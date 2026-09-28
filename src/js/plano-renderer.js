@@ -6,7 +6,6 @@ let clientes = [];
 let lugares = [];
 let roles = [];
 
-// Estado por panel: { idCliente, idLugar, dimensiones, celdas, zonas, equiposSinUbicar }
 const panelIzq = crearEstadoPanel('izq');
 const panelDer = crearEstadoPanel('der');
 let panelActivo = panelIzq;
@@ -31,11 +30,12 @@ let celdaInicioSeleccion = null;
 let zonaEditando = null;
 let colorSeleccionado = '#e74c3c';
 
-// Drag & drop
-let dragOrigen = null; // { tipo:'celda'|'lista', idEquipo, fila, columna, panelSufijo }
+let dragOrigen = null;
+let moverPendiente = null;
 
-// Modal mover entre pisos
-let moverPendiente = null; // { idEquipo, panelOrigen, panelDestino, fila, columna, equipoInfo }
+let tabActivo = '__todos__';
+let filtroRolActivo = '__todos__';
+let filtroBusquedaLateral = '';
 
 const COLORES_DISPONIBLES = [
     '#e74c3c', '#e67e22', '#f1c40f', '#27ae60',
@@ -46,9 +46,8 @@ const COLORES_DISPONIBLES = [
    REFERENCIAS DOM
    ========================================================= */
 
-const contenedorPrincipal = document.querySelector('.contenedor-principal');
+const contenedorPrincipal = document.getElementById('contenedor-principal');
 
-// Panel izquierdo
 const selectClienteIzq = document.getElementById('select-cliente-izq');
 const selectLugarIzq   = document.getElementById('select-lugar-izq');
 const inputFilasIzq    = document.getElementById('input-filas-izq');
@@ -56,7 +55,6 @@ const inputColumnasIzq = document.getElementById('input-columnas-izq');
 const gridIzq          = document.getElementById('grid-izq');
 const panelIzqDiv      = document.getElementById('panel-izq');
 
-// Panel derecho
 const selectClienteDer = document.getElementById('select-cliente-der');
 const selectLugarDer   = document.getElementById('select-lugar-der');
 const inputFilasDer    = document.getElementById('input-filas-der');
@@ -66,21 +64,28 @@ const panelDerDiv      = document.getElementById('panel-der');
 
 const selectModo       = document.getElementById('select-modo');
 
-// Panel lateral
+const panelLateral     = document.getElementById('panel-lateral');
+const lateralBackdrop  = document.getElementById('lateral-backdrop');
+const btnToggleLateral = document.getElementById('btn-toggle-lateral');
+const btnCerrarLateral = document.getElementById('btn-cerrar-lateral');
+const badgeToggle      = document.getElementById('badge-toggle');
+
 const listaSinUbicar   = document.getElementById('lista-sin-ubicar');
 const listaZonas       = document.getElementById('lista-zonas');
+const lateralTabs      = document.getElementById('lateral-tabs');
+const lateralFiltrosRol = document.getElementById('lateral-filtros-rol');
+const buscadorLateral  = document.getElementById('buscador-lateral');
 
 const btnModoZona         = document.getElementById('btn-modo-zona');
 const btnLimpiarSeleccion = document.getElementById('btn-limpiar-seleccion');
+const btnExportarPDF      = document.getElementById('btn-exportar-pdf');
 
-// Modal confirmación
 const modal          = document.getElementById('modal');
 const modalTitulo    = document.getElementById('modal-titulo');
 const modalTexto     = document.getElementById('modal-texto');
 const modalAceptar   = document.getElementById('modal-aceptar');
 const modalCancelar  = document.getElementById('modal-cancelar');
 
-// Modal zona
 const modalZona         = document.getElementById('modal-zona');
 const modalZonaTitulo   = document.getElementById('modal-zona-titulo');
 const modalZonaNombre   = document.getElementById('zona-nombre');
@@ -89,7 +94,6 @@ const modalZonaAceptar  = document.getElementById('modal-zona-aceptar');
 const modalZonaCancelar = document.getElementById('modal-zona-cancelar');
 const coloresZonaDiv    = document.getElementById('colores-zona');
 
-// Modal mover entre pisos
 const modalMover        = document.getElementById('modal-mover-piso');
 const moverTitulo       = document.getElementById('mover-titulo');
 const moverInfo         = document.getElementById('mover-info');
@@ -112,14 +116,108 @@ const moverCancelar     = document.getElementById('mover-cancelar');
 const moverConfirmar    = document.getElementById('mover-confirmar');
 
 /* =========================================================
+   TOOLTIP CUSTOM
+   ========================================================= */
+
+let tooltipDiv = null;
+
+function crearTooltip() {
+    tooltipDiv = document.createElement('div');
+    tooltipDiv.className = 'tooltip-plano';
+    tooltipDiv.style.display = 'none';
+    document.body.appendChild(tooltipDiv);
+}
+
+function mostrarTooltip(ev, contenido) {
+    if (!tooltipDiv) crearTooltip();
+
+    tooltipDiv.innerHTML = `
+        <div class="tooltip-header">
+            <span class="rol-badge" data-rol="${contenido.rol}">${contenido.rol}</span>
+            <span class="hostname">${contenido.hostname}</span>
+        </div>
+        <div class="tooltip-body">
+            <div class="tooltip-row">
+                <span class="label">Tipo:</span>
+                <span class="valor">${contenido.tipoIP}</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="label">IP:</span>
+                <span class="valor">${contenido.ip || 'DHCP (sin IP)'}</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="label">Posición:</span>
+                <span class="valor">Fila ${contenido.fila}, Col ${contenido.col}</span>
+            </div>
+        </div>
+    `;
+
+    tooltipDiv.style.display = 'block';
+
+    // Posicionar
+    const x = ev.clientX + 16;
+    const y = ev.clientY + 16;
+    const rect = tooltipDiv.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+
+    let posX = x;
+    let posY = y;
+
+    if (x + w > window.innerWidth - 12) posX = ev.clientX - w - 16;
+    if (y + h > window.innerHeight - 12) posY = ev.clientY - h - 16;
+
+    tooltipDiv.style.left = posX + 'px';
+    tooltipDiv.style.top = posY + 'px';
+}
+
+function ocultarTooltip() {
+    if (tooltipDiv) tooltipDiv.style.display = 'none';
+}
+
+/* =========================================================
+   PANEL LATERAL COLAPSABLE
+   ========================================================= */
+
+function abrirLateral() {
+    panelLateral.classList.add('abierto');
+    lateralBackdrop.style.display = 'block';
+}
+
+function cerrarLateral() {
+    panelLateral.classList.remove('abierto');
+    lateralBackdrop.style.display = 'none';
+}
+
+btnToggleLateral.addEventListener('click', () => {
+    if (panelLateral.classList.contains('abierto')) cerrarLateral();
+    else abrirLateral();
+});
+
+btnCerrarLateral.addEventListener('click', cerrarLateral);
+lateralBackdrop.addEventListener('click', cerrarLateral);
+/* Desactivar el backdrop mientras se arrastra para no bloquear el drop */
+document.addEventListener('dragstart', () => {
+    lateralBackdrop.style.pointerEvents = 'none';
+});
+
+document.addEventListener('dragend', () => {
+    lateralBackdrop.style.pointerEvents = 'auto';
+});
+
+/* =========================================================
    MODAL DE CONFIRMACIÓN
    ========================================================= */
 
 let accionPendiente = null;
 
-function mostrarConfirmacion(titulo, texto, alAceptar) {
+function mostrarConfirmacion(titulo, contenidoHTML, alAceptar) {
     modalTitulo.textContent = titulo;
-    modalTexto.textContent = texto;
+    if (typeof contenidoHTML === 'string' && contenidoHTML.startsWith('<')) {
+        modalTexto.innerHTML = contenidoHTML;
+    } else {
+        modalTexto.innerHTML = `<p>${contenidoHTML}</p>`;
+    }
     modal.style.display = 'flex';
     accionPendiente = alAceptar;
 }
@@ -236,15 +334,11 @@ document.getElementById('btn-volver').addEventListener('click', () => window.api
 
 selectModo.addEventListener('change', () => {
     const doble = selectModo.value === 'doble';
-    panelDerDiv.style.display = doble ? 'block' : 'none';
+    panelDerDiv.style.display = doble ? 'flex' : 'none';
     contenedorPrincipal.classList.toggle('solo-simple', !doble);
 
-    if (doble && !panelDer.idLugar) {
-        // Inicializar el panel derecho con el mismo cliente del izquierdo
-        // pero sin piso (usuario lo elige)
-        if (panelIzq.idCliente) {
-            cargarLugaresPanel(panelDer, panelIzq.idCliente, false);
-        }
+    if (doble && !panelDer.idLugar && panelIzq.idCliente) {
+        cargarLugaresPanel(panelDer, panelIzq.idCliente, false);
     }
 });
 
@@ -256,12 +350,22 @@ btnModoZona.addEventListener('click', () => {
     modoZona = !modoZona;
     if (modoZona) {
         btnModoZona.classList.add('activo');
-        btnModoZona.textContent = 'Modo Zona (activo)';
+        btnModoZona.innerHTML = `
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <path d="M3 9h18M9 21V9"/>
+            </svg>
+            Modo Zona (activo)`;
         btnLimpiarSeleccion.style.display = 'inline-block';
         seleccionZona = null;
     } else {
         btnModoZona.classList.remove('activo');
-        btnModoZona.textContent = 'Modo Zona';
+        btnModoZona.innerHTML = `
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <path d="M3 9h18M9 21V9"/>
+            </svg>
+            Modo Zona`;
         btnLimpiarSeleccion.style.display = 'none';
         seleccionZona = null;
         celdaInicioSeleccion = null;
@@ -278,6 +382,119 @@ btnLimpiarSeleccion.addEventListener('click', () => {
 });
 
 /* =========================================================
+   EXPORTAR PDF
+   ========================================================= */
+
+btnExportarPDF.addEventListener('click', async () => {
+    if (!panelActivo.idLugar) {
+        alert('Selecciona un piso primero.');
+        return;
+    }
+
+    try {
+        const html = generarHTMLPlanoParaPDF(panelActivo);
+        const lugar = lugares.find(l => Number(l.IdLugarCliente) === Number(panelActivo.idLugar));
+        const nombreArchivo = `Plano-${lugar?.Nombre || 'Piso'}-${Date.now()}.pdf`;
+
+        btnExportarPDF.disabled = true;
+        btnExportarPDF.innerHTML = 'Generando...';
+
+        const res = await window.api.plano.exportarPDF(html, nombreArchivo);
+
+        if (res.ok) {
+            alert('✅ PDF generado en:\n\n' + res.ruta);
+        } else {
+            alert('Generación cancelada.');
+        }
+    } catch (err) {
+        alert('Error al generar PDF: ' + err.message);
+    } finally {
+        btnExportarPDF.disabled = false;
+        btnExportarPDF.innerHTML = `
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="12" y1="18" x2="12" y2="12"/>
+                <polyline points="9 15 12 18 15 15"/>
+            </svg>
+            Exportar PDF`;
+    }
+});
+
+function generarHTMLPlanoParaPDF(panel) {
+    const lugar = lugares.find(l => Number(l.IdLugarCliente) === Number(panel.idLugar));
+    const cliente = clientes.find(c => Number(c.IdCliente) === Number(panel.idCliente)) ||
+                    clientes.find(c => {
+                        return panel.equiposSinUbicar.some(e => Number(e.IdCliente) === Number(c.IdCliente));
+                    });
+
+    const nombreCliente = cliente ? `${cliente.Codigo} - ${cliente.Nombre}` : '';
+    const nombrePiso = lugar ? lugar.Nombre : '';
+
+    // Encabezado
+    let html = `
+        <div class="encabezado">
+            <h1>Plano de Equipos</h1>
+            <p>${nombreCliente ? nombreCliente + ' · ' : ''}${nombrePiso}</p>
+        </div>
+    `;
+
+    // Grid
+    html += `<div class="grid-plano" style="grid-template-columns: repeat(${panel.dimensiones.Columnas}, 1fr);">`;
+
+    for (let f = 0; f < panel.dimensiones.Filas; f++) {
+        for (let c = 0; c < panel.dimensiones.Columnas; c++) {
+            const contenido = panel.celdas[f]?.[c];
+            const fila = f + 1;
+            const col = c + 1;
+            const zona = zonaEnCelda(panel, fila, col);
+
+            let clase = 'celda ' + (contenido ? 'ocupada' : 'vacia');
+            let attrs = '';
+            if (contenido && contenido.RolCodigo) {
+                attrs = ` data-rol="${contenido.RolCodigo}"`;
+            }
+
+            // Zona (color suave)
+            let styleZona = '';
+            if (zona && zona.Color) {
+                styleZona = ` style="background: ${zona.Color}33;"`;
+            }
+
+            if (contenido) {
+                const ip = contenido.IP || 'DHCP';
+                html += `
+                    <div class="${clase}"${attrs}${styleZona}>
+                        <div class="hostname">${contenido.Hostname}</div>
+                        <div class="ip">${ip}</div>
+                        ${zona && esInicioZona(fila, col, zona) ? `<div class="etiqueta-zona">${zona.Nombre}</div>` : ''}
+                    </div>
+                `;
+            } else {
+                html += `<div class="${clase}"${styleZona}></div>`;
+            }
+        }
+    }
+
+    html += `</div>`;
+
+    // Leyenda
+    html += `
+        <div class="leyenda-pdf">
+            <div class="item"><span class="punto" style="background:#3b82f6;"></span>AGT</div>
+            <div class="item"><span class="punto" style="background:#22c55e;"></span>SPR</div>
+            <div class="item"><span class="punto" style="background:#f97316;"></span>CLD</div>
+            <div class="item"><span class="punto" style="background:#a855f7;"></span>GRN</div>
+            <div class="item"><span class="punto" style="background:#14b8a6;"></span>CRD</div>
+            <div class="item"><span class="punto" style="background:#ec4899;"></span>MIS</div>
+            <div class="item"><span class="punto" style="background:#475569;"></span>ADM</div>
+        </div>
+    `;
+
+    return html;
+}
+
+/* =========================================================
    CARGA DE CLIENTES Y LUGARES
    ========================================================= */
 
@@ -288,7 +505,7 @@ async function cargarClientes() {
 }
 
 function llenarSelectCliente(select) {
-    select.innerHTML = '<option value="">-- Todos los clientes --</option>';
+    select.innerHTML = '<option value="">-- Todos --</option>';
     clientes.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.IdCliente;
@@ -301,7 +518,6 @@ async function cargarLugaresPanel(panel, idCliente, seleccionarPrimero) {
     const todos = await window.api.lugares.listar();
     lugares = todos;
 
-    // Si idCliente es null, mostramos todos los pisos
     const filtrados = idCliente
         ? todos.filter(l => Number(l.IdCliente) === Number(idCliente))
         : todos;
@@ -323,7 +539,7 @@ async function cargarLugaresPanel(panel, idCliente, seleccionarPrimero) {
 }
 
 /* =========================================================
-   EVENTOS DE LOS PANELES
+   EVENTOS DE PANELES
    ========================================================= */
 
 function conectarEventosPanel(panel, selectCliente, selectLugar, inputFilas, inputColumnas, btnAplicar) {
@@ -350,7 +566,7 @@ function conectarEventosPanel(panel, selectCliente, selectLugar, inputFilas, inp
             alert('Selecciona un piso primero.');
             return;
         }
-        const nuevasFilas    = parseInt(inputFilas.value, 10);
+        const nuevasFilas = parseInt(inputFilas.value, 10);
         const nuevasColumnas = parseInt(inputColumnas.value, 10);
 
         if (nuevasFilas < 1 || nuevasColumnas < 1) {
@@ -358,12 +574,43 @@ function conectarEventosPanel(panel, selectCliente, selectLugar, inputFilas, inp
             return;
         }
 
+        const expulsados = [];
+        panel.celdas.forEach((fila, i) => {
+            fila.forEach((celda, j) => {
+                if (celda && (i + 1 > nuevasFilas || j + 1 > nuevasColumnas)) {
+                    expulsados.push({ ...celda, _fila: i + 1, _col: j + 1 });
+                }
+            });
+        });
+
+        let contenidoModal;
+        if (expulsados.length > 0) {
+            const lista = expulsados.map(e =>
+                `<li><b>${e.Hostname}</b> — estaba en fila ${e._fila}, columna ${e._col}</li>`
+            ).join('');
+            contenidoModal = `
+                <p>Se cambiará el grid a <b>${nuevasFilas} × ${nuevasColumnas}</b>.</p>
+                <p style="color:#dc2626;"><b>${expulsados.length} equipo(s)</b> quedarán fuera del rango y volverán a la lista:</p>
+                <ul class="lista-expulsados">${lista}</ul>
+                <p style="margin-top:10px;font-size:0.85rem;color:#64748b;">Los equipos seguirán existiendo, solo perderán su posición.</p>
+            `;
+        } else {
+            contenidoModal = `<p>Se cambiará el grid a <b>${nuevasFilas} × ${nuevasColumnas}</b>. No hay equipos afectados.</p>`;
+        }
+
         mostrarConfirmacion(
             'Cambiar dimensiones',
-            `Se cambiará el grid a ${nuevasFilas} filas × ${nuevasColumnas} columnas. Los equipos fuera del nuevo rango se quedarán sin ubicar. ¿Continuar?`,
+            contenidoModal,
             async () => {
-                await window.api.plano.actualizarDim(panel.idLugar, nuevasFilas, nuevasColumnas);
-                await cargarPanel(panel);
+                const res = await window.api.plano.actualizarDim(panel.idLugar, nuevasFilas, nuevasColumnas);
+                await recargarPanel(panel);
+
+                if (res && res.expulsados && res.expulsados.length > 0) {
+                    const nombres = res.expulsados.map(e => e.Hostname).join(', ');
+                    setTimeout(() => {
+                        alert(`Se regresaron ${res.expulsados.length} equipo(s) a la lista:\n\n${nombres}`);
+                    }, 200);
+                }
             }
         );
     });
@@ -383,13 +630,11 @@ async function cargarPanel(panel) {
 
     panel.dimensiones = await window.api.plano.dimensiones(panel.idLugar);
 
-    // Input de dimensiones
     const inputFilas = panel.sufijo === 'izq' ? inputFilasIzq : inputFilasDer;
     const inputColumnas = panel.sufijo === 'izq' ? inputColumnasIzq : inputColumnasDer;
     inputFilas.value = panel.dimensiones.Filas;
     inputColumnas.value = panel.dimensiones.Columnas;
 
-    // Matriz
     panel.celdas = Array.from({ length: panel.dimensiones.Filas }, () =>
         Array.from({ length: panel.dimensiones.Columnas }, () => null)
     );
@@ -405,7 +650,9 @@ async function cargarPanel(panel) {
                 Hostname: u.Hostname,
                 TipoIP: u.TipoIP,
                 IP: u.IP,
-                RolCodigo: u.RolCodigo
+                RolCodigo: u.RolCodigo,
+                _fila: u.Fila,
+                _col: u.Columna
             };
         }
     });
@@ -433,7 +680,7 @@ function limpiarPanel(panel) {
 }
 
 /* =========================================================
-   UTILIDAD ZONAS
+   ZONAS
    ========================================================= */
 
 function zonaEnCelda(panel, fila, columna) {
@@ -446,6 +693,18 @@ function zonaEnCelda(panel, fila, columna) {
 function esInicioZona(fila, columna, zona) {
     return zona.FilaInicio === fila && zona.ColumnaInicio === columna;
 }
+
+/* =========================================================
+   SVG ICONO PC
+   ========================================================= */
+
+const SVG_PC = `
+    <svg class="icono-pc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+        <line x1="12" y1="17" x2="12" y2="21"/>
+    </svg>
+`;
 
 /* =========================================================
    RENDER DEL GRID
@@ -473,6 +732,10 @@ function renderGridPanel(panel) {
             celda.dataset.columna = columna;
             celda.dataset.panel = panel.sufijo;
 
+            if (contenido && contenido.RolCodigo) {
+                celda.dataset.rol = contenido.RolCodigo;
+            }
+
             if (zona && zona.Color) {
                 celda.style.background = zona.Color + '33';
                 celda.classList.add('en-zona');
@@ -487,12 +750,38 @@ function renderGridPanel(panel) {
             if (contenido) {
                 celda.innerHTML = `
                     <button class="cerrar" data-id="${contenido.IdEquipo}">✕</button>
-                    <div class="hostname">${contenido.Hostname}</div>
-                    <div class="tipo">${contenido.TipoIP === 'DHCP' ? 'DHCP' : contenido.IP}</div>
+                    ${SVG_PC}
                 `;
+
+                // Tooltip custom
+                celda.addEventListener('mouseenter', (ev) => {
+                    mostrarTooltip(ev, {
+                        hostname: contenido.Hostname,
+                        rol: contenido.RolCodigo || '',
+                        tipoIP: contenido.TipoIP,
+                        ip: contenido.IP,
+                        fila,
+                        col: columna
+                    });
+                });
+                celda.addEventListener('mousemove', (ev) => {
+                    if (tooltipDiv && tooltipDiv.style.display === 'block') {
+                        mostrarTooltip(ev, {
+                            hostname: contenido.Hostname,
+                            rol: contenido.RolCodigo || '',
+                            tipoIP: contenido.TipoIP,
+                            ip: contenido.IP,
+                            fila,
+                            col: columna
+                        });
+                    }
+                });
+                celda.addEventListener('mouseleave', ocultarTooltip);
+
                 if (!modoZona) {
                     celda.draggable = true;
                     celda.addEventListener('dragstart', (ev) => {
+                        ocultarTooltip();
                         dragOrigen = {
                             tipo: 'celda',
                             idEquipo: contenido.IdEquipo,
@@ -580,71 +869,132 @@ document.addEventListener('mouseup', () => {
 });
 
 /* =========================================================
-   PANEL LATERAL (agrupado por cliente)
+   PANEL LATERAL
    ========================================================= */
 
+buscadorLateral.addEventListener('input', () => {
+    filtroBusquedaLateral = buscadorLateral.value.trim().toLowerCase();
+    renderPanelLateral();
+});
+
+lateralFiltrosRol.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.filtro-rol-chip');
+    if (!btn) return;
+    filtroRolActivo = btn.dataset.rol;
+    renderPanelLateral();
+});
+
+lateralTabs.addEventListener('click', (ev) => {
+    const tab = ev.target.closest('.lateral-tab');
+    if (!tab) return;
+    tabActivo = tab.dataset.tab;
+    renderPanelLateral();
+});
+
 function renderPanelLateral() {
-    renderListaSinUbicarAgrupada();
+    renderTabs();
+    renderFiltrosRol();
+    renderListaSinUbicarFiltrada();
     renderListaZonas();
+    actualizarBadge();
 }
 
-function renderListaSinUbicarAgrupada() {
+function renderTabs() {
+    lateralTabs.innerHTML = '';
+
+    const equipos = panelActivo.equiposSinUbicar || [];
+
+    const porCliente = {};
+    equipos.forEach(e => {
+        if (!porCliente[e.IdCliente]) {
+            porCliente[e.IdCliente] = {
+                id: e.IdCliente,
+                codigo: e.ClienteCodigo,
+                nombre: e.ClienteNombre,
+                total: 0
+            };
+        }
+        porCliente[e.IdCliente].total++;
+    });
+
+    const tabTodos = document.createElement('button');
+    tabTodos.className = 'lateral-tab' + (tabActivo === '__todos__' ? ' activo' : '');
+    tabTodos.dataset.tab = '__todos__';
+    tabTodos.innerHTML = `Todos <span class="tab-badge">${equipos.length}</span>`;
+    lateralTabs.appendChild(tabTodos);
+
+    Object.values(porCliente).forEach(g => {
+        const tab = document.createElement('button');
+        tab.className = 'lateral-tab' + (tabActivo === String(g.id) ? ' activo' : '');
+        tab.dataset.tab = String(g.id);
+        tab.innerHTML = `${g.codigo} <span class="tab-badge">${g.total}</span>`;
+        lateralTabs.appendChild(tab);
+    });
+}
+
+function renderFiltrosRol() {
+    lateralFiltrosRol.querySelectorAll('.filtro-rol-chip').forEach(chip => {
+        const rol = chip.dataset.rol;
+        chip.classList.toggle('activo', rol === filtroRolActivo);
+    });
+}
+
+function renderListaSinUbicarFiltrada() {
     listaSinUbicar.innerHTML = '';
 
-    if (!panelActivo.equiposSinUbicar || panelActivo.equiposSinUbicar.length === 0) {
-        listaSinUbicar.innerHTML = '<p style="color:#95a5a6;font-size:0.85rem;">Sin equipos pendientes</p>';
+    let equipos = panelActivo.equiposSinUbicar || [];
+
+    if (tabActivo !== '__todos__') {
+        const idCli = parseInt(tabActivo, 10);
+        equipos = equipos.filter(e => Number(e.IdCliente) === idCli);
+    }
+
+    if (filtroRolActivo !== '__todos__') {
+        equipos = equipos.filter(e => e.RolCodigo === filtroRolActivo);
+    }
+
+    if (filtroBusquedaLateral) {
+        equipos = equipos.filter(e =>
+            e.Hostname.toLowerCase().includes(filtroBusquedaLateral)
+        );
+    }
+
+    if (equipos.length === 0) {
+        listaSinUbicar.innerHTML = '<li class="lista-sin-ubicar-vacia">Sin equipos que coincidan con el filtro.</li>';
         return;
     }
 
-    // Agrupar por cliente
-    const grupos = {};
-    panelActivo.equiposSinUbicar.forEach(e => {
-        const key = e.IdCliente;
-        if (!grupos[key]) {
-            grupos[key] = {
-                idCliente: e.IdCliente,
-                codigo: e.ClienteCodigo,
-                nombre: e.ClienteNombre,
-                equipos: []
+    equipos.forEach(e => {
+        const li = document.createElement('li');
+        li.dataset.rol = e.RolCodigo || '';
+        li.draggable = true;
+        li.innerHTML = `
+            <span class="rol-punto"></span>
+            <span class="hostname-texto">${e.Hostname}</span>
+        `;
+        li.addEventListener('dragstart', (ev) => {
+            dragOrigen = {
+                tipo: 'lista',
+                idEquipo: e.IdEquipo,
+                panelSufijo: panelActivo.sufijo,
+                hostname: e.Hostname
             };
-        }
-        grupos[key].equipos.push(e);
-    });
-
-    Object.values(grupos).forEach(g => {
-        const details = document.createElement('details');
-        details.className = 'grupo-cliente';
-
-        const summary = document.createElement('summary');
-        summary.textContent = `${g.codigo} - ${g.nombre} (${g.equipos.length})`;
-        details.appendChild(summary);
-
-        const ul = document.createElement('ul');
-        g.equipos.forEach(e => {
-            const li = document.createElement('li');
-            li.textContent = e.Hostname;
-            li.draggable = true;
-            li.addEventListener('dragstart', (ev) => {
-                dragOrigen = {
-                    tipo: 'lista',
-                    idEquipo: e.IdEquipo,
-                    panelSufijo: panelActivo.sufijo,
-                    hostname: e.Hostname
-                };
-                ev.dataTransfer.effectAllowed = 'move';
-            });
-            ul.appendChild(li);
+            ev.dataTransfer.effectAllowed = 'move';
         });
-        details.appendChild(ul);
-        listaSinUbicar.appendChild(details);
+        listaSinUbicar.appendChild(li);
     });
+}
+
+function actualizarBadge() {
+    const total = (panelActivo.equiposSinUbicar || []).length;
+    badgeToggle.textContent = total;
 }
 
 function renderListaZonas() {
     listaZonas.innerHTML = '';
 
     if (!panelActivo.zonas || panelActivo.zonas.length === 0) {
-        listaZonas.innerHTML = '<li style="cursor:default;color:#95a5a6;background:transparent;">Sin zonas definidas</li>';
+        listaZonas.innerHTML = '<li style="cursor:default;color:#95a5a6;background:transparent;font-size:0.8rem;">Sin zonas definidas</li>';
         return;
     }
 
@@ -698,9 +1048,6 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
     const mismoPanel = panelOrigen === panelDestino;
     const contenidoDestino = panelDestino.celdas[filaDestino - 1][columnaDestino - 1];
 
-    // ============================================================
-    // CASO 1: viene de la lista "sin ubicar"
-    // ============================================================
     if (dragOrigen.tipo === 'lista') {
         const idEq = dragOrigen.idEquipo;
         const equipo = panelActivo.equiposSinUbicar.find(e => Number(e.IdEquipo) === Number(idEq));
@@ -708,13 +1055,12 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
 
         if (!equipo) return;
 
-        // Si es del mismo panel: asignar normal
         if (mismoPanel) {
             if (contenidoDestino) {
                 mostrarConfirmacion(
                     'Celda ocupada',
-                    `La celda (${filaDestino}, ${columnaDestino}) ya tiene ${contenidoDestino.Hostname}. ` +
-                    `Si continúas, se quitará ese equipo y se colocará ${equipo.Hostname}. ¿Continuar?`,
+                    `La celda (${filaDestino}, ${columnaDestino}) ya tiene <b>${contenidoDestino.Hostname}</b>.<br><br>` +
+                    `Si continúas, se quitará ese equipo y se colocará <b>${equipo.Hostname}</b>. ¿Continuar?`,
                     async () => {
                         await window.api.plano.quitar(contenidoDestino.IdEquipo, panelDestino.idLugar, contenidoDestino.Hostname);
                         await window.api.plano.asignar(panelDestino.idLugar, equipo.IdEquipo, filaDestino, columnaDestino);
@@ -724,23 +1070,17 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
             } else {
                 mostrarConfirmacion(
                     'Asignar equipo',
-                    `¿Colocar ${equipo.Hostname} en la celda (${filaDestino}, ${columnaDestino})?`,
+                    `¿Colocar <b>${equipo.Hostname}</b> en la celda (${filaDestino}, ${columnaDestino})?`,
                     async () => {
                         await window.api.plano.asignar(panelDestino.idLugar, equipo.IdEquipo, filaDestino, columnaDestino);
                         await recargarPanel(panelDestino);
                     }
                 );
             }
-            return;
         }
-
-        // Si es de otro panel: no aplica, la lista solo pertenece al panel activo
         return;
     }
 
-    // ============================================================
-    // CASO 2: viene de una celda
-    // ============================================================
     if (dragOrigen.tipo === 'celda') {
         const origen = { ...dragOrigen };
         dragOrigen = null;
@@ -750,13 +1090,11 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
         const equipoOrigen = panelOrigen.celdas[origen.fila - 1][origen.columna - 1];
         if (!equipoOrigen) return;
 
-        // -------- MISMO PANEL --------
         if (mismoPanel) {
             if (!contenidoDestino) {
-                // Mover
                 mostrarConfirmacion(
                     'Mover equipo',
-                    `¿Mover ${equipoOrigen.Hostname} de (${origen.fila}, ${origen.columna}) a (${filaDestino}, ${columnaDestino})?`,
+                    `¿Mover <b>${equipoOrigen.Hostname}</b> de (${origen.fila}, ${origen.columna}) a (${filaDestino}, ${columnaDestino})?`,
                     async () => {
                         await window.api.plano.mover(
                             equipoOrigen.IdEquipo, filaDestino, columnaDestino,
@@ -766,10 +1104,9 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                     }
                 );
             } else {
-                // Intercambiar mismo piso
                 mostrarConfirmacion(
                     'Intercambiar posiciones',
-                    `Se intercambiarán las posiciones de ${equipoOrigen.Hostname} y ${contenidoDestino.Hostname}. ` +
+                    `Se intercambiarán las posiciones de <b>${equipoOrigen.Hostname}</b> y <b>${contenidoDestino.Hostname}</b>.<br><br>` +
                     `Los datos de cada equipo permanecerán intactos. ¿Continuar?`,
                     async () => {
                         await window.api.plano.intercambiar(
@@ -784,9 +1121,7 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
             return;
         }
 
-        // -------- ENTRE PANELES (cambio de piso) --------
         if (!contenidoDestino) {
-            // Cambio de piso sin swap
             abrirModalMoverEntrePisos({
                 idEquipo: equipoOrigen.IdEquipo,
                 panelOrigen,
@@ -798,7 +1133,6 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                 equipoDestino: null
             });
         } else {
-            // Cambio de piso con swap
             abrirModalMoverEntrePisos({
                 idEquipo: equipoOrigen.IdEquipo,
                 panelOrigen,
@@ -824,7 +1158,6 @@ async function abrirModalMoverEntrePisos(datos) {
 
     const { equipoInfo, panelOrigen, panelDestino, fila, columna, conSwap, equipoDestino } = datos;
 
-    // Info general
     let infoHTML = `
         <div><b>Equipo:</b> ${equipoInfo.Hostname}</div>
         <div><b>Desde:</b> Panel ${panelOrigen.sufijo === 'izq' ? 'Izquierdo' : 'Derecho'}, celda (${datos.filaOrigen ?? '?'}, ${datos.columnaOrigen ?? '?'})</div>
@@ -833,8 +1166,8 @@ async function abrirModalMoverEntrePisos(datos) {
 
     if (conSwap) {
         infoHTML += `
-            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #bdc3c7;">
-                <b>⚠ La celda destino ya tiene:</b> ${equipoDestino.Hostname}<br>
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid #cbd5e1;">
+                <b style="color:#dc2626;">⚠ La celda destino ya tiene:</b> ${equipoDestino.Hostname}<br>
                 Se intercambiarán posiciones. Los datos de cada equipo se mantienen.
             </div>
         `;
@@ -847,17 +1180,12 @@ async function abrirModalMoverEntrePisos(datos) {
     formEditarMover.style.display = 'none';
     moverMensaje.style.display = 'none';
 
-    // Si hay swap, ocultamos el checkbox (no aplica)
     document.querySelector('.check-mantener').style.display = conSwap ? 'none' : 'block';
 
-    // Cargar selects del formulario (clientes, roles)
     llenarSelectClientesMover();
     llenarSelectRolesMover();
-
-    // Cargar datos del equipo
     await cargarDatosEquipoEnModal(equipoInfo.IdEquipo);
 
-    // Cargar lugares del piso destino
     const selectLugarDestino = panelDestino.idLugar;
     const lugarDestino = lugares.find(l => Number(l.IdLugarCliente) === Number(selectLugarDestino));
     if (lugarDestino) {
@@ -888,7 +1216,6 @@ moverConfirmar.addEventListener('click', async () => {
 
     try {
         if (conSwap) {
-            // Swap entre pisos
             const res = await window.api.plano.swapEntrePisos({
                 idEquipoA: idEquipo,
                 idEquipoB: equipoDestino.IdEquipo,
@@ -904,12 +1231,9 @@ moverConfirmar.addEventListener('click', async () => {
 
             if (!res.ok) {
                 mostrarMensajeMover(res.mensaje, 'error');
-                moverConfirmar.disabled = false;
-                moverConfirmar.textContent = 'Confirmar';
                 return;
             }
         } else {
-            // Mover normal (con o sin editar)
             let nuevosDatos = null;
 
             if (!chkMantener.checked) {
@@ -930,20 +1254,14 @@ moverConfirmar.addEventListener('click', async () => {
 
                 if (!nuevosDatos.idCliente || !nuevosDatos.idRolEquipo) {
                     mostrarMensajeMover('Cliente y rol son obligatorios.', 'error');
-                    moverConfirmar.disabled = false;
-                    moverConfirmar.textContent = 'Confirmar';
                     return;
                 }
                 if (!nuevosDatos.hostname) {
                     mostrarMensajeMover('El hostname es obligatorio.', 'error');
-                    moverConfirmar.disabled = false;
-                    moverConfirmar.textContent = 'Confirmar';
                     return;
                 }
                 if (nuevosDatos.tipoIP === 'Estatica' && !nuevosDatos.ip) {
                     mostrarMensajeMover('La IP es obligatoria en estáticos.', 'error');
-                    moverConfirmar.disabled = false;
-                    moverConfirmar.textContent = 'Confirmar';
                     return;
                 }
             }
@@ -954,8 +1272,6 @@ moverConfirmar.addEventListener('click', async () => {
 
             if (!res.ok) {
                 mostrarMensajeMover(res.mensaje, 'error');
-                moverConfirmar.disabled = false;
-                moverConfirmar.textContent = 'Confirmar';
                 return;
             }
         }
@@ -1005,12 +1321,6 @@ function llenarSelectRolesMover() {
 }
 
 async function cargarDatosEquipoEnModal(idEquipo) {
-    // Buscar el equipo en los paneles
-    const equipo = [...panelIzq.celdas.flat(), ...panelDer.celdas.flat()]
-        .find(e => e && Number(e.IdEquipo) === Number(idEquipo));
-    if (!equipo) return;
-
-    // Necesitamos más datos: vamos al listado completo de equipos
     const todos = await window.api.equipos.listar();
     const eq = todos.find(x => Number(x.IdEquipo) === Number(idEquipo));
     if (!eq) return;
@@ -1035,7 +1345,7 @@ async function cargarDatosEquipoEnModal(idEquipo) {
 function confirmarQuitar(equipo, panel) {
     mostrarConfirmacion(
         'Quitar del plano',
-        `¿Quitar ${equipo.Hostname} del plano? El equipo seguirá existiendo en el sistema, solo se eliminará su ubicación física.`,
+        `¿Quitar <b>${equipo.Hostname}</b> del plano?<br><br>El equipo seguirá existiendo en el sistema, solo se eliminará su ubicación física.`,
         async () => {
             await window.api.plano.quitar(equipo.IdEquipo, panel.idLugar, equipo.Hostname);
             await recargarPanel(panel);
@@ -1050,7 +1360,7 @@ function confirmarQuitar(equipo, panel) {
 (async () => {
     await cargarClientes();
     roles = await window.api.roles.listar();
-
-    // Cargar lugares del panel izquierdo (todos los pisos por defecto)
     await cargarLugaresPanel(panelIzq, null, false);
+    renderPanelLateral();
+    crearTooltip();
 })();

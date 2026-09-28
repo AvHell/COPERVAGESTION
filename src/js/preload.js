@@ -93,6 +93,7 @@ contextBridge.exposeInMainWorld('api', {
         listarZonas:    (idLugar) => ipcRenderer.invoke('plano:listarZonas', idLugar),
         crearZona:      (idLugar, nombre, color, fi, ff, ci, cf) => ipcRenderer.invoke('plano:crearZona', idLugar, nombre, color, fi, ff, ci, cf),
         actualizarZona: (idZona, nombre, color, fi, ff, ci, cf, idLugar) => ipcRenderer.invoke('plano:actualizarZona', idZona, nombre, color, fi, ff, ci, cf, idLugar),
-        eliminarZona:   (idZona, idLugar, nombre) => ipcRenderer.invoke('plano:eliminarZona', idZona, idLugar, nombre)
+        eliminarZona:   (idZona, idLugar, nombre) => ipcRenderer.invoke('plano:eliminarZona', idZona, idLugar, nombre),
+        exportarPDF:    (htmlPlano, nombreArchivo) => ipcRenderer.invoke('plano:exportarPDF', htmlPlano, nombreArchivo)
     }
 });

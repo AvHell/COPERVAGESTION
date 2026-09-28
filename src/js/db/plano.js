@@ -13,15 +13,66 @@ async function obtenerDimensiones(idLugarCliente) {
     return r.recordset[0] || { Filas: 8, Columnas: 12 };
 }
 
-async function actualizarDimensiones(idLugarCliente, filas, columnas) {
+async function actualizarDimensiones(idUsuario, idLugarCliente, filas, columnas) {
     const pool = await getPool();
-    await pool.request()
-        .input('IdLugarCliente', sql.Int, idLugarCliente)
-        .input('Filas', sql.Int, filas)
-        .input('Columnas', sql.Int, columnas)
-        .query(`UPDATE LugaresClientes SET Filas = @Filas, Columnas = @Columnas
-                WHERE IdLugarCliente = @IdLugarCliente`);
-    return { ok: true, mensaje: 'Dimensiones actualizadas' };
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+
+    try {
+        // Detectar equipos fuera del nuevo rango
+        const fueraRango = await new sql.Request(tx)
+            .input('IdLugarCliente', sql.Int, idLugarCliente)
+            .input('Filas', sql.Int, filas)
+            .input('Columnas', sql.Int, columnas)
+            .query(`
+                SELECT E.IdEquipo, E.Hostname, P.Fila, P.Columna
+                FROM PlanoUbicaciones P
+                INNER JOIN Equipos E ON E.IdEquipo = P.IdEquipo
+                WHERE P.IdLugarCliente = @IdLugarCliente
+                  AND (P.Fila > @Filas OR P.Columna > @Columnas)
+            `);
+
+        const expulsados = fueraRango.recordset;
+
+        // Eliminar ubicaciones fuera de rango
+        if (expulsados.length > 0) {
+            await new sql.Request(tx)
+                .input('IdLugarCliente', sql.Int, idLugarCliente)
+                .input('Filas', sql.Int, filas)
+                .input('Columnas', sql.Int, columnas)
+                .query(`
+                    DELETE FROM PlanoUbicaciones
+                    WHERE IdLugarCliente = @IdLugarCliente
+                      AND (Fila > @Filas OR Columna > @Columnas)
+                `);
+        }
+
+        // Actualizar dimensiones
+        await new sql.Request(tx)
+            .input('IdLugarCliente', sql.Int, idLugarCliente)
+            .input('Filas', sql.Int, filas)
+            .input('Columnas', sql.Int, columnas)
+            .query(`UPDATE LugaresClientes SET Filas = @Filas, Columnas = @Columnas
+                    WHERE IdLugarCliente = @IdLugarCliente`);
+
+        await tx.commit();
+
+        // Histórico
+        const detalle = expulsados.length > 0
+            ? `Dimensiones cambiadas a ${filas}x${columnas}. ${expulsados.length} equipo(s) fuera de rango: ${expulsados.map(e => e.Hostname).join(', ')}`
+            : `Dimensiones cambiadas a ${filas}x${columnas}`;
+
+        await historicos.registrar(idUsuario, idLugarCliente, null, 'Redimensionar', detalle);
+
+        return {
+            ok: true,
+            mensaje: 'Dimensiones actualizadas',
+            expulsados
+        };
+    } catch (err) {
+        await tx.rollback();
+        throw err;
+    }
 }
 
 /* =========================================================

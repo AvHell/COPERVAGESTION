@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Clientes</title>
+    <link rel="stylesheet" href="../css/general.css">
+    <link rel="stylesheet" href="../css/clientes.css">
+</head>
+<body>
+    <div class="barra-acciones">
+        <button id="btn-volver" class="secundario">← Volver al menú</button>
+        <button id="btn-nuevo">+ Nuevo cliente</button>
+    </div>
+
+    <h2>Clientes</h2>
+
+    <!-- Formulario -->
+    <div class="contenedor-form" id="formulario" style="display:none;">
+        <div class="fila-form">
+            <div>
+                <label for="codigo">Código</label>
+                <input type="text" id="codigo" maxlength="10" placeholder="NU">
+            </div>
+            <div>
+                <label for="nombre">Nombre</label>
+                <input type="text" id="nombre" placeholder="Cliente NU">
+            </div>
+            <div>
+                <button id="btn-guardar">Guardar</button>
+                <button id="btn-cancelar" class="secundario">Cancelar</button>
+            </div>
+        </div>
+        <div id="mensaje" class="mensaje" style="display:none;"></div>
+    </div>
+
+    <!-- Tabla -->
+    <table>
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th style="width:180px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-clientes"></tbody>
+    </table>
+
+    <script src="../js/clientes-renderer.js"></script>
+</body>
+</html>

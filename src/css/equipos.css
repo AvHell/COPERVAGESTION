@@ -1,0 +1,230 @@
+/* =========================================================
+   BUSCADOR
+   ========================================================= */
+
+.buscador {
+    position: relative;
+    margin-left: auto;
+    width: 340px;
+}
+
+.buscador .icono-svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-texto-suave);
+    pointer-events: none;
+    width: 16px;
+    height: 16px;
+}
+
+.buscador input {
+    padding-left: 36px;
+}
+
+/* =========================================================
+   MODAL GRANDE
+   ========================================================= */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    padding: 20px;
+}
+
+.modal-grande {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 1000px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    overflow: hidden;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--color-borde);
+    flex-shrink: 0;
+}
+
+.modal-header h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--color-texto);
+    margin: 0;
+}
+
+.btn-cerrar-modal {
+    background: transparent;
+    color: var(--color-texto-suave);
+    font-size: 1rem;
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+.btn-cerrar-modal:hover:not(:disabled) {
+    background: #f1f5f9;
+    color: var(--color-texto);
+}
+
+.modal-body {
+    padding: 22px 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--color-borde);
+    background: #f8fafc;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   FORMULARIO
+   ========================================================= */
+
+.grid-form {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.grid-form.col2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-form.col4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.seccion-titulo {
+    font-weight: 600;
+    color: var(--color-texto);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-borde);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 10px;
+}
+
+.seccion-titulo:first-child {
+    margin-top: 0;
+}
+
+.campo-oculto {
+    display: none;
+}
+
+/* =========================================================
+   SELECT CON BOTÓN +
+   ========================================================= */
+
+.select-con-boton {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.select-con-boton select {
+    flex: 1;
+    min-width: 0;
+}
+
+.btn-agregar-mini {
+    padding: 0 14px;
+    background: var(--color-primario-suave);
+    color: var(--color-primario);
+    border: 1px solid var(--color-primario);
+    font-weight: 700;
+    font-size: 1.1rem;
+    line-height: 1;
+    min-width: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-agregar-mini:hover:not(:disabled) {
+    background: var(--color-primario);
+    color: #fff;
+}
+/* =========================================================
+   CHECKBOX DE HOSTNAME MANUAL
+   ========================================================= */
+
+.fila-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border: 1px solid var(--color-borde);
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-texto);
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--color-primario);
+}
+
+.checkbox-label span {
+    color: var(--color-texto);
+}
+
+.ayuda-checkbox {
+    font-size: 0.8rem;
+    color: var(--color-texto-suave);
+    margin-left: auto;
+    font-style: italic;
+}
+
+/* Input de hostname cuando está habilitado */
+#hostnamePreview:not([readonly]) {
+    background: #fff;
+    color: var(--color-texto);
+    border-color: var(--color-primario);
+    box-shadow: 0 0 0 3px var(--color-primario-suave);
+    cursor: text;
+}
+
+#hostnamePreview:not([readonly]):focus {
+    outline: none;
+    border-color: var(--color-primario);
+    box-shadow: 0 0 0 3px var(--color-primario-suave);
+}

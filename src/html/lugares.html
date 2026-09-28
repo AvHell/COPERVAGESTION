@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Lugares de Clientes</title>
+    <link rel="stylesheet" href="../css/general.css">
+    <link rel="stylesheet" href="../css/lugares.css">
+</head>
+<body>
+    <div class="barra-acciones">
+        <button id="btn-volver" class="secundario">← Volver al menú</button>
+        <button id="btn-nuevo">+ Nuevo lugar</button>
+    </div>
+
+    <h2>Lugares de Clientes</h2>
+
+    <div class="contenedor-form" id="formulario" style="display:none;">
+        <div class="fila-form">
+            <div>
+                <label for="cliente">Cliente</label>
+                <select id="cliente"></select>
+            </div>
+            <div>
+                <label for="nombre">Nombre del lugar</label>
+                <input type="text" id="nombre" placeholder="Piso 3 - Operaciones">
+            </div>
+            <div>
+                <button id="btn-guardar">Guardar</button>
+                <button id="btn-cancelar" class="secundario">Cancelar</button>
+            </div>
+        </div>
+        <div id="mensaje" class="mensaje" style="display:none;"></div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th>Lugar</th>
+                <th style="width:180px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-lugares"></tbody>
+    </table>
+
+    <script src="../js/lugares-renderer.js"></script>
+</body>
+</html>

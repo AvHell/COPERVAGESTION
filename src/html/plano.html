@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Plano Visual</title>
+    <link rel="stylesheet" href="../css/general.css">
+    <link rel="stylesheet" href="../css/plano.css">
+</head>
+<body>
+
+    <div class="barra-superior">
+        <button id="btn-volver" class="secundario">← Volver al menú</button>
+        <label>Modo:</label>
+        <select id="select-modo" style="width:auto;">
+            <option value="simple">Simple</option>
+            <option value="doble">Doble</option>
+        </select>
+        <button id="btn-modo-zona" class="btn-modo">Modo Zona</button>
+        <button id="btn-limpiar-seleccion" class="secundario" style="display:none;">Limpiar selección</button>
+    </div>
+
+    <div class="contenedor-principal">
+
+        <!-- Panel Izquierdo -->
+        <div class="panel-plano" id="panel-izq">
+            <div class="panel-encabezado">
+                <label>Cliente:</label>
+                <select class="select-cliente-panel" id="select-cliente-izq"></select>
+                <label>Piso:</label>
+                <select class="select-lugar-panel" id="select-lugar-izq"></select>
+                <label>Filas:</label>
+                <input type="number" class="input-filas-panel" id="input-filas-izq" min="1" max="30" style="width:60px;">
+                <label>Cols:</label>
+                <input type="number" class="input-columnas-panel" id="input-columnas-izq" min="1" max="30" style="width:60px;">
+                <button class="btn-aplicar-dim-panel" id="btn-aplicar-dim-izq" style="font-size:0.8rem;padding:4px 8px;">Aplicar</button>
+            </div>
+            <div class="plano-wrapper">
+                <div id="grid-izq" class="grid-plano"></div>
+            </div>
+        </div>
+
+        <!-- Panel Derecho (oculto en modo simple) -->
+        <div class="panel-plano" id="panel-der" style="display:none;">
+            <div class="panel-encabezado">
+                <label>Cliente:</label>
+                <select class="select-cliente-panel" id="select-cliente-der"></select>
+                <label>Piso:</label>
+                <select class="select-lugar-panel" id="select-lugar-der"></select>
+                <label>Filas:</label>
+                <input type="number" class="input-filas-panel" id="input-filas-der" min="1" max="30" style="width:60px;">
+                <label>Cols:</label>
+                <input type="number" class="input-columnas-panel" id="input-columnas-der" min="1" max="30" style="width:60px;">
+                <button class="btn-aplicar-dim-panel" id="btn-aplicar-dim-der" style="font-size:0.8rem;padding:4px 8px;">Aplicar</button>
+            </div>
+            <div class="plano-wrapper">
+                <div id="grid-der" class="grid-plano"></div>
+            </div>
+        </div>
+
+        <!-- Panel lateral (compartido) -->
+        <div class="panel-lateral">
+            <h3>Equipos sin ubicar</h3>
+            <div id="lista-sin-ubicar"></div>
+
+            <h3 style="margin-top:20px;">Zonas del piso activo</h3>
+            <ul id="lista-zonas" class="lista-zonas"></ul>
+        </div>
+
+    </div>
+
+    <!-- Modal confirmación general -->
+    <div id="modal" class="modal-overlay" style="display:none;">
+        <div class="modal-caja">
+            <h3 id="modal-titulo">Confirmar acción</h3>
+            <p id="modal-texto"></p>
+            <div class="modal-acciones">
+                <button id="modal-cancelar" class="secundario">Cancelar</button>
+                <button id="modal-aceptar">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal zona -->
+    <div id="modal-zona" class="modal-overlay" style="display:none;">
+        <div class="modal-caja">
+            <h3 id="modal-zona-titulo">Nueva zona</h3>
+            <div class="campo-zona">
+                <label for="zona-nombre">Nombre (ej. Mesa 1, Entrada, Extintor)</label>
+                <input type="text" id="zona-nombre" maxlength="100" placeholder="Mesa 1">
+            </div>
+            <div class="campo-zona">
+                <label>Color</label>
+                <div class="colores-zona" id="colores-zona"></div>
+            </div>
+            <p id="zona-rango" style="font-size:0.85rem;color:#7f8c8d;margin-top:8px;"></p>
+            <div class="modal-acciones">
+                <button id="modal-zona-cancelar" class="secundario">Cancelar</button>
+                <button id="modal-zona-aceptar">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal mover entre pisos -->
+    <div id="modal-mover-piso" class="modal-overlay" style="display:none;">
+        <div class="modal-caja modal-grande">
+            <h3 id="mover-titulo">Mover equipo entre pisos</h3>
+
+            <div class="info-mover" id="mover-info"></div>
+
+            <div class="check-mantener">
+                <label>
+                    <input type="checkbox" id="chk-mantener" checked>
+                    Mantener datos del equipo (hostname, IP, cliente, red)
+                </label>
+            </div>
+
+            <div id="form-editar-mover" style="display:none;">
+                <div class="seccion-titulo">Editar datos del equipo</div>
+
+                <div class="grid-form">
+                    <div>
+                        <label for="mv-cliente">Cliente</label>
+                        <select id="mv-cliente"></select>
+                    </div>
+                    <div>
+                        <label for="mv-lugar">Lugar (destino)</label>
+                        <select id="mv-lugar" disabled></select>
+                    </div>
+                    <div>
+                        <label for="mv-rol">Rol</label>
+                        <select id="mv-rol"></select>
+                    </div>
+                </div>
+
+                <div class="grid-form">
+                    <div>
+                        <label for="mv-tipoIP">Tipo IP</label>
+                        <select id="mv-tipoIP">
+                            <option value="Estatica">Estática</option>
+                            <option value="DHCP">DHCP</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="mv-hostname">Hostname</label>
+                        <input type="text" id="mv-hostname">
+                    </div>
+                    <div>
+                        <label for="mv-ip">IP</label>
+                        <input type="text" id="mv-ip">
+                    </div>
+                </div>
+
+                <div class="grid-form">
+                    <div>
+                        <label for="mv-mascara">Máscara</label>
+                        <input type="text" id="mv-mascara">
+                    </div>
+                    <div>
+                        <label for="mv-puerta">Puerta de enlace</label>
+                        <input type="text" id="mv-puerta">
+                    </div>
+                    <div>
+                        <label for="mv-dns1">DNS 1</label>
+                        <input type="text" id="mv-dns1">
+                    </div>
+                    <div>
+                        <label for="mv-dns2">DNS 2</label>
+                        <input type="text" id="mv-dns2">
+                    </div>
+                </div>
+
+                <div class="grid-form">
+                    <div>
+                        <label for="mv-usuario">Usuario admin</label>
+                        <input type="text" id="mv-usuario">
+                    </div>
+                    <div>
+                        <label for="mv-password">Password admin</label>
+                        <input type="text" id="mv-password">
+                    </div>
+                </div>
+
+                <div id="mover-mensaje" class="mensaje" style="display:none;"></div>
+            </div>
+
+            <div class="modal-acciones">
+                <button id="mover-cancelar" class="secundario">Cancelar</button>
+                <button id="mover-confirmar">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/plano-renderer.js"></script>
+</body>
+</html>

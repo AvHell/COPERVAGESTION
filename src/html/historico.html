@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Histórico del Plano</title>
+    <link rel="stylesheet" href="../css/general.css">
+</head>
+<body>
+    <div class="barra-acciones">
+        <button id="btn-volver" class="secundario">← Volver al menú</button>
+        <label>Cliente:</label>
+        <select id="select-cliente" style="width:auto;"></select>
+        <label>Piso:</label>
+        <select id="select-lugar" style="width:auto;"></select>
+    </div>
+
+    <h2>Histórico del Plano</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>Acción</th>
+                <th>Equipo</th>
+                <th>Detalle</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-historico"></tbody>
+    </table>
+
+    <script src="../js/historico-renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Iniciar sesión</title>
+    <link rel="stylesheet" href="../css/general.css">
+    <link rel="stylesheet" href="../css/login.css">
+</head>
+<body>
+    <div class="login-wrapper">
+        <h1>Inventario de Equipos</h1>
+        <p class="subtitulo">Inicia sesión para continuar</p>
+
+        <div class="form-group">
+            <label for="usuario">Usuario</label>
+            <input type="text" id="usuario" placeholder="admin" autofocus>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Contraseña</label>
+            <input type="password" id="password" placeholder="••••••••">
+        </div>
+
+        <button id="btn-login" class="btn-login">Entrar</button>
+
+        <div id="mensaje" class="mensaje" style="display:none;"></div>
+    </div>
+
+    <script src="../js/login-renderer.js"></script>
+</body>
+</html>

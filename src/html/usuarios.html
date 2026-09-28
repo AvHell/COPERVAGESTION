@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Usuarios</title>
+    <link rel="stylesheet" href="../css/general.css">
+    <link rel="stylesheet" href="../css/roles.css">
+</head>
+<body>
+    <div class="barra-acciones">
+        <button id="btn-volver" class="secundario">← Volver al menú</button>
+        <button id="btn-nuevo">+ Nuevo usuario</button>
+    </div>
+
+    <h2>Usuarios</h2>
+
+    <div class="contenedor-form" id="formulario" style="display:none;">
+        <div class="grid-form" style="grid-template-columns:1fr 1fr 1fr 1fr;">
+            <div>
+                <label for="nombres">Nombres</label>
+                <input type="text" id="nombres">
+            </div>
+            <div>
+                <label for="apellidos">Apellidos</label>
+                <input type="text" id="apellidos">
+            </div>
+            <div>
+                <label for="nombreUsuario">Nombre usuario</label>
+                <input type="text" id="nombreUsuario">
+            </div>
+            <div>
+                <label for="password">Contraseña (dejar vacío para no cambiar)</label>
+                <input type="password" id="password">
+            </div>
+        </div>
+        <div class="barra-acciones">
+            <button id="btn-guardar">Guardar</button>
+            <button id="btn-cancelar" class="secundario">Cancelar</button>
+        </div>
+        <div id="mensaje" class="mensaje" style="display:none;"></div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Usuario</th>
+                <th>Nombres</th>
+                <th>Apellidos</th>
+                <th>Activo</th>
+                <th style="width:180px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-usuarios"></tbody>
+    </table>
+
+    <script src="../js/usuarios-renderer.js"></script>
+</body>
+</html>

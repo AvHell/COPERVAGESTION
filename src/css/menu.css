@@ -1,0 +1,30 @@
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding: 0;
+}
+
+h1 {
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.menu-botones {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    width: 80%;
+}
+
+.menu-botones button {
+    padding: 25px 15px;
+    font-size: 1.05rem;
+    background: #34495e;
+}
+
+.menu-botones button:hover {
+    background: #2c3e50;
+}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Roles de Equipo</title>
+    <link rel="stylesheet" href="../css/general.css">
+    <link rel="stylesheet" href="../css/roles.css">
+</head>
+<body>
+    <div class="barra-acciones">
+        <button id="btn-volver" class="secundario">← Volver al menú</button>
+        <button id="btn-nuevo">+ Nuevo rol</button>
+    </div>
+
+    <h2>Roles de Equipo</h2>
+
+    <div class="contenedor-form" id="formulario" style="display:none;">
+        <div class="fila-form">
+            <div>
+                <label for="codigo">Código</label>
+                <input type="text" id="codigo" maxlength="10" placeholder="AGT">
+            </div>
+            <div>
+                <label for="nombre">Nombre</label>
+                <input type="text" id="nombre" placeholder="Agente">
+            </div>
+            <div>
+                <label for="descripcion">Descripción</label>
+                <input type="text" id="descripcion" placeholder="Opcional">
+            </div>
+            <div>
+                <button id="btn-guardar">Guardar</button>
+                <button id="btn-cancelar" class="secundario">Cancelar</button>
+            </div>
+        </div>
+        <div id="mensaje" class="mensaje" style="display:none;"></div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th style="width:180px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-roles"></tbody>
+    </table>
+
+    <script src="../js/roles-renderer.js"></script>
+</body>
+</html>

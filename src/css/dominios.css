@@ -1,0 +1,12 @@
+.subtitulo-seccion {
+    color: var(--color-texto-suave);
+    font-size: 0.9rem;
+    margin-top: -8px;
+    margin-bottom: 18px;
+}
+
+td .password-celda {
+    font-family: 'Consolas', monospace;
+    color: var(--color-texto-suave);
+    letter-spacing: 0.05em;
+}

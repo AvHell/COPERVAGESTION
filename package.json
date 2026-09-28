@@ -1,0 +1,21 @@
+{
+  "name": "proyectoequipos",
+  "version": "1.0.0",
+  "description": "Sistema de inventario de equipos por cliente, piso y rol",
+  "main": "src/js/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^44.4.5"
+  },
+  "dependencies": {
+    "msnodesqlv8": "^5.5.0",
+    "mssql": "^12.7.2",
+    "sweetalert2": "^11.26.25"
+  }
+}

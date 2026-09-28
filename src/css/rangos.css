@@ -1,0 +1,35 @@
+.contenedor-form {
+    background: #fff;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.fila-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr auto;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 10px;
+}
+
+.fila-form.doble {
+    grid-template-columns: 1fr 1fr;
+}
+
+.mensaje {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.mensaje.ok    { background: #d4edda; color: #155724; }
+.mensaje.error { background: #f8d7da; color: #721c24; }
+
+.acciones-tabla button {
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    margin-right: 5px;
+}

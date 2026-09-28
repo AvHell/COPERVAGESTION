@@ -1,0 +1,152 @@
+/* =========================================================
+   SUBTÍTULO Y FILTROS
+   ========================================================= */
+
+.subtitulo-seccion {
+    color: var(--color-texto-suave);
+    font-size: 0.9rem;
+    margin-top: -8px;
+    margin-bottom: 18px;
+}
+
+.filtros {
+    display: grid;
+    grid-template-columns: 1fr 1fr 2fr;
+    gap: 14px;
+    background: #fff;
+    padding: 16px;
+    border-radius: var(--radio);
+    margin-bottom: 16px;
+    border: 1px solid var(--color-borde);
+    box-shadow: var(--sombra-suave);
+}
+
+/* =========================================================
+   MODAL DE CONFIGURACIÓN (SWEETALERT2)
+   ========================================================= */
+
+/* El popup en general */
+.swal2-popup.swal-config {
+    width: 480px !important;
+    padding: 26px 28px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15) !important;
+}
+
+/* Título */
+.swal2-popup.swal-config .swal2-title {
+    font-size: 1.15rem !important;
+    font-weight: 600 !important;
+    color: var(--color-texto) !important;
+    padding: 0 0 16px 0 !important;
+    margin: 0 !important;
+    border-bottom: 1px solid var(--color-borde) !important;
+}
+
+/* Contenedor de campos */
+.swal2-popup.swal-config .swal2-html-container {
+    margin: 18px 0 0 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+}
+
+/* Inputs y selects dentro del modal */
+.swal2-popup.swal-config .swal2-input,
+.swal2-popup.swal-config .swal2-select {
+    width: 100% !important;
+    height: 42px !important;
+    margin: 0 0 12px 0 !important;
+    padding: 10px 14px !important;
+    font-size: 0.92rem !important;
+    font-family: 'Segoe UI', 'Inter', sans-serif !important;
+    border: 1px solid var(--color-borde) !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+    color: var(--color-texto) !important;
+    box-sizing: border-box !important;
+    transition: border-color 0.15s, box-shadow 0.15s !important;
+    display: block !important;
+    box-shadow: none !important;
+}
+
+.swal2-popup.swal-config .swal2-input:focus,
+.swal2-popup.swal-config .swal2-select:focus {
+    outline: none !important;
+    border-color: var(--color-primario) !important;
+    box-shadow: 0 0 0 3px var(--color-primario-suave) !important;
+}
+
+.swal2-popup.swal-config .swal2-input::placeholder {
+    color: #94a3b8 !important;
+}
+
+/* Select: appearance nativo para que se vea bien */
+.swal2-popup.swal-config .swal2-select {
+    appearance: auto !important;
+    -webkit-appearance: auto !important;
+    cursor: pointer !important;
+    padding-right: 36px !important;
+}
+
+/* Último campo sin margen inferior */
+.swal2-popup.swal-config .swal2-html-container > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* Botones */
+.swal2-popup.swal-config .swal2-actions {
+    margin: 20px 0 0 0 !important;
+    gap: 10px !important;
+    width: 100% !important;
+    justify-content: flex-end !important;
+}
+
+.swal2-popup.swal-config .swal2-confirm,
+.swal2-popup.swal-config .swal2-cancel {
+    padding: 10px 22px !important;
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    border-radius: 8px !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+.swal2-popup.swal-config .swal2-confirm {
+    background: var(--color-primario) !important;
+    color: #fff !important;
+}
+
+.swal2-popup.swal-config .swal2-confirm:hover {
+    background: var(--color-primario-hover) !important;
+}
+
+.swal2-popup.swal-config .swal2-cancel {
+    background: #fff !important;
+    color: var(--color-texto) !important;
+    border: 1px solid var(--color-borde) !important;
+}
+
+.swal2-popup.swal-config .swal2-cancel:hover {
+    background: #f1f5f9 !important;
+}
+
+/* Mensaje de validación */
+.swal2-popup.swal-config .swal2-validation-message {
+    background: #fef2f2 !important;
+    color: #991b1b !important;
+    border-radius: 6px !important;
+    margin-top: 10px !important;
+    font-size: 0.85rem !important;
+}
+
+/* Ícono arriba del título */
+.swal2-popup.swal-config .swal2-icon {
+    margin: 0 auto 16px auto !important;
+    width: 56px !important;
+    height: 56px !important;
+    border-width: 3px !important;
+}
+
+.swal2-popup.swal-config .swal2-icon .swal2-icon-content {
+    font-size: 2rem !important;
+}

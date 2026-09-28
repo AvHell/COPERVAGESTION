@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Dominios Admin</title>
+    <link rel="stylesheet" href="../css/general.css">
+    <link rel="stylesheet" href="../css/configred.css">
+</head>
+<body>
+    <div class="barra-acciones">
+        <button id="btn-volver" class="secundario">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Volver al menú
+        </button>
+        <button id="btn-nuevo">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Nuevo dominio
+        </button>
+    </div>
+
+    <h2>Dominios Admin</h2>
+    <p class="subtitulo-seccion">Usuarios y contraseñas de administrador por cliente.</p>
+
+    <div class="filtros" style="grid-template-columns: 1fr 2fr;">
+        <div>
+            <label for="filtro-cliente">Cliente</label>
+            <select id="filtro-cliente"></select>
+        </div>
+        <div>
+            <label for="filtro-busqueda">Buscar</label>
+            <input type="text" id="filtro-busqueda" placeholder="Usuario o descripción...">
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th>Usuario</th>
+                <th>Password</th>
+                <th>Descripción</th>
+                <th style="width:180px;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-dominios"></tbody>
+    </table>
+
+    <script src="../../node_modules/sweetalert2/dist/sweetalert2.all.min.js"></script>
+    <script src="../js/dominios-renderer.js"></script>
+</body>
+</html>

@@ -35,6 +35,14 @@
             Modo Zona
         </button>
 
+        <button id="btn-modo-zona-libre" class="btn-modo">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+                <path d="M4 20h16M4 4h16v16"/>
+                <path d="M9 4v16M4 9h16"/>
+            </svg>
+            Modo Zona Libre
+        </button>
+
         <button id="btn-limpiar-seleccion" class="secundario" style="display:none;">
             Limpiar selección
         </button>
@@ -46,7 +54,17 @@
                 <line x1="12" y1="18" x2="12" y2="12"/>
                 <polyline points="9 15 12 18 15 15"/>
             </svg>
-            Exportar PDF
+            PDF Visual
+        </button>
+
+        <button id="btn-exportar-pdf-doc" class="secundario">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="8" y1="13" x2="16" y2="13"/>
+                <line x1="8" y1="17" x2="16" y2="17"/>
+            </svg>
+            PDF Documentado
         </button>
 
         <button id="btn-toggle-lateral" class="secundario btn-toggle-lateral">
@@ -101,7 +119,10 @@
                 <button id="btn-aplicar-dim-izq" class="secundario btn-aplicar-dim">Aplicar</button>
             </div>
             <div class="plano-wrapper">
-                <div id="grid-izq" class="grid-plano"></div>
+                <div class="grid-plano-wrapper">
+                    <div id="grid-izq" class="grid-plano"></div>
+                    <div id="llaves-izq" class="llaves-zona"></div>
+                </div>
             </div>
         </div>
 
@@ -127,7 +148,10 @@
                 <button id="btn-aplicar-dim-der" class="secundario btn-aplicar-dim">Aplicar</button>
             </div>
             <div class="plano-wrapper">
-                <div id="grid-der" class="grid-plano"></div>
+                <div class="grid-plano-wrapper">
+                    <div id="grid-der" class="grid-plano"></div>
+                    <div id="llaves-der" class="llaves-zona"></div>
+                </div>
             </div>
         </div>
 
@@ -208,6 +232,28 @@
             <div class="modal-acciones">
                 <button id="modal-zona-cancelar" class="secundario">Cancelar</button>
                 <button id="modal-zona-aceptar">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- MODAL ZONA LIBRE -->
+    <!-- ========================================================= -->
+    <div id="modal-zona-libre" class="modal-overlay" style="display:none;">
+        <div class="modal-caja">
+            <h3 id="modal-zona-libre-titulo">Nueva zona libre</h3>
+            <div class="campo-zona">
+                <label for="zona-libre-nombre">Texto (ej. ENTRADA, VENTANA, EXTINTOR)</label>
+                <input type="text" id="zona-libre-nombre" maxlength="100" placeholder="ENTRADA">
+            </div>
+            <div class="campo-zona">
+                <label>Color</label>
+                <div class="colores-zona" id="colores-zona-libre"></div>
+            </div>
+            <p id="zona-libre-celdas" style="font-size:0.85rem;color:#7f8c8d;margin-top:8px;"></p>
+            <div class="modal-acciones">
+                <button id="modal-zona-libre-cancelar" class="secundario">Cancelar</button>
+                <button id="modal-zona-libre-aceptar">Guardar</button>
             </div>
         </div>
     </div>

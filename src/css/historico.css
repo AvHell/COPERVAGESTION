@@ -1,0 +1,508 @@
+/* =========================================================
+   HISTÓRICO DEL PLANO — ESTILOS AUTOCONTENIDOS
+   Base limpia. Filtros por fecha. Badges por acción.
+   ========================================================= */
+
+/* =========================================================
+   RESET Y BASE
+   ========================================================= */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body { height: 100%; }
+
+/* =========================================================
+   VARIABLES
+   ========================================================= */
+:root {
+    --hi-azul:            #1e3a5f;
+    --hi-azul-hover:      #274d7a;
+    --hi-azul-suave:      rgba(30, 58, 95, 0.12);
+    --hi-azul-claro:      #eef2f7;
+    --hi-gris-fondo:      #f4f6f9;
+    --hi-gris-borde:      #d7dde5;
+    --hi-gris-suave:      #eef2f7;
+    --hi-gris-texto:      #4a5568;
+    --hi-gris-texto-2:    #94a3b8;
+    --hi-blanco:          #ffffff;
+    --hi-exito:           #2f855a;
+    --hi-error:           #b91c1c;
+    --hi-advertencia:     #b7791f;
+    --hi-info:            #0369a1;
+    --hi-radio:           10px;
+    --hi-radio-sm:        8px;
+    --hi-sombra-suave:    0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --hi-sombra-media:    0 6px 18px rgba(15, 23, 42, 0.08);
+    --hi-sombra-fuerte:   0 20px 60px rgba(15, 23, 42, 0.25);
+
+    --hi-fuente: 'Poppins', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --hi-fuente-mono: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+}
+
+/* =========================================================
+   BASE
+   ========================================================= */
+body {
+    font-family: var(--hi-fuente);
+    font-size: 14px;
+    color: #1a202c;
+    background-color: var(--hi-gris-fondo);
+    padding: 32px 40px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background-image:
+        radial-gradient(circle at 0% 0%, rgba(30, 58, 95, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 100% 100%, rgba(30, 58, 95, 0.03) 0%, transparent 40%);
+    background-attachment: fixed;
+}
+
+/* =========================================================
+   BOTONES
+   ========================================================= */
+button {
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border-radius: var(--hi-radio-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+                box-shadow 0.15s ease, transform 0.05s ease;
+    background-color: var(--hi-azul);
+    color: var(--hi-blanco);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    user-select: none;
+}
+button:hover:not(:disabled)  { background-color: var(--hi-azul-hover); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:focus-visible {
+    outline: 2px solid var(--hi-azul-hover);
+    outline-offset: 2px;
+}
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+button.secundario {
+    background-color: var(--hi-blanco);
+    color: var(--hi-azul);
+    border-color: var(--hi-gris-borde);
+}
+button.secundario:hover:not(:disabled) {
+    background-color: var(--hi-gris-suave);
+    border-color: var(--hi-azul);
+}
+
+button.peligro { background-color: var(--hi-error); }
+button.peligro:hover:not(:disabled) { background-color: #991b1b; }
+
+button svg, button .icono-svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    stroke-width: 2;
+}
+
+/* =========================================================
+   BARRA DE ACCIONES
+   ========================================================= */
+.barra-acciones {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+/* =========================================================
+   TÍTULO Y SUBTÍTULO
+   ========================================================= */
+h2 {
+    color: var(--hi-azul);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 8px 0 4px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--hi-gris-borde);
+}
+.subtitulo-seccion {
+    color: var(--hi-gris-texto);
+    font-size: 13.5px;
+    margin-bottom: 18px;
+}
+
+/* =========================================================
+   FILTROS
+   ========================================================= */
+.filtros {
+    display: grid;
+    grid-template-columns: 2fr 2fr 1fr 1fr auto;
+    gap: 14px;
+    align-items: end;
+    background: var(--hi-blanco);
+    padding: 16px;
+    border-radius: var(--hi-radio);
+    margin-bottom: 20px;
+    border: 1px solid var(--hi-gris-borde);
+    box-shadow: var(--hi-sombra-suave);
+}
+.filtros > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.filtros label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--hi-gris-texto);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.filtros select,
+.filtros input[type="date"] {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: #1a202c;
+    background-color: var(--hi-blanco);
+    border: 1px solid var(--hi-gris-borde);
+    border-radius: var(--hi-radio-sm);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.filtros select:focus,
+.filtros input[type="date"]:focus {
+    outline: none;
+    border-color: var(--hi-azul);
+    box-shadow: 0 0 0 3px var(--hi-azul-suave);
+}
+.filtro-acciones {
+    display: flex;
+    flex-direction: row !important;
+    align-items: flex-end;
+}
+.filtro-acciones button {
+    white-space: nowrap;
+}
+
+/* =========================================================
+   ESTADO VACÍO
+   ========================================================= */
+.sin-resultados {
+    text-align: center;
+    padding: 60px 20px;
+    background-color: var(--hi-blanco);
+    border: 1px solid var(--hi-gris-borde);
+    border-radius: var(--hi-radio);
+    box-shadow: var(--hi-sombra-suave);
+    color: var(--hi-gris-texto);
+}
+.sin-resultados svg {
+    width: 42px;
+    height: 42px;
+    color: var(--hi-gris-texto-2);
+    margin-bottom: 12px;
+}
+.sin-resultados p {
+    font-size: 14px;
+}
+
+.oculto { display: none !important; }
+
+/* =========================================================
+   TABLA
+   ========================================================= */
+.card-tabla {
+    background-color: var(--hi-blanco);
+    border: 1px solid var(--hi-gris-borde);
+    border-radius: var(--hi-radio);
+    overflow: hidden;
+    box-shadow: var(--hi-sombra-suave);
+}
+.tabla-historico {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--hi-blanco);
+    font-family: var(--hi-fuente);
+    font-feature-settings: 'tnum';
+}
+.tabla-historico thead { background-color: #fafbfc; }
+.tabla-historico th {
+    padding: 11px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--hi-gris-texto);
+    border-bottom: 1px solid var(--hi-gris-borde);
+}
+.tabla-historico td {
+    padding: 13px 16px;
+    font-size: 13.5px;
+    color: #2d3748;
+    border-bottom: 1px solid var(--hi-gris-borde);
+    vertical-align: top;
+    letter-spacing: 0.005em;
+}
+.tabla-historico tbody tr:last-child td { border-bottom: none; }
+.tabla-historico tbody tr:hover { background-color: var(--hi-gris-suave); }
+
+/* =========================================================
+   BADGES
+   ========================================================= */
+
+/* Badge de fecha */
+.badge-fecha {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 1px;
+    font-family: var(--hi-fuente);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--hi-azul);
+    background-color: var(--hi-azul-claro);
+    padding: 4px 12px;
+    border-radius: var(--hi-radio-sm);
+    border: 1px solid rgba(30, 58, 95, 0.15);
+    line-height: 1.25;
+    white-space: nowrap;
+}
+.badge-fecha .hora {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--hi-gris-texto);
+}
+
+/* Badge de usuario */
+.badge-usuario {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--hi-fuente);
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 4px 14px;
+    border-radius: 999px;
+    line-height: 1.4;
+    background-color: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.badge-usuario svg {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.2;
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+
+/* Badge de acción */
+.badge-accion {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--hi-fuente);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.5;
+    border: 1px solid;
+    white-space: nowrap;
+}
+
+/* Colores por tipo de acción */
+.badge-accion.accion-asignar {
+    background-color: #ecfdf5;
+    color: #047857;
+    border-color: #a7f3d0;
+}
+.badge-accion.accion-mover {
+    background-color: #eff6ff;
+    color: #1e40af;
+    border-color: #bfdbfe;
+}
+.badge-accion.accion-quitar {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border-color: #fecaca;
+}
+.badge-accion.accion-intercambiar {
+    background-color: #f5f3ff;
+    color: #5b21b6;
+    border-color: #ddd6fe;
+}
+.badge-accion.accion-zona {
+    background-color: #fef3c7;
+    color: #92400e;
+    border-color: #fde68a;
+}
+.badge-accion.accion-dimensiones {
+    background-color: #fdf2f8;
+    color: #9d174d;
+    border-color: #fbcfe8;
+}
+.badge-accion.accion-def {
+    background-color: var(--hi-azul-claro);
+    color: var(--hi-azul);
+    border-color: rgba(30, 58, 95, 0.15);
+}
+
+/* Badge de equipo (hostname) */
+.badge-equipo {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--hi-fuente-mono);
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--hi-azul);
+    background-color: var(--hi-azul-claro);
+    padding: 4px 12px;
+    border-radius: 6px;
+    letter-spacing: 0.03em;
+    border: 1px solid rgba(30, 58, 95, 0.15);
+}
+.badge-equipo.vacia {
+    color: var(--hi-gris-texto-2);
+    font-style: italic;
+    font-weight: 500;
+    font-family: var(--hi-fuente);
+}
+
+/* Detalle con icono */
+.detalle-celda {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.5;
+    color: var(--hi-gris-texto);
+    font-size: 13px;
+}
+.detalle-celda svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
+    color: var(--hi-azul);
+    flex-shrink: 0;
+    margin-top: 2px;
+    opacity: 0.7;
+}
+.detalle-celda.vacia {
+    color: var(--hi-gris-texto-2);
+    font-style: italic;
+}
+
+/* Ruta origen → destino */
+.ruta-movimiento {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--hi-gris-texto);
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+.ruta-movimiento .piso {
+    font-weight: 600;
+    color: var(--hi-azul);
+    background-color: var(--hi-azul-claro);
+    padding: 1px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(30, 58, 95, 0.15);
+}
+.ruta-movimiento .flecha {
+    color: var(--hi-gris-texto-2);
+    font-weight: 700;
+}
+
+/* =========================================================
+   TOAST SWEETALERT2 — versión limpia
+   ========================================================= */
+.swal2-toast.cl-toast {
+    border-left: 4px solid #cbd5e1;
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+    padding: 12px 18px;
+    font-family: var(--hi-fuente);
+    min-width: 280px;
+    max-width: 400px;
+}
+.swal2-toast.cl-toast.cl-toast-success { border-left-color: var(--hi-exito); }
+.swal2-toast.cl-toast.cl-toast-error   { border-left-color: var(--hi-error); }
+.swal2-toast.cl-toast.cl-toast-warning { border-left-color: var(--hi-advertencia); }
+.swal2-toast.cl-toast.cl-toast-info    { border-left-color: var(--hi-info); }
+
+.swal2-toast.cl-toast .swal2-title {
+    font-size: 13.5px;
+    font-weight: 500;
+    font-family: var(--hi-fuente);
+    text-align: left;
+    line-height: 1.4;
+    color: #1a202c;
+}
+.swal2-toast.cl-toast .swal2-icon {
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
+    flex-shrink: 0;
+}
+.swal2-toast.cl-toast .swal2-timer-progress-bar {
+    background: linear-gradient(90deg, #1e3a5f 0%, #274d7a 100%);
+    height: 3px;
+}
+
+/* =========================================================
+   OCULTAR RESIDUOS INTERNOS DE SWEETALERT
+   ========================================================= */
+body > input.swal2-input,
+body > input.swal2-file,
+body > input.swal2-radio,
+body > input.swal2-checkbox,
+body > select.swal2-select,
+body > textarea.swal2-textarea,
+body > .swal2-validation-message,
+body > .swal2-input-label,
+body > .swal2-select-label {
+    display: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+@media (max-width: 900px) {
+    .filtros {
+        grid-template-columns: 1fr 1fr;
+    }
+    .filtro-acciones {
+        grid-column: 1 / -1;
+    }
+}
+@media (max-width: 720px) {
+    body { padding: 20px; }
+    .barra-acciones { flex-wrap: wrap; }
+    .filtros { grid-template-columns: 1fr; }
+    .tabla-historico th,
+    .tabla-historico td { padding: 10px 12px; font-size: 12.5px; }
+    .swal2-toast.cl-toast { min-width: 0; width: 100%; }
+}

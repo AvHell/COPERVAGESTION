@@ -1,57 +1,333 @@
-body {
-    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
+/* =========================================================
+   LOGIN — ESTILOS AUTOCONTENIDOS
+   Diseño moderno con tarjeta flotante.
+   Ojo para mostrar/ocultar contraseña.
+   ========================================================= */
+
+/* =========================================================
+   RESET Y BASE
+   ========================================================= */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
     padding: 0;
 }
 
+html, body { height: 100%; }
+
+/* =========================================================
+   VARIABLES
+   ========================================================= */
+:root {
+    --lo-azul:            #1e3a5f;
+    --lo-azul-hover:      #274d7a;
+    --lo-azul-suave:      rgba(30, 58, 95, 0.12);
+    --lo-azul-claro:      #eef2f7;
+    --lo-gris-fondo:      #f4f6f9;
+    --lo-gris-borde:      #d7dde5;
+    --lo-gris-suave:      #eef2f7;
+    --lo-gris-texto:      #4a5568;
+    --lo-gris-texto-2:    #94a3b8;
+    --lo-blanco:          #ffffff;
+    --lo-exito:           #2f855a;
+    --lo-error:           #b91c1c;
+    --lo-radio:           14px;
+    --lo-radio-sm:        10px;
+    --lo-sombra-tarjeta:  0 20px 60px rgba(15, 23, 42, 0.25);
+    --lo-sombra-suave:    0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+
+    --lo-fuente: 'Poppins', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+    --lo-grad-fondo:  linear-gradient(135deg, #1e3a5f 0%, #16283f 100%);
+    --lo-grad-azul:   linear-gradient(135deg, #1e3a5f 0%, #274d7a 100%);
+    --lo-grad-azul-h: linear-gradient(135deg, #274d7a 0%, #1e3a5f 100%);
+}
+
+/* =========================================================
+   BODY — Fondo con gradiente institucional
+   ========================================================= */
+body {
+    font-family: var(--lo-fuente);
+    font-size: 14px;
+    color: #1a202c;
+    background: var(--lo-grad-fondo);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Halos decorativos sutiles */
+body::before {
+    content: '';
+    position: absolute;
+    top: -20%;
+    right: -10%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+body::after {
+    content: '';
+    position: absolute;
+    bottom: -20%;
+    left: -10%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* =========================================================
+   WRAPPER Y TARJETA
+   ========================================================= */
 .login-wrapper {
-    background: #fff;
-    padding: 35px 30px;
-    border-radius: 10px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-    width: 360px;
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
 }
 
-.login-wrapper h1 {
+.login-card {
+    background-color: var(--lo-blanco);
+    border-radius: var(--lo-radio);
+    padding: 36px 34px 30px;
+    box-shadow: var(--lo-sombra-tarjeta);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+.login-header {
     text-align: center;
-    font-size: 1.4rem;
-    margin-bottom: 5px;
-    color: #2c3e50;
+    margin-bottom: 28px;
 }
 
-.subtitulo {
-    text-align: center;
-    color: #7f8c8d;
-    font-size: 0.9rem;
-    margin-bottom: 25px;
+.brand-logo {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 16px;
+    border-radius: 16px;
+    background: var(--lo-grad-azul);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 20px rgba(30, 58, 95, 0.25);
+}
+.brand-logo svg {
+    width: 30px;
+    height: 30px;
+    stroke-width: 2;
 }
 
+.login-header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--lo-azul);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin-bottom: 4px;
+}
+.login-header .subtitulo {
+    font-size: 13.5px;
+    color: var(--lo-gris-texto);
+    letter-spacing: 0.01em;
+}
+
+/* =========================================================
+   FORMULARIO
+   ========================================================= */
 .form-group {
-    margin-bottom: 15px;
+    margin-bottom: 16px;
 }
 
+.form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--lo-gris-texto);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Wrapper input + icono + botón */
+.input-con-icono {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.icono-input {
+    position: absolute;
+    left: 14px;
+    width: 16px;
+    height: 16px;
+    color: var(--lo-gris-texto-2);
+    pointer-events: none;
+    stroke-width: 2;
+}
+
+.input-con-icono input {
+    width: 100%;
+    padding: 12px 14px 12px 42px;
+    font-family: inherit;
+    font-size: 14px;
+    color: #1a202c;
+    background-color: var(--lo-blanco);
+    border: 1.5px solid var(--lo-gris-borde);
+    border-radius: var(--lo-radio-sm);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input-con-icono input:focus {
+    outline: none;
+    border-color: var(--lo-azul);
+    box-shadow: 0 0 0 3px var(--lo-azul-suave);
+}
+.input-con-icono input::placeholder {
+    color: var(--lo-gris-texto-2);
+    font-weight: 400;
+}
+
+/* Botón ojo (dentro del input password) */
+.btn-toggle-password {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 6px;
+    background: transparent;
+    color: var(--lo-gris-texto-2);
+    border: none;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.btn-toggle-password:hover {
+    background-color: var(--lo-gris-suave);
+    color: var(--lo-azul);
+}
+.btn-toggle-password:focus-visible {
+    outline: 2px solid var(--lo-azul);
+    outline-offset: 1px;
+}
+
+.btn-toggle-password svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+    flex-shrink: 0;
+}
+
+/* Ajustar padding del input password para el botón ojo */
+#password {
+    padding-right: 46px;
+}
+
+/* =========================================================
+   BOTÓN LOGIN
+   ========================================================= */
 .btn-login {
     width: 100%;
-    padding: 12px;
-    font-size: 1rem;
-    margin-top: 10px;
-    background: #2c3e50;
+    margin-top: 8px;
+    padding: 13px 22px;
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: #ffffff;
+    background: var(--lo-grad-azul);
+    border: none;
+    border-radius: var(--lo-radio-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    letter-spacing: 0.01em;
+    box-shadow: 0 6px 18px rgba(30, 58, 95, 0.28);
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+}
+.btn-login:hover:not(:disabled) {
+    background: var(--lo-grad-azul-h);
+    box-shadow: 0 8px 22px rgba(30, 58, 95, 0.35);
+}
+.btn-login:active:not(:disabled) {
+    transform: translateY(1px);
+}
+.btn-login:focus-visible {
+    outline: 2px solid var(--lo-azul-hover);
+    outline-offset: 2px;
+}
+.btn-login:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+.btn-login .btn-icon {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2.2;
+    flex-shrink: 0;
 }
 
-.btn-login:hover {
-    background: #1a252f;
-}
-
+/* =========================================================
+   MENSAJES
+   ========================================================= */
 .mensaje {
-    margin-top: 15px;
-    padding: 10px;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    text-align: center;
+    margin-top: 16px;
+    padding: 11px 14px;
+    border-radius: var(--lo-radio-sm);
+    font-size: 13.5px;
+    font-weight: 500;
+    border-left: 4px solid;
+    text-align: left;
+}
+.mensaje.ok {
+    background-color: #f0fdf4;
+    color: var(--lo-exito);
+    border-left-color: var(--lo-exito);
+}
+.mensaje.error {
+    background-color: #fef2f2;
+    color: var(--lo-error);
+    border-left-color: var(--lo-error);
 }
 
-.mensaje.ok    { background: #d4edda; color: #155724; }
-.mensaje.error { background: #f8d7da; color: #721c24; }
+.oculto { display: none !important; }
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+@media (max-width: 480px) {
+    .login-card {
+        padding: 28px 22px 24px;
+    }
+    .brand-logo {
+        width: 52px;
+        height: 52px;
+    }
+    .brand-logo svg {
+        width: 26px;
+        height: 26px;
+    }
+    .login-header h1 {
+        font-size: 18px;
+    }
+}

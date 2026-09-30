@@ -1,12 +1,510 @@
+/* =========================================================
+   DOMINIOS ADMIN — ESTILOS AUTOCONTENIDOS
+   Base limpia. SweetAlert sin overrides masivos.
+   Toast con cl-toast + didOpen (sin sombra).
+   Badges de cliente con color por código.
+   ========================================================= */
+
+/* =========================================================
+   RESET Y BASE
+   ========================================================= */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body { height: 100%; }
+
+/* =========================================================
+   VARIABLES
+   ========================================================= */
+:root {
+    --do-azul:            #1e3a5f;
+    --do-azul-hover:      #274d7a;
+    --do-azul-suave:      rgba(30, 58, 95, 0.12);
+    --do-azul-claro:      #eef2f7;
+    --do-gris-fondo:      #f4f6f9;
+    --do-gris-borde:      #d7dde5;
+    --do-gris-suave:      #eef2f7;
+    --do-gris-texto:      #4a5568;
+    --do-gris-texto-2:    #94a3b8;
+    --do-blanco:          #ffffff;
+    --do-exito:           #2f855a;
+    --do-error:           #b91c1c;
+    --do-advertencia:     #b7791f;
+    --do-radio:           10px;
+    --do-radio-sm:        8px;
+    --do-sombra-suave:    0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --do-sombra-media:    0 6px 18px rgba(15, 23, 42, 0.08);
+    --do-sombra-fuerte:   0 20px 60px rgba(15, 23, 42, 0.25);
+
+    --do-fuente: 'Poppins', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* =========================================================
+   BASE
+   ========================================================= */
+body {
+    font-family: var(--do-fuente);
+    font-size: 14px;
+    color: #1a202c;
+    background-color: var(--do-gris-fondo);
+    padding: 32px 40px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background-image:
+        radial-gradient(circle at 0% 0%, rgba(30, 58, 95, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 100% 100%, rgba(30, 58, 95, 0.03) 0%, transparent 40%);
+    background-attachment: fixed;
+}
+
+/* =========================================================
+   BOTONES
+   ========================================================= */
+button {
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border-radius: var(--do-radio-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+                box-shadow 0.15s ease, transform 0.05s ease;
+    background-color: var(--do-azul);
+    color: var(--do-blanco);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    user-select: none;
+}
+button:hover:not(:disabled)  { background-color: var(--do-azul-hover); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:focus-visible {
+    outline: 2px solid var(--do-azul-hover);
+    outline-offset: 2px;
+}
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+button.secundario {
+    background-color: var(--do-blanco);
+    color: var(--do-azul);
+    border-color: var(--do-gris-borde);
+}
+button.secundario:hover:not(:disabled) {
+    background-color: var(--do-gris-suave);
+    border-color: var(--do-azul);
+}
+
+button.peligro { background-color: var(--do-error); }
+button.peligro:hover:not(:disabled) { background-color: #991b1b; }
+
+button svg, button .icono-svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    stroke-width: 2;
+}
+
+/* =========================================================
+   BARRA DE ACCIONES
+   ========================================================= */
+.barra-acciones {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+/* =========================================================
+   TÍTULO Y SUBTÍTULO
+   ========================================================= */
+h2 {
+    color: var(--do-azul);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 8px 0 4px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--do-gris-borde);
+}
 .subtitulo-seccion {
-    color: var(--color-texto-suave);
-    font-size: 0.9rem;
-    margin-top: -8px;
+    color: var(--do-gris-texto);
+    font-size: 13.5px;
     margin-bottom: 18px;
 }
 
-td .password-celda {
-    font-family: 'Consolas', monospace;
-    color: var(--color-texto-suave);
-    letter-spacing: 0.05em;
+/* =========================================================
+   FILTROS
+   ========================================================= */
+.filtros {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 14px;
+    background: var(--do-blanco);
+    padding: 16px;
+    border-radius: var(--do-radio);
+    margin-bottom: 20px;
+    border: 1px solid var(--do-gris-borde);
+    box-shadow: var(--do-sombra-suave);
+}
+.filtros > div { display: flex; flex-direction: column; }
+.filtros label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--do-gris-texto);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.filtros select,
+.filtros input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: #1a202c;
+    background-color: var(--do-blanco);
+    border: 1px solid var(--do-gris-borde);
+    border-radius: var(--do-radio-sm);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.filtros select:focus,
+.filtros input[type="text"]:focus {
+    outline: none;
+    border-color: var(--do-azul);
+    box-shadow: 0 0 0 3px var(--do-azul-suave);
+}
+.filtros input::placeholder { color: var(--do-gris-texto-2); }
+
+/* =========================================================
+   TABLA
+   ========================================================= */
+.card-tabla {
+    background-color: var(--do-blanco);
+    border: 1px solid var(--do-gris-borde);
+    border-radius: var(--do-radio);
+    overflow: hidden;
+    box-shadow: var(--do-sombra-suave);
+}
+.tabla-dominios {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--do-blanco);
+    font-family: var(--do-fuente);
+    font-feature-settings: 'tnum';
+}
+.tabla-dominios thead { background-color: #fafbfc; }
+.tabla-dominios th {
+    padding: 11px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--do-gris-texto);
+    border-bottom: 1px solid var(--do-gris-borde);
+}
+.tabla-dominios td {
+    padding: 13px 16px;
+    font-size: 13.5px;
+    color: #2d3748;
+    border-bottom: 1px solid var(--do-gris-borde);
+    vertical-align: middle;
+    letter-spacing: 0.005em;
+}
+.tabla-dominios tbody tr:last-child td { border-bottom: none; }
+.tabla-dominios tbody tr:hover { background-color: var(--do-gris-suave); }
+
+/* =========================================================
+   BADGES
+   ========================================================= */
+
+/* Badge cliente (código) — pill de color */
+.badge-cliente {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--do-fuente);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid;
+}
+.badge-cliente.codigo-nu {
+    color: #6d28d9;
+    background-color: #f5f3ff;
+    border-color: #ddd6fe;
+}
+.badge-cliente.codigo-didi {
+    color: #c2410c;
+    background-color: #fff7ed;
+    border-color: #fed7aa;
+}
+.badge-cliente.codigo-adama {
+    color: #047857;
+    background-color: #ecfdf5;
+    border-color: #a7f3d0;
+}
+.badge-cliente.codigo-kubo {
+    color: #0369a1;
+    background-color: #f0f9ff;
+    border-color: #bae6fd;
+}
+.badge-cliente.codigo-mega {
+    color: #be185d;
+    background-color: #fdf2f8;
+    border-color: #fbcfe8;
+}
+.badge-cliente.codigo-def {
+    color: var(--do-azul);
+    background-color: var(--do-azul-claro);
+    border-color: rgba(30, 58, 95, 0.15);
+}
+
+/* Badge de usuario admin — pill azul */
+.badge-usuario {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--do-fuente);
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 4px 14px;
+    border-radius: 999px;
+    line-height: 1.4;
+    background-color: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.badge-usuario svg {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.2;
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+
+/* Password con dots */
+.password-celda {
+    font-family: var(--do-fuente);
+    font-size: 14px;
+    color: var(--do-gris-texto);
+    letter-spacing: 0.15em;
+    font-weight: 700;
+}
+
+/* Descripción */
+.badge-desc {
+    display: inline-flex;
+    align-items: center;
+    font-size: 13px;
+    color: var(--do-gris-texto);
+    line-height: 1.4;
+}
+.badge-desc.vacia {
+    color: var(--do-gris-texto-2);
+    font-style: italic;
+}
+
+/* =========================================================
+   ACCIONES DE TABLA
+   ========================================================= */
+.acciones-tabla {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.acciones-tabla button {
+    padding: 6px 12px;
+    font-size: 12.5px;
+}
+
+/* Estado vacío */
+.estado-vacio {
+    text-align: center;
+    padding: 40px 16px;
+    color: var(--do-gris-texto);
+    font-style: italic;
+}
+
+/* =========================================================
+   TOAST SWEETALERT2 — versión limpia
+   ========================================================= */
+.swal2-toast.cl-toast {
+    border-left: 4px solid #cbd5e1;
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+    padding: 12px 18px;
+    font-family: var(--do-fuente);
+    min-width: 280px;
+    max-width: 400px;
+}
+.swal2-toast.cl-toast.cl-toast-success { border-left-color: var(--do-exito); }
+.swal2-toast.cl-toast.cl-toast-error   { border-left-color: var(--do-error); }
+.swal2-toast.cl-toast.cl-toast-warning { border-left-color: var(--do-advertencia); }
+.swal2-toast.cl-toast.cl-toast-info    { border-left-color: var(--do-azul); }
+
+.swal2-toast.cl-toast .swal2-title {
+    font-size: 13.5px;
+    font-weight: 500;
+    font-family: var(--do-fuente);
+    text-align: left;
+    line-height: 1.4;
+    color: #1a202c;
+}
+.swal2-toast.cl-toast .swal2-icon {
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
+    flex-shrink: 0;
+}
+.swal2-toast.cl-toast .swal2-timer-progress-bar {
+    background: linear-gradient(90deg, #1e3a5f 0%, #274d7a 100%);
+    height: 3px;
+}
+
+/* =========================================================
+   SWEETALERT2 — CONFIRM MODAL
+   ========================================================= */
+.swal2-popup.cl-confirm {
+    font-family: var(--do-fuente);
+    padding: 26px 28px 22px;
+    border-radius: 14px;
+}
+.swal2-popup.cl-confirm .swal2-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--do-azul);
+    padding: 0 0 6px 0;
+    margin: 0;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+}
+.swal2-popup.cl-confirm .swal2-html-container {
+    margin: 6px 0 0 0;
+    padding: 0;
+    font-size: 13.5px;
+    color: var(--do-gris-texto);
+    line-height: 1.55;
+}
+.swal2-popup.cl-confirm .swal2-html-container strong {
+    color: var(--do-azul);
+    font-weight: 600;
+}
+.swal2-popup.cl-confirm .swal2-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    border-width: 2.5px;
+    border-color: var(--do-advertencia);
+    color: var(--do-advertencia);
+}
+.swal2-popup.cl-confirm .swal2-icon .swal2-icon-content {
+    font-size: 1.6rem;
+    line-height: 1;
+}
+.swal2-popup.cl-confirm .swal2-actions {
+    margin: 20px 0 0 0;
+    gap: 10px;
+    width: 100%;
+    justify-content: flex-end;
+}
+.swal2-popup.cl-confirm .swal2-confirm,
+.swal2-popup.cl-confirm .swal2-cancel {
+    padding: 10px 22px;
+    font-size: 13.5px;
+    font-family: var(--do-fuente);
+    font-weight: 600;
+    border-radius: 10px;
+    margin: 0;
+    cursor: pointer;
+    min-width: 110px;
+}
+.swal2-popup.cl-confirm .swal2-cancel {
+    background: var(--do-blanco);
+    color: var(--do-azul);
+    border: 1px solid var(--do-gris-borde);
+}
+.swal2-popup.cl-confirm .swal2-cancel:hover {
+    background: var(--do-gris-suave);
+    border-color: var(--do-azul);
+}
+.swal2-popup.cl-confirm .swal2-confirm.cl-peligro {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    color: #ffffff;
+    border: none;
+}
+.swal2-popup.cl-confirm .swal2-confirm.cl-peligro:hover {
+    background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+}
+
+/* =========================================================
+   SWEETALERT2 — inputs y selects de los modales de form
+   (aplican a cualquier Swal.fire que use html con inputs)
+   ========================================================= */
+.swal2-popup .swal2-input,
+.swal2-popup .swal2-select {
+    font-family: var(--do-fuente) !important;
+    font-size: 14px !important;
+    padding: 10px 14px !important;
+    height: auto !important;
+    min-height: 42px !important;
+    border: 1px solid var(--do-gris-borde) !important;
+    border-radius: var(--do-radio-sm) !important;
+    background-color: var(--do-blanco) !important;
+    color: #1a202c !important;
+    box-shadow: none !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.swal2-popup .swal2-input:focus,
+.swal2-popup .swal2-select:focus {
+    border-color: var(--do-azul) !important;
+    box-shadow: 0 0 0 3px var(--do-azul-suave) !important;
+    outline: none !important;
+}
+.swal2-popup .swal2-input::placeholder { color: var(--do-gris-texto-2) !important; }
+
+/* =========================================================
+   OCULTAR RESIDUOS INTERNOS DE SWEETALERT
+   ========================================================= */
+body > input.swal2-input,
+body > input.swal2-file,
+body > input.swal2-radio,
+body > input.swal2-checkbox,
+body > select.swal2-select,
+body > textarea.swal2-textarea,
+body > .swal2-validation-message,
+body > .swal2-input-label,
+body > .swal2-select-label {
+    display: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+@media (max-width: 720px) {
+    body { padding: 20px; }
+    .barra-acciones { flex-wrap: wrap; }
+    .filtros { grid-template-columns: 1fr; }
+    .swal2-toast.cl-toast { min-width: 0; width: 100%; }
+    .swal2-popup.cl-confirm { width: calc(100% - 32px); }
 }

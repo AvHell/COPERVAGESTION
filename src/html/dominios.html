@@ -3,10 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <title>Dominios Admin</title>
-    <link rel="stylesheet" href="../css/general.css">
-    <link rel="stylesheet" href="../css/configred.css">
+
+    <!-- Fuente Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- SweetAlert2 por CDN (versión flotante 11) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Estilos autocontenidos -->
+    <link rel="stylesheet" href="../css/dominios.css">
 </head>
 <body>
+
+    <!-- =========================================================
+         BARRA SUPERIOR
+         ========================================================= -->
     <div class="barra-acciones">
         <button id="btn-volver" class="secundario">
             <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -14,6 +27,7 @@
             </svg>
             Volver al menú
         </button>
+
         <button id="btn-nuevo">
             <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 5v14M5 12h14"/>
@@ -25,7 +39,10 @@
     <h2>Dominios Admin</h2>
     <p class="subtitulo-seccion">Usuarios y contraseñas de administrador por cliente.</p>
 
-    <div class="filtros" style="grid-template-columns: 1fr 2fr;">
+    <!-- =========================================================
+         FILTROS
+         ========================================================= -->
+    <div class="filtros">
         <div>
             <label for="filtro-cliente">Cliente</label>
             <select id="filtro-cliente"></select>
@@ -36,20 +53,24 @@
         </div>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Cliente</th>
-                <th>Usuario</th>
-                <th>Password</th>
-                <th>Descripción</th>
-                <th style="width:180px;">Acciones</th>
-            </tr>
-        </thead>
-        <tbody id="tabla-dominios"></tbody>
-    </table>
+    <!-- =========================================================
+         TABLA
+         ========================================================= -->
+    <div class="card-tabla">
+        <table class="tabla-dominios">
+            <thead>
+                <tr>
+                    <th style="width:180px;">Cliente</th>
+                    <th style="width:24%;">Usuario</th>
+                    <th style="width:20%;">Password</th>
+                    <th>Descripción</th>
+                    <th style="width:200px; text-align:right;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-dominios"></tbody>
+        </table>
+    </div>
 
-    <script src="../../node_modules/sweetalert2/dist/sweetalert2.all.min.js"></script>
     <script src="../js/dominios-renderer.js"></script>
 </body>
 </html>

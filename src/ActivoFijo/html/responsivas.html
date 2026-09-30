@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Activo Fijo - Responsivas</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <link rel="stylesheet" href="../css/responsivas.css">
+</head>
+<body>
+
+    <!-- BARRA SUPERIOR -->
+    <div class="barra-acciones">
+        <button id="btn-volver" class="secundario">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Volver al menú
+        </button>
+
+        <div class="buscador">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="input-busqueda" placeholder="Buscar por folio, serie, IMEI, persona...">
+            <button type="button" id="btn-limpiar-busqueda" class="btn-limpiar oculto" title="Limpiar búsqueda">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+
+        <button id="btn-nuevo">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Nueva responsiva
+        </button>
+    </div>
+
+    <h2>Responsivas de Activos</h2>
+
+    <!-- FILTROS -->
+    <div class="filtros">
+        <div class="filtro">
+            <label for="filtro-estatus">Estatus</label>
+            <select id="filtro-estatus">
+                <option value="">Todos</option>
+                <option value="ASIGNADO">Asignado</option>
+                <option value="PENDIENTE">Pendiente</option>
+                <option value="DEVUELTO">Devuelto</option>
+                <option value="CANCELADO">Cancelado</option>
+            </select>
+        </div>
+        <button id="btn-limpiar-filtros" class="secundario">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            Limpiar filtros
+        </button>
+    </div>
+
+    <!-- ESTADO VACÍO -->
+    <div id="sin-resultados" class="sin-resultados oculto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <p>No se encontraron responsivas con ese criterio.</p>
+        <button type="button" id="btn-limpiar-busqueda-vacio" class="secundario">Limpiar búsqueda</button>
+    </div>
+
+    <!-- TABLA -->
+    <div class="card-tabla">
+        <table class="tabla-responsivas">
+            <thead>
+                <tr>
+                    <th>Folio</th>
+                    <th>Activo</th>
+                    <th>Persona</th>
+                    <th>Cartera</th>
+                    <th>F. Asignación</th>
+                    <th>Estatus</th>
+                    <th style="width:260px; text-align:right;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-body"></tbody>
+        </table>
+    </div>
+
+    <!-- MODAL -->
+    <div id="modal-responsiva" class="modal-overlay" style="display:none;">
+        <div class="modal-base">
+            <div class="modal-header">
+                <h3 id="modal-titulo">Nueva responsiva</h3>
+                <button id="modal-cerrar" class="btn-cerrar-modal" title="Cerrar">✕</button>
+            </div>
+
+            <form id="formulario" autocomplete="off">
+                <div class="modal-body">
+                    <div class="grid-form">
+
+                        <!-- Activo -->
+                        <div class="seccion-titulo campo-full">Activo a asignar</div>
+
+                        <div class="campo-full">
+                            <label for="activo">Activo *</label>
+                            <select id="activo" required></select>
+                            <div id="info-activo" class="info-activo oculto"></div>
+                        </div>
+
+                        <!-- Ticket -->
+                        <div class="seccion-titulo campo-full">Datos del ticket</div>
+
+                        <div>
+                            <label for="folio">Folio / Ticket *</label>
+                            <input type="text" id="folio" maxlength="50" placeholder="INC-20260914-3500" required>
+                        </div>
+                        <div>
+                            <label for="tipo-responsiva">Tipo de responsiva *</label>
+                            <input type="text" id="tipo-responsiva" readonly placeholder="Se llena al elegir el activo">
+                        </div>
+                        <div>
+                            <label for="fecha-asignacion">Fecha de asignación *</label>
+                            <input type="date" id="fecha-asignacion" required>
+                        </div>
+                        <div>
+                            <label for="fecha-devolucion">Fecha devolución programada</label>
+                            <input type="date" id="fecha-devolucion">
+                        </div>
+                        <div>
+                            <label for="estatus">Estatus *</label>
+                            <select id="estatus" required>
+                                <option value="ASIGNADO">Asignado</option>
+                                <option value="PENDIENTE">Pendiente</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="motivo">Motivo de la salida</label>
+                            <input type="text" id="motivo" maxlength="150" placeholder="Ej. USO OPERATIVO, HOME OFFICE">
+                        </div>
+                        <div class="campo-full">
+                            <label for="proyecto">Nombre del proyecto / servicio</label>
+                            <input type="text" id="proyecto" maxlength="200" placeholder="Ej. Asignación de celular">
+                        </div>
+                        <div class="campo-full">
+                            <label for="descripcion">Descripción de la solicitud</label>
+                            <input type="text" id="descripcion" maxlength="300" placeholder="Ej. TELÉFONO CELULAR">
+                        </div>
+
+                        <!-- Quien recibe -->
+                        <div class="seccion-titulo campo-full">Información de quien recibe</div>
+
+                        <div class="campo-full">
+                            <label for="nombre-recibe">Nombre completo *</label>
+                            <input type="text" id="nombre-recibe" maxlength="200" required>
+                        </div>
+                        <div>
+                            <label for="puesto-recibe">Puesto</label>
+                            <input type="text" id="puesto-recibe" maxlength="100">
+                        </div>
+                        <div>
+                            <label for="area-recibe">Área</label>
+                            <input type="text" id="area-recibe" maxlength="100">
+                        </div>
+                        <div>
+                            <label for="correo-recibe">Correo</label>
+                            <input type="text" id="correo-recibe" maxlength="150" placeholder="usuario@coperva.com">
+                        </div>
+                        <div>
+                            <label for="cartera">Cartera</label>
+                            <select id="cartera"><option value="">— Sin cartera —</option></select>
+                        </div>
+                        <div class="campo-full">
+                            <label for="puesto-cat">Puesto (catálogo)</label>
+                            <select id="puesto-cat"><option value="">— Sin puesto —</option></select>
+                        </div>
+
+                        <!-- Quien entrega -->
+                        <div class="seccion-titulo campo-full">Información de quien entrega (TI)</div>
+
+                        <div>
+                            <label for="nombre-entrega">Nombre</label>
+                            <input type="text" id="nombre-entrega" maxlength="200" placeholder="Ej. Iván Lara">
+                        </div>
+                        <div>
+                            <label for="puesto-entrega">Puesto</label>
+                            <input type="text" id="puesto-entrega" maxlength="100" placeholder="Ej. Soporte">
+                        </div>
+                        <div class="campo-full">
+                            <label for="area-entrega">Área</label>
+                            <input type="text" id="area-entrega" maxlength="100" value="Sistemas">
+                        </div>
+
+                        <!-- Documentos -->
+                        <div class="seccion-titulo campo-full">Documentos y observaciones</div>
+
+                        <div>
+                            <label for="ruta-pdf">Ruta PDF responsiva</label>
+                            <input type="text" id="ruta-pdf" maxlength="500" placeholder="Opcional">
+                        </div>
+                        <div>
+                            <label for="ruta-ine">Ruta INE</label>
+                            <input type="text" id="ruta-ine" maxlength="500" placeholder="Opcional">
+                        </div>
+                        <div class="campo-full">
+                            <label for="ruta-comprobante">Ruta comprobante de domicilio</label>
+                            <input type="text" id="ruta-comprobante" maxlength="500" placeholder="Opcional">
+                        </div>
+                        <div class="campo-full">
+                            <label for="observaciones">Observaciones</label>
+                            <textarea id="observaciones" maxlength="500" rows="3"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="mensaje" class="mensaje oculto"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="btn-cancelar" class="secundario">Cancelar</button>
+                    <button type="submit" id="btn-guardar">
+                        <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="../js/responsivas-renderer.js"></script>
+</body>
+</html>

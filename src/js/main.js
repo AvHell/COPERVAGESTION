@@ -1,8 +1,11 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+/* =========================================================
+   BASE DE DATOS — MÓDULOS EXISTENTES
+   ========================================================= */
 const clientesDB   = require('./db/clientes');
 const rolesDB      = require('./db/roles');
 const lugaresDB    = require('./db/lugares');
@@ -14,34 +17,144 @@ const historicosDB = require('./db/historicos');
 const dominiosDB   = require('./db/dominios');
 const configDB     = require('./db/configuraciones');
 
-const ventanas = {};
-const HTML = path.join(__dirname, '../html');
+/* =========================================================
+   BASE DE DATOS — MÓDULO ACTIVO FIJO (aislado)
+   ========================================================= */
+const activoFijoCatalogosDB   = require('../ActivoFijo/consultas/catalogos');
+const activoFijoActivosDB     = require('../ActivoFijo/consultas/activos');
+const activoFijoResponsivasDB = require('../ActivoFijo/consultas/responsivas');
+const activoFijoReportesDB = require('../ActivoFijo/consultas/reportes');
 
+/* =========================================================
+   RUTAS
+   ========================================================= */
+const ventanas   = {};
+const HTML       = path.join(__dirname, '../html');
+const HTML_AF    = path.join(__dirname, '..', 'ActivoFijo', 'html');
+const PRELOAD    = path.join(__dirname, 'preload.js');
+const PRELOAD_AF = path.join(__dirname, '..', 'ActivoFijo', 'preload-activofijo.js');
+
+/* =========================================================
+   ESTADO GLOBAL
+   ========================================================= */
 let usuarioActual = null;
+
+/* =========================================================
+   OPCIONES DE ARRANQUE
+   ========================================================= */
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+app.commandLine.appendSwitch('disable-http-cache');
+
+/* =========================================================
+   MENÚ DE LA APLICACIÓN
+   ========================================================= */
+function construirMenuApp() {
+    const template = [
+        {
+            label: 'Archivo',
+            submenu: [
+                {
+                    label: 'Recargar',
+                    accelerator: 'F5',
+                    click: (_item, win) => { if (win) win.reload(); }
+                },
+                {
+                    label: 'Forzar recarga',
+                    accelerator: 'Ctrl+Shift+R',
+                    click: (_item, win) => { if (win) win.webContents.reloadIgnoringCache(); }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Salir',
+                    accelerator: 'Alt+F4',
+                    click: () => app.quit()
+                }
+            ]
+        },
+        {
+            label: 'Editar',
+            submenu: [
+                { role: 'undo',         label: 'Deshacer' },
+                { role: 'redo',         label: 'Rehacer' },
+                { type: 'separator' },
+                { role: 'cut',          label: 'Cortar' },
+                { role: 'copy',         label: 'Copiar' },
+                { role: 'paste',        label: 'Pegar' },
+                { role: 'selectAll',    label: 'Seleccionar todo' }
+            ]
+        },
+        {
+            label: 'Ver',
+            submenu: [
+                { role: 'resetZoom',    label: 'Zoom normal' },
+                { role: 'zoomIn',       label: 'Acercar' },
+                { role: 'zoomOut',      label: 'Alejar' },
+                { type: 'separator' },
+                { role: 'togglefullscreen', label: 'Pantalla completa' },
+                { type: 'separator' },
+                {
+                    label: 'Herramientas de desarrollo',
+                    accelerator: 'Ctrl+Shift+I',
+                    click: (_item, win) => { if (win) win.webContents.toggleDevTools(); }
+                }
+            ]
+        },
+        {
+            label: 'Ventana',
+            submenu: [
+                { role: 'minimize',     label: 'Minimizar' },
+                { role: 'close',        label: 'Cerrar' }
+            ]
+        },
+        {
+            label: 'Ayuda',
+            submenu: [
+                {
+                    label: 'Acerca de',
+                    click: () => {
+                        dialog.showMessageBox({
+                            type: 'info',
+                            title: 'Acerca de',
+                            message: 'Inventario de Equipos',
+                            detail: 'Sistema interno de gestión de red · v1.0'
+                        });
+                    }
+                }
+            ]
+        }
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 /* =========================================================
    FÁBRICA DE VENTANAS
    ========================================================= */
-
 function crearVentana(nombre, archivo, opciones = {}) {
     if (ventanas[nombre] && !ventanas[nombre].isDestroyed()) {
         ventanas[nombre].focus();
-        return;
+        return ventanas[nombre];
     }
+
+    const basePath     = opciones.basePath     || HTML;
+    const preloadPath  = opciones.preload      || PRELOAD;
+
     const win = new BrowserWindow({
-        width: opciones.width  || 1000,
+        width:  opciones.width  || 1000,
         height: opciones.height || 700,
-        title: opciones.title || nombre,
+        title:  opciones.title  || nombre,
         show: false,
         resizable: opciones.resizable !== false,
+        autoHideMenuBar: false,
         webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
+            preload: preloadPath,
             contextIsolation: true,
             nodeIntegration: false
         }
     });
 
-    win.loadFile(path.join(HTML, archivo));
+    win.setMenuBarVisibility(true);
+
+    win.loadFile(path.join(basePath, archivo));
 
     if (opciones.maximizar !== false) {
         win.once('ready-to-show', () => { win.maximize(); win.show(); });
@@ -51,12 +164,13 @@ function crearVentana(nombre, archivo, opciones = {}) {
 
     ventanas[nombre] = win;
     win.on('closed', () => { ventanas[nombre] = null; });
+
+    return win;
 }
 
 /* =========================================================
-   VENTANAS
+   VENTANAS — SISTEMA EXISTENTE
    ========================================================= */
-
 const crearLoginWindow     = () => crearVentana('login',     'login.html',     { width: 420, height: 500, title: 'Iniciar sesión', maximizar: false, resizable: false });
 const crearMenuWindow      = () => crearVentana('menu',      'menu.html',      { title: 'Menú Principal' });
 const crearClientesWindow  = () => crearVentana('clientes',  'clientes.html',  { title: 'Clientes' });
@@ -71,43 +185,184 @@ const crearDominiosWindow  = () => crearVentana('dominios',  'dominios.html',  {
 const crearConfigRedWindow = () => crearVentana('configred', 'configred.html', { title: 'Configuraciones de Red' });
 
 /* =========================================================
+   VENTANAS — MÓDULO ACTIVO FIJO
+   ========================================================= */
+const crearActivoFijoCatalogosWindow = () => crearVentana(
+    'activofijo-catalogos',
+    'catalogos.html',
+    {
+        title:    'Catálogos - Activo Fijo',
+        basePath: HTML_AF,
+        preload:  PRELOAD_AF
+    }
+);
+
+const crearActivoFijoActivosWindow = () => crearVentana(
+    'activofijo-activos',
+    'activos.html',
+    {
+        title:    'Inventario - Activo Fijo',
+        basePath: HTML_AF,
+        preload:  PRELOAD_AF
+    }
+);
+
+const crearActivoFijoResponsivasWindow = () => crearVentana(
+    'activofijo-responsivas',
+    'responsivas.html',
+    {
+        title:    'Responsivas - Activo Fijo',
+        basePath: HTML_AF,
+        preload:  PRELOAD_AF
+    }
+);
+
+const crearActivoFijoReportesWindow = () => crearVentana(
+    'activofijo-reportes',
+    'reportes.html',
+    {
+        title:    'Reportes - Activo Fijo',
+        basePath: HTML_AF,
+        preload:  PRELOAD_AF
+    }
+);
+
+/* =========================================================
+   UTILIDADES
+   ========================================================= */
+function cerrarVentana(nombre) {
+    if (ventanas[nombre] && !ventanas[nombre].isDestroyed()) {
+        ventanas[nombre].close();
+    }
+}
+
+function asegurarMenuAbierto() {
+    if (!ventanas['menu'] || ventanas['menu'].isDestroyed()) {
+        crearMenuWindow();
+    } else {
+        if (ventanas['menu'].isMinimized()) ventanas['menu'].restore();
+        ventanas['menu'].focus();
+    }
+}
+
+/* =========================================================
    IPC: LOGIN
    ========================================================= */
-
 ipcMain.handle('login', async (_e, nombreUsuario, password) => {
     const res = await usuariosDB.login(nombreUsuario, password);
     if (res.ok) usuarioActual = res.usuario;
     return res;
 });
 
-ipcMain.handle('logout', () => { usuarioActual = null; return { ok: true }; });
+ipcMain.handle('logout', () => {
+    usuarioActual = null;
+    return { ok: true };
+});
+
 ipcMain.handle('usuario-actual', () => usuarioActual);
 
 /* =========================================================
-   IPC: ABRIR VENTANAS
+   IPC: ABRIR VENTANAS DEL SISTEMA
    ========================================================= */
+ipcMain.handle('abrir-menu', () => {
+    cerrarVentana('login');
+    asegurarMenuAbierto();
+    return { ok: true };
+});
 
-ipcMain.handle('abrir-menu',      () => crearMenuWindow());
-ipcMain.handle('abrir-clientes',  () => crearClientesWindow());
-ipcMain.handle('abrir-roles',     () => crearRolesWindow());
-ipcMain.handle('abrir-lugares',   () => crearLugaresWindow());
-ipcMain.handle('abrir-rangos',    () => crearRangosWindow());
-ipcMain.handle('abrir-equipos',   () => crearEquiposWindow());
-ipcMain.handle('abrir-plano',     () => crearPlanoWindow());
-ipcMain.handle('abrir-usuarios',  () => crearUsuariosWindow());
-ipcMain.handle('abrir-historico', () => crearHistoricoWindow());
-ipcMain.handle('abrir-dominios',  () => crearDominiosWindow());
-ipcMain.handle('abrir-configred', () => crearConfigRedWindow());
+ipcMain.handle('abrir-clientes',  () => { crearClientesWindow();  return { ok: true }; });
+ipcMain.handle('abrir-roles',     () => { crearRolesWindow();     return { ok: true }; });
+ipcMain.handle('abrir-lugares',   () => { crearLugaresWindow();   return { ok: true }; });
+ipcMain.handle('abrir-rangos',    () => { crearRangosWindow();    return { ok: true }; });
+ipcMain.handle('abrir-equipos',   () => { crearEquiposWindow();   return { ok: true }; });
+ipcMain.handle('abrir-plano',     () => { crearPlanoWindow();     return { ok: true }; });
+ipcMain.handle('abrir-usuarios',  () => { crearUsuariosWindow();  return { ok: true }; });
+ipcMain.handle('abrir-historico', () => { crearHistoricoWindow(); return { ok: true }; });
+ipcMain.handle('abrir-dominios',  () => { crearDominiosWindow();  return { ok: true }; });
+ipcMain.handle('abrir-configred', () => { crearConfigRedWindow(); return { ok: true }; });
 
 ipcMain.handle('volver-menu', (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (win) win.close();
+    asegurarMenuAbierto();
+    return { ok: true };
 });
+
+/* =========================================================
+   IPC: ABRIR VENTANAS DE ACTIVO FIJO
+   ========================================================= */
+ipcMain.handle('abrir-activofijo-catalogos',   () => { crearActivoFijoCatalogosWindow();   return { ok: true }; });
+ipcMain.handle('abrir-activofijo-activos',     () => { crearActivoFijoActivosWindow();     return { ok: true }; });
+ipcMain.handle('abrir-activofijo-responsivas', () => { crearActivoFijoResponsivasWindow(); return { ok: true }; });
+ipcMain.handle('abrir-activofijo-reportes', () => { crearActivoFijoReportesWindow(); return { ok: true }; });
+
+/* Alias con prefijo af-* */
+ipcMain.handle('af-abrir-catalogos',   () => { crearActivoFijoCatalogosWindow();   return { ok: true }; });
+ipcMain.handle('af-abrir-activos',     () => { crearActivoFijoActivosWindow();     return { ok: true }; });
+ipcMain.handle('af-abrir-responsivas', () => { crearActivoFijoResponsivasWindow(); return { ok: true }; });
+
+/* =========================================================
+   IPC: CATÁLOGOS DE ACTIVO FIJO
+   ========================================================= */
+ipcMain.handle('af-catalogos-listar',     async (_e, clave)            => await activoFijoCatalogosDB.listar(clave));
+ipcMain.handle('af-catalogos-crear',      async (_e, clave, datos)     => await activoFijoCatalogosDB.crear(clave, datos));
+ipcMain.handle('af-catalogos-actualizar', async (_e, clave, id, datos) => await activoFijoCatalogosDB.actualizar(clave, id, datos));
+ipcMain.handle('af-catalogos-eliminar',   async (_e, clave, id)        => await activoFijoCatalogosDB.eliminar(clave, id));
+
+/* =========================================================
+   IPC: ACTIVOS DE ACTIVO FIJO
+   ========================================================= */
+ipcMain.handle('af-activos-listar',     async (_e, filtros) => await activoFijoActivosDB.listar(filtros || {}));
+ipcMain.handle('af-activos-obtener',    async (_e, id)      => await activoFijoActivosDB.obtener(id));
+ipcMain.handle('af-activos-crear',      async (_e, datos)   => await activoFijoActivosDB.crear(datos, usuarioActual?.IdUsuario));
+ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario));
+ipcMain.handle('af-activos-eliminar',   async (_e, id)      => await activoFijoActivosDB.eliminar(id));
+
+ipcMain.handle('af-activos-lista-tipos',    async () => await activoFijoActivosDB.listarTipos());
+ipcMain.handle('af-activos-lista-marcas',   async () => await activoFijoActivosDB.listarMarcas());
+ipcMain.handle('af-activos-lista-estados',  async () => await activoFijoActivosDB.listarEstados());
+ipcMain.handle('af-activos-lista-estatus',  async () => await activoFijoActivosDB.listarEstatus());
+ipcMain.handle('af-activos-lista-carteras', async () => await activoFijoActivosDB.listarCarteras());
+
+/* =========================================================
+   IPC: RESPONSIVAS DE ACTIVO FIJO
+   ========================================================= */
+ipcMain.handle('af-resp-listar',              async (_e, filtros)      => await activoFijoResponsivasDB.listar(filtros || {}));
+ipcMain.handle('af-resp-obtener',             async (_e, id)           => await activoFijoResponsivasDB.obtener(id));
+ipcMain.handle('af-resp-activos-disponibles', async ()                 => await activoFijoResponsivasDB.activosDisponibles());
+ipcMain.handle('af-resp-crear',               async (_e, datos)        => await activoFijoResponsivasDB.crear(datos, usuarioActual?.IdUsuario));
+ipcMain.handle('af-resp-actualizar',          async (_e, id, datos)    => await activoFijoResponsivasDB.actualizar(id, datos, usuarioActual?.IdUsuario));
+ipcMain.handle('af-resp-devolver',            async (_e, id, f, obs)   => await activoFijoResponsivasDB.devolver(id, f, obs, usuarioActual?.IdUsuario));
+ipcMain.handle('af-resp-eliminar',            async (_e, id)           => await activoFijoResponsivasDB.eliminar(id));
+ipcMain.handle('af-resp-lista-carteras',      async ()                 => await activoFijoResponsivasDB.listarCarteras());
+ipcMain.handle('af-resp-lista-puestos',       async ()                 => await activoFijoResponsivasDB.listarPuestos());
+
+
+/* =========================================================
+   IPC: REPORTES DE ACTIVO FIJO
+   ========================================================= */
+ipcMain.handle('af-rep-resumen-general',       async () => await activoFijoReportesDB.resumenGeneral());
+ipcMain.handle('af-rep-resumen-tipo',          async () => await activoFijoReportesDB.resumenPorTipo());
+ipcMain.handle('af-rep-resumen-cartera',       async () => await activoFijoReportesDB.resumenPorCartera());
+ipcMain.handle('af-rep-inventario',            async (_e, filtros) => await activoFijoReportesDB.inventario(filtros || {}));
+ipcMain.handle('af-rep-responsivas-activas',   async () => await activoFijoReportesDB.responsivasActivas());
+ipcMain.handle('af-rep-asignaciones-persona',  async () => await activoFijoReportesDB.asignacionesPorPersona());
+ipcMain.handle('af-rep-por-ticket',            async () => await activoFijoReportesDB.porTicket());
+ipcMain.handle('af-rep-historial-asignaciones',async (_e, filtros) => await activoFijoReportesDB.historialAsignaciones(filtros || {}));
+ipcMain.handle('af-rep-historial-activo',      async (_e, id) => await activoFijoReportesDB.historialActivo(id));
+ipcMain.handle('af-rep-celulares',             async () => await activoFijoReportesDB.celulares());
+ipcMain.handle('af-rep-laptops',               async () => await activoFijoReportesDB.laptops());
+
+ipcMain.handle('af-rep-tipos',                 async () => await activoFijoReportesDB.tiposParaFiltro());
+ipcMain.handle('af-rep-estados',               async () => await activoFijoReportesDB.estadosParaFiltro());
+ipcMain.handle('af-rep-estatus',               async () => await activoFijoReportesDB.estatusParaFiltro());
+ipcMain.handle('af-rep-carteras',              async () => await activoFijoReportesDB.carterasParaFiltro());
+
+ipcMain.handle('af-abrir-reportes', () => { crearActivoFijoReportesWindow(); return { ok: true }; });
 
 /* =========================================================
    IPC: CLIENTES / ROLES / LUGARES / RANGOS
    ========================================================= */
-
 ipcMain.handle('clientes:listar',     async () => await clientesDB.listar());
 ipcMain.handle('clientes:crear',      async (_e, codigo, nombre) => await clientesDB.crear(codigo, nombre));
 ipcMain.handle('clientes:actualizar', async (_e, id, codigo, nombre) => await clientesDB.actualizar(id, codigo, nombre));
@@ -131,7 +386,6 @@ ipcMain.handle('rangos:eliminar',   async (_e, id) => await rangosDB.eliminar(id
 /* =========================================================
    IPC: EQUIPOS
    ========================================================= */
-
 ipcMain.handle('equipos:listar',               async () => await equiposDB.listar());
 ipcMain.handle('equipos:crear',                async (_e, datos) => await equiposDB.crear(datos));
 ipcMain.handle('equipos:actualizar',           async (_e, id, datos) => await equiposDB.actualizar(id, datos));
@@ -139,9 +393,8 @@ ipcMain.handle('equipos:eliminar',             async (_e, id) => await equiposDB
 ipcMain.handle('equipos:verificarIPDuplicada', async (_e, ip, idExcluir) => await equiposDB.verificarIPDuplicada(ip, idExcluir));
 
 /* =========================================================
-   IPC: DOMINIOS (por cliente)
+   IPC: DOMINIOS
    ========================================================= */
-
 ipcMain.handle('dominios:listarPorCliente', async (_e, idCliente) => await dominiosDB.listarPorCliente(idCliente));
 ipcMain.handle('dominios:listarTodas',      async (_e, filtros) => await dominiosDB.listarTodas(filtros));
 ipcMain.handle('dominios:crear',            async (_e, idCliente, u, p, d) => await dominiosDB.crear(idCliente, u, p, d));
@@ -149,9 +402,8 @@ ipcMain.handle('dominios:actualizar',       async (_e, id, u, p, d) => await dom
 ipcMain.handle('dominios:eliminar',         async (_e, id) => await dominiosDB.eliminar(id));
 
 /* =========================================================
-   IPC: CONFIGURACIONES DE RED (por cliente)
+   IPC: CONFIGURACIONES DE RED
    ========================================================= */
-
 ipcMain.handle('config:listarPorClienteTipo', async (_e, idCliente, tipo) => await configDB.listarPorClienteTipo(idCliente, tipo));
 ipcMain.handle('config:listarTodas',          async (_e, filtros) => await configDB.listarTodas(filtros));
 ipcMain.handle('config:crear',                async (_e, idCliente, tipo, valor, desc) => await configDB.crear(idCliente, tipo, valor, desc));
@@ -161,7 +413,6 @@ ipcMain.handle('config:eliminar',             async (_e, id) => await configDB.e
 /* =========================================================
    IPC: USUARIOS / HISTÓRICOS
    ========================================================= */
-
 ipcMain.handle('usuarios:listar',     async () => await usuariosDB.listar());
 ipcMain.handle('usuarios:crear',      async (_e, datos) => await usuariosDB.crear(datos));
 ipcMain.handle('usuarios:actualizar', async (_e, id, datos) => await usuariosDB.actualizar(id, datos));
@@ -172,8 +423,7 @@ ipcMain.handle('historicos:listarPorLugar', async (_e, idLugar) => await histori
 /* =========================================================
    IPC: PLANO
    ========================================================= */
-
-ipcMain.handle('plano:dimensiones',    async (_e, idLugar) => await planoDB.obtenerDimensiones(idLugar));
+ipcMain.handle('plano:dimensiones', async (_e, idLugar) => await planoDB.obtenerDimensiones(idLugar));
 
 ipcMain.handle('plano:actualizarDim', async (_e, idLugar, filas, columnas) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
@@ -220,11 +470,40 @@ ipcMain.handle('plano:eliminarZona', async (_e, idZona, idLugar, nombre) => {
     return await planoDB.eliminarZona(usuarioActual.IdUsuario, idLugar, idZona, nombre);
 });
 
+ipcMain.handle('plano:moverEntrePisos', async (_e, idEquipo, idLugarOrigen, idLugarDestino, fila, columna, nuevosDatos) => {
+    if (!usuarioActual) throw new Error('Sesión no iniciada');
+    return await planoDB.moverEntrePisos(
+        usuarioActual.IdUsuario, idEquipo, idLugarOrigen, idLugarDestino, fila, columna, nuevosDatos
+    );
+});
+
+ipcMain.handle('plano:swapEntrePisos', async (_e, datos) => {
+    if (!usuarioActual) throw new Error('Sesión no iniciada');
+    return await planoDB.swapEntrePisos(
+        usuarioActual.IdUsuario,
+        datos.idEquipoA, datos.idEquipoB,
+        datos.idPisoA, datos.filaA, datos.colA,
+        datos.idPisoB, datos.filaB, datos.colB,
+        datos.hostA, datos.hostB
+    );
+});
+
+ipcMain.handle('plano:listarZonasLibres', async (_e, idLugar) => await planoDB.listarZonasLibres(idLugar));
+
+ipcMain.handle('plano:guardarZonaLibre', async (_e, idLugar, nombre, color, celdas) => {
+    if (!usuarioActual) throw new Error('Sesión no iniciada');
+    return await planoDB.guardarZonaLibre(usuarioActual.IdUsuario, idLugar, nombre, color, celdas);
+});
+
+ipcMain.handle('plano:eliminarZonaLibre', async (_e, idLugar, nombre, color) => {
+    if (!usuarioActual) throw new Error('Sesión no iniciada');
+    return await planoDB.eliminarZonaLibre(usuarioActual.IdUsuario, idLugar, nombre, color);
+});
+
 /* =========================================================
    IPC: EXPORTAR PDF
    ========================================================= */
-
-ipcMain.handle('plano:exportarPDF', async (_e, htmlPlano, nombreArchivo) => {
+ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
 
     const winPDF = new BrowserWindow({
@@ -237,183 +516,51 @@ ipcMain.handle('plano:exportarPDF', async (_e, htmlPlano, nombreArchivo) => {
         }
     });
 
-    try {
-        const htmlCompleto = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    * { box-sizing: border-box; }
-                    body {
-                        font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-                        margin: 0;
-                        padding: 40px;
-                        background: #fff;
-                        color: #1e293b;
-                    }
-                    .encabezado {
-                        text-align: center;
-                        margin-bottom: 30px;
-                        padding-bottom: 20px;
-                        border-bottom: 3px solid #1e293b;
-                    }
-                    .encabezado h1 {
-                        margin: 0 0 8px 0;
-                        font-size: 1.6rem;
-                        color: #1e293b;
-                    }
-                    .encabezado p {
-                        margin: 0;
-                        color: #64748b;
-                        font-size: 0.9rem;
-                    }
-                    .grid-plano {
-                        display: grid;
-                        gap: 6px;
-                        background: #e2e8f0;
-                        padding: 14px;
-                        border-radius: 10px;
-                        width: fit-content;
-                        margin: 0 auto;
-                        border: 2px solid #cbd5e1;
-                    }
-                    .celda {
-                        width: 100px;
-                        height: 76px;
-                        background: #fff;
-                        border: 2px dashed #cbd5e1;
-                        border-radius: 8px;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        text-align: center;
-                        padding: 4px;
-                        position: relative;
-                        overflow: hidden;
-                        page-break-inside: avoid;
-                    }
-                    .celda.ocupada {
-                        border-style: solid;
-                        border-width: 2px;
-                        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-                    }
-                    .celda .hostname {
-                        font-weight: 700;
-                        font-size: 0.72rem;
-                        line-height: 1.1;
-                        word-break: break-all;
-                    }
-                    .celda .ip {
-                        font-size: 0.65rem;
-                        margin-top: 3px;
-                        color: #475569;
-                        font-weight: 500;
-                    }
-                    .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
-                    .celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
-                    .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
-                    .celda[data-rol="GRN"] { background: #f3e8ff; border-color: #a855f7; }
-                    .celda[data-rol="CRD"] { background: #ccfbf1; border-color: #14b8a6; }
-                    .celda[data-rol="MIS"] { background: #fce7f3; border-color: #ec4899; }
-                    .celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
-                    .celda[data-rol="AGT"] .hostname { color: #1e40af; }
-                    .celda[data-rol="SPR"] .hostname { color: #166534; }
-                    .celda[data-rol="CLD"] .hostname { color: #9a3412; }
-                    .celda[data-rol="GRN"] .hostname { color: #6b21a8; }
-                    .celda[data-rol="CRD"] .hostname { color: #115e59; }
-                    .celda[data-rol="MIS"] .hostname { color: #9d174d; }
-                    .celda[data-rol="ADM"] .hostname { color: #1e293b; }
-                    .celda .etiqueta-zona {
-                        position: absolute;
-                        top: -6px;
-                        left: 3px;
-                        font-size: 0.55rem;
-                        font-weight: 700;
-                        background: #1e293b;
-                        color: #fff;
-                        padding: 1px 6px;
-                        border-radius: 8px;
-                        text-transform: uppercase;
-                        letter-spacing: 0.03em;
-                    }
-                    .leyenda-pdf {
-                        display: flex;
-                        gap: 14px;
-                        flex-wrap: wrap;
-                        justify-content: center;
-                        margin-top: 30px;
-                        padding-top: 20px;
-                        border-top: 2px solid #e2e8f0;
-                    }
-                    .leyenda-pdf .item {
-                        display: flex;
-                        align-items: center;
-                        gap: 6px;
-                        font-size: 0.75rem;
-                        color: #334155;
-                    }
-                    .leyenda-pdf .punto {
-                        width: 12px;
-                        height: 12px;
-                        border-radius: 3px;
-                    }
-                    @page {
-                        size: landscape;
-                        margin: 12mm;
-                    }
-                </style>
-            </head>
-            <body>
-                ${htmlPlano}
-            </body>
-            </html>
-        `;
+    let tmpPath = null;
 
-        const tmpPath = path.join(os.tmpdir(), `plano-${Date.now()}.html`);
-        fs.writeFileSync(tmpPath, htmlCompleto, 'utf-8');
+    try {
+        tmpPath = path.join(os.tmpdir(), `plano-${Date.now()}.html`);
+        fs.writeFileSync(tmpPath, opciones.html, 'utf-8');
 
         await winPDF.loadFile(tmpPath);
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 700));
 
         const { canceled, filePath } = await dialog.showSaveDialog({
-            title: 'Guardar plano como PDF',
-            defaultPath: nombreArchivo || `Plano-${Date.now()}.pdf`,
+            title: 'Guardar PDF',
+            defaultPath: opciones.nombreArchivo || `Plano-${Date.now()}.pdf`,
             filters: [{ name: 'PDF', extensions: ['pdf'] }]
         });
 
         if (canceled || !filePath) {
-            winPDF.destroy();
-            fs.unlinkSync(tmpPath);
             return { ok: false, mensaje: 'Cancelado' };
         }
 
         const datosPDF = await winPDF.webContents.printToPDF({
             printBackground: true,
-            landscape: true,
-            pageSize: 'A4',
-            margins: { marginType: 'default' }
+            preferCSSPageSize: true,
+            margins: { marginType: 'none' }
         });
 
         fs.writeFileSync(filePath, datosPDF);
 
-        winPDF.destroy();
-        fs.unlinkSync(tmpPath);
-
         return { ok: true, mensaje: 'PDF generado', ruta: filePath };
     } catch (err) {
-        if (!winPDF.isDestroyed()) winPDF.destroy();
         throw err;
+    } finally {
+        if (!winPDF.isDestroyed()) winPDF.destroy();
+        if (tmpPath && fs.existsSync(tmpPath)) {
+            try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore */ }
+        }
     }
 });
 
 /* =========================================================
    CICLO DE VIDA
    ========================================================= */
-
 app.whenReady().then(() => {
+    construirMenuApp();
     crearLoginWindow();
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) crearLoginWindow();
     });
@@ -422,3 +569,17 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
+
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        const wins = BrowserWindow.getAllWindows();
+        if (wins.length > 0) {
+            const win = wins[0];
+            if (win.isMinimized()) win.restore();
+            win.focus();
+        }
+    });
+}

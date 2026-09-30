@@ -86,6 +86,8 @@ async function listarPorLugar(idLugarCliente) {
         .query(`
             SELECT P.IdUbicacion, P.IdEquipo, P.Fila, P.Columna,
                    E.Hostname, E.TipoIP, E.IP, E.IdCliente,
+                   E.Mascara, E.PuertaEnlace, E.DNS1, E.DNS2,
+                   E.UsuarioAdmin, E.PasswordAdmin,
                    R.Codigo AS RolCodigo
             FROM PlanoUbicaciones P
             INNER JOIN Equipos E ON E.IdEquipo = P.IdEquipo
@@ -100,7 +102,9 @@ async function equiposSinUbicacion(idLugarCliente) {
     const r = await pool.request()
         .input('IdLugarCliente', sql.Int, idLugarCliente)
         .query(`
-            SELECT E.IdEquipo, E.Hostname, E.TipoIP, E.IP, E.IdCliente,
+            SELECT E.IdEquipo, E.Hostname, E.TipoIP, E.IP, E.IdCliente, E.IdLugarCliente,
+                   E.Mascara, E.PuertaEnlace, E.DNS1, E.DNS2,
+                   E.UsuarioAdmin, E.PasswordAdmin,
                    C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
                    R.Codigo AS RolCodigo
             FROM Equipos E
@@ -386,6 +390,90 @@ async function swapEntrePisos(idUsuario, idEquipoA, idEquipoB,
 }
 
 /* =========================================================
+   ZONAS LIBRES (colorear celdas vacías individualmente)
+   ========================================================= */
+
+async function listarZonasLibres(idLugarCliente) {
+    const pool = await getPool();
+    const r = await pool.request()
+        .input('IdLugarCliente', sql.Int, idLugarCliente)
+        .query(`
+            SELECT IdZonaLibre, Nombre, Color, Fila, Columna
+            FROM PlanoZonasLibres
+            WHERE IdLugarCliente = @IdLugarCliente
+            ORDER BY IdZonaLibre
+        `);
+    return r.recordset;
+}
+
+/**
+ * Reemplaza todas las celdas libres de un mismo grupo (por nombre+color).
+ * Se llama cuando el usuario guarda una zona libre nueva.
+ *
+ * Estrategia: se borran TODAS las celdas libres con ese nombre+color
+ * en el piso, y se insertan las nuevas.
+ */
+async function guardarZonaLibre(idUsuario, idLugarCliente, nombre, color, celdas) {
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+
+    try {
+        // Borrar celdas previas con ese nombre+color en el piso
+        await new sql.Request(tx)
+            .input('IdLugarCliente', sql.Int, idLugarCliente)
+            .input('Nombre', sql.NVarChar(100), nombre)
+            .input('Color', sql.VarChar(20), color)
+            .query(`DELETE FROM PlanoZonasLibres
+                    WHERE IdLugarCliente = @IdLugarCliente
+                      AND Nombre = @Nombre
+                      AND Color = @Color`);
+
+        // Insertar cada celda
+        for (const celda of celdas) {
+            await new sql.Request(tx)
+                .input('IdLugarCliente', sql.Int, idLugarCliente)
+                .input('Nombre', sql.NVarChar(100), nombre)
+                .input('Color', sql.VarChar(20), color)
+                .input('Fila', sql.Int, celda.fila)
+                .input('Columna', sql.Int, celda.columna)
+                .query(`INSERT INTO PlanoZonasLibres (IdLugarCliente, Nombre, Color, Fila, Columna)
+                        VALUES (@IdLugarCliente, @Nombre, @Color, @Fila, @Columna)`);
+        }
+
+        await tx.commit();
+
+        await historicos.registrar(idUsuario, idLugarCliente, null, 'ZonaLibre',
+            `Zona libre "${nombre}" guardada con ${celdas.length} celda(s)`);
+
+        return { ok: true, mensaje: 'Zona libre guardada' };
+    } catch (err) {
+        await tx.rollback();
+        throw err;
+    }
+}
+
+/**
+ * Elimina todas las celdas libres con ese nombre+color.
+ */
+async function eliminarZonaLibre(idUsuario, idLugarCliente, nombre, color) {
+    const pool = await getPool();
+    await pool.request()
+        .input('IdLugarCliente', sql.Int, idLugarCliente)
+        .input('Nombre', sql.NVarChar(100), nombre)
+        .input('Color', sql.VarChar(20), color)
+        .query(`DELETE FROM PlanoZonasLibres
+                WHERE IdLugarCliente = @IdLugarCliente
+                  AND Nombre = @Nombre
+                  AND Color = @Color`);
+
+    await historicos.registrar(idUsuario, idLugarCliente, null, 'ZonaLibre',
+        `Zona libre "${nombre}" eliminada`);
+
+    return { ok: true, mensaje: 'Zona libre eliminada' };
+}
+
+/* =========================================================
    ZONAS
    ========================================================= */
 
@@ -460,5 +548,6 @@ module.exports = {
     listarPorLugar, equiposSinUbicacion,
     asignar, mover, quitar, intercambiar,
     moverEntrePisos, swapEntrePisos,
-    listarZonas, crearZona, actualizarZona, eliminarZona
+    listarZonas, crearZona, actualizarZona, eliminarZona,
+    listarZonasLibres, guardarZonaLibre, eliminarZonaLibre
 };

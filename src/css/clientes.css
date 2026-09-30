@@ -1,37 +1,629 @@
-.contenedor-form {
-    background: #fff;
-    padding: 15px;
-    border-radius: 6px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+/* =========================================================
+   CLIENTES — ESTILOS AUTOCONTENIDOS
+   Base limpia. SweetAlert sin overrides masivos.
+   El toast usa clases .cl-toast + didOpen para inline styles.
+   ========================================================= */
+
+/* =========================================================
+   RESET Y BASE
+   ========================================================= */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
-.fila-form {
-    display: grid;
-    grid-template-columns: 1fr 2fr auto;
-    gap: 10px;
-    align-items: end;
+html, body { height: 100%; }
+
+/* =========================================================
+   VARIABLES
+   ========================================================= */
+:root {
+    --cl-azul:            #1e3a5f;
+    --cl-azul-hover:      #274d7a;
+    --cl-azul-suave:      rgba(30, 58, 95, 0.12);
+    --cl-azul-claro:      #eef2f7;
+    --cl-gris-fondo:      #f4f6f9;
+    --cl-gris-borde:      #d7dde5;
+    --cl-gris-suave:      #eef2f7;
+    --cl-gris-texto:      #4a5568;
+    --cl-gris-texto-2:    #94a3b8;
+    --cl-blanco:          #ffffff;
+    --cl-exito:           #2f855a;
+    --cl-error:           #b91c1c;
+    --cl-advertencia:     #b7791f;
+    --cl-radio:           10px;
+    --cl-radio-sm:        8px;
+    --cl-sombra-suave:    0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --cl-sombra-media:    0 6px 18px rgba(15, 23, 42, 0.08);
+    --cl-sombra-fuerte:   0 20px 60px rgba(15, 23, 42, 0.25);
+
+    --cl-fuente: 'Poppins', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
-.mensaje {
-    margin-top: 10px;
-    padding: 10px;
-    border-radius: 6px;
-    font-size: 0.9rem;
+/* =========================================================
+   BASE
+   ========================================================= */
+body {
+    font-family: var(--cl-fuente);
+    font-size: 14px;
+    color: #1a202c;
+    background-color: var(--cl-gris-fondo);
+    padding: 32px 40px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background-image:
+        radial-gradient(circle at 0% 0%, rgba(30, 58, 95, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 100% 100%, rgba(30, 58, 95, 0.03) 0%, transparent 40%);
+    background-attachment: fixed;
 }
 
-.mensaje.ok {
-    background: #d4edda;
-    color: #155724;
+/* =========================================================
+   BOTONES
+   ========================================================= */
+button {
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border-radius: var(--cl-radio-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+                box-shadow 0.15s ease, transform 0.05s ease;
+    background-color: var(--cl-azul);
+    color: var(--cl-blanco);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    user-select: none;
+}
+button:hover:not(:disabled)  { background-color: var(--cl-azul-hover); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:focus-visible {
+    outline: 2px solid var(--cl-azul-hover);
+    outline-offset: 2px;
+}
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+button.secundario {
+    background-color: var(--cl-blanco);
+    color: var(--cl-azul);
+    border-color: var(--cl-gris-borde);
+}
+button.secundario:hover:not(:disabled) {
+    background-color: var(--cl-gris-suave);
+    border-color: var(--cl-azul);
 }
 
-.mensaje.error {
-    background: #f8d7da;
-    color: #721c24;
+button.peligro { background-color: var(--cl-error); }
+button.peligro:hover:not(:disabled) { background-color: #991b1b; }
+
+button svg, button .icono-svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    stroke-width: 2;
 }
 
+/* =========================================================
+   BARRA DE ACCIONES
+   ========================================================= */
+.barra-acciones {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+/* =========================================================
+   BUSCADOR
+   ========================================================= */
+.buscador {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.buscador > .icono-svg {
+    position: absolute;
+    left: 14px;
+    width: 16px;
+    height: 16px;
+    color: var(--cl-gris-texto-2);
+    pointer-events: none;
+}
+.buscador input[type="text"] {
+    width: 100%;
+    padding: 10px 40px 10px 40px;
+    font-family: inherit;
+    font-size: 14px;
+    color: #1a202c;
+    background-color: var(--cl-blanco);
+    border: 1px solid var(--cl-gris-borde);
+    border-radius: var(--cl-radio-sm);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.buscador input[type="text"]:focus {
+    outline: none;
+    border-color: var(--cl-azul);
+    box-shadow: 0 0 0 3px var(--cl-azul-suave);
+}
+.buscador input::placeholder { color: var(--cl-gris-texto-2); }
+
+.btn-limpiar {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 4px;
+    background: transparent;
+    color: var(--cl-gris-texto-2);
+    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+}
+.btn-limpiar svg { width: 14px; height: 14px; stroke-width: 2.5; }
+.btn-limpiar:hover:not(:disabled) {
+    background-color: var(--cl-gris-suave);
+    color: var(--cl-azul);
+}
+
+/* =========================================================
+   TÍTULO
+   ========================================================= */
+h2 {
+    color: var(--cl-azul);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 8px 0 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--cl-gris-borde);
+}
+
+/* =========================================================
+   TABLA
+   ========================================================= */
+.card-tabla {
+    background-color: var(--cl-blanco);
+    border: 1px solid var(--cl-gris-borde);
+    border-radius: var(--cl-radio);
+    overflow: hidden;
+    box-shadow: var(--cl-sombra-suave);
+}
+.tabla-clientes {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--cl-blanco);
+    font-family: var(--cl-fuente);
+    font-feature-settings: 'tnum';
+}
+.tabla-clientes thead { background-color: #fafbfc; }
+.tabla-clientes th {
+    padding: 11px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--cl-gris-texto);
+    border-bottom: 1px solid var(--cl-gris-borde);
+}
+.tabla-clientes td {
+    padding: 13px 16px;
+    font-size: 13.5px;
+    color: #2d3748;
+    border-bottom: 1px solid var(--cl-gris-borde);
+    vertical-align: middle;
+    letter-spacing: 0.005em;
+}
+.tabla-clientes tbody tr:last-child td { border-bottom: none; }
+.tabla-clientes tbody tr:hover { background-color: var(--cl-gris-suave); }
+
+/* =========================================================
+   BADGES
+   ========================================================= */
+.badge-codigo {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--cl-fuente);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid;
+}
+.badge-codigo.codigo-nu {
+    color: #6d28d9;
+    background-color: #f5f3ff;
+    border-color: #ddd6fe;
+}
+.badge-codigo.codigo-didi {
+    color: #c2410c;
+    background-color: #fff7ed;
+    border-color: #fed7aa;
+}
+.badge-codigo.codigo-adama {
+    color: #047857;
+    background-color: #ecfdf5;
+    border-color: #a7f3d0;
+}
+.badge-codigo.codigo-kubo {
+    color: #0369a1;
+    background-color: #f0f9ff;
+    border-color: #bae6fd;
+}
+.badge-codigo.codigo-mega {
+    color: #be185d;
+    background-color: #fdf2f8;
+    border-color: #fbcfe8;
+}
+.badge-codigo.codigo-def {
+    color: var(--cl-azul);
+    background-color: var(--cl-azul-claro);
+    border-color: rgba(30, 58, 95, 0.15);
+}
+
+.badge-nombre {
+    display: inline-flex;
+    align-items: center;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #1a202c;
+    letter-spacing: -0.005em;
+}
+
+/* =========================================================
+   ACCIONES DE TABLA
+   ========================================================= */
+.acciones-tabla {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
 .acciones-tabla button {
+    padding: 6px 12px;
+    font-size: 12.5px;
+}
+
+/* =========================================================
+   ESTADO SIN RESULTADOS
+   ========================================================= */
+.sin-resultados {
+    text-align: center;
+    padding: 60px 20px;
+    background-color: var(--cl-blanco);
+    border: 1px solid var(--cl-gris-borde);
+    border-radius: var(--cl-radio);
+    box-shadow: var(--cl-sombra-suave);
+    color: var(--cl-gris-texto);
+}
+.sin-resultados svg {
+    width: 42px;
+    height: 42px;
+    color: var(--cl-gris-texto-2);
+    margin-bottom: 12px;
+}
+.sin-resultados p {
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.oculto { display: none !important; }
+
+/* =========================================================
+   MODAL DE CLIENTE
+   ========================================================= */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+.modal-base {
+    background-color: var(--cl-blanco);
+    border-radius: 14px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--cl-sombra-fuerte);
+    overflow: hidden;
+}
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 26px;
+    border-bottom: 1px solid var(--cl-gris-borde);
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+}
+.modal-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--cl-azul);
+    letter-spacing: -0.01em;
+}
+.btn-cerrar-modal {
+    background: transparent;
+    color: var(--cl-gris-texto);
+    border: none;
     padding: 4px 10px;
-    font-size: 0.85rem;
-    margin-right: 5px;
+    font-size: 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    line-height: 1;
+    transition: background-color 0.15s, color 0.15s;
+}
+.btn-cerrar-modal:hover:not(:disabled) {
+    background-color: var(--cl-gris-suave);
+    color: var(--cl-error);
+}
+.modal-body {
+    padding: 22px 26px;
+    overflow-y: auto;
+    flex: 1;
+}
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 26px;
+    border-top: 1px solid var(--cl-gris-borde);
+    background-color: #fafbfc;
+}
+.grid-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+.grid-form label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--cl-gris-texto);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.grid-form input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: #1a202c;
+    background-color: var(--cl-blanco);
+    border: 1px solid var(--cl-gris-borde);
+    border-radius: var(--cl-radio-sm);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.grid-form input:focus {
+    outline: none;
+    border-color: var(--cl-azul);
+    box-shadow: 0 0 0 3px var(--cl-azul-suave);
+}
+.grid-form input::placeholder {
+    color: var(--cl-gris-texto-2);
+    font-weight: 400;
+}
+#codigo {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+.mensaje {
+    margin-top: 14px;
+    padding: 10px 14px;
+    border-radius: var(--cl-radio-sm);
+    font-size: 13.5px;
+    font-weight: 500;
+    border-left: 4px solid;
+}
+.mensaje.ok {
+    background-color: #f0fdf4;
+    color: var(--cl-exito);
+    border-left-color: var(--cl-exito);
+}
+.mensaje.error {
+    background-color: #fef2f2;
+    color: var(--cl-error);
+    border-left-color: var(--cl-error);
+}
+
+/* =========================================================
+   TOAST SWEETALERT2 — versión limpia
+   Usamos `.swal2-toast.cl-toast` (mayor especificidad que
+   `.swal2-toast` de SweetAlert) → gana sin `!important`.
+   El box-shadow se elimina desde JS vía didOpen (inline style).
+   ========================================================= */
+
+/* Forma y layout del toast */
+.swal2-toast.cl-toast {
+    border-left: 4px solid #cbd5e1;
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+    padding: 12px 18px;
+    font-family: var(--cl-fuente);
+    min-width: 280px;
+    max-width: 400px;
+}
+
+/* Colores del borde izquierdo según variante */
+.swal2-toast.cl-toast.cl-toast-success {
+    border-left-color: var(--cl-exito);
+}
+.swal2-toast.cl-toast.cl-toast-error {
+    border-left-color: var(--cl-error);
+}
+.swal2-toast.cl-toast.cl-toast-warning {
+    border-left-color: var(--cl-advertencia);
+}
+.swal2-toast.cl-toast.cl-toast-info {
+    border-left-color: var(--cl-azul);
+}
+
+/* Tipografía del texto del toast */
+.swal2-toast.cl-toast .swal2-title {
+    font-size: 13.5px;
+    font-weight: 500;
+    font-family: var(--cl-fuente);
+    text-align: left;
+    line-height: 1.4;
+    color: #1a202c;
+}
+
+/* Icono del toast */
+.swal2-toast.cl-toast .swal2-icon {
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
+    flex-shrink: 0;
+}
+
+/* Barra de progreso del timer */
+.swal2-toast.cl-toast .swal2-timer-progress-bar {
+    background: linear-gradient(90deg, #1e3a5f 0%, #274d7a 100%);
+    height: 3px;
+}
+
+/* =========================================================
+   SWEETALERT2 — CONFIRM MODAL (eliminar)
+   Usamos `.swal2-popup.cl-confirm` para especificidad natural.
+   ========================================================= */
+.swal2-popup.cl-confirm {
+    font-family: var(--cl-fuente);
+    padding: 26px 28px 22px;
+    border-radius: 14px;
+}
+
+.swal2-popup.cl-confirm .swal2-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--cl-azul);
+    padding: 0 0 6px 0;
+    margin: 0;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+}
+
+.swal2-popup.cl-confirm .swal2-html-container {
+    margin: 6px 0 0 0;
+    padding: 0;
+    font-size: 13.5px;
+    color: var(--cl-gris-texto);
+    line-height: 1.55;
+}
+
+.swal2-popup.cl-confirm .swal2-html-container strong {
+    color: var(--cl-azul);
+    font-weight: 600;
+}
+
+.swal2-popup.cl-confirm .swal2-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    border-width: 2.5px;
+    border-color: var(--cl-advertencia);
+    color: var(--cl-advertencia);
+}
+
+.swal2-popup.cl-confirm .swal2-icon .swal2-icon-content {
+    font-size: 1.6rem;
+    line-height: 1;
+}
+
+.swal2-popup.cl-confirm .swal2-actions {
+    margin: 20px 0 0 0;
+    gap: 10px;
+    width: 100%;
+    justify-content: flex-end;
+}
+
+.swal2-popup.cl-confirm .swal2-confirm,
+.swal2-popup.cl-confirm .swal2-cancel {
+    padding: 10px 22px;
+    font-size: 13.5px;
+    font-family: var(--cl-fuente);
+    font-weight: 600;
+    border-radius: 10px;
+    margin: 0;
+    cursor: pointer;
+    min-width: 110px;
+}
+
+.swal2-popup.cl-confirm .swal2-cancel {
+    background: var(--cl-blanco);
+    color: var(--cl-azul);
+    border: 1px solid var(--cl-gris-borde);
+}
+
+.swal2-popup.cl-confirm .swal2-cancel:hover {
+    background: var(--cl-gris-suave);
+    border-color: var(--cl-azul);
+}
+
+.swal2-popup.cl-confirm .swal2-confirm.cl-peligro {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    color: #ffffff;
+    border: none;
+}
+
+.swal2-popup.cl-confirm .swal2-confirm.cl-peligro:hover {
+    background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+}
+
+
+
+/* =========================================================
+   OCULTAR RESIDUOS INTERNOS DE SWEETALERT
+   (pequeña defensa por si quedan inputs fantasma)
+   ========================================================= */
+body > input.swal2-input,
+body > input.swal2-file,
+body > input.swal2-radio,
+body > input.swal2-checkbox,
+body > select.swal2-select,
+body > textarea.swal2-textarea,
+body > .swal2-validation-message,
+body > .swal2-input-label,
+body > .swal2-select-label {
+    display: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+@media (max-width: 720px) {
+    body { padding: 20px; }
+    .barra-acciones { flex-wrap: wrap; }
+    .modal-base { max-width: 100%; max-height: 96vh; }
+    .grid-form { grid-template-columns: 1fr; }
+    .swal2-toast.cl-toast {
+        min-width: 0;
+        width: 100%;
+    }
+    .swal2-popup.cl-confirm { width: calc(100% - 32px); }
 }

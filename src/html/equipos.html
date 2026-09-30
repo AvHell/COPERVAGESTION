@@ -3,10 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <title>Equipos</title>
-    <link rel="stylesheet" href="../css/general.css">
+
+    <!-- Fuente Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- SweetAlert2 por CDN (versión flotante 11) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Estilos autocontenidos -->
     <link rel="stylesheet" href="../css/equipos.css">
 </head>
 <body>
+
+    <!-- =========================================================
+         BARRA SUPERIOR
+         ========================================================= -->
     <div class="barra-acciones">
         <button id="btn-volver" class="secundario">
             <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -14,46 +27,56 @@
             </svg>
             Volver al menú
         </button>
+
+        <div class="buscador">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="input-busqueda" placeholder="Buscar por hostname, cliente, lugar, rol o IP...">
+            <button type="button" id="btn-limpiar-busqueda" class="btn-limpiar oculto" title="Limpiar búsqueda">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+
         <button id="btn-nuevo">
             <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 5v14M5 12h14"/>
             </svg>
             Nuevo equipo
         </button>
-        <div class="buscador">
-            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input type="text" id="input-busqueda" placeholder="Buscar por hostname, cliente, lugar o IP...">
-        </div>
     </div>
 
     <h2>Equipos</h2>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Hostname</th>
-                <th>Cliente</th>
-                <th>Lugar</th>
-                <th>Rol</th>
-                <th>Tipo</th>
-                <th>IP</th>
-                <th style="width:180px;">Acciones</th>
-            </tr>
-        </thead>
-        <tbody id="tabla-equipos"></tbody>
-    </table>
+    <!-- =========================================================
+         ESTADO VACÍO
+         ========================================================= -->
+    <div id="sin-resultados" class="sin-resultados oculto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <p>No se encontraron equipos con ese criterio.</p>
+        <button type="button" id="btn-limpiar-filtro" class="secundario">Limpiar búsqueda</button>
+    </div>
 
-    <!-- ========================================================= -->
-    <!-- MODAL DE EQUIPO                                           -->
-    <!-- ========================================================= -->
+    <!-- =========================================================
+         CONTENEDOR DE GRUPOS (por cliente y lugar)
+         ========================================================= -->
+    <div id="contenedor-grupos"></div>
+
+    <!-- =========================================================
+         MODAL DE EQUIPO
+         ========================================================= -->
     <div id="modal-equipo" class="modal-overlay" style="display:none;">
         <div class="modal-grande">
             <div class="modal-header">
                 <h3 id="modal-equipo-titulo">Nuevo equipo</h3>
-                <button id="modal-equipo-cerrar" class="btn-cerrar-modal">✕</button>
+                <button id="modal-equipo-cerrar" class="btn-cerrar-modal" title="Cerrar">✕</button>
             </div>
 
             <div class="modal-body">
@@ -93,7 +116,6 @@
                     </div>
                 </div>
 
-                <!-- NUEVO: Checkbox para hostname manual -->
                 <div id="filaCheckboxHostname" class="fila-checkbox">
                     <label class="checkbox-label">
                         <input type="checkbox" id="chk-hostname-manual">
@@ -163,7 +185,7 @@
                     </div>
                 </div>
 
-                <div id="mensaje" class="mensaje" style="display:none;"></div>
+                <div id="mensaje" class="mensaje oculto"></div>
             </div>
 
             <div class="modal-footer">
@@ -180,7 +202,6 @@
         </div>
     </div>
 
-    <script src="../../node_modules/sweetalert2/dist/sweetalert2.all.min.js"></script>
     <script src="../js/equipos-renderer.js"></script>
 </body>
 </html>

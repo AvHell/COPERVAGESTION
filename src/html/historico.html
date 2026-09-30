@@ -3,31 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <title>Histórico del Plano</title>
-    <link rel="stylesheet" href="../css/general.css">
+
+    <!-- Fuente Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- SweetAlert2 por CDN (versión flotante 11) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Estilos autocontenidos -->
+    <link rel="stylesheet" href="../css/historico.css">
 </head>
 <body>
+
+    <!-- =========================================================
+         BARRA SUPERIOR
+         ========================================================= -->
     <div class="barra-acciones">
-        <button id="btn-volver" class="secundario">← Volver al menú</button>
-        <label>Cliente:</label>
-        <select id="select-cliente" style="width:auto;"></select>
-        <label>Piso:</label>
-        <select id="select-lugar" style="width:auto;"></select>
+        <button id="btn-volver" class="secundario">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Volver al menú
+        </button>
     </div>
 
     <h2>Histórico del Plano</h2>
+    <p class="subtitulo-seccion">Registro cronológico de movimientos y cambios en los planos de equipos.</p>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Usuario</th>
-                <th>Acción</th>
-                <th>Equipo</th>
-                <th>Detalle</th>
-            </tr>
-        </thead>
-        <tbody id="tabla-historico"></tbody>
-    </table>
+    <!-- =========================================================
+         FILTROS
+         ========================================================= -->
+    <div class="filtros">
+        <div>
+            <label for="select-cliente">Cliente</label>
+            <select id="select-cliente">
+                <option value="">-- Selecciona cliente --</option>
+            </select>
+        </div>
+        <div>
+            <label for="select-lugar">Piso</label>
+            <select id="select-lugar">
+                <option value="">-- Selecciona piso --</option>
+            </select>
+        </div>
+        <div>
+            <label for="filtro-desde">Desde</label>
+            <input type="date" id="filtro-desde">
+        </div>
+        <div>
+            <label for="filtro-hasta">Hasta</label>
+            <input type="date" id="filtro-hasta">
+        </div>
+        <div class="filtro-acciones">
+            <button type="button" id="btn-limpiar-fechas" class="secundario">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     style="width:15px;height:15px;">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+                Limpiar fechas
+            </button>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         ESTADO "SELECCIONA PISO"
+         ========================================================= -->
+    <div id="estado-inicial" class="sin-resultados">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <p>Selecciona un cliente y un piso para ver el histórico de movimientos.</p>
+    </div>
+
+    <!-- =========================================================
+         ESTADO SIN RESULTADOS
+         ========================================================= -->
+    <div id="sin-resultados" class="sin-resultados oculto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <p id="texto-sin-resultados">No hay movimientos registrados.</p>
+    </div>
+
+    <!-- =========================================================
+         TABLA
+         ========================================================= -->
+    <div id="contenedor-tabla" class="card-tabla oculto">
+        <table class="tabla-historico">
+            <thead>
+                <tr>
+                    <th style="width:150px;">Fecha</th>
+                    <th style="width:180px;">Usuario</th>
+                    <th style="width:140px;">Acción</th>
+                    <th style="width:160px;">Equipo</th>
+                    <th>Detalle</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-historico"></tbody>
+        </table>
+    </div>
 
     <script src="../js/historico-renderer.js"></script>
 </body>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Activo Fijo - Inventario</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <link rel="stylesheet" href="../css/activos.css">
+</head>
+<body>
+
+    <!-- BARRA SUPERIOR -->
+    <div class="barra-acciones">
+        <button id="btn-volver" class="secundario">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Volver al menú
+        </button>
+
+        <div class="buscador">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="input-busqueda" placeholder="Buscar por serie, IMEI, teléfono, modelo...">
+            <button type="button" id="btn-limpiar-busqueda" class="btn-limpiar oculto" title="Limpiar búsqueda">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+
+        <button id="btn-nuevo">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Nuevo activo
+        </button>
+    </div>
+
+    <h2>Inventario de Activos Fijos</h2>
+
+    <!-- FILTROS -->
+    <div class="filtros">
+        <div class="filtro">
+            <label for="filtro-tipo">Tipo</label>
+            <select id="filtro-tipo"><option value="">Todos</option></select>
+        </div>
+        <div class="filtro">
+            <label for="filtro-estado">Estado</label>
+            <select id="filtro-estado"><option value="">Todos</option></select>
+        </div>
+        <div class="filtro">
+            <label for="filtro-estatus">Estatus</label>
+            <select id="filtro-estatus"><option value="">Todos</option></select>
+        </div>
+        <div class="filtro">
+            <label for="filtro-cartera">Cartera</label>
+            <select id="filtro-cartera"><option value="">Todas</option></select>
+        </div>
+        <button id="btn-limpiar-filtros" class="secundario">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            Limpiar filtros
+        </button>
+    </div>
+
+    <!-- ESTADO VACÍO -->
+    <div id="sin-resultados" class="sin-resultados oculto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <p>No se encontraron activos con ese criterio.</p>
+        <button type="button" id="btn-limpiar-busqueda-vacio" class="secundario">Limpiar búsqueda</button>
+    </div>
+
+    <!-- TABLA -->
+    <div class="card-tabla">
+        <table class="tabla-activos">
+            <thead>
+                <tr>
+                    <th>Serie / IMEI / Teléfono</th>
+                    <th>Marca / Modelo</th>
+                    <th>Tipo</th>
+                    <th>Estado</th>
+                    <th>Estatus</th>
+                    <th>Cartera</th>
+                    <th>Precio</th>
+                    <th style="width:200px; text-align:right;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-body"></tbody>
+        </table>
+    </div>
+
+    <!-- MODAL -->
+    <div id="modal-activo" class="modal-overlay" style="display:none;">
+        <div class="modal-base">
+            <div class="modal-header">
+                <h3 id="modal-titulo">Nuevo activo</h3>
+                <button id="modal-cerrar" class="btn-cerrar-modal" title="Cerrar">✕</button>
+            </div>
+
+            <form id="formulario" autocomplete="off">
+                <div class="modal-body">
+                    <div class="grid-form">
+
+                        <!-- Identificación -->
+                        <div class="seccion-titulo campo-full">Identificación</div>
+
+                        <div>
+                            <label for="tipo">Tipo *</label>
+                            <select id="tipo" required></select>
+                        </div>
+                        <div>
+                            <label for="marca">Marca</label>
+                            <select id="marca"><option value="">— Sin marca —</option></select>
+                        </div>
+                        <div>
+                            <label for="modelo">Modelo</label>
+                            <input type="text" id="modelo" maxlength="150" placeholder="Ej. HP ProDesk 400 G4">
+                        </div>
+                        <div>
+                            <label for="noserie">No. Serie</label>
+                            <input type="text" id="noserie" maxlength="150" placeholder="Ej. 8CC9253DXK">
+                        </div>
+
+                        <!-- Campos dinámicos según tipo -->
+                        <div class="campo-imei1 campo-full oculto">
+                            <label for="imei1">IMEI 1</label>
+                            <input type="text" id="imei1" maxlength="50" placeholder="15 dígitos">
+                        </div>
+                        <div class="campo-imei2 campo-full oculto">
+                            <label for="imei2">IMEI 2</label>
+                            <input type="text" id="imei2" maxlength="50" placeholder="15 dígitos">
+                        </div>
+                        <div class="campo-telefono campo-full oculto">
+                            <label for="notelefono">No. Teléfono</label>
+                            <input type="text" id="notelefono" maxlength="50" placeholder="Ej. 5646448174">
+                        </div>
+
+                        <!-- Estado y estatus -->
+                        <div class="seccion-titulo campo-full">Situación</div>
+
+                        <div>
+                            <label for="estado">Estado *</label>
+                            <select id="estado" required></select>
+                        </div>
+                        <div>
+                            <label for="estatus">Estatus *</label>
+                            <select id="estatus" required></select>
+                        </div>
+                        <div>
+                            <label for="cartera">Cartera</label>
+                            <select id="cartera"><option value="">— Sin cartera —</option></select>
+                        </div>
+                        <div>
+                            <label for="precio">Precio</label>
+                            <input type="number" id="precio" step="0.01" min="0" placeholder="0.00">
+                        </div>
+
+                        <!-- Especificaciones técnicas -->
+                        <div class="seccion-titulo campo-full">Especificaciones técnicas</div>
+
+                        <div>
+                            <label for="procesador">Procesador</label>
+                            <input type="text" id="procesador" maxlength="150" placeholder="Ej. Intel Core i5-8500T">
+                        </div>
+                        <div>
+                            <label for="ram">Memoria RAM</label>
+                            <input type="text" id="ram" maxlength="50" placeholder="Ej. 8 GB">
+                        </div>
+                        <div>
+                            <label for="almacenamiento">Almacenamiento</label>
+                            <input type="text" id="almacenamiento" maxlength="50" placeholder="Ej. 240 GB SSD">
+                        </div>
+                        <div>
+                            <label for="so">Sistema Operativo</label>
+                            <input type="text" id="so" maxlength="100" placeholder="Ej. Windows 11 Pro">
+                        </div>
+                        <div class="campo-full">
+                            <label for="accesorios">Accesorios</label>
+                            <input type="text" id="accesorios" maxlength="300" placeholder="Ej. Cargador, cable USB">
+                        </div>
+                        <div class="campo-full">
+                            <label for="observaciones">Observaciones</label>
+                            <textarea id="observaciones" maxlength="500" rows="3" placeholder="Notas adicionales"></textarea>
+                        </div>
+                    </div>
+
+                    <div id="mensaje" class="mensaje oculto"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="btn-cancelar" class="secundario">Cancelar</button>
+                    <button type="submit" id="btn-guardar">
+                        <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="../js/activos-renderer.js"></script>
+</body>
+</html>

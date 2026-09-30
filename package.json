@@ -3,19 +3,64 @@
   "version": "1.0.0",
   "description": "Sistema de inventario de equipos por cliente, piso y rol",
   "main": "src/js/main.js",
-  "scripts": {
-    "start": "electron ."
-  },
-  "keywords": [],
-  "author": "",
+  "author": "Coperva Servicios",
   "license": "ISC",
   "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64",
+    "dist:portable": "electron-builder --win portable --x64",
+    "dist:installer": "electron-builder --win nsis --x64",
+    "dist:all": "electron-builder --win nsis portable --x64",
+    "pack": "electron-builder --dir"
+  },
   "devDependencies": {
-    "electron": "^44.4.5"
+    "electron": "^44.4.5",
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
-    "msnodesqlv8": "^5.5.0",
     "mssql": "^12.7.2",
     "sweetalert2": "^11.26.25"
+  },
+  "build": {
+    "appId": "com.coperva.proyectoequipos",
+    "productName": "Inventario Equipos",
+    "copyright": "Copyright © 2026 Coperva Servicios",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "src/js/main.js"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "src/img/logo.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Inventario Equipos",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "InventarioEquipos-Setup-${version}.${ext}",
+      "installerIcon": "src/img/logo.ico",
+      "uninstallerIcon": "src/img/logo.ico",
+      "installerHeaderIcon": "src/img/logo.ico"
+    },
+    "portable": {
+      "artifactName": "InventarioEquipos-Portable-${version}.${ext}"
+    }
   }
 }

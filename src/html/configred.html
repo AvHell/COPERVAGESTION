@@ -3,10 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <title>Configuraciones de Red</title>
-    <link rel="stylesheet" href="../css/general.css">
+
+    <!-- Fuente Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- SweetAlert2 por CDN (versión flotante 11) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Estilos autocontenidos -->
     <link rel="stylesheet" href="../css/configred.css">
 </head>
 <body>
+
+    <!-- =========================================================
+         BARRA SUPERIOR
+         ========================================================= -->
     <div class="barra-acciones">
         <button id="btn-volver" class="secundario">
             <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -25,6 +38,9 @@
     <h2>Configuraciones de Red</h2>
     <p class="subtitulo-seccion">Catálogo de valores sugeridos por cliente (máscaras, puertas de enlace, DNS).</p>
 
+    <!-- =========================================================
+         FILTROS
+         ========================================================= -->
     <div class="filtros">
         <div>
             <label for="filtro-cliente">Cliente</label>
@@ -46,20 +62,22 @@
         </div>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Cliente</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>Descripción</th>
-                <th style="width:180px;">Acciones</th>
-            </tr>
-        </thead>
-        <tbody id="tabla-config"></tbody>
-    </table>
+    <!-- =========================================================
+         ESTADO VACÍO
+         ========================================================= -->
+    <div id="sin-resultados" class="sin-resultados oculto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <p>No se encontraron configuraciones con ese criterio.</p>
+    </div>
 
-    <script src="../../node_modules/sweetalert2/dist/sweetalert2.all.min.js"></script>
+    <!-- =========================================================
+         CONTENEDOR DE GRUPOS (por cliente)
+         ========================================================= -->
+    <div id="contenedor-grupos"></div>
+
     <script src="../js/configred-renderer.js"></script>
 </body>
 </html>

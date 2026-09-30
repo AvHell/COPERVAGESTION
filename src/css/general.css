@@ -1,268 +1,276 @@
 /* =========================================================
    RESET Y BASE
    ========================================================= */
-
-* {
+*, *::before, *::after {
+    box-sizing: border-box;
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 :root {
-    --color-primario:       #2563eb;
-    --color-primario-hover: #1d4ed8;
-    --color-primario-suave: #eff6ff;
-    --color-exito:          #16a34a;
-    --color-peligro:        #dc2626;
-    --color-peligro-hover:  #b91c1c;
-    --color-advertencia:    #f59e0b;
-    --color-texto:          #1e293b;
-    --color-texto-suave:    #64748b;
-    --color-borde:          #e2e8f0;
-    --color-fondo:          #f8fafc;
-    --color-blanco:         #ffffff;
-    --sombra-suave:         0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-    --sombra-media:         0 4px 12px rgba(0,0,0,0.08);
-    --radio:                8px;
+    --azul-institucional: #1e3a5f;
+    --azul-oscuro:        #16283f;
+    --azul-hover:         #274d7a;
+    --gris-fondo:         #f4f6f9;
+    --gris-borde:         #d7dde5;
+    --gris-texto:         #4a5568;
+    --gris-suave:         #eef2f7;
+    --blanco:             #ffffff;
+    --exito:              #2f855a;
+    --error:              #b91c1c;
+    --advertencia:        #b7791f;
+    --sombra-suave:       0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --sombra-media:       0 4px 12px rgba(0,0,0,0.08);
+    --radio:              6px;
+    --fuente: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+html, body {
+    height: 100%;
 }
 
 body {
-    background: var(--color-fondo);
-    color: var(--color-texto);
-    padding: 24px;
+    font-family: var(--fuente);
     font-size: 14px;
+    color: #1a202c;
+    background-color: var(--gris-fondo);
+    padding: 32px 40px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
 }
 
-h1, h2 {
-    color: var(--color-texto);
-    margin-bottom: 16px;
+/* =========================================================
+   TIPOGRAFÍA
+   ========================================================= */
+h1, h2, h3 {
+    color: var(--azul-institucional);
     font-weight: 600;
     letter-spacing: -0.01em;
 }
 
-h1 { font-size: 1.5rem; }
-h2 { font-size: 1.25rem; }
+h2 {
+    font-size: 22px;
+    margin: 8px 0 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--gris-borde);
+}
+
+/* =========================================================
+   BARRA DE ACCIONES
+   ========================================================= */
+.barra-acciones {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 12px;
+}
 
 /* =========================================================
    BOTONES
    ========================================================= */
-
 button {
-    background: var(--color-primario);
-    color: #fff;
-    border: none;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
     padding: 9px 18px;
     border-radius: var(--radio);
+    border: 1px solid transparent;
     cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-    transition: background 0.15s, box-shadow 0.15s, transform 0.05s;
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+                box-shadow 0.15s ease, transform 0.05s ease;
+    background-color: var(--azul-institucional);
+    color: var(--blanco);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    line-height: 1;
+    gap: 8px;
+    white-space: nowrap;
+    user-select: none;
 }
 
 button:hover:not(:disabled) {
-    background: var(--color-primario-hover);
-    box-shadow: var(--sombra-suave);
+    background-color: var(--azul-hover);
 }
 
 button:active:not(:disabled) {
     transform: translateY(1px);
 }
 
+button:focus-visible {
+    outline: 2px solid var(--azul-hover);
+    outline-offset: 2px;
+}
+
 button:disabled {
-    opacity: 0.55;
+    opacity: 0.6;
     cursor: not-allowed;
 }
 
 button.secundario {
-    background: #fff;
-    color: var(--color-texto);
-    border: 1px solid var(--color-borde);
+    background-color: var(--blanco);
+    color: var(--azul-institucional);
+    border-color: var(--gris-borde);
 }
 
 button.secundario:hover:not(:disabled) {
-    background: #f1f5f9;
+    background-color: var(--gris-suave);
+    border-color: var(--azul-institucional);
 }
 
 button.peligro {
-    background: var(--color-peligro);
+    background-color: var(--error);
 }
 
 button.peligro:hover:not(:disabled) {
-    background: var(--color-peligro-hover);
+    background-color: #991b1b;
 }
 
-button .icono-svg {
-    width: 16px;
-    height: 16px;
+button svg {
+    width: 15px;
+    height: 15px;
     flex-shrink: 0;
+    stroke-width: 2;
 }
 
 /* =========================================================
-   INPUTS
+   FORMULARIO
    ========================================================= */
-
-input, select, textarea {
-    padding: 9px 12px;
-    border: 1px solid var(--color-borde);
+.contenedor-form {
+    background-color: var(--blanco);
+    border: 1px solid var(--gris-borde);
     border-radius: var(--radio);
-    font-size: 0.9rem;
-    width: 100%;
-    background: #fff;
-    color: var(--color-texto);
-    transition: border-color 0.15s, box-shadow 0.15s;
-    font-family: inherit;
+    padding: 22px 24px;
+    margin-bottom: 24px;
+    box-shadow: var(--sombra-suave);
 }
 
-input:focus, select:focus, textarea:focus {
-    outline: none;
-    border-color: var(--color-primario);
-    box-shadow: 0 0 0 3px var(--color-primario-suave);
-}
-
-input[readonly] {
-    background: #f1f5f9;
-    color: var(--color-texto-suave);
-    cursor: not-allowed;
+.fila-form {
+    display: grid;
+    grid-template-columns: 180px 1fr auto;
+    gap: 18px;
+    align-items: end;
 }
 
 label {
     display: block;
-    margin-bottom: 6px;
-    font-size: 0.85rem;
-    color: var(--color-texto-suave);
-    font-weight: 500;
-}
-
-/* =========================================================
-   TABLAS
-   ========================================================= */
-
-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    background: #fff;
-    border-radius: var(--radio);
-    overflow: hidden;
-    box-shadow: var(--sombra-suave);
-    border: 1px solid var(--color-borde);
-}
-
-th, td {
-    padding: 12px 16px;
-    text-align: left;
-    border-bottom: 1px solid var(--color-borde);
-    font-size: 0.9rem;
-}
-
-th {
-    background: #f8fafc;
+    font-size: 12.5px;
     font-weight: 600;
-    color: var(--color-texto);
-    font-size: 0.8rem;
+    color: var(--gris-texto);
+    margin-bottom: 6px;
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 
-tbody tr:hover {
-    background: #f8fafc;
+input[type="text"],
+input[type="number"],
+input[type="email"],
+select {
+    width: 100%;
+    padding: 9px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    color: #1a202c;
+    background-color: var(--blanco);
+    border: 1px solid var(--gris-borde);
+    border-radius: var(--radio);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-tr:last-child td {
-    border-bottom: none;
+input:focus,
+select:focus {
+    outline: none;
+    border-color: var(--azul-institucional);
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.12);
+}
+
+input::placeholder {
+    color: #a0aec0;
 }
 
 /* =========================================================
-   FORMULARIOS / UTILIDADES
+   MENSAJES
    ========================================================= */
-
-.form-group {
-    margin-bottom: 14px;
-}
-
-.barra-acciones {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 18px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
 .mensaje {
-    margin-top: 12px;
-    padding: 12px 14px;
+    margin-top: 16px;
+    padding: 10px 14px;
     border-radius: var(--radio);
-    font-size: 0.88rem;
+    font-size: 13.5px;
+    font-weight: 500;
     border-left: 4px solid;
 }
 
 .mensaje.ok {
-    background: #f0fdf4;
-    color: #166534;
-    border-color: var(--color-exito);
+    background-color: #f0fdf4;
+    color: var(--exito);
+    border-left-color: var(--exito);
 }
 
 .mensaje.error {
-    background: #fef2f2;
-    color: #991b1b;
-    border-color: var(--color-peligro);
+    background-color: #fef2f2;
+    color: var(--error);
+    border-left-color: var(--error);
 }
 
-.acciones-tabla button {
-    padding: 5px 12px;
-    font-size: 0.82rem;
-    margin-right: 6px;
+.oculto {
+    display: none !important;
 }
 
 /* =========================================================
-   SWEETALERT2 TEMA CORPORATIVO
+   TABLA
    ========================================================= */
-
-.swal2-popup {
-    font-family: 'Segoe UI', 'Inter', sans-serif !important;
-    border-radius: 12px !important;
-    padding: 24px !important;
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--blanco);
+    border: 1px solid var(--gris-borde);
+    border-radius: var(--radio);
+    overflow: hidden;
+    box-shadow: var(--sombra-suave);
 }
 
-.swal2-title {
-    font-size: 1.15rem !important;
-    font-weight: 600 !important;
-    color: var(--color-texto) !important;
+thead {
+    background-color: var(--azul-institucional);
 }
 
-.swal2-html-container {
-    font-size: 0.9rem !important;
-    color: var(--color-texto-suave) !important;
-    line-height: 1.5 !important;
+th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--blanco);
 }
 
-.swal2-confirm {
-    background: var(--color-primario) !important;
-    border-radius: var(--radio) !important;
-    font-weight: 500 !important;
-    padding: 9px 20px !important;
-    font-size: 0.9rem !important;
+td {
+    padding: 12px 16px;
+    border-top: 1px solid var(--gris-borde);
+    font-size: 14px;
+    color: #2d3748;
 }
 
-.swal2-confirm:hover {
-    background: var(--color-primario-hover) !important;
+tbody tr:hover {
+    background-color: var(--gris-suave);
 }
 
-.swal2-cancel {
-    background: #fff !important;
-    color: var(--color-texto) !important;
-    border: 1px solid var(--color-borde) !important;
-    border-radius: var(--radio) !important;
-    font-weight: 500 !important;
-    padding: 9px 20px !important;
-    font-size: 0.9rem !important;
+tbody tr:first-child td {
+    border-top: none;
 }
 
-.swal2-cancel:hover {
-    background: #f1f5f9 !important;
+.acciones-tabla {
+    display: flex;
+    gap: 8px;
+}
+
+.acciones-tabla button {
+    padding: 6px 12px;
+    font-size: 12.5px;
+}
+
+/* Estado vacío */
+.estado-vacio {
+    text-align: center;
+    padding: 40px 16px;
+    color: var(--gris-texto);
+    font-style: italic;
 }

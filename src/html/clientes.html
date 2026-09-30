@@ -3,47 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <title>Clientes</title>
-    <link rel="stylesheet" href="../css/general.css">
+
+    <!-- Fuente Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- SweetAlert2 por CDN (versión flotante 11) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Estilos autocontenidos -->
     <link rel="stylesheet" href="../css/clientes.css">
 </head>
 <body>
+
+    <!-- =========================================================
+         BARRA SUPERIOR
+         ========================================================= -->
     <div class="barra-acciones">
-        <button id="btn-volver" class="secundario">← Volver al menú</button>
-        <button id="btn-nuevo">+ Nuevo cliente</button>
-    </div>
+        <button id="btn-volver" class="secundario">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Volver al menú
+        </button>
 
-    <h2>Clientes</h2>
-
-    <!-- Formulario -->
-    <div class="contenedor-form" id="formulario" style="display:none;">
-        <div class="fila-form">
-            <div>
-                <label for="codigo">Código</label>
-                <input type="text" id="codigo" maxlength="10" placeholder="NU">
-            </div>
-            <div>
-                <label for="nombre">Nombre</label>
-                <input type="text" id="nombre" placeholder="Cliente NU">
-            </div>
-            <div>
-                <button id="btn-guardar">Guardar</button>
-                <button id="btn-cancelar" class="secundario">Cancelar</button>
-            </div>
+        <div class="buscador">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="input-busqueda" placeholder="Buscar por código o nombre...">
+            <button type="button" id="btn-limpiar-busqueda" class="btn-limpiar oculto" title="Limpiar búsqueda">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
         </div>
-        <div id="mensaje" class="mensaje" style="display:none;"></div>
+
+        <button id="btn-nuevo">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Nuevo cliente
+        </button>
     </div>
 
-    <!-- Tabla -->
-    <table>
-        <thead>
-            <tr>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th style="width:180px;">Acciones</th>
-            </tr>
-        </thead>
-        <tbody id="tabla-clientes"></tbody>
-    </table>
+    <h2>Gestión de Clientes</h2>
+
+    <!-- =========================================================
+         ESTADO VACÍO
+         ========================================================= -->
+    <div id="sin-resultados" class="sin-resultados oculto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <p>No se encontraron clientes con ese criterio.</p>
+        <button type="button" id="btn-limpiar-filtro" class="secundario">Limpiar búsqueda</button>
+    </div>
+
+    <!-- =========================================================
+         TABLA
+         ========================================================= -->
+    <div class="card-tabla">
+        <table class="tabla-clientes">
+            <thead>
+                <tr>
+                    <th style="width:180px;">Código</th>
+                    <th>Nombre</th>
+                    <th style="width:200px; text-align:right;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-clientes"></tbody>
+        </table>
+    </div>
+
+    <!-- =========================================================
+         MODAL DE CLIENTE
+         ========================================================= -->
+    <div id="modal-cliente" class="modal-overlay" style="display:none;">
+        <div class="modal-base">
+            <div class="modal-header">
+                <h3 id="modal-cliente-titulo">Nuevo cliente</h3>
+                <button id="modal-cliente-cerrar" class="btn-cerrar-modal" title="Cerrar">✕</button>
+            </div>
+
+            <form id="formulario" autocomplete="off">
+                <div class="modal-body">
+                    <div class="grid-form">
+                        <div>
+                            <label for="codigo">Código *</label>
+                            <input type="text" id="codigo" maxlength="10" placeholder="NU" required>
+                        </div>
+                        <div>
+                            <label for="nombre">Nombre *</label>
+                            <input type="text" id="nombre" maxlength="150" placeholder="Cliente NU" required>
+                        </div>
+                    </div>
+                    <div id="mensaje" class="mensaje oculto"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="btn-cancelar" class="secundario">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="btn-guardar">
+                        <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="../js/clientes-renderer.js"></script>
 </body>

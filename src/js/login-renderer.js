@@ -1,10 +1,58 @@
-const inputUsuario = document.getElementById('usuario');
-const inputPassword = document.getElementById('password');
-const btnLogin = document.getElementById('btn-login');
-const mensaje = document.getElementById('mensaje');
+/* =========================================================
+   REFERENCIAS DOM
+   ========================================================= */
+const formLogin          = document.getElementById('form-login');
+const inputUsuario       = document.getElementById('usuario');
+const inputPassword      = document.getElementById('password');
+const btnLogin           = document.getElementById('btn-login');
+const btnTogglePassword  = document.getElementById('btn-toggle-password');
+const mensaje            = document.getElementById('mensaje');
 
+const iconoOjo           = btnTogglePassword.querySelector('.icono-ojo');
+const iconoOjoCerrado    = btnTogglePassword.querySelector('.icono-ojo-cerrado');
+
+/* =========================================================
+   TOGGLE PASSWORD
+   ========================================================= */
+btnTogglePassword.addEventListener('click', () => {
+    const mostrando = inputPassword.type === 'text';
+
+    if (mostrando) {
+        inputPassword.type = 'password';
+        iconoOjo.classList.remove('oculto');
+        iconoOjoCerrado.classList.add('oculto');
+        btnTogglePassword.setAttribute('title', 'Mostrar contraseña');
+        btnTogglePassword.setAttribute('aria-label', 'Mostrar contraseña');
+    } else {
+        inputPassword.type = 'text';
+        iconoOjo.classList.add('oculto');
+        iconoOjoCerrado.classList.remove('oculto');
+        btnTogglePassword.setAttribute('title', 'Ocultar contraseña');
+        btnTogglePassword.setAttribute('aria-label', 'Ocultar contraseña');
+    }
+
+    // Mantener foco en el input para no perder el cursor
+    inputPassword.focus();
+});
+
+/* =========================================================
+   MENSAJE
+   ========================================================= */
+function mostrarMensaje(texto, tipo) {
+    mensaje.textContent = texto;
+    mensaje.className = 'mensaje ' + tipo;
+    mensaje.classList.remove('oculto');
+}
+
+function ocultarMensaje() {
+    mensaje.classList.add('oculto');
+}
+
+/* =========================================================
+   LOGIN
+   ========================================================= */
 async function hacerLogin() {
-    const usuario = inputUsuario.value.trim();
+    const usuario  = inputUsuario.value.trim();
     const password = inputPassword.value;
 
     if (!usuario || !password) {
@@ -13,41 +61,49 @@ async function hacerLogin() {
     }
 
     btnLogin.disabled = true;
-    btnLogin.textContent = 'Verificando...';
+    btnLogin.querySelector('.btn-text').textContent = 'Verificando...';
+    ocultarMensaje();
 
     try {
         const res = await window.api.login(usuario, password);
+
         if (res.ok) {
             mostrarMensaje('¡Bienvenido, ' + res.usuario.Nombres + '!', 'ok');
+
             // Esperar un poco y abrir el menú
             setTimeout(async () => {
                 await window.api.abrirMenu();
                 window.close();
             }, 500);
         } else {
-            mostrarMensaje(res.mensaje, 'error');
+            mostrarMensaje(res.mensaje || 'Credenciales incorrectas.', 'error');
             btnLogin.disabled = false;
-            btnLogin.textContent = 'Entrar';
+            btnLogin.querySelector('.btn-text').textContent = 'Entrar';
+            inputPassword.value = '';
+            inputPassword.focus();
         }
     } catch (err) {
         mostrarMensaje('Error: ' + err.message, 'error');
         btnLogin.disabled = false;
-        btnLogin.textContent = 'Entrar';
+        btnLogin.querySelector('.btn-text').textContent = 'Entrar';
     }
 }
 
-btnLogin.addEventListener('click', hacerLogin);
-
-inputPassword.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') hacerLogin();
+/* =========================================================
+   SUBMIT DEL FORMULARIO
+   (Enter en cualquier campo dispara el submit)
+   ========================================================= */
+formLogin.addEventListener('submit', (e) => {
+    e.preventDefault();
+    hacerLogin();
 });
 
+/* =========================================================
+   ENTER EN EL CAMPO USUARIO → salta al password
+   ========================================================= */
 inputUsuario.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') inputPassword.focus();
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        inputPassword.focus();
+    }
 });
-
-function mostrarMensaje(texto, tipo) {
-    mensaje.textContent = texto;
-    mensaje.className = 'mensaje ' + tipo;
-    mensaje.style.display = 'block';
-}

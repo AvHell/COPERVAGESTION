@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { PDFDocument } = require('pdf-lib');
 
 /* =========================================================
    BASE DE DATOS — MÓDULOS EXISTENTES
@@ -18,12 +19,13 @@ const dominiosDB   = require('./db/dominios');
 const configDB     = require('./db/configuraciones');
 
 /* =========================================================
-   BASE DE DATOS — MÓDULO ACTIVO FIJO (aislado)
+   BASE DE DATOS — MÓDULO ACTIVO FIJO
    ========================================================= */
 const activoFijoCatalogosDB   = require('../ActivoFijo/consultas/catalogos');
 const activoFijoActivosDB     = require('../ActivoFijo/consultas/activos');
 const activoFijoResponsivasDB = require('../ActivoFijo/consultas/responsivas');
-const activoFijoReportesDB = require('../ActivoFijo/consultas/reportes');
+const activoFijoReportesDB    = require('../ActivoFijo/consultas/reportes');
+const activoFijoImportacionDB = require('../ActivoFijo/consultas/importacion');
 
 /* =========================================================
    RUTAS
@@ -33,6 +35,24 @@ const HTML       = path.join(__dirname, '../html');
 const HTML_AF    = path.join(__dirname, '..', 'ActivoFijo', 'html');
 const PRELOAD    = path.join(__dirname, 'preload.js');
 const PRELOAD_AF = path.join(__dirname, '..', 'ActivoFijo', 'preload-activofijo.js');
+
+/* Ruta de la plantilla PDF
+   Estructura esperada:
+     ProyectoEquipos/
+       ├── Formatos/
+       │   └── ResponsivaCelulares.pdf
+       └── src/
+           └── js/
+               └── main.js
+*/
+const PLANTILLA_PDF = path.join(__dirname, '..', '..', 'Formatos', 'ResponsivaCelulares.pdf');
+
+/* Log de verificación al arrancar */
+console.log('===========================================');
+console.log('Ruta plantilla PDF:');
+console.log(PLANTILLA_PDF);
+console.log('¿Existe?', fs.existsSync(PLANTILLA_PDF));
+console.log('===========================================');
 
 /* =========================================================
    ESTADO GLOBAL
@@ -53,57 +73,41 @@ function construirMenuApp() {
         {
             label: 'Archivo',
             submenu: [
-                {
-                    label: 'Recargar',
-                    accelerator: 'F5',
-                    click: (_item, win) => { if (win) win.reload(); }
-                },
-                {
-                    label: 'Forzar recarga',
-                    accelerator: 'Ctrl+Shift+R',
-                    click: (_item, win) => { if (win) win.webContents.reloadIgnoringCache(); }
-                },
+                { label: 'Recargar', accelerator: 'F5', click: (_i, w) => { if (w) w.reload(); } },
+                { label: 'Forzar recarga', accelerator: 'Ctrl+Shift+R', click: (_i, w) => { if (w) w.webContents.reloadIgnoringCache(); } },
                 { type: 'separator' },
-                {
-                    label: 'Salir',
-                    accelerator: 'Alt+F4',
-                    click: () => app.quit()
-                }
+                { label: 'Salir', accelerator: 'Alt+F4', click: () => app.quit() }
             ]
         },
         {
             label: 'Editar',
             submenu: [
-                { role: 'undo',         label: 'Deshacer' },
-                { role: 'redo',         label: 'Rehacer' },
+                { role: 'undo', label: 'Deshacer' },
+                { role: 'redo', label: 'Rehacer' },
                 { type: 'separator' },
-                { role: 'cut',          label: 'Cortar' },
-                { role: 'copy',         label: 'Copiar' },
-                { role: 'paste',        label: 'Pegar' },
-                { role: 'selectAll',    label: 'Seleccionar todo' }
+                { role: 'cut', label: 'Cortar' },
+                { role: 'copy', label: 'Copiar' },
+                { role: 'paste', label: 'Pegar' },
+                { role: 'selectAll', label: 'Seleccionar todo' }
             ]
         },
         {
             label: 'Ver',
             submenu: [
-                { role: 'resetZoom',    label: 'Zoom normal' },
-                { role: 'zoomIn',       label: 'Acercar' },
-                { role: 'zoomOut',      label: 'Alejar' },
+                { role: 'resetZoom', label: 'Zoom normal' },
+                { role: 'zoomIn', label: 'Acercar' },
+                { role: 'zoomOut', label: 'Alejar' },
                 { type: 'separator' },
                 { role: 'togglefullscreen', label: 'Pantalla completa' },
                 { type: 'separator' },
-                {
-                    label: 'Herramientas de desarrollo',
-                    accelerator: 'Ctrl+Shift+I',
-                    click: (_item, win) => { if (win) win.webContents.toggleDevTools(); }
-                }
+                { label: 'Herramientas de desarrollo', accelerator: 'Ctrl+Shift+I', click: (_i, w) => { if (w) w.webContents.toggleDevTools(); } }
             ]
         },
         {
             label: 'Ventana',
             submenu: [
-                { role: 'minimize',     label: 'Minimizar' },
-                { role: 'close',        label: 'Cerrar' }
+                { role: 'minimize', label: 'Minimizar' },
+                { role: 'close', label: 'Cerrar' }
             ]
         },
         {
@@ -135,8 +139,8 @@ function crearVentana(nombre, archivo, opciones = {}) {
         return ventanas[nombre];
     }
 
-    const basePath     = opciones.basePath     || HTML;
-    const preloadPath  = opciones.preload      || PRELOAD;
+    const basePath    = opciones.basePath || HTML;
+    const preloadPath = opciones.preload  || PRELOAD;
 
     const win = new BrowserWindow({
         width:  opciones.width  || 1000,
@@ -153,7 +157,6 @@ function crearVentana(nombre, archivo, opciones = {}) {
     });
 
     win.setMenuBarVisibility(true);
-
     win.loadFile(path.join(basePath, archivo));
 
     if (opciones.maximizar !== false) {
@@ -164,7 +167,6 @@ function crearVentana(nombre, archivo, opciones = {}) {
 
     ventanas[nombre] = win;
     win.on('closed', () => { ventanas[nombre] = null; });
-
     return win;
 }
 
@@ -188,40 +190,30 @@ const crearConfigRedWindow = () => crearVentana('configred', 'configred.html', {
    VENTANAS — MÓDULO ACTIVO FIJO
    ========================================================= */
 const crearActivoFijoCatalogosWindow = () => crearVentana(
-    'activofijo-catalogos',
-    'catalogos.html',
-    {
-        title:    'Catálogos - Activo Fijo',
-        basePath: HTML_AF,
-        preload:  PRELOAD_AF
-    }
+    'activofijo-catalogos', 'catalogos.html',
+    { title: 'Catálogos - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
 );
 
 const crearActivoFijoActivosWindow = () => crearVentana(
-    'activofijo-activos',
-    'activos.html',
-    {
-        title:    'Inventario - Activo Fijo',
-        basePath: HTML_AF,
-        preload:  PRELOAD_AF
-    }
+    'activofijo-activos', 'activos.html',
+    { title: 'Inventario - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
 );
 
 const crearActivoFijoResponsivasWindow = () => crearVentana(
-    'activofijo-responsivas',
-    'responsivas.html',
-    {
-        title:    'Responsivas - Activo Fijo',
-        basePath: HTML_AF,
-        preload:  PRELOAD_AF
-    }
+    'activofijo-responsivas', 'responsivas.html',
+    { title: 'Responsivas - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
 );
 
 const crearActivoFijoReportesWindow = () => crearVentana(
-    'activofijo-reportes',
-    'reportes.html',
+    'activofijo-reportes', 'reportes.html',
+    { title: 'Reportes - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
+);
+
+const crearActivoFijoImportarWindow = () => crearVentana(
+    'activofijo-importar',
+    'importar.html',
     {
-        title:    'Reportes - Activo Fijo',
+        title:    'Importar Masivo - Activo Fijo',
         basePath: HTML_AF,
         preload:  PRELOAD_AF
     }
@@ -254,21 +246,13 @@ ipcMain.handle('login', async (_e, nombreUsuario, password) => {
     return res;
 });
 
-ipcMain.handle('logout', () => {
-    usuarioActual = null;
-    return { ok: true };
-});
-
+ipcMain.handle('logout', () => { usuarioActual = null; return { ok: true }; });
 ipcMain.handle('usuario-actual', () => usuarioActual);
 
 /* =========================================================
    IPC: ABRIR VENTANAS DEL SISTEMA
    ========================================================= */
-ipcMain.handle('abrir-menu', () => {
-    cerrarVentana('login');
-    asegurarMenuAbierto();
-    return { ok: true };
-});
+ipcMain.handle('abrir-menu', () => { cerrarVentana('login'); asegurarMenuAbierto(); return { ok: true }; });
 
 ipcMain.handle('abrir-clientes',  () => { crearClientesWindow();  return { ok: true }; });
 ipcMain.handle('abrir-roles',     () => { crearRolesWindow();     return { ok: true }; });
@@ -294,71 +278,246 @@ ipcMain.handle('volver-menu', (e) => {
 ipcMain.handle('abrir-activofijo-catalogos',   () => { crearActivoFijoCatalogosWindow();   return { ok: true }; });
 ipcMain.handle('abrir-activofijo-activos',     () => { crearActivoFijoActivosWindow();     return { ok: true }; });
 ipcMain.handle('abrir-activofijo-responsivas', () => { crearActivoFijoResponsivasWindow(); return { ok: true }; });
-ipcMain.handle('abrir-activofijo-reportes', () => { crearActivoFijoReportesWindow(); return { ok: true }; });
+ipcMain.handle('abrir-activofijo-reportes',    () => { crearActivoFijoReportesWindow();    return { ok: true }; });
+ipcMain.handle('abrir-activofijo-importar',    () => { crearActivoFijoImportarWindow();    return { ok: true }; });
 
 /* Alias con prefijo af-* */
 ipcMain.handle('af-abrir-catalogos',   () => { crearActivoFijoCatalogosWindow();   return { ok: true }; });
 ipcMain.handle('af-abrir-activos',     () => { crearActivoFijoActivosWindow();     return { ok: true }; });
 ipcMain.handle('af-abrir-responsivas', () => { crearActivoFijoResponsivasWindow(); return { ok: true }; });
+ipcMain.handle('af-abrir-reportes',    () => { crearActivoFijoReportesWindow();    return { ok: true }; });
+ipcMain.handle('af-abrir-importar',    () => { crearActivoFijoImportarWindow();    return { ok: true }; });
 
 /* =========================================================
    IPC: CATÁLOGOS DE ACTIVO FIJO
    ========================================================= */
-ipcMain.handle('af-catalogos-listar',     async (_e, clave)            => await activoFijoCatalogosDB.listar(clave));
+ipcMain.handle('af-catalogos-listar',     async (_e, clave, filtros)   => await activoFijoCatalogosDB.listar(clave, filtros || {}));
 ipcMain.handle('af-catalogos-crear',      async (_e, clave, datos)     => await activoFijoCatalogosDB.crear(clave, datos));
 ipcMain.handle('af-catalogos-actualizar', async (_e, clave, id, datos) => await activoFijoCatalogosDB.actualizar(clave, id, datos));
 ipcMain.handle('af-catalogos-eliminar',   async (_e, clave, id)        => await activoFijoCatalogosDB.eliminar(clave, id));
+ipcMain.handle('af-catalogos-restaurar',  async (_e, clave, id)        => await activoFijoCatalogosDB.restaurar(clave, id));
 
 /* =========================================================
-   IPC: ACTIVOS DE ACTIVO FIJO
+   IPC: ACTIVOS
    ========================================================= */
-ipcMain.handle('af-activos-listar',     async (_e, filtros) => await activoFijoActivosDB.listar(filtros || {}));
-ipcMain.handle('af-activos-obtener',    async (_e, id)      => await activoFijoActivosDB.obtener(id));
-ipcMain.handle('af-activos-crear',      async (_e, datos)   => await activoFijoActivosDB.crear(datos, usuarioActual?.IdUsuario));
-ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario));
-ipcMain.handle('af-activos-eliminar',   async (_e, id)      => await activoFijoActivosDB.eliminar(id));
+ipcMain.handle('af-activos-listar',     async (_e, filtros)  => await activoFijoActivosDB.listar(filtros || {}));
+ipcMain.handle('af-activos-obtener',    async (_e, id)       => await activoFijoActivosDB.obtener(id));
+ipcMain.handle('af-activos-crear',      async (_e, datos)    => await activoFijoActivosDB.crear(datos, usuarioActual?.IdUsuario));
+ipcMain.handle('af-activos-actualizar', async (_e, id, datos)=> await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario));
+ipcMain.handle('af-activos-eliminar',   async (_e, id, motivo) => await activoFijoActivosDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null));
+ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo) => await activoFijoActivosDB.restaurar(id, usuarioActual?.IdUsuario, motivo || null));
+ipcMain.handle('af-activos-historico',  async (_e, id)         => await activoFijoActivosDB.historico(id));
 
+/* ----- Catálogos auxiliares originales ----- */
 ipcMain.handle('af-activos-lista-tipos',    async () => await activoFijoActivosDB.listarTipos());
 ipcMain.handle('af-activos-lista-marcas',   async () => await activoFijoActivosDB.listarMarcas());
 ipcMain.handle('af-activos-lista-estados',  async () => await activoFijoActivosDB.listarEstados());
 ipcMain.handle('af-activos-lista-estatus',  async () => await activoFijoActivosDB.listarEstatus());
 ipcMain.handle('af-activos-lista-carteras', async () => await activoFijoActivosDB.listarCarteras());
 
-/* =========================================================
-   IPC: RESPONSIVAS DE ACTIVO FIJO
-   ========================================================= */
-ipcMain.handle('af-resp-listar',              async (_e, filtros)      => await activoFijoResponsivasDB.listar(filtros || {}));
-ipcMain.handle('af-resp-obtener',             async (_e, id)           => await activoFijoResponsivasDB.obtener(id));
-ipcMain.handle('af-resp-activos-disponibles', async ()                 => await activoFijoResponsivasDB.activosDisponibles());
-ipcMain.handle('af-resp-crear',               async (_e, datos)        => await activoFijoResponsivasDB.crear(datos, usuarioActual?.IdUsuario));
-ipcMain.handle('af-resp-actualizar',          async (_e, id, datos)    => await activoFijoResponsivasDB.actualizar(id, datos, usuarioActual?.IdUsuario));
-ipcMain.handle('af-resp-devolver',            async (_e, id, f, obs)   => await activoFijoResponsivasDB.devolver(id, f, obs, usuarioActual?.IdUsuario));
-ipcMain.handle('af-resp-eliminar',            async (_e, id)           => await activoFijoResponsivasDB.eliminar(id));
-ipcMain.handle('af-resp-lista-carteras',      async ()                 => await activoFijoResponsivasDB.listarCarteras());
-ipcMain.handle('af-resp-lista-puestos',       async ()                 => await activoFijoResponsivasDB.listarPuestos());
-
+/* ----- Catálogos auxiliares NUEVOS (periféricos) ----- */
+ipcMain.handle('af-activos-lista-sitios',          async () => await activoFijoActivosDB.listarSitios());
+ipcMain.handle('af-activos-lista-subtipos',        async () => await activoFijoActivosDB.listarSubtipos());
+ipcMain.handle('af-activos-lista-voltajes',        async () => await activoFijoActivosDB.listarVoltajes());
+ipcMain.handle('af-activos-lista-clasificaciones', async () => await activoFijoActivosDB.listarClasificaciones());
+ipcMain.handle('af-activos-lista-tamanios',        async () => await activoFijoActivosDB.listarTamanios());
+ipcMain.handle('af-activos-lista-capacidades',     async () => await activoFijoActivosDB.listarCapacidades());
 
 /* =========================================================
-   IPC: REPORTES DE ACTIVO FIJO
+   IPC: RESPONSIVAS
    ========================================================= */
-ipcMain.handle('af-rep-resumen-general',       async () => await activoFijoReportesDB.resumenGeneral());
-ipcMain.handle('af-rep-resumen-tipo',          async () => await activoFijoReportesDB.resumenPorTipo());
-ipcMain.handle('af-rep-resumen-cartera',       async () => await activoFijoReportesDB.resumenPorCartera());
-ipcMain.handle('af-rep-inventario',            async (_e, filtros) => await activoFijoReportesDB.inventario(filtros || {}));
-ipcMain.handle('af-rep-responsivas-activas',   async () => await activoFijoReportesDB.responsivasActivas());
-ipcMain.handle('af-rep-asignaciones-persona',  async () => await activoFijoReportesDB.asignacionesPorPersona());
-ipcMain.handle('af-rep-por-ticket',            async () => await activoFijoReportesDB.porTicket());
-ipcMain.handle('af-rep-historial-asignaciones',async (_e, filtros) => await activoFijoReportesDB.historialAsignaciones(filtros || {}));
-ipcMain.handle('af-rep-historial-activo',      async (_e, id) => await activoFijoReportesDB.historialActivo(id));
-ipcMain.handle('af-rep-celulares',             async () => await activoFijoReportesDB.celulares());
-ipcMain.handle('af-rep-laptops',               async () => await activoFijoReportesDB.laptops());
+ipcMain.handle('af-resp-listar',              async (_e, filtros)    => await activoFijoResponsivasDB.listar(filtros || {}));
+ipcMain.handle('af-resp-obtener',             async (_e, id)         => await activoFijoResponsivasDB.obtener(id));
+ipcMain.handle('af-resp-activos-disponibles', async ()               => await activoFijoResponsivasDB.activosDisponibles());
+ipcMain.handle('af-resp-crear',               async (_e, datos)      => await activoFijoResponsivasDB.crear(datos, usuarioActual?.IdUsuario));
+ipcMain.handle('af-resp-actualizar',          async (_e, id, datos)  => await activoFijoResponsivasDB.actualizar(id, datos, usuarioActual?.IdUsuario));
+ipcMain.handle('af-resp-devolver',            async (_e, id, f, obs) => await activoFijoResponsivasDB.devolver(id, f, obs, usuarioActual?.IdUsuario));
+ipcMain.handle('af-resp-eliminar',            async (_e, id, motivo) => await activoFijoResponsivasDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null));
+ipcMain.handle('af-resp-lista-carteras',      async ()               => await activoFijoResponsivasDB.listarCarteras());
+ipcMain.handle('af-resp-lista-puestos',       async ()               => await activoFijoResponsivasDB.listarPuestos());
 
-ipcMain.handle('af-rep-tipos',                 async () => await activoFijoReportesDB.tiposParaFiltro());
-ipcMain.handle('af-rep-estados',               async () => await activoFijoReportesDB.estadosParaFiltro());
-ipcMain.handle('af-rep-estatus',               async () => await activoFijoReportesDB.estatusParaFiltro());
-ipcMain.handle('af-rep-carteras',              async () => await activoFijoReportesDB.carterasParaFiltro());
+/* =========================================================
+   IPC: REPORTES
+   ========================================================= */
+ipcMain.handle('af-rep-resumen-general',       async ()               => await activoFijoReportesDB.resumenGeneral());
+ipcMain.handle('af-rep-resumen-tipo',          async ()               => await activoFijoReportesDB.resumenPorTipo());
+ipcMain.handle('af-rep-resumen-cartera',       async ()               => await activoFijoReportesDB.resumenPorCartera());
+ipcMain.handle('af-rep-inventario',            async (_e, filtros)    => await activoFijoReportesDB.inventario(filtros || {}));
+ipcMain.handle('af-rep-responsivas-activas',   async ()               => await activoFijoReportesDB.responsivasActivas());
+ipcMain.handle('af-rep-asignaciones-persona',  async ()               => await activoFijoReportesDB.asignacionesPorPersona());
+ipcMain.handle('af-rep-por-ticket',            async ()               => await activoFijoReportesDB.porTicket());
+ipcMain.handle('af-rep-historial-asignaciones',async (_e, filtros)    => await activoFijoReportesDB.historialAsignaciones(filtros || {}));
+ipcMain.handle('af-rep-historial-activo',      async (_e, id)         => await activoFijoReportesDB.historialActivo(id));
+ipcMain.handle('af-rep-celulares',             async ()               => await activoFijoReportesDB.celulares());
+ipcMain.handle('af-rep-laptops',               async ()               => await activoFijoReportesDB.laptops());
 
-ipcMain.handle('af-abrir-reportes', () => { crearActivoFijoReportesWindow(); return { ok: true }; });
+ipcMain.handle('af-rep-tipos',                 async ()               => await activoFijoReportesDB.tiposParaFiltro());
+ipcMain.handle('af-rep-estados',               async ()               => await activoFijoReportesDB.estadosParaFiltro());
+ipcMain.handle('af-rep-estatus',               async ()               => await activoFijoReportesDB.estatusParaFiltro());
+ipcMain.handle('af-rep-carteras',              async ()               => await activoFijoReportesDB.carterasParaFiltro());
+
+/* =========================================================
+   IPC: IMPORTACIÓN MASIVA
+   ========================================================= */
+ipcMain.handle('af-import-layouts',  async () => activoFijoImportacionDB.listarLayouts());
+ipcMain.handle('af-import-layout',   async (_e, clave) => activoFijoImportacionDB.obtenerLayout(clave));
+ipcMain.handle('af-import-procesar', async (_e, datos) => await activoFijoImportacionDB.importar(datos, usuarioActual?.IdUsuario));
+
+/* =========================================================
+   IPC: GENERAR PDF DE RESPONSIVA (pdf-lib)
+   - Fuente pequeña (8pt)
+   - Campos se marcan como read-only al terminar
+   - Formulario aplanado (no editable)
+   ========================================================= */
+ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
+    if (!usuarioActual) throw new Error('Sesión no iniciada');
+
+    // 1. Traer datos de la BD
+    const d = await activoFijoResponsivasDB.obtenerParaPDF(idResponsiva);
+    if (!d) {
+        return { ok: false, mensaje: 'Responsiva no encontrada.' };
+    }
+
+    // 2. Verificar plantilla
+    if (!fs.existsSync(PLANTILLA_PDF)) {
+        return {
+            ok: false,
+            mensaje: `No se encontró la plantilla en:\n${PLANTILLA_PDF}\n\nVerifica que exista la carpeta "Formatos" en la raíz del proyecto con el archivo "ResponsivaCelulares.pdf".`
+        };
+    }
+
+    // 3. Pedir dónde guardar
+    const nombreArchivo = `Responsiva-${(d.FolioTicket || 'sin-folio').replace(/[\/\\:*?"<>|]/g, '_')}.pdf`;
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Guardar PDF de responsiva',
+        defaultPath: nombreArchivo,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    });
+
+    if (canceled || !filePath) {
+        return { ok: false, mensaje: 'Cancelado' };
+    }
+
+    try {
+        // 4. Helpers
+        const fmtFecha = (f) => {
+            if (!f) return 'N/A';
+            const fecha = new Date(f);
+            if (isNaN(fecha.getTime())) return 'N/A';
+            const dia = String(fecha.getDate()).padStart(2, '0');
+            const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+            return `${dia}/${mes}/${fecha.getFullYear()}`;
+        };
+        const fmtPrecio = (v) => {
+            if (v == null || v === '') return '';
+            return '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 2 });
+        };
+
+        // 5. Cargar plantilla
+        const plantillaBytes = fs.readFileSync(PLANTILLA_PDF);
+        const pdf  = await PDFDocument.load(plantillaBytes);
+        const form = pdf.getForm();
+
+        /* =================================================
+           TAMAÑO DE FUENTE POR DEFECTO
+           ================================================= */
+        const FUENTE = 6;
+
+        /* =================================================
+           setCampo(nombre, valor, tamaño?)
+           - tamaño es OPCIONAL. Si no se pasa, usa FUENTE.
+           ================================================= */
+        const setCampo = (nombre, valor, tamaño = null) => {
+            try {
+                const campo = form.getTextField(nombre);
+                if (!campo) {
+                    console.warn(`[PDF] ✗ Campo no encontrado: ${nombre}`);
+                    return;
+                }
+
+                const sizeFinal = tamaño ?? FUENTE;
+
+                campo.setText(String(valor ?? ''));
+                campo.setFontSize(sizeFinal);
+
+                console.log(`[PDF] ✓ ${nombre} = "${valor}" (${sizeFinal}pt)`);
+            } catch (err) {
+                console.warn(`[PDF] ✗ Error en campo ${nombre}: ${err.message}`);
+            }
+        };
+
+        /* =================================================
+           MAPEO — con tamaños personalizados donde se necesite
+           ================================================= */
+        setCampo('ticket',                d.FolioTicket);
+        setCampo('nombreproyecto',        d.NombreProyecto);
+        setCampo('descripcion_solicitud', d.DescripcionSolicitud);
+        setCampo('observaciones',         d.Observaciones);
+        setCampo('fecha_asignacion',      fmtFecha(d.FechaAsignacion));
+        setCampo('fecha_devolucion',      fmtFecha(d.FechaDevolucionProgramada));
+        setCampo('estatus',               d.EstatusResponsiva);
+        setCampo('motivo_salida',         d.MotivoSalida);
+
+        setCampo('tipo_equipo',           d.Tipo);
+        setCampo('marca',                 d.Marca);
+        setCampo('modelo',                d.Modelo);
+        setCampo('no_serie',              d.NoSerie);
+        setCampo('precio_activo',         fmtPrecio(d.PrecioActivo));
+        setCampo('procesador',            d.Procesador);
+        setCampo('memoria_ram',           d.MemoriaRAM);
+        setCampo('almacenamiento',        d.Almacenamiento);
+        setCampo('accesorios',            d.Accesorios);
+
+        setCampo('imei_uno',              d.IMEI1);
+        setCampo('imei_dos',              d.IMEI2);
+
+        setCampo('nombre_recibe',         d.NombreRecibe);
+        setCampo('area_recibe',           d.AreaRecibe);
+        setCampo('puesto_recibe',         d.PuestoRecibe, 5);   // ← 5pt personalizado
+
+        setCampo('nombre_entrega',        d.NombreEntrega);
+        setCampo('puesto_entrega',        d.PuestoEntrega);
+        setCampo('area_entrega',          d.AreaEntrega);
+
+        /* =================================================
+           BLOQUEAR TODOS LOS CAMPOS
+           - readOnly(true): no se puede escribir
+           - flatten(): el formulario queda "plano"
+           ================================================= */
+
+        // Opción 1: Solo marcar como read-only
+        try {
+            form.getFields().forEach(campo => {
+                try {
+                    campo.enableReadOnly();
+                } catch (_) {
+                    // Algunos tipos no soportan readOnly, se ignora
+                }
+            });
+        } catch (err) {
+            console.warn('[PDF] Error marcando read-only:', err.message);
+        }
+
+        // Opción 2 (opcional): Aplanar el formulario
+        try {
+            form.flatten();
+        } catch (err) {
+            console.warn('[PDF] Error aplanando formulario:', err.message);
+        }
+
+        // 7. Guardar PDF
+        const bytesFinales = await pdf.save();
+        fs.writeFileSync(filePath, bytesFinales);
+
+        // 8. Actualizar ruta en BD
+        await activoFijoResponsivasDB.actualizarRutaPDF(idResponsiva, filePath, usuarioActual.IdUsuario);
+
+        return { ok: true, mensaje: 'PDF generado correctamente.', ruta: filePath };
+    } catch (err) {
+        console.error('Error generando PDF:', err);
+        return { ok: false, mensaje: 'Error al generar PDF: ' + err.message };
+    }
+});
 
 /* =========================================================
    IPC: CLIENTES / ROLES / LUGARES / RANGOS
@@ -501,19 +660,14 @@ ipcMain.handle('plano:eliminarZonaLibre', async (_e, idLugar, nombre, color) => 
 });
 
 /* =========================================================
-   IPC: EXPORTAR PDF
+   IPC: EXPORTAR PDF DEL PLANO
    ========================================================= */
 ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
 
     const winPDF = new BrowserWindow({
-        width: 1400,
-        height: 900,
-        show: false,
-        webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false
-        }
+        width: 1400, height: 900, show: false,
+        webPreferences: { contextIsolation: true, nodeIntegration: false }
     });
 
     let tmpPath = null;
@@ -531,9 +685,7 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
             filters: [{ name: 'PDF', extensions: ['pdf'] }]
         });
 
-        if (canceled || !filePath) {
-            return { ok: false, mensaje: 'Cancelado' };
-        }
+        if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
 
         const datosPDF = await winPDF.webContents.printToPDF({
             printBackground: true,
@@ -542,7 +694,6 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
         });
 
         fs.writeFileSync(filePath, datosPDF);
-
         return { ok: true, mensaje: 'PDF generado', ruta: filePath };
     } catch (err) {
         throw err;

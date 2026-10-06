@@ -549,6 +549,120 @@ h2 {
     border: none;
 }
 
+
+/* =========================================================
+   TABS DE VISTA (Activas / Canceladas)
+   ========================================================= */
+.tabs-vista {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--af-gris-borde);
+}
+.tab-vista {
+    background: transparent;
+    color: var(--af-gris-texto);
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    padding: 10px 18px;
+    font-size: 13.5px;
+    font-weight: 500;
+    transition: all 0.15s;
+    margin-bottom: -2px;
+}
+.tab-vista:hover:not(:disabled) {
+    background-color: var(--af-gris-suave);
+    color: var(--af-azul);
+}
+.tab-vista.activo {
+    color: var(--af-azul);
+    border-bottom-color: var(--af-azul);
+    background-color: transparent;
+    font-weight: 600;
+}
+.tab-vista svg { width: 15px; height: 15px; }
+
+/* =========================================================
+   TABS DE VISTA (Activas / Canceladas)
+   ========================================================= */
+.tabs-vista {
+    display: flex;
+    gap: 4px;
+    margin: 0 0 20px;
+    border-bottom: 2px solid var(--af-gris-borde);
+}
+.tab-vista {
+    background: transparent;
+    color: var(--af-gris-texto);
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    padding: 10px 18px;
+    font-size: 13.5px;
+    font-weight: 500;
+    transition: all 0.15s;
+    margin-bottom: -2px;
+}
+.tab-vista:hover:not(:disabled) {
+    background-color: var(--af-gris-suave);
+    color: var(--af-azul);
+}
+.tab-vista.activo {
+    color: var(--af-azul);
+    border-bottom-color: var(--af-azul);
+    background-color: transparent;
+    font-weight: 600;
+}
+.tab-vista svg { width: 15px; height: 15px; }
+
+/* Badge CANCELADO */
+.badge-estatus-CANCELADO {
+    color: #4b5563;
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+/* =========================================================
+   MODAL DE DETALLE (Ver)
+   ========================================================= */
+.swal2-popup.cl-historico {
+    font-family: var(--af-fuente);
+    padding: 22px 24px;
+    border-radius: 14px;
+}
+.swal2-popup.cl-historico .swal2-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--af-azul);
+    padding: 0 0 10px;
+}
+.detalle-resp {
+    text-align: left;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+.det-seccion {
+    padding: 12px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+.det-seccion:last-child { border-bottom: none; }
+.det-titulo {
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--af-azul);
+    margin-bottom: 6px;
+}
+.det-linea {
+    font-size: 13px;
+    color: #374151;
+    line-height: 1.55;
+}
+.det-linea b { color: #1f2937; }
+
 /* RESPONSIVE */
 @media (max-width: 900px) {
     body { padding: 20px; }

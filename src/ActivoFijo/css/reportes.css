@@ -38,7 +38,9 @@ body {
     background-attachment: fixed;
 }
 
-/* BOTONES */
+/* =========================================================
+   BOTONES
+   ========================================================= */
 button {
     font-family: inherit;
     font-size: 13.5px;
@@ -75,7 +77,9 @@ button svg, button .icono-svg {
     stroke-width: 2;
 }
 
-/* BARRA ACCIONES */
+/* =========================================================
+   BARRA ACCIONES
+   ========================================================= */
 .barra-acciones {
     display: flex;
     align-items: center;
@@ -129,6 +133,9 @@ button svg, button .icono-svg {
     color: var(--af-azul);
 }
 
+/* =========================================================
+   TÍTULO
+   ========================================================= */
 h2 {
     color: var(--af-azul);
     font-size: 22px;
@@ -138,7 +145,9 @@ h2 {
     border-bottom: 2px solid var(--af-gris-borde);
 }
 
-/* KPIs */
+/* =========================================================
+   KPIs
+   ========================================================= */
 .kpis-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -188,19 +197,22 @@ h2 {
     color: #1a202c;
     line-height: 1.2;
     letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Colores por tipo de KPI */
-.kpi-total      .kpi-icon { background-color: #eef2f7; color: #1e3a5f; }
-.kpi-valor      .kpi-icon { background-color: #ecfdf5; color: #047857; }
-.kpi-stock      .kpi-icon { background-color: #f3f4f6; color: #6b7280; }
-.kpi-disponible .kpi-icon { background-color: #f0f9ff; color: #0369a1; }
-.kpi-asignado   .kpi-icon { background-color: #ecfdf5; color: #047857; }
-.kpi-pendiente  .kpi-icon { background-color: #fffbeb; color: #b45309; }
-.kpi-baja       .kpi-icon { background-color: #fef2f2; color: #b91c1c; }
+.kpi-total       .kpi-icon { background-color: #eef2f7; color: #1e3a5f; }
+.kpi-valor       .kpi-icon { background-color: #ecfdf5; color: #047857; }
+.kpi-stock       .kpi-icon { background-color: #f3f4f6; color: #6b7280; }
+.kpi-disponible  .kpi-icon { background-color: #f0f9ff; color: #0369a1; }
+.kpi-asignado    .kpi-icon { background-color: #ecfdf5; color: #047857; }
+.kpi-pendiente   .kpi-icon { background-color: #fffbeb; color: #b45309; }
+.kpi-baja        .kpi-icon { background-color: #fef2f2; color: #b91c1c; }
 .kpi-responsivas .kpi-icon { background-color: #f5f3ff; color: #7c3aed; }
 
-/* TABS */
+/* =========================================================
+   TABS
+   ========================================================= */
 .tabs-reportes {
     display: flex;
     gap: 4px;
@@ -233,7 +245,9 @@ h2 {
 }
 .tab svg { width: 14px; height: 14px; }
 
-/* FILTROS */
+/* =========================================================
+   FILTROS
+   ========================================================= */
 .filtros {
     display: flex;
     gap: 12px;
@@ -270,7 +284,9 @@ h2 {
     box-shadow: 0 0 0 3px var(--af-azul-suave);
 }
 
-/* TABLA */
+/* =========================================================
+   TABLA
+   ========================================================= */
 .card-tabla {
     background-color: var(--af-blanco);
     border: 1px solid var(--af-gris-borde);
@@ -281,70 +297,150 @@ h2 {
 .tabla-reportes {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 13.5px;
+    font-family: var(--af-fuente);
+    table-layout: auto;
 }
-.tabla-reportes thead { background-color: #fafbfc; }
+
+.tabla-reportes thead {
+    background-color: #f7f9fc;
+    border-bottom: 2px solid var(--af-gris-borde);
+}
 .tabla-reportes th {
-    padding: 11px 14px;
+    padding: 14px 20px;
     text-align: left;
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--af-gris-texto);
-    border-bottom: 1px solid var(--af-gris-borde);
+    letter-spacing: 0.04em;
+    color: #64748b;
     white-space: nowrap;
-}
-.tabla-reportes td {
-    padding: 11px 14px;
-    font-size: 12.5px;
-    color: #2d3748;
-    border-bottom: 1px solid var(--af-gris-borde);
     vertical-align: middle;
+    line-height: 1.3;
+}
+
+.tabla-reportes td {
+    padding: 14px 20px;
+    font-size: 13.5px;
+    color: #1e293b;
+    border-bottom: 1px solid #edf0f4;
+    vertical-align: middle;
+    line-height: 1.45;
+    letter-spacing: 0.005em;
 }
 .tabla-reportes tbody tr:last-child td { border-bottom: none; }
-.tabla-reportes tbody tr:hover { background-color: var(--af-gris-suave); }
-
-/* CELDAS ESPECIALES */
-.celda-numero {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-weight: 600;
-    color: var(--af-azul);
-    text-align: right;
+.tabla-reportes tbody tr {
+    transition: background-color 0.12s ease;
 }
-.celda-precio {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-weight: 600;
-    color: #047857;
+.tabla-reportes tbody tr:hover { background-color: #f8fafc; }
+
+/* =========================================================
+   ALINEACIÓN POR TIPO DE COLUMNA
+   Encabezado y celdas comparten la misma alineación.
+   ========================================================= */
+
+/* Columna NÚMEROS → centrada */
+.tabla-reportes th.col-numero,
+.tabla-reportes td.col-numero {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Columna PRECIOS → derecha */
+.tabla-reportes th.col-precio,
+.tabla-reportes td.col-precio {
     text-align: right;
+    font-variant-numeric: tabular-nums;
+    padding-right: 26px;
+}
+
+/* Columna FECHAS → centrada */
+.tabla-reportes th.col-fecha,
+.tabla-reportes td.col-fecha {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Columna BADGES → centrada */
+.tabla-reportes th.col-badge,
+.tabla-reportes td.col-badge {
+    text-align: center;
+}
+.tabla-reportes td.col-badge .badge {
+    display: inline-flex;
+}
+
+/* Columna FOLIO → centrada */
+.tabla-reportes th.col-folio,
+.tabla-reportes td.col-folio {
+    text-align: center;
+}
+
+/* Columna MONO (series, IMEI) → izquierda */
+.tabla-reportes th.col-mono,
+.tabla-reportes td.col-mono {
+    text-align: left;
+}
+
+/* =========================================================
+   ESTILOS ESPECÍFICOS DE CELDAS
+   ========================================================= */
+
+/* Números */
+.tabla-reportes .celda-numero {
+    font-family: var(--af-fuente);
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--af-azul);
+    letter-spacing: 0.01em;
+}
+
+/* Precios */
+.tabla-reportes .celda-precio {
+    font-family: var(--af-fuente);
+    font-weight: 600;
+    font-size: 13.5px;
+    color: #047857;
     white-space: nowrap;
 }
-.celda-fecha {
+
+/* Fechas */
+.tabla-reportes .celda-fecha {
+    font-family: var(--af-fuente);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+/* Folio */
+.tabla-reportes .celda-folio {
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 12px;
-    color: var(--af-gris-texto);
-    white-space: nowrap;
-}
-.celda-folio {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 11.5px;
     font-weight: 600;
     color: var(--af-azul);
     background-color: var(--af-azul-claro);
-    padding: 3px 8px;
-    border-radius: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
     white-space: nowrap;
-}
-.celda-mono {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
-    color: #2d3748;
+    display: inline-block;
+    letter-spacing: 0.02em;
 }
 
-/* BADGES */
+/* Monoespaciado */
+.tabla-reportes .celda-mono {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12.5px;
+    color: #334155;
+    letter-spacing: 0.02em;
+}
+
+/* =========================================================
+   BADGES
+   ========================================================= */
 .badge {
     display: inline-flex;
-    padding: 3px 9px;
+    padding: 3px 10px;
     border-radius: 999px;
     font-size: 10.5px;
     font-weight: 600;
@@ -352,6 +448,7 @@ h2 {
     text-transform: uppercase;
     border: 1px solid;
     white-space: nowrap;
+    line-height: 1.4;
 }
 .badge-tipo {
     color: var(--af-azul);
@@ -372,7 +469,9 @@ h2 {
 .badge-estatus-BAJA       { color: #374151; background-color: #e5e7eb; border-color: #9ca3af; }
 .badge-estatus-CANCELADO  { color: #6b7280; background-color: #f3f4f6; border-color: #d1d5db; }
 
-/* EMPTY / LOADING */
+/* =========================================================
+   EMPTY / LOADING
+   ========================================================= */
 .cargando,
 .sin-resultados {
     text-align: center;
@@ -405,7 +504,9 @@ h2 {
 
 .oculto { display: none !important; }
 
-/* RESPONSIVE */
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
 @media (max-width: 900px) {
     body { padding: 20px; }
     .barra-acciones { flex-wrap: wrap; }

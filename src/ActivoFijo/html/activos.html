@@ -47,6 +47,26 @@
 
     <h2>Inventario de Activos Fijos</h2>
 
+    <!-- TABS DE VISTA -->
+    <div class="tabs-vista" id="tabs-vista">
+        <button class="tab-vista activo" data-vista="activos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="7" width="20" height="14" rx="2"></rect>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+            Activos
+        </button>
+        <button class="tab-vista" data-vista="eliminados">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+            </svg>
+            Eliminados (BAJA)
+        </button>
+    </div>
+
     <!-- FILTROS -->
     <div class="filtros">
         <div class="filtro">
@@ -57,13 +77,17 @@
             <label for="filtro-estado">Estado</label>
             <select id="filtro-estado"><option value="">Todos</option></select>
         </div>
-        <div class="filtro">
+        <div class="filtro" id="filtro-estatus-wrap">
             <label for="filtro-estatus">Estatus</label>
             <select id="filtro-estatus"><option value="">Todos</option></select>
         </div>
         <div class="filtro">
             <label for="filtro-cartera">Cartera</label>
             <select id="filtro-cartera"><option value="">Todas</option></select>
+        </div>
+        <div class="filtro">
+            <label for="filtro-sitio">Sitio</label>
+            <select id="filtro-sitio"><option value="">Todos</option></select>
         </div>
         <button id="btn-limpiar-filtros" class="secundario">
             <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -80,7 +104,7 @@
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
-        <p>No se encontraron activos con ese criterio.</p>
+        <p id="sin-resultados-texto">No se encontraron activos con ese criterio.</p>
         <button type="button" id="btn-limpiar-busqueda-vacio" class="secundario">Limpiar búsqueda</button>
     </div>
 
@@ -95,8 +119,9 @@
                     <th>Estado</th>
                     <th>Estatus</th>
                     <th>Cartera</th>
+                    <th>Sitio</th>
                     <th>Precio</th>
-                    <th style="width:200px; text-align:right;">Acciones</th>
+                    <th style="width:230px; text-align:right;">Acciones</th>
                 </tr>
             </thead>
             <tbody id="tabla-body"></tbody>
@@ -115,7 +140,7 @@
                 <div class="modal-body">
                     <div class="grid-form">
 
-                        <!-- Identificación -->
+                        <!-- IDENTIFICACIÓN -->
                         <div class="seccion-titulo campo-full">Identificación</div>
 
                         <div>
@@ -135,7 +160,7 @@
                             <input type="text" id="noserie" maxlength="150" placeholder="Ej. 8CC9253DXK">
                         </div>
 
-                        <!-- Campos dinámicos según tipo -->
+                        <!-- DINÁMICOS: IMEI / TELÉFONO -->
                         <div class="campo-imei1 campo-full oculto">
                             <label for="imei1">IMEI 1</label>
                             <input type="text" id="imei1" maxlength="50" placeholder="15 dígitos">
@@ -149,7 +174,39 @@
                             <input type="text" id="notelefono" maxlength="50" placeholder="Ej. 5646448174">
                         </div>
 
-                        <!-- Estado y estatus -->
+                        <!-- UBICACIÓN Y CLASIFICACIÓN -->
+                        <div class="seccion-titulo campo-full">Ubicación y clasificación</div>
+
+                        <div class="campo-sitio">
+                            <label for="sitio">Sitio</label>
+                            <select id="sitio"><option value="">— Sin sitio —</option></select>
+                        </div>
+                        <div class="campo-subtipo">
+                            <label for="subtipo">Subtipo</label>
+                            <select id="subtipo" disabled><option value="">— Selecciona un tipo primero —</option></select>
+                        </div>
+                        <div class="campo-clasificacion">
+                            <label for="clasificacion">Clasificación</label>
+                            <select id="clasificacion"><option value="">— Sin clasificación —</option></select>
+                        </div>
+                        <div class="campo-tamanio">
+                            <label for="tamanio">Tamaño</label>
+                            <select id="tamanio"><option value="">— Sin tamaño —</option></select>
+                        </div>
+                        <div class="campo-capacidad">
+                            <label for="capacidad">Capacidad</label>
+                            <select id="capacidad"><option value="">— Sin capacidad —</option></select>
+                        </div>
+                        <div class="campo-voltaje">
+                            <label for="voltaje">Voltaje</label>
+                            <select id="voltaje"><option value="">— Sin voltaje —</option></select>
+                        </div>
+                        <div class="campo-usuario-asignado campo-full oculto">
+                            <label for="usuario-asignado">Usuario asignado</label>
+                            <input type="text" id="usuario-asignado" maxlength="200" placeholder="Nombre completo del usuario externo">
+                        </div>
+
+                        <!-- SITUACIÓN -->
                         <div class="seccion-titulo campo-full">Situación</div>
 
                         <div>
@@ -164,34 +221,38 @@
                             <label for="cartera">Cartera</label>
                             <select id="cartera"><option value="">— Sin cartera —</option></select>
                         </div>
-                        <div>
+                        <div class="campo-precio oculto">
                             <label for="precio">Precio</label>
                             <input type="number" id="precio" step="0.01" min="0" placeholder="0.00">
                         </div>
 
-                        <!-- Especificaciones técnicas -->
-                        <div class="seccion-titulo campo-full">Especificaciones técnicas</div>
+                        <!-- ESPECIFICACIONES TÉCNICAS -->
+                        <div class="seccion-titulo campo-full bloque-especificaciones oculto">Especificaciones técnicas</div>
 
-                        <div>
+                        <div class="bloque-especificaciones oculto">
                             <label for="procesador">Procesador</label>
                             <input type="text" id="procesador" maxlength="150" placeholder="Ej. Intel Core i5-8500T">
                         </div>
-                        <div>
+                        <div class="bloque-especificaciones oculto">
                             <label for="ram">Memoria RAM</label>
                             <input type="text" id="ram" maxlength="50" placeholder="Ej. 8 GB">
                         </div>
-                        <div>
+                        <div class="bloque-especificaciones oculto">
                             <label for="almacenamiento">Almacenamiento</label>
                             <input type="text" id="almacenamiento" maxlength="50" placeholder="Ej. 240 GB SSD">
                         </div>
-                        <div>
+                        <div class="bloque-especificaciones oculto">
                             <label for="so">Sistema Operativo</label>
                             <input type="text" id="so" maxlength="100" placeholder="Ej. Windows 11 Pro">
                         </div>
-                        <div class="campo-full">
+
+                        <!-- ACCESORIOS -->
+                        <div class="campo-full campo-accesorios oculto">
                             <label for="accesorios">Accesorios</label>
                             <input type="text" id="accesorios" maxlength="300" placeholder="Ej. Cargador, cable USB">
                         </div>
+
+                        <!-- OBSERVACIONES -->
                         <div class="campo-full">
                             <label for="observaciones">Observaciones</label>
                             <textarea id="observaciones" maxlength="500" rows="3" placeholder="Notas adicionales"></textarea>

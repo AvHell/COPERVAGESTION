@@ -41,14 +41,15 @@
             <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 5v14M5 12h14"/>
             </svg>
-            Nuevo registro
+            <span id="btn-nuevo-texto">Nuevo registro</span>
         </button>
     </div>
 
-    <h2>Catálogos de Activo Fijo</h2>
+    <h2 id="titulo-catalogo">Catálogos de Activo Fijo</h2>
 
     <!-- TABS DE CATÁLOGOS -->
     <div class="tabs-catalogos" id="tabs-catalogos">
+        <!-- Catálogos base -->
         <button class="tab activo" data-catalogo="marcas">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
@@ -92,6 +93,73 @@
             </svg>
             Puestos
         </button>
+
+        <!-- Catálogos nuevos (periféricos) -->
+        <button class="tab" data-catalogo="sitios">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 21h18"></path>
+                <path d="M5 21V7l8-4v18"></path>
+                <path d="M19 21V11l-6-4"></path>
+            </svg>
+            Sitios
+        </button>
+        <button class="tab" data-catalogo="subtipos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            Subtipos
+        </button>
+        <button class="tab" data-catalogo="voltajes">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            Voltajes
+        </button>
+        <button class="tab" data-catalogo="clasificaciones">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Clasificaciones
+        </button>
+        <button class="tab" data-catalogo="tamanios">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                <line x1="3" y1="9" x2="21" y2="9"></line>
+            </svg>
+            Tamaños
+        </button>
+        <button class="tab" data-catalogo="capacidades">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+            Capacidades
+        </button>
+    </div>
+
+    <!-- TABS DE VISTA (Activos / Eliminados) -->
+    <div class="tabs-vista" id="tabs-vista">
+        <button class="tab-vista activo" data-vista="activos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="7" width="20" height="14" rx="2"></rect>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+            Activos
+        </button>
+        <button class="tab-vista" data-vista="eliminados">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+            </svg>
+            Eliminados
+        </button>
     </div>
 
     <!-- ESTADO VACÍO -->
@@ -100,7 +168,7 @@
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
-        <p>No se encontraron registros con ese criterio.</p>
+        <p id="sin-resultados-texto">No se encontraron registros con ese criterio.</p>
         <button type="button" id="btn-limpiar-filtro" class="secundario">Limpiar búsqueda</button>
     </div>
 

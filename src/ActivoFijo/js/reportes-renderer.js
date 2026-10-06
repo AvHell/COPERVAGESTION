@@ -81,23 +81,41 @@ function toastError(titulo, texto = '') {
 }
 
 /* =========================================================
+   MAPEAR TIPO DE COLUMNA → CLASE CSS
+   ========================================================= */
+function claseParaTipo(tipo) {
+    switch (tipo) {
+        case 'numero':        return 'col-numero';
+        case 'precio':        return 'col-precio';
+        case 'fecha':         return 'col-fecha';
+        case 'folio':         return 'col-folio';
+        case 'mono':          return 'col-mono';
+        case 'badge-tipo':
+        case 'badge-estado':
+        case 'badge-estatus': return 'col-badge';
+        default:              return '';
+    }
+}
+
+/* =========================================================
    CONFIGURACIÓN DE VISTAS
    ========================================================= */
 const VISTAS = {
-    'resumen-tipo':     { titulo: 'Resumen por Tipo',       filtros: [],                              endpoint: 'resumenPorTipo' },
-    'resumen-cartera':  { titulo: 'Resumen por Cartera',    filtros: [],                              endpoint: 'resumenPorCartera' },
-    'inventario':       { titulo: 'Inventario Completo',    filtros: ['tipo','estado','estatus','cartera'], endpoint: 'inventario' },
-    'responsivas':      { titulo: 'Responsivas Activas',    filtros: [],                              endpoint: 'responsivasActivas' },
-    'personas':         { titulo: 'Asignaciones por Persona', filtros: [],                            endpoint: 'asignacionesPorPersona' },
-    'tickets':          { titulo: 'Activos por Ticket',     filtros: [],                              endpoint: 'porTicket' },
-    'celulares':        { titulo: 'Celulares',              filtros: [],                              endpoint: 'celulares' },
-    'laptops':          { titulo: 'Laptops',                filtros: [],                              endpoint: 'laptops' }
+    'resumen-tipo':     { titulo: 'Resumen por Tipo',         filtros: [],                                    endpoint: 'resumenPorTipo' },
+    'resumen-cartera':  { titulo: 'Resumen por Cartera',      filtros: [],                                    endpoint: 'resumenPorCartera' },
+    'inventario':       { titulo: 'Inventario Completo',      filtros: ['tipo','estado','estatus','cartera'], endpoint: 'inventario' },
+    'responsivas':      { titulo: 'Responsivas Activas',      filtros: [],                                    endpoint: 'responsivasActivas' },
+    'personas':         { titulo: 'Asignaciones por Persona', filtros: [],                                    endpoint: 'asignacionesPorPersona' },
+    'tickets':          { titulo: 'Activos por Ticket',       filtros: [],                                    endpoint: 'porTicket' },
+    'celulares':        { titulo: 'Celulares',                filtros: [],                                    endpoint: 'celulares' },
+    'laptops':          { titulo: 'Laptops',                  filtros: [],                                    endpoint: 'laptops' }
 };
 
 /* =========================================================
    DEFINICIÓN DE COLUMNAS POR VISTA
-   Cada columna: { key, etiqueta, tipo, formato }
-   Tipos: texto | numero | precio | fecha | badge-estado | badge-estatus | badge-tipo | folio | mono
+   Tipos: texto | numero | precio | fecha |
+          badge-estado | badge-estatus | badge-tipo |
+          folio | mono
    ========================================================= */
 const COLUMNAS = {
     'resumen-tipo': [
@@ -131,54 +149,54 @@ const COLUMNAS = {
         { key: 'PrecioActivo', etiqueta: 'Precio',      tipo: 'precio' }
     ],
     'responsivas': [
-        { key: 'FolioTicket',     etiqueta: 'Folio',         tipo: 'folio' },
-        { key: 'Tipo',            etiqueta: 'Tipo',          tipo: 'badge-tipo' },
-        { key: 'NoSerie',         etiqueta: 'Serie',         tipo: 'mono' },
-        { key: 'Marca',           etiqueta: 'Marca',         tipo: 'texto' },
-        { key: 'Modelo',          etiqueta: 'Modelo',        tipo: 'texto' },
-        { key: 'NombreRecibe',    etiqueta: 'Recibe',        tipo: 'texto' },
-        { key: 'Cartera',         etiqueta: 'Cartera',       tipo: 'texto' },
-        { key: 'FechaAsignacion', etiqueta: 'F. Asignación', tipo: 'fecha' },
-        { key: 'EstatusResponsiva', etiqueta: 'Estatus',     tipo: 'badge-estatus' }
+        { key: 'FolioTicket',       etiqueta: 'Folio',         tipo: 'folio' },
+        { key: 'Tipo',              etiqueta: 'Tipo',          tipo: 'badge-tipo' },
+        { key: 'NoSerie',           etiqueta: 'Serie',         tipo: 'mono' },
+        { key: 'Marca',             etiqueta: 'Marca',         tipo: 'texto' },
+        { key: 'Modelo',            etiqueta: 'Modelo',        tipo: 'texto' },
+        { key: 'NombreRecibe',      etiqueta: 'Recibe',        tipo: 'texto' },
+        { key: 'Cartera',           etiqueta: 'Cartera',       tipo: 'texto' },
+        { key: 'FechaAsignacion',   etiqueta: 'F. Asignación', tipo: 'fecha' },
+        { key: 'EstatusResponsiva', etiqueta: 'Estatus',       tipo: 'badge-estatus' }
     ],
     'personas': [
-        { key: 'Persona',              etiqueta: 'Persona',        tipo: 'texto' },
-        { key: 'Puesto',               etiqueta: 'Puesto',         tipo: 'texto' },
-        { key: 'Area',                 etiqueta: 'Área',           tipo: 'texto' },
-        { key: 'Correo',               etiqueta: 'Correo',         tipo: 'mono' },
-        { key: 'TotalAsignaciones',    etiqueta: 'Activos',        tipo: 'numero' },
-        { key: 'ValorTotalAsignado',   etiqueta: 'Valor asignado', tipo: 'precio' }
+        { key: 'Persona',            etiqueta: 'Persona',        tipo: 'texto' },
+        { key: 'Puesto',             etiqueta: 'Puesto',         tipo: 'texto' },
+        { key: 'Area',               etiqueta: 'Área',           tipo: 'texto' },
+        { key: 'Correo',             etiqueta: 'Correo',         tipo: 'mono' },
+        { key: 'TotalAsignaciones',  etiqueta: 'Activos',        tipo: 'numero' },
+        { key: 'ValorTotalAsignado', etiqueta: 'Valor asignado', tipo: 'precio' }
     ],
     'tickets': [
-        { key: 'FolioTicket',      etiqueta: 'Ticket',          tipo: 'folio' },
-        { key: 'TotalActivos',     etiqueta: 'Total activos',   tipo: 'numero' },
-        { key: 'Personas',         etiqueta: 'Personas',        tipo: 'texto' },
-        { key: 'ValorTotalTicket', etiqueta: 'Valor total',     tipo: 'precio' },
-        { key: 'FechaAsignacion',  etiqueta: 'Fecha',           tipo: 'fecha' }
+        { key: 'FolioTicket',      etiqueta: 'Ticket',        tipo: 'folio' },
+        { key: 'TotalActivos',     etiqueta: 'Total activos', tipo: 'numero' },
+        { key: 'Personas',         etiqueta: 'Personas',      tipo: 'texto' },
+        { key: 'ValorTotalTicket', etiqueta: 'Valor total',   tipo: 'precio' },
+        { key: 'FechaAsignacion',  etiqueta: 'Fecha',         tipo: 'fecha' }
     ],
     'celulares': [
-        { key: 'IMEI1',        etiqueta: 'IMEI 1',      tipo: 'mono' },
-        { key: 'IMEI2',        etiqueta: 'IMEI 2',      tipo: 'mono' },
-        { key: 'NoTelefono',   etiqueta: 'Teléfono',    tipo: 'mono' },
-        { key: 'Marca',        etiqueta: 'Marca',       tipo: 'texto' },
-        { key: 'Modelo',       etiqueta: 'Modelo',      tipo: 'texto' },
-        { key: 'PrecioActivo', etiqueta: 'Precio',      tipo: 'precio' },
-        { key: 'Estatus',      etiqueta: 'Estatus',     tipo: 'badge-estatus' },
-        { key: 'NombreRecibe', etiqueta: 'Recibe',      tipo: 'texto' },
-        { key: 'Cartera',      etiqueta: 'Cartera',     tipo: 'texto' },
+        { key: 'IMEI1',           etiqueta: 'IMEI 1',   tipo: 'mono' },
+        { key: 'IMEI2',           etiqueta: 'IMEI 2',   tipo: 'mono' },
+        { key: 'NoTelefono',      etiqueta: 'Teléfono', tipo: 'mono' },
+        { key: 'Marca',           etiqueta: 'Marca',    tipo: 'texto' },
+        { key: 'Modelo',          etiqueta: 'Modelo',   tipo: 'texto' },
+        { key: 'PrecioActivo',    etiqueta: 'Precio',   tipo: 'precio' },
+        { key: 'Estatus',         etiqueta: 'Estatus',  tipo: 'badge-estatus' },
+        { key: 'NombreRecibe',    etiqueta: 'Recibe',   tipo: 'texto' },
+        { key: 'Cartera',         etiqueta: 'Cartera',  tipo: 'texto' },
         { key: 'FechaAsignacion', etiqueta: 'Fecha',    tipo: 'fecha' }
     ],
     'laptops': [
-        { key: 'NoSerie',        etiqueta: 'Serie',         tipo: 'mono' },
-        { key: 'Marca',          etiqueta: 'Marca',         tipo: 'texto' },
-        { key: 'Modelo',         etiqueta: 'Modelo',        tipo: 'texto' },
-        { key: 'Procesador',     etiqueta: 'Procesador',    tipo: 'texto' },
-        { key: 'MemoriaRAM',     etiqueta: 'RAM',           tipo: 'texto' },
-        { key: 'Almacenamiento', etiqueta: 'Disco',         tipo: 'texto' },
-        { key: 'PrecioActivo',   etiqueta: 'Precio',        tipo: 'precio' },
-        { key: 'Estatus',        etiqueta: 'Estatus',       tipo: 'badge-estatus' },
-        { key: 'NombreRecibe',   etiqueta: 'Recibe',        tipo: 'texto' },
-        { key: 'FechaAsignacion',etiqueta: 'Fecha',         tipo: 'fecha' }
+        { key: 'NoSerie',         etiqueta: 'Serie',      tipo: 'mono' },
+        { key: 'Marca',           etiqueta: 'Marca',      tipo: 'texto' },
+        { key: 'Modelo',          etiqueta: 'Modelo',     tipo: 'texto' },
+        { key: 'Procesador',      etiqueta: 'Procesador', tipo: 'texto' },
+        { key: 'MemoriaRAM',      etiqueta: 'RAM',        tipo: 'texto' },
+        { key: 'Almacenamiento',  etiqueta: 'Disco',      tipo: 'texto' },
+        { key: 'PrecioActivo',    etiqueta: 'Precio',     tipo: 'precio' },
+        { key: 'Estatus',         etiqueta: 'Estatus',    tipo: 'badge-estatus' },
+        { key: 'NombreRecibe',    etiqueta: 'Recibe',     tipo: 'texto' },
+        { key: 'FechaAsignacion', etiqueta: 'Fecha',      tipo: 'fecha' }
     ]
 };
 
@@ -255,7 +273,6 @@ async function cargarVista() {
         const endpoint = window.api.activoFijo.reportes[cfg.endpoint];
         let data;
 
-        // Inventario tiene filtros
         if (cfg.endpoint === 'inventario') {
             data = await endpoint(filtros);
         } else {
@@ -275,13 +292,16 @@ async function cargarVista() {
 
 /* =========================================================
    RENDER TABLA
+   Encabezados y celdas comparten la clase según tipo de columna
    ========================================================= */
 function renderTabla() {
-    const cfg = VISTAS[vistaActual];
     const cols = COLUMNAS[vistaActual] || [];
 
-    // Encabezados
-    tablaHead.innerHTML = '<tr>' + cols.map(c => `<th>${escaparHTML(c.etiqueta)}</th>`).join('') + '</tr>';
+    // Encabezados con clase según tipo de columna
+    tablaHead.innerHTML = '<tr>' + cols.map(c => {
+        const clase = claseParaTipo(c.tipo);
+        return `<th class="${clase}">${escaparHTML(c.etiqueta)}</th>`;
+    }).join('') + '</tr>';
 
     // Filtrar por búsqueda de texto
     const filtrados = datosActuales.filter(r => {
@@ -311,39 +331,42 @@ function renderTabla() {
 
 /* =========================================================
    RENDER CELDA POR TIPO
+   Cada celda lleva la misma clase que su encabezado
    ========================================================= */
 function renderCelda(val, tipo) {
+    const clase = claseParaTipo(tipo);
+
     if (val === null || val === undefined || val === '') {
-        return `<td>—</td>`;
+        return `<td class="${clase}">—</td>`;
     }
 
     switch (tipo) {
         case 'numero':
-            return `<td class="celda-numero">${formatearNumero(val)}</td>`;
+            return `<td class="${clase} celda-numero">${formatearNumero(val)}</td>`;
 
         case 'precio':
-            return `<td class="celda-precio">${formatearPrecio(val)}</td>`;
+            return `<td class="${clase} celda-precio">${formatearPrecio(val)}</td>`;
 
         case 'fecha':
-            return `<td class="celda-fecha">${formatearFecha(val)}</td>`;
+            return `<td class="${clase} celda-fecha">${formatearFecha(val)}</td>`;
 
         case 'folio':
-            return `<td><span class="celda-folio">${escaparHTML(val)}</span></td>`;
+            return `<td class="${clase}"><span class="celda-folio">${escaparHTML(val)}</span></td>`;
 
         case 'mono':
-            return `<td class="celda-mono">${escaparHTML(val)}</td>`;
+            return `<td class="${clase} celda-mono">${escaparHTML(val)}</td>`;
 
         case 'badge-tipo':
-            return `<td><span class="badge badge-tipo">${escaparHTML(val)}</span></td>`;
+            return `<td class="${clase}"><span class="badge badge-tipo">${escaparHTML(val)}</span></td>`;
 
         case 'badge-estado':
-            return `<td><span class="badge badge-estado-${escaparHTML(val)}">${escaparHTML(val)}</span></td>`;
+            return `<td class="${clase}"><span class="badge badge-estado-${escaparHTML(val)}">${escaparHTML(val)}</span></td>`;
 
         case 'badge-estatus':
-            return `<td><span class="badge badge-estatus-${escaparHTML(val)}">${escaparHTML(val)}</span></td>`;
+            return `<td class="${clase}"><span class="badge badge-estatus-${escaparHTML(val)}">${escaparHTML(val)}</span></td>`;
 
         default:
-            return `<td>${escaparHTML(val)}</td>`;
+            return `<td class="${clase}">${escaparHTML(val)}</td>`;
     }
 }
 
@@ -359,11 +382,9 @@ tabs.addEventListener('click', (e) => {
 
     vistaActual = btn.dataset.vista;
 
-    // Mostrar/ocultar filtros según la vista
     const cfg = VISTAS[vistaActual];
     actualizarFiltrosVisibles(cfg.filtros);
 
-    // Limpiar búsqueda al cambiar de vista
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');

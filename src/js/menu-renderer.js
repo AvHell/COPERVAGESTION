@@ -23,6 +23,8 @@ const MODULOS = {
     activofijo_activos:   () => window.api.abrirActivoFijoActivos(),
     activofijo_responsivas: () => window.api.abrirActivoFijoResponsivas(),
     activofijo_reportes: () => window.api.abrirActivoFijoReportes(),
+    activofijo_importar: () => window.api.abrirActivoFijoImportar(),
+
 };
 
 document.querySelectorAll('.modulo-card').forEach(btn => {

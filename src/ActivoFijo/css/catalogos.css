@@ -543,6 +543,67 @@ h2 {
     border: none;
 }
 
+/* Selects del formulario */
+.grid-form select {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: #1a202c;
+    background-color: var(--af-blanco);
+    border: 1px solid var(--af-gris-borde);
+    border-radius: var(--af-radio-sm);
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.grid-form select:focus {
+    outline: none;
+    border-color: var(--af-azul);
+    box-shadow: 0 0 0 3px var(--af-azul-suave);
+}
+
+/* =========================================================
+   TABS DE VISTA (Activos / Eliminados)
+   ========================================================= */
+.tabs-vista {
+    display: flex;
+    gap: 4px;
+    margin: 0 0 20px;
+    border-bottom: 2px solid var(--af-gris-borde);
+}
+.tab-vista {
+    background: transparent;
+    color: var(--af-gris-texto);
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    padding: 10px 18px;
+    font-size: 13.5px;
+    font-weight: 500;
+    transition: all 0.15s;
+    margin-bottom: -2px;
+}
+.tab-vista:hover:not(:disabled) {
+    background-color: var(--af-gris-suave);
+    color: var(--af-azul);
+}
+.tab-vista.activo {
+    color: var(--af-azul);
+    border-bottom-color: var(--af-azul);
+    background-color: transparent;
+    font-weight: 600;
+}
+.tab-vista svg { width: 15px; height: 15px; }
+
+/* Botón restaurar (verde suave) */
+button.exito {
+    background-color: #2f855a;
+    color: var(--af-blanco);
+}
+button.exito:hover:not(:disabled) {
+    background-color: #276749;
+}
+
 /* RESPONSIVE */
 @media (max-width: 720px) {
     body { padding: 20px; }

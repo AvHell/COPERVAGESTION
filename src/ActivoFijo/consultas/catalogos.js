@@ -1,14 +1,16 @@
 /* =========================================================
-   ACTIVO FIJO — CATÁLOGOS (6 CRUDs en un solo módulo)
-   Ajusta la ruta de conexion.js según tu estructura real.
+   ACTIVO FIJO — CATÁLOGOS (12 CRUDs en un solo módulo)
+   Soft delete: se marca Activo = 0, no se borra
    ========================================================= */
 const { getPool, sql } = require('../../js/db/conexion');
 
 /* =========================================================
-   CONFIGURACIÓN DE LOS 6 CATÁLOGOS
-   Cada uno declara: tabla, PK, y columnas editables.
+   CONFIGURACIÓN DE LOS CATÁLOGOS
    ========================================================= */
 const CATALOGOS = {
+    /* ---------------------------------------------------
+       CATÁLOGOS BASE
+       --------------------------------------------------- */
     marcas: {
         tabla: 'ActivoFijoMarcas',
         pk:    'IdMarca',
@@ -20,10 +22,21 @@ const CATALOGOS = {
         tabla: 'ActivoFijoTipos',
         pk:    'IdTipo',
         campos: [
-            { nombre: 'Nombre',              tipo: 'NVarChar', longitud: 100, requerido: true, unico: true },
-            { nombre: 'RequiereResponsiva',  tipo: 'Bit',      default: 0 },
-            { nombre: 'RequiereIMEI',        tipo: 'Bit',      default: 0 },
-            { nombre: 'RequiereTelefono',    tipo: 'Bit',      default: 0 }
+            { nombre: 'Nombre',                  tipo: 'NVarChar', longitud: 100, requerido: true, unico: true },
+            { nombre: 'GrupoSubtipo',            tipo: 'NVarChar', longitud: 50 },
+            { nombre: 'RequiereResponsiva',      tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereIMEI',            tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereTelefono',        tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereSitio',           tipo: 'Bit',      default: 1 },
+            { nombre: 'RequiereSubtipo',         tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereClasificacion',   tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereTamanio',         tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereCapacidad',       tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereVoltaje',         tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereUsuarioAsignado', tipo: 'Bit',      default: 0 },
+            { nombre: 'RequierePrecio',          tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereEspecificaciones',tipo: 'Bit',      default: 0 },
+            { nombre: 'RequiereAccesorios',      tipo: 'Bit',      default: 0 }
         ]
     },
     estados: {
@@ -53,6 +66,55 @@ const CATALOGOS = {
         campos: [
             { nombre: 'Nombre', tipo: 'NVarChar', longitud: 100, requerido: true, unico: true }
         ]
+    },
+
+    /* ---------------------------------------------------
+       CATÁLOGOS NUEVOS (periféricos)
+       --------------------------------------------------- */
+    sitios: {
+        tabla: 'ActivoFijoSitios',
+        pk:    'IdSitio',
+        campos: [
+            { nombre: 'Nombre',      tipo: 'NVarChar', longitud: 100, requerido: true, unico: true },
+            { nombre: 'Descripcion', tipo: 'NVarChar', longitud: 200 }
+        ]
+    },
+    subtipos: {
+        tabla: 'ActivoFijoSubtipos',
+        pk:    'IdSubtipo',
+        campos: [
+            { nombre: 'Grupo',       tipo: 'NVarChar', longitud: 50,  requerido: true, unico: false },
+            { nombre: 'Nombre',      tipo: 'NVarChar', longitud: 100, requerido: true, unico: false },
+            { nombre: 'Descripcion', tipo: 'NVarChar', longitud: 200 }
+        ]
+    },
+    voltajes: {
+        tabla: 'ActivoFijoVoltajes',
+        pk:    'IdVoltaje',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 50, requerido: true, unico: true }
+        ]
+    },
+    clasificaciones: {
+        tabla: 'ActivoFijoClasificaciones',
+        pk:    'IdClasificacion',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 50, requerido: true, unico: true }
+        ]
+    },
+    tamanios: {
+        tabla: 'ActivoFijoTamanios',
+        pk:    'IdTamanio',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 50, requerido: true, unico: true }
+        ]
+    },
+    capacidades: {
+        tabla: 'ActivoFijoCapacidades',
+        pk:    'IdCapacidad',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 50, requerido: true, unico: true }
+        ]
     }
 };
 
@@ -76,33 +138,49 @@ function tipoSql(tipo, longitud) {
 
 /* =========================================================
    LISTAR
+   - filtros.soloEliminados = true  → Activo = 0
+   - si no                          → Activo = 1
    ========================================================= */
-async function listar(clave) {
+async function listar(clave, filtros = {}) {
     const { tabla, pk } = getConfig(clave);
     const pool = await getPool();
+
+    const where = filtros.soloEliminados ? 'WHERE Activo = 0' : 'WHERE Activo = 1';
+
     const result = await pool.request().query(
-        `SELECT * FROM ${tabla} ORDER BY ${pk}`
+        `SELECT * FROM ${tabla} ${where} ORDER BY ${pk}`
     );
     return result.recordset;
 }
 
 /* =========================================================
-   CREAR
+   CREAR (Activo = 1 por default)
    ========================================================= */
 async function crear(clave, datos) {
     try {
         const cfg = getConfig(clave);
         const pool = await getPool();
 
-        // Validar duplicado en campo único
+        // Validar duplicado en campo único (solo entre ACTIVOS)
         for (const campo of cfg.campos) {
             if (campo.unico && datos[campo.nombre] !== undefined) {
                 const dup = await pool.request()
                     .input('Valor', tipoSql(campo.tipo, campo.longitud), datos[campo.nombre])
-                    .query(`SELECT 1 FROM ${cfg.tabla} WHERE ${campo.nombre} = @Valor`);
+                    .query(`SELECT 1 FROM ${cfg.tabla} WHERE ${campo.nombre} = @Valor AND Activo = 1`);
                 if (dup.recordset.length > 0) {
-                    return { ok: false, mensaje: `Ya existe un registro con ${campo.nombre} = "${datos[campo.nombre]}".` };
+                    return { ok: false, mensaje: `Ya existe un registro activo con ${campo.nombre} = "${datos[campo.nombre]}".` };
                 }
+            }
+        }
+
+        // Validación especial: subtipos (Grupo + Nombre único entre activos)
+        if (clave === 'subtipos') {
+            const dup = await pool.request()
+                .input('Grupo',  sql.NVarChar(50),  datos.Grupo)
+                .input('Nombre', sql.NVarChar(100), datos.Nombre)
+                .query(`SELECT 1 FROM ActivoFijoSubtipos WHERE Grupo = @Grupo AND Nombre = @Nombre AND Activo = 1`);
+            if (dup.recordset.length > 0) {
+                return { ok: false, mensaje: `Ya existe un subtipo activo "${datos.Nombre}" en el grupo "${datos.Grupo}".` };
             }
         }
 
@@ -110,6 +188,7 @@ async function crear(clave, datos) {
         const columnas = [];
         const valores  = [];
         const request  = pool.request();
+
         cfg.campos.forEach((campo, i) => {
             const valor = datos[campo.nombre] !== undefined ? datos[campo.nombre] : campo.default;
             if (valor === undefined) return;
@@ -118,6 +197,10 @@ async function crear(clave, datos) {
             columnas.push(campo.nombre);
             valores.push(`@${paramName}`);
         });
+
+        // Forzar Activo = 1 al crear
+        columnas.push('Activo');
+        valores.push('1');
 
         await request.query(
             `INSERT INTO ${cfg.tabla} (${columnas.join(', ')}) VALUES (${valores.join(', ')})`
@@ -140,17 +223,30 @@ async function actualizar(clave, id, datos) {
         const cfg = getConfig(clave);
         const pool = await getPool();
 
-        // Validar duplicado en campo único (excluyendo el propio)
+        // Validar duplicado en campo único (solo entre ACTIVOS, excluyendo el propio)
         for (const campo of cfg.campos) {
             if (campo.unico && datos[campo.nombre] !== undefined) {
                 const dup = await pool.request()
                     .input('Valor', tipoSql(campo.tipo, campo.longitud), datos[campo.nombre])
                     .input('Id',    sql.Int, id)
                     .query(`SELECT 1 FROM ${cfg.tabla}
-                            WHERE ${campo.nombre} = @Valor AND ${cfg.pk} <> @Id`);
+                            WHERE ${campo.nombre} = @Valor AND ${cfg.pk} <> @Id AND Activo = 1`);
                 if (dup.recordset.length > 0) {
-                    return { ok: false, mensaje: `Ya existe otro registro con ${campo.nombre} = "${datos[campo.nombre]}".` };
+                    return { ok: false, mensaje: `Ya existe otro registro activo con ${campo.nombre} = "${datos[campo.nombre]}".` };
                 }
+            }
+        }
+
+        // Validación especial: subtipos
+        if (clave === 'subtipos') {
+            const dup = await pool.request()
+                .input('Grupo',  sql.NVarChar(50),  datos.Grupo)
+                .input('Nombre', sql.NVarChar(100), datos.Nombre)
+                .input('Id',     sql.Int, id)
+                .query(`SELECT 1 FROM ActivoFijoSubtipos
+                        WHERE Grupo = @Grupo AND Nombre = @Nombre AND IdSubtipo <> @Id AND Activo = 1`);
+            if (dup.recordset.length > 0) {
+                return { ok: false, mensaje: `Ya existe un subtipo activo "${datos.Nombre}" en el grupo "${datos.Grupo}".` };
             }
         }
 
@@ -187,27 +283,60 @@ async function actualizar(clave, id, datos) {
 }
 
 /* =========================================================
-   ELIMINAR
+   ELIMINAR (Soft delete) — Marca Activo = 0
+   Valida que no esté en uso en el módulo de activos
    ========================================================= */
 async function eliminar(clave, id) {
     try {
         const cfg = getConfig(clave);
         const pool = await getPool();
+
+        // Validación de uso: si algún activo u otra entidad lo usa, no se puede dar de baja
+        // Nota: NO bloqueamos la baja si está en uso. Solo la permitimos si Activo=1.
+        // Si el usuario quiere bloqueo, se puede añadir después.
+
         const result = await pool.request()
             .input('Id', sql.Int, id)
-            .query(`DELETE FROM ${cfg.tabla} WHERE ${cfg.pk} = @Id`);
+            .query(`
+                UPDATE ${cfg.tabla}
+                SET Activo = 0
+                WHERE ${cfg.pk} = @Id AND Activo = 1
+            `);
 
         if (result.rowsAffected[0] === 0) {
-            return { ok: false, mensaje: 'El registro ya no existe.' };
+            return { ok: false, mensaje: 'El registro ya estaba dado de baja o no existe.' };
         }
 
-        return { ok: true, mensaje: 'Registro eliminado correctamente.' };
+        return { ok: true, mensaje: 'Registro dado de baja. Puedes verlo en la pestaña "Eliminados".' };
     } catch (err) {
-        if (err.number === 547) {
-            return { ok: false, mensaje: 'No se puede eliminar: el registro está siendo usado en otro módulo.' };
-        }
-        return { ok: false, mensaje: 'Error al eliminar: ' + err.message };
+        return { ok: false, mensaje: 'Error al dar de baja: ' + err.message };
     }
 }
 
-module.exports = { listar, crear, actualizar, eliminar, CATALOGOS };
+/* =========================================================
+   RESTAURAR — Saca de baja lógica (Activo = 0 → 1)
+   ========================================================= */
+async function restaurar(clave, id) {
+    try {
+        const cfg = getConfig(clave);
+        const pool = await getPool();
+
+        const result = await pool.request()
+            .input('Id', sql.Int, id)
+            .query(`
+                UPDATE ${cfg.tabla}
+                SET Activo = 1
+                WHERE ${cfg.pk} = @Id AND Activo = 0
+            `);
+
+        if (result.rowsAffected[0] === 0) {
+            return { ok: false, mensaje: 'El registro no está dado de baja o no existe.' };
+        }
+
+        return { ok: true, mensaje: 'Registro restaurado. Vuelve al listado activo.' };
+    } catch (err) {
+        return { ok: false, mensaje: 'Error al restaurar: ' + err.message };
+    }
+}
+
+module.exports = { listar, crear, actualizar, eliminar, restaurar, CATALOGOS };

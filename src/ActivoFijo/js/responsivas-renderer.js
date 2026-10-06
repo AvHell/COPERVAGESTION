@@ -1,5 +1,7 @@
 /* =========================================================
    ACTIVO FIJO — RENDERER DE RESPONSIVAS
+   Tabs: Activas / Canceladas
+   Cancelar = soft delete (histórico, no se restaura)
    ========================================================= */
 const Swal = window.Swal;
 
@@ -14,17 +16,20 @@ let modoEdicion      = false;
 let idEditando       = null;
 let guardando        = false;
 let filtroBusqueda   = '';
+let vistaActual      = 'activas';      // 'activas' | 'canceladas'
 let filtros          = { idEstatus: '' };
 
 /* =========================================================
    REFERENCIAS DOM
    ========================================================= */
+const tabsVista        = document.getElementById('tabs-vista');
 const tablaBody        = document.getElementById('tabla-body');
 const formulario       = document.getElementById('formulario');
 const mensaje          = document.getElementById('mensaje');
 const btnGuardar       = document.getElementById('btn-guardar');
 const btnNuevo         = document.getElementById('btn-nuevo');
 const sinResultados    = document.getElementById('sin-resultados');
+const sinResultadosTxt = document.getElementById('sin-resultados-texto');
 const inputBusqueda    = document.getElementById('input-busqueda');
 const btnLimpiarBusq   = document.getElementById('btn-limpiar-busqueda');
 const btnLimpiarFiltro = document.getElementById('btn-limpiar-filtros');
@@ -32,6 +37,7 @@ const btnLimpiarVacio  = document.getElementById('btn-limpiar-busqueda-vacio');
 const modal            = document.getElementById('modal-responsiva');
 const modalTitulo      = document.getElementById('modal-titulo');
 const filtroEstatus    = document.getElementById('filtro-estatus');
+const filtroEstatusWrap= document.getElementById('filtro-estatus-wrap');
 
 const selActivo        = document.getElementById('activo');
 const inpFolio         = document.getElementById('folio');
@@ -66,10 +72,32 @@ function escaparHTML(str) {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function fechaAInput(valor) {
+    if (!valor) return '';
+
+    if (valor instanceof Date) {
+        if (isNaN(valor.getTime())) return '';
+        const y = valor.getFullYear();
+        const m = String(valor.getMonth() + 1).padStart(2, '0');
+        const d = String(valor.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    const s = String(valor);
+    const soloFecha = s.split(/[T\s]/)[0];
+    if (!soloFecha) return '';
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) return soloFecha;
+
+    const d2 = new Date(valor);
+    if (isNaN(d2.getTime())) return '';
+    return `${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, '0')}-${String(d2.getDate()).padStart(2, '0')}`;
+}
+
 function formatearFecha(f) {
-    if (!f) return '—';
+    if (!f) return 'N/A';
     const d = new Date(f);
-    if (isNaN(d.getTime())) return '—';
+    if (isNaN(d.getTime())) return 'N/A';
     const dia = String(d.getDate()).padStart(2, '0');
     const mes = String(d.getMonth() + 1).padStart(2, '0');
     return `${dia}/${mes}/${d.getFullYear()}`;
@@ -142,7 +170,7 @@ async function cargarCatalogos() {
 }
 
 /* =========================================================
-   CARGAR ACTIVOS DISPONIBLES (para el select del modal)
+   CARGAR ACTIVOS DISPONIBLES
    ========================================================= */
 async function cargarActivosDisponibles() {
     try {
@@ -159,11 +187,21 @@ async function cargarActivosDisponibles() {
 }
 
 /* =========================================================
-   CARGAR RESPONSIVAS
+   CARGAR RESPONSIVAS (según vista actual)
    ========================================================= */
 async function cargarResponsivas() {
     try {
-        responsivas = await window.api.activoFijo.responsivas.listar(filtros);
+        const filtrosEnvio = { ...filtros };
+
+        if (vistaActual === 'canceladas') {
+            filtrosEnvio.soloCancelados = true;
+            filtrosEnvio.idEstatus = '';
+            // sincronizar también el estado local
+            filtros.idEstatus = '';
+            filtroEstatus.value = '';
+        }
+
+        responsivas = await window.api.activoFijo.responsivas.listar(filtrosEnvio);
         renderTabla();
     } catch (err) {
         toastError('No se pudieron cargar las responsivas', err.message);
@@ -187,6 +225,11 @@ function renderTabla() {
 
     if (listaFiltrada.length === 0) {
         sinResultados.classList.remove('oculto');
+        if (sinResultadosTxt) {
+            sinResultadosTxt.textContent = vistaActual === 'canceladas'
+                ? 'No hay responsivas canceladas con ese criterio.'
+                : 'No se encontraron responsivas con ese criterio.';
+        }
         document.querySelector('.card-tabla').style.display = 'none';
         return;
     }
@@ -194,14 +237,15 @@ function renderTabla() {
     sinResultados.classList.add('oculto');
     document.querySelector('.card-tabla').style.display = '';
 
+    const esVistaCanceladas = (vistaActual === 'canceladas');
+
     listaFiltrada.forEach(r => {
         const tr = document.createElement('tr');
 
-        // Activo info
         const tipoMarca = [r.Tipo, r.Marca, r.Modelo].filter(Boolean).join(' ');
         const serieHtml = r.NoSerie ? `<span class="serie">SN: ${escaparHTML(r.NoSerie)}</span>` : '';
-        const imeiHtml = r.IMEI1 ? `<span class="extra">IMEI: ${escaparHTML(r.IMEI1)}</span>` : '';
-        const telHtml  = r.NoTelefono ? `<span class="extra">Tel: ${escaparHTML(r.NoTelefono)}</span>` : '';
+        const imeiHtml  = r.IMEI1 ? `<span class="extra">IMEI: ${escaparHTML(r.IMEI1)}</span>` : '';
+        const telHtml   = r.NoTelefono ? `<span class="extra">Tel: ${escaparHTML(r.NoTelefono)}</span>` : '';
 
         const activoHtml = `
             <div class="activo-info">
@@ -223,13 +267,46 @@ function renderTabla() {
             <td>${personaHtml}</td>
             <td>${escaparHTML(r.Cartera ?? '—')}</td>
             <td><span class="fecha">${formatearFecha(r.FechaAsignacion)}</span></td>
+            <td><span class="fecha">${formatearFecha(r.FechaDevolucionReal || r.FechaDevolucionProgramada)}</span></td>
             <td><span class="badge-estatus badge-estatus-${escaparHTML(r.EstatusResponsiva)}">${escaparHTML(r.EstatusResponsiva)}</span></td>
             <td class="acciones-tabla"></td>
         `;
 
         const celda = tr.querySelector('.acciones-tabla');
 
-        // Editar
+        /* ---- Vista CANCELADAS → PDF + Ver detalle ---- */
+        if (esVistaCanceladas) {
+            const btnVer = document.createElement('button');
+            btnVer.type = 'button';
+            btnVer.className = 'secundario';
+            btnVer.title = 'Ver detalle';
+            btnVer.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg> Ver`;
+            btnVer.addEventListener('click', () => verDetalle(r.IdResponsiva));
+            celda.appendChild(btnVer);
+
+            const btnPDF = document.createElement('button');
+            btnPDF.type = 'button';
+            btnPDF.className = 'secundario';
+            btnPDF.title = 'Generar PDF de responsiva';
+            btnPDF.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg> PDF`;
+            btnPDF.addEventListener('click', () => generarPDFResponsiva(r.IdResponsiva, r.FolioTicket));
+            celda.appendChild(btnPDF);
+
+            tablaBody.appendChild(tr);
+            return;
+        }
+
+        /* ---- Vista ACTIVAS → Editar + PDF + (Devolver / Cancelar según estatus) ---- */
         const btnEditar = document.createElement('button');
         btnEditar.type = 'button';
         btnEditar.className = 'secundario';
@@ -242,7 +319,20 @@ function renderTabla() {
         btnEditar.addEventListener('click', () => abrirEdicion(r.IdResponsiva));
         celda.appendChild(btnEditar);
 
-        // Devolver (solo si está ASIGNADO o PENDIENTE)
+        const btnPDF = document.createElement('button');
+        btnPDF.type = 'button';
+        btnPDF.className = 'secundario';
+        btnPDF.title = 'Generar PDF de responsiva';
+        btnPDF.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg> PDF`;
+        btnPDF.addEventListener('click', () => generarPDFResponsiva(r.IdResponsiva, r.FolioTicket));
+        celda.appendChild(btnPDF);
+
         if (r.EstatusResponsiva === 'ASIGNADO' || r.EstatusResponsiva === 'PENDIENTE') {
             const btnDevolver = document.createElement('button');
             btnDevolver.type = 'button';
@@ -254,26 +344,52 @@ function renderTabla() {
                 </svg> Devolver`;
             btnDevolver.addEventListener('click', () => devolverResponsiva(r.IdResponsiva, r.NombreRecibe));
             celda.appendChild(btnDevolver);
-        }
 
-        // Eliminar
-        const btnEliminar = document.createElement('button');
-        btnEliminar.type = 'button';
-        btnEliminar.className = 'peligro';
-        btnEliminar.title = 'Eliminar';
-        btnEliminar.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                <path d="M10 11v6M14 11v6"></path>
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-            </svg>`;
-        btnEliminar.addEventListener('click', () => eliminarResponsiva(r.IdResponsiva, r.FolioTicket));
-        celda.appendChild(btnEliminar);
+            const btnCancelar = document.createElement('button');
+            btnCancelar.type = 'button';
+            btnCancelar.className = 'peligro';
+            btnCancelar.title = 'Cancelar responsiva';
+            btnCancelar.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                </svg> Cancelar`;
+            btnCancelar.addEventListener('click', () => cancelarResponsiva(r.IdResponsiva, r.FolioTicket));
+            celda.appendChild(btnCancelar);
+        }
 
         tablaBody.appendChild(tr);
     });
 }
+
+/* =========================================================
+   TABS DE VISTA (Activas / Canceladas)
+   ========================================================= */
+tabsVista.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-vista');
+    if (!btn || btn.classList.contains('activo')) return;
+
+    tabsVista.querySelectorAll('.tab-vista').forEach(t => t.classList.remove('activo'));
+    btn.classList.add('activo');
+
+    vistaActual = btn.dataset.vista;
+
+    // Ocultar filtro de estatus en Canceladas
+    if (filtroEstatusWrap) {
+        filtroEstatusWrap.classList.toggle('oculto', vistaActual === 'canceladas');
+    }
+
+    // Deshabilitar "Nueva responsiva" en Canceladas
+    btnNuevo.disabled = (vistaActual === 'canceladas');
+    btnNuevo.style.opacity = (vistaActual === 'canceladas') ? '0.5' : '';
+
+    // Limpiar búsqueda
+    inputBusqueda.value = '';
+    filtroBusqueda = '';
+    btnLimpiarBusq.classList.add('oculto');
+
+    cargarResponsivas();
+});
 
 /* =========================================================
    BUSCADOR Y FILTROS
@@ -338,16 +454,14 @@ selActivo.addEventListener('change', () => {
         return;
     }
 
-    // Guardar el nombre del tipo en el campo readonly
     inpTipoResp.value = a.Tipo;
 
-    // Mostrar info detallada
     const marcaModelo = [a.Marca, a.Modelo].filter(Boolean).join(' ') || '—';
     infoActivo.innerHTML = `
         <strong>${escaparHTML(a.Tipo)}</strong> — ${escaparHTML(marcaModelo)}<br>
-        ${a.NoSerie ? `<strong>Serie:</strong> ${escaparHTML(a.NoSerie)}<br>` : ''}
-        ${a.IMEI1   ? `<strong>IMEI 1:</strong> ${escaparHTML(a.IMEI1)}<br>` : ''}
-        ${a.IMEI2   ? `<strong>IMEI 2:</strong> ${escaparHTML(a.IMEI2)}<br>` : ''}
+        ${a.NoSerie    ? `<strong>Serie:</strong> ${escaparHTML(a.NoSerie)}<br>` : ''}
+        ${a.IMEI1      ? `<strong>IMEI 1:</strong> ${escaparHTML(a.IMEI1)}<br>` : ''}
+        ${a.IMEI2      ? `<strong>IMEI 2:</strong> ${escaparHTML(a.IMEI2)}<br>` : ''}
         ${a.NoTelefono ? `<strong>Teléfono:</strong> ${escaparHTML(a.NoTelefono)}<br>` : ''}
         ${a.PrecioActivo ? `<strong>Precio:</strong> $${Number(a.PrecioActivo).toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : ''}
     `;
@@ -373,13 +487,13 @@ function limpiarFormulario() {
     inpCorreoRecibe.value = '';
     selCartera.value = '';
     selPuestoCat.value = '';
+    inpObservaciones.value = '';
     inpNombreEntrega.value = '';
     inpPuestoEntrega.value = '';
     inpAreaEntrega.value = 'Sistemas';
     inpRutaPDF.value = '';
     inpRutaINE.value = '';
     inpRutaComprob.value = '';
-    inpObservaciones.value = '';
     infoActivo.classList.add('oculto');
     infoActivo.innerHTML = '';
     selActivo.disabled = false;
@@ -389,6 +503,7 @@ function limpiarFormulario() {
    NUEVO
    ========================================================= */
 btnNuevo.addEventListener('click', async () => {
+    if (vistaActual === 'canceladas') return;
     modoEdicion = false;
     idEditando = null;
     modalTitulo.textContent = 'Nueva responsiva';
@@ -410,10 +525,8 @@ async function abrirEdicion(id) {
     idEditando = id;
     modalTitulo.textContent = 'Editar responsiva';
 
-    // Cargar el activo actual en el select y bloquearlo
     await cargarActivosDisponibles();
 
-    // Añadir el activo actual a las opciones si no está (porque está ASIGNADO)
     const existe = activosDisp.find(a => a.IdActivoFijoEQ === r.IdActivoFijoEQ);
     if (!existe) {
         const opt = document.createElement('option');
@@ -422,13 +535,12 @@ async function abrirEdicion(id) {
         selActivo.appendChild(opt);
     }
     selActivo.value = r.IdActivoFijoEQ;
-    selActivo.disabled = true; // No permitir cambiar el activo en edición
+    selActivo.disabled = true;
 
-    // Llenar campos
     inpFolio.value         = r.FolioTicket ?? '';
     inpTipoResp.value      = r.TipoResponsiva ?? '';
-    inpFechaAsig.value     = r.FechaAsignacion ? r.FechaAsignacion.split('T')[0] : '';
-    inpFechaDev.value      = r.FechaDevolucionProgramada ? r.FechaDevolucionProgramada.split('T')[0] : '';
+    inpFechaAsig.value     = fechaAInput(r.FechaAsignacion);
+    inpFechaDev.value      = fechaAInput(r.FechaDevolucionProgramada);
     selEstatus.value       = r.EstatusResponsiva ?? 'ASIGNADO';
     inpMotivo.value        = r.MotivoSalida ?? '';
     inpProyecto.value      = r.NombreProyecto ?? '';
@@ -437,16 +549,16 @@ async function abrirEdicion(id) {
     inpPuestoRecibe.value  = r.PuestoRecibe ?? '';
     inpAreaRecibe.value    = r.AreaRecibe ?? '';
     inpCorreoRecibe.value  = r.CorreoRecibe ?? '';
-    selCartera.value       = r.IdCartera ?? '';
+    selCartera.value       = r.IdCartera != null ? String(r.IdCartera) : '';
+    selPuestoCat.value     = r.IdPuesto  != null ? String(r.IdPuesto)  : '';
+    inpObservaciones.value = r.Observaciones ?? '';
     inpNombreEntrega.value = r.NombreEntrega ?? '';
     inpPuestoEntrega.value = r.PuestoEntrega ?? '';
     inpAreaEntrega.value   = r.AreaEntrega ?? 'Sistemas';
     inpRutaPDF.value       = r.RutaPDF ?? '';
     inpRutaINE.value       = r.RutaINE ?? '';
     inpRutaComprob.value   = r.RutaComprobanteDomicilio ?? '';
-    inpObservaciones.value = r.Observaciones ?? '';
 
-    // Info del activo
     const tipoMarca = [r.Tipo, r.Marca, r.Modelo].filter(Boolean).join(' ');
     infoActivo.innerHTML = `
         <strong>${escaparHTML(r.Tipo)}</strong> — ${escaparHTML(tipoMarca)}<br>
@@ -461,13 +573,63 @@ async function abrirEdicion(id) {
 }
 
 /* =========================================================
+   VER DETALLE (solo lectura, para canceladas)
+   ========================================================= */
+async function verDetalle(id) {
+    const r = responsivas.find(x => x.IdResponsiva === id);
+    if (!r) { toastError('Responsiva no encontrada'); return; }
+
+    const html = `
+        <div class="detalle-resp">
+            <div class="det-seccion">
+                <div class="det-titulo">Ticket</div>
+                <div class="det-linea"><b>Folio:</b> ${escaparHTML(r.FolioTicket)}</div>
+                <div class="det-linea"><b>Estatus:</b> ${escaparHTML(r.EstatusResponsiva)}</div>
+                <div class="det-linea"><b>Tipo:</b> ${escaparHTML(r.TipoResponsiva ?? '—')}</div>
+                <div class="det-linea"><b>Fecha asignación:</b> ${formatearFecha(r.FechaAsignacion)}</div>
+                <div class="det-linea"><b>Fecha devolución:</b> ${formatearFecha(r.FechaDevolucionReal || r.FechaDevolucionProgramada)}</div>
+            </div>
+            <div class="det-seccion">
+                <div class="det-titulo">Activo</div>
+                <div class="det-linea"><b>Tipo:</b> ${escaparHTML(r.Tipo ?? '—')}</div>
+                <div class="det-linea"><b>Marca / Modelo:</b> ${escaparHTML([r.Marca, r.Modelo].filter(Boolean).join(' ') || '—')}</div>
+                ${r.NoSerie    ? `<div class="det-linea"><b>Serie:</b> ${escaparHTML(r.NoSerie)}</div>` : ''}
+                ${r.IMEI1      ? `<div class="det-linea"><b>IMEI 1:</b> ${escaparHTML(r.IMEI1)}</div>` : ''}
+                ${r.IMEI2      ? `<div class="det-linea"><b>IMEI 2:</b> ${escaparHTML(r.IMEI2)}</div>` : ''}
+                ${r.NoTelefono ? `<div class="det-linea"><b>Teléfono:</b> ${escaparHTML(r.NoTelefono)}</div>` : ''}
+            </div>
+            <div class="det-seccion">
+                <div class="det-titulo">Persona</div>
+                <div class="det-linea"><b>Nombre:</b> ${escaparHTML(r.NombreRecibe)}</div>
+                ${r.PuestoRecibe ? `<div class="det-linea"><b>Puesto:</b> ${escaparHTML(r.PuestoRecibe)}</div>` : ''}
+                ${r.AreaRecibe   ? `<div class="det-linea"><b>Área:</b> ${escaparHTML(r.AreaRecibe)}</div>` : ''}
+                ${r.CorreoRecibe ? `<div class="det-linea"><b>Correo:</b> ${escaparHTML(r.CorreoRecibe)}</div>` : ''}
+            </div>
+            ${r.Observaciones ? `
+            <div class="det-seccion">
+                <div class="det-titulo">Observaciones</div>
+                <div class="det-linea">${escaparHTML(r.Observaciones)}</div>
+            </div>` : ''}
+        </div>
+    `;
+
+    Swal.fire({
+        title: `Folio ${escaparHTML(r.FolioTicket)}`,
+        width: '820px',
+        html,
+        showCloseButton: true,
+        showConfirmButton: false,
+        customClass: { popup: 'cl-historico' }
+    });
+}
+
+/* =========================================================
    GUARDAR
    ========================================================= */
 formulario.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (guardando) return;
 
-    // Validaciones
     if (!modoEdicion && !selActivo.value) {
         mostrarMensaje('Debes seleccionar un activo.', 'error');
         return;
@@ -486,7 +648,7 @@ formulario.addEventListener('submit', async (e) => {
     }
 
     const datos = {
-        IdActivoFijoEQ:    modoEdicion ? idEditando && parseInt(selActivo.value, 10) : parseInt(selActivo.value, 10),
+        IdActivoFijoEQ:    parseInt(selActivo.value, 10),
         FolioTicket:       inpFolio.value.trim(),
         TipoResponsiva:    inpTipoResp.value.trim() || null,
         FechaAsignacion:   inpFechaAsig.value,
@@ -533,6 +695,61 @@ formulario.addEventListener('submit', async (e) => {
         setGuardando(false);
     }
 });
+
+/* =========================================================
+   GENERAR PDF
+   ========================================================= */
+async function generarPDFResponsiva(id, folio) {
+    const conf = await Swal.fire({
+        icon: 'question',
+        title: '¿Generar PDF de responsiva?',
+        html: `Se generará el PDF para el folio <strong>${escaparHTML(folio)}</strong>.<br>Podrás elegir dónde guardarlo.`,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, generar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    });
+
+    if (!conf.isConfirmed) return;
+
+    Swal.fire({
+        title: 'Generando PDF...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const res = await window.api.activoFijo.responsivas.generarPDF(id);
+        Swal.close();
+
+        if (res && res.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: 'PDF generado',
+                html: `Se guardó en:<br><code style="font-size:11px;word-break:break-all;">${escaparHTML(res.ruta)}</code>`,
+                confirmButtonText: 'Aceptar',
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'cl-confirm',
+                    confirmButton: 'swal2-confirm swal2-styled'
+                }
+            });
+            await cargarResponsivas();
+        } else {
+            toastError('No se pudo generar el PDF', res?.mensaje || 'Error desconocido');
+        }
+    } catch (err) {
+        Swal.close();
+        toastError('Error al generar PDF', err.message);
+    }
+}
 
 /* =========================================================
    DEVOLVER
@@ -582,16 +799,23 @@ async function devolverResponsiva(id, nombrePersona) {
 }
 
 /* =========================================================
-   ELIMINAR
+   CANCELAR (Soft delete → histórico)
    ========================================================= */
-async function eliminarResponsiva(id, folio) {
+async function cancelarResponsiva(id, folio) {
     const confirmacion = await Swal.fire({
         icon: 'warning',
-        title: '¿Eliminar responsiva?',
-        html: `Se eliminará la responsiva del folio <strong>${escaparHTML(folio)}</strong>.<br>Esta acción no se puede deshacer.`,
+        title: '¿Cancelar responsiva?',
+        html: `Se cancelará la responsiva del folio <strong>${escaparHTML(folio)}</strong>.<br><br>
+               La responsiva quedará como <b>histórico</b> en la pestaña <b>Canceladas</b>.<br>
+               El activo volverá a estar <b>disponible</b>.<br><br>
+               <b>Nota:</b> si necesitas volver a asignar este activo, deberás crear una <b>nueva responsiva</b>.`,
+        input: 'textarea',
+        inputLabel: 'Motivo de la cancelación',
+        inputPlaceholder: 'Ej. Error de captura, asignación duplicada, cancelación de ticket...',
+        inputAttributes: { maxlength: 500, rows: 3 },
         showCancelButton: true,
-        confirmButtonText: 'Sí, eliminar',
-        cancelButtonText: 'Cancelar',
+        confirmButtonText: 'Sí, cancelar',
+        cancelButtonText: 'Volver',
         reverseButtons: true,
         focusCancel: true,
         buttonsStyling: false,
@@ -599,22 +823,26 @@ async function eliminarResponsiva(id, folio) {
             popup: 'cl-confirm',
             confirmButton: 'swal2-confirm swal2-styled cl-peligro',
             cancelButton: 'swal2-cancel swal2-styled'
+        },
+        inputValidator: (value) => {
+            if (!value || !value.trim()) return 'El motivo es obligatorio';
+            return null;
         }
     });
 
     if (!confirmacion.isConfirmed) return;
 
     try {
-        const res = await window.api.activoFijo.responsivas.eliminar(id);
+        const res = await window.api.activoFijo.responsivas.eliminar(id, confirmacion.value.trim());
         if (res && res.ok) {
             await cargarResponsivas();
             await cargarActivosDisponibles();
-            toastExito(res.mensaje || 'Responsiva eliminada');
+            toastExito(res.mensaje || 'Responsiva cancelada');
         } else {
-            toastError('No se pudo eliminar', res?.mensaje || 'Error desconocido');
+            toastError('No se pudo cancelar', res?.mensaje || 'Error desconocido');
         }
     } catch (err) {
-        toastError('Error al eliminar', err.message);
+        toastError('Error al cancelar', err.message);
     }
 }
 

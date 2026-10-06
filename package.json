@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "mssql": "^12.7.2",
+    "pdf-lib": "^1.17.1",
     "sweetalert2": "^11.26.25"
   },
   "build": {
@@ -39,8 +40,18 @@
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "src/img/logo.ico",
       "requestedExecutionLevel": "asInvoker",

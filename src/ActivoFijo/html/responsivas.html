@@ -47,16 +47,33 @@
 
     <h2>Responsivas de Activos</h2>
 
+    <!-- TABS DE VISTA -->
+    <div class="tabs-vista" id="tabs-vista">
+        <button class="tab-vista activo" data-vista="activas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            Activas
+        </button>
+        <button class="tab-vista" data-vista="canceladas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+            </svg>
+            Canceladas
+        </button>
+    </div>
+
     <!-- FILTROS -->
     <div class="filtros">
-        <div class="filtro">
+        <div class="filtro" id="filtro-estatus-wrap">
             <label for="filtro-estatus">Estatus</label>
             <select id="filtro-estatus">
                 <option value="">Todos</option>
                 <option value="ASIGNADO">Asignado</option>
                 <option value="PENDIENTE">Pendiente</option>
                 <option value="DEVUELTO">Devuelto</option>
-                <option value="CANCELADO">Cancelado</option>
             </select>
         </div>
         <button id="btn-limpiar-filtros" class="secundario">
@@ -74,7 +91,7 @@
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
-        <p>No se encontraron responsivas con ese criterio.</p>
+        <p id="sin-resultados-texto">No se encontraron responsivas con ese criterio.</p>
         <button type="button" id="btn-limpiar-busqueda-vacio" class="secundario">Limpiar búsqueda</button>
     </div>
 
@@ -88,8 +105,9 @@
                     <th>Persona</th>
                     <th>Cartera</th>
                     <th>F. Asignación</th>
+                    <th>F. Devolución</th>
                     <th>Estatus</th>
-                    <th style="width:260px; text-align:right;">Acciones</th>
+                    <th style="width:280px; text-align:right;">Acciones</th>
                 </tr>
             </thead>
             <tbody id="tabla-body"></tbody>
@@ -184,6 +202,11 @@
                             <select id="puesto-cat"><option value="">— Sin puesto —</option></select>
                         </div>
 
+                        <div class="campo-full">
+                            <label for="observaciones">Observaciones</label>
+                            <textarea id="observaciones" maxlength="500" rows="3" placeholder="Notas adicionales sobre la asignación (opcional)"></textarea>
+                        </div>
+
                         <!-- Quien entrega -->
                         <div class="seccion-titulo campo-full">Información de quien entrega (TI)</div>
 
@@ -201,11 +224,11 @@
                         </div>
 
                         <!-- Documentos -->
-                        <div class="seccion-titulo campo-full">Documentos y observaciones</div>
+                        <div class="seccion-titulo campo-full">Documentos</div>
 
                         <div>
                             <label for="ruta-pdf">Ruta PDF responsiva</label>
-                            <input type="text" id="ruta-pdf" maxlength="500" placeholder="Opcional">
+                            <input type="text" id="ruta-pdf" maxlength="500" placeholder="Se llena al generar el PDF">
                         </div>
                         <div>
                             <label for="ruta-ine">Ruta INE</label>
@@ -214,10 +237,6 @@
                         <div class="campo-full">
                             <label for="ruta-comprobante">Ruta comprobante de domicilio</label>
                             <input type="text" id="ruta-comprobante" maxlength="500" placeholder="Opcional">
-                        </div>
-                        <div class="campo-full">
-                            <label for="observaciones">Observaciones</label>
-                            <textarea id="observaciones" maxlength="500" rows="3"></textarea>
                         </div>
                     </div>
 

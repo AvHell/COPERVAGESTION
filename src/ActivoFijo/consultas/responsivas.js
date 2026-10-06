@@ -1,18 +1,34 @@
 /* =========================================================
    ACTIVO FIJO — CRUD DE RESPONSIVAS
+   Soft delete: al cancelar NO se borra, queda como histórico
    ========================================================= */
 const { getPool, sql } = require('../../js/db/conexion');
 
 /* =========================================================
-   LISTAR (con filtros)
+   LISTAR
+   - filtros.idEstatus        → filtra por ese estatus exacto
+   - filtros.soloCancelados   → solo CANCELADO
+   - por defecto              → oculta CANCELADO
    ========================================================= */
 async function listar(filtros = {}) {
     const pool = await getPool();
     const request = pool.request();
 
     let where = '1=1';
-    if (filtros.idEstatus)  { where += ' AND r.EstatusResponsiva = @Estatus'; request.input('Estatus', sql.NVarChar(30), filtros.idEstatus); }
-    if (filtros.idTipo)     { where += ' AND af.IdTipo = @IdTipo';           request.input('IdTipo', sql.Int, filtros.idTipo); }
+
+    if (filtros.soloCancelados) {
+        where += " AND r.EstatusResponsiva = 'CANCELADO'";
+    } else if (filtros.idEstatus) {
+        where += ' AND r.EstatusResponsiva = @Estatus';
+        request.input('Estatus', sql.NVarChar(30), filtros.idEstatus);
+    } else {
+        where += " AND r.EstatusResponsiva <> 'CANCELADO'";
+    }
+
+    if (filtros.idTipo) {
+        where += ' AND af.IdTipo = @IdTipo';
+        request.input('IdTipo', sql.Int, filtros.idTipo);
+    }
 
     const result = await request.query(`
         SELECT
@@ -37,7 +53,11 @@ async function listar(filtros = {}) {
             r.RutaPDF,
             r.RutaINE,
             r.RutaComprobanteDomicilio,
+            r.IdCartera,
+            r.IdPuesto,
             r.FechaCreacion,
+            r.FechaModificacion,
+            r.IdUsuarioModificacion,
 
             af.IdActivoFijoEQ,
             af.NoSerie,
@@ -99,8 +119,92 @@ async function obtener(id) {
 }
 
 /* =========================================================
+   OBTENER DATOS COMPLETOS PARA PDF
+   ========================================================= */
+async function obtenerParaPDF(id) {
+    const pool = await getPool();
+    const r = await pool.request()
+        .input('Id', sql.Int, id)
+        .query(`
+            SELECT
+                r.IdResponsiva,
+                r.FolioTicket,
+                r.TipoResponsiva,
+                r.FechaAsignacion,
+                r.FechaDevolucionProgramada,
+                r.FechaDevolucionReal,
+                r.EstatusResponsiva,
+                r.MotivoSalida,
+                r.NombreProyecto,
+                r.DescripcionSolicitud,
+                r.Observaciones,
+
+                r.NombreRecibe,
+                r.PuestoRecibe,
+                r.AreaRecibe,
+                r.CorreoRecibe,
+
+                r.NombreEntrega,
+                r.PuestoEntrega,
+                r.AreaEntrega,
+
+                r.RutaPDF,
+                r.RutaINE,
+                r.RutaComprobanteDomicilio,
+
+                af.IdActivoFijoEQ,
+                af.NoSerie,
+                af.IMEI1,
+                af.IMEI2,
+                af.NoTelefono,
+                af.Modelo,
+                af.PrecioActivo,
+                af.Procesador,
+                af.MemoriaRAM,
+                af.Almacenamiento,
+                af.SistemaOperativo,
+                af.Accesorios,
+
+                m.Nombre  AS Marca,
+                t.Nombre  AS Tipo,
+                t.RequiereIMEI,
+                t.RequiereTelefono,
+
+                c.Nombre  AS Cartera,
+                p.Nombre  AS PuestoCatalogo
+            FROM ActivoFijoResponsivas r
+            INNER JOIN ActivoFijoEquipos af ON af.IdActivoFijoEQ = r.IdActivoFijoEQ
+            INNER JOIN ActivoFijoTipos   t  ON t.IdTipo = af.IdTipo
+            LEFT  JOIN ActivoFijoMarcas  m  ON m.IdMarca = af.IdMarca
+            LEFT  JOIN ActivoFijoCarteras c ON c.IdCartera = r.IdCartera
+            LEFT  JOIN ActivoFijoPuestos  p ON p.IdPuesto  = r.IdPuesto
+            WHERE r.IdResponsiva = @Id
+        `);
+    return r.recordset[0] ?? null;
+}
+
+/* =========================================================
+   ACTUALIZAR RUTA PDF
+   ========================================================= */
+async function actualizarRutaPDF(id, ruta, idUsuario) {
+    const pool = await getPool();
+    await pool.request()
+        .input('Id',        sql.Int,           id)
+        .input('Ruta',      sql.NVarChar(500), ruta)
+        .input('IdUsuario', sql.Int,           idUsuario || null)
+        .query(`
+            UPDATE ActivoFijoResponsivas SET
+                RutaPDF = @Ruta,
+                FechaGeneracionPDF = GETDATE(),
+                IdUsuarioModificacion = @IdUsuario,
+                FechaModificacion = GETDATE()
+            WHERE IdResponsiva = @Id
+        `);
+}
+
+/* =========================================================
    ACTIVOS DISPONIBLES PARA ASIGNAR
-   Solo los que su tipo requiere responsiva y están libres.
+   Excluye los que ya tienen responsiva activa
    ========================================================= */
 async function activosDisponibles() {
     const pool = await getPool();
@@ -124,7 +228,13 @@ async function activosDisponibles() {
         INNER JOIN ActivoFijoEstatus st ON st.IdEstatus = af.IdEstatus
         LEFT  JOIN ActivoFijoMarcas  m  ON m.IdMarca = af.IdMarca
         WHERE t.RequiereResponsiva = 1
-          AND st.Nombre IN ('STOCK', 'DISPONIBLE', 'DEVUELTO')
+          AND st.Nombre IN ('DISPONIBLE', 'DEVUELTO')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM ActivoFijoResponsivas r
+              WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
+                AND r.EstatusResponsiva IN ('ASIGNADO','PENDIENTE')
+          )
         ORDER BY t.Nombre, m.Nombre, af.NoSerie
     `);
     return r.recordset;
@@ -132,16 +242,12 @@ async function activosDisponibles() {
 
 /* =========================================================
    CREAR RESPONSIVA
-   El trigger trg_AFR_AfterInsert hace el resto:
-   - Snapshot en ActivoFijoAsignacionesHist
-   - Movimiento en ActivoFijoHistoricos
-   - Update estatus del activo a ASIGNADO/PENDIENTE
    ========================================================= */
 async function crear(datos, idUsuario) {
     try {
         const pool = await getPool();
 
-        // Validar que el activo exista y no tenga responsiva activa
+        // Verificar que no tenga otra responsiva activa
         const respActiva = await pool.request()
             .input('IdActivo', sql.Int, datos.IdActivoFijoEQ)
             .query(`
@@ -151,7 +257,7 @@ async function crear(datos, idUsuario) {
                   AND EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
             `);
         if (respActiva.recordset.length > 0) {
-            return { ok: false, mensaje: 'Este activo ya tiene una responsiva activa. Debe devolverse antes de reasignar.' };
+            return { ok: false, mensaje: 'Este activo ya tiene una responsiva activa. Debe devolverse o cancelarse antes de reasignar.' };
         }
 
         const result = await pool.request()
@@ -198,6 +304,21 @@ async function crear(datos, idUsuario) {
                 );
                 SELECT SCOPE_IDENTITY() AS Id;
             `);
+
+        // Actualizar estatus del activo si está asignado
+        if ((datos.EstatusResponsiva || 'ASIGNADO') !== 'DEVUELTO') {
+            await pool.request()
+                .input('IdActivo', sql.Int, datos.IdActivoFijoEQ)
+                .input('IdUsuario', sql.Int, idUsuario || null)
+                .query(`
+                    UPDATE ActivoFijoEquipos SET
+                        IdEstatus = (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'ASIGNADO'),
+                        IdUsuarioModificacion = @IdUsuario,
+                        FechaModificacion = GETDATE()
+                    WHERE IdActivoFijoEQ = @IdActivo
+                      AND IdEstatus <> (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'ASIGNADO')
+                `);
+        }
 
         return { ok: true, mensaje: 'Responsiva creada correctamente.', id: result.recordset[0].Id };
     } catch (err) {
@@ -274,8 +395,9 @@ async function actualizar(id, datos, idUsuario) {
 }
 
 /* =========================================================
-   DEVOLVER (atajo que solo cambia estatus)
-   El trigger trg_AFR_AfterUpdate libera el activo.
+   DEVOLVER
+   - Marca la responsiva como DEVUELTO
+   - Libera el activo (DISPONIBLE)
    ========================================================= */
 async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
     try {
@@ -298,8 +420,24 @@ async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
             `);
 
         if (result.rowsAffected[0] === 0) {
-            return { ok: false, mensaje: 'La responsiva ya estaba devuelta o no existe.' };
+            return { ok: false, mensaje: 'La responsiva ya estaba devuelta, cancelada o no existe.' };
         }
+
+        // Liberar el activo
+        await pool.request()
+            .input('Id', sql.Int, id)
+            .input('IdUsuario', sql.Int, idUsuario || null)
+            .query(`
+                UPDATE ActivoFijoEquipos SET
+                    IdEstatus = (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'DISPONIBLE'),
+                    IdUsuarioModificacion = @IdUsuario,
+                    FechaModificacion = GETDATE()
+                WHERE IdActivoFijoEQ IN (
+                    SELECT IdActivoFijoEQ FROM ActivoFijoResponsivas
+                    WHERE IdResponsiva = @Id
+                )
+            `);
+
         return { ok: true, mensaje: 'Devolución registrada. El activo vuelve a estar disponible.' };
     } catch (err) {
         return { ok: false, mensaje: 'Error al devolver: ' + err.message };
@@ -307,41 +445,75 @@ async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
 }
 
 /* =========================================================
-   ELIMINAR
+   CANCELAR RESPONSIVA (Soft delete → histórico)
+   - NO se elimina el registro
+   - Se marca como CANCELADO
+   - Libera el activo si estaba asignado
+   - Guarda quién canceló + motivo en Observaciones
+   - NO se puede restaurar: queda como histórico
    ========================================================= */
-async function eliminar(id) {
+async function eliminar(id, idUsuario, motivo = null) {
     try {
         const pool = await getPool();
 
-        // Si estaba activa, liberar el activo primero
+        // 1. Construir el texto de la observación de cancelación
+        let textoCancel = null;
+        if (motivo) {
+            textoCancel = `[CANCELADA] Motivo: ${String(motivo).trim()}`;
+        } else {
+            textoCancel = '[CANCELADA]';
+        }
+
+        // 2. Marcar la responsiva como CANCELADA
+        const result = await pool.request()
+            .input('Id',        sql.Int,           id)
+            .input('IdUsuario', sql.Int,           idUsuario || null)
+            .input('Texto',     sql.NVarChar(500), textoCancel)
+            .query(`
+                UPDATE ActivoFijoResponsivas SET
+                    EstatusResponsiva = 'CANCELADO',
+                    Observaciones = 
+                        CASE
+                            WHEN Observaciones IS NULL OR LTRIM(RTRIM(Observaciones)) = ''
+                                THEN @Texto
+                            ELSE CONCAT(Observaciones, ' | ', @Texto)
+                        END,
+                    IdUsuarioModificacion = @IdUsuario,
+                    FechaModificacion = GETDATE()
+                WHERE IdResponsiva = @Id
+                  AND EstatusResponsiva <> 'CANCELADO'
+            `);
+
+        if (result.rowsAffected[0] === 0) {
+            return { ok: false, mensaje: 'La responsiva ya estaba cancelada o no existe.' };
+        }
+
+        // 3. Liberar el activo (si estaba asignado)
         await pool.request()
-            .input('Id', sql.Int, id)
+            .input('Id',        sql.Int, id)
+            .input('IdUsuario', sql.Int, idUsuario || null)
             .query(`
                 UPDATE ActivoFijoEquipos SET
                     IdEstatus = (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'DISPONIBLE'),
+                    IdUsuarioModificacion = @IdUsuario,
                     FechaModificacion = GETDATE()
                 WHERE IdActivoFijoEQ IN (
                     SELECT IdActivoFijoEQ FROM ActivoFijoResponsivas
                     WHERE IdResponsiva = @Id
-                      AND EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
                 )
             `);
 
-        const result = await pool.request()
-            .input('Id', sql.Int, id)
-            .query('DELETE FROM ActivoFijoResponsivas WHERE IdResponsiva = @Id');
-
-        if (result.rowsAffected[0] === 0) {
-            return { ok: false, mensaje: 'La responsiva ya no existe.' };
-        }
-        return { ok: true, mensaje: 'Responsiva eliminada correctamente.' };
+        return {
+            ok: true,
+            mensaje: 'Responsiva cancelada. El activo vuelve a estar disponible. La responsiva queda como histórico.'
+        };
     } catch (err) {
-        return { ok: false, mensaje: 'Error al eliminar: ' + err.message };
+        return { ok: false, mensaje: 'Error al cancelar: ' + err.message };
     }
 }
 
 /* =========================================================
-   CATÁLOGOS AUXILIARES (para selects)
+   CATÁLOGOS AUXILIARES
    ========================================================= */
 async function listarCarteras() {
     const pool = await getPool();
@@ -360,6 +532,7 @@ async function listarPuestos() {
 }
 
 module.exports = {
-    listar, obtener, activosDisponibles, crear, actualizar, devolver, eliminar,
+    listar, obtener, obtenerParaPDF, actualizarRutaPDF,
+    activosDisponibles, crear, actualizar, devolver, eliminar,
     listarCarteras, listarPuestos
 };

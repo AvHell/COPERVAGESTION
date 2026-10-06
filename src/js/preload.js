@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('api', {
     abrirActivoFijoActivos:     () => ipcRenderer.invoke('abrir-activofijo-activos'),
     abrirActivoFijoResponsivas: () => ipcRenderer.invoke('abrir-activofijo-responsivas'),
     abrirActivoFijoReportes:    () => ipcRenderer.invoke('abrir-activofijo-reportes'),
+    abrirActivoFijoImportar: () => ipcRenderer.invoke('af-abrir-importar'),
+
 
     /* =========================================================
        CLIENTES

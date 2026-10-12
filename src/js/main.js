@@ -9,7 +9,7 @@ const { PDFDocument } = require('pdf-lib');
    ========================================================= */
 const clientesDB   = require('./db/clientes');
 const rolesDB      = require('./db/roles');
-const lugaresDB    = require('./db/lugares');
+const pisosDB      = require('./db/pisos');
 const rangosDB     = require('./db/rangos');
 const equiposDB    = require('./db/equipos');
 const planoDB      = require('./db/plano');
@@ -26,6 +26,7 @@ const activoFijoActivosDB     = require('../ActivoFijo/consultas/activos');
 const activoFijoResponsivasDB = require('../ActivoFijo/consultas/responsivas');
 const activoFijoReportesDB    = require('../ActivoFijo/consultas/reportes');
 const activoFijoImportacionDB = require('../ActivoFijo/consultas/importacion');
+const { title } = require('process');
 
 /* =========================================================
    RUTAS
@@ -36,18 +37,8 @@ const HTML_AF    = path.join(__dirname, '..', 'ActivoFijo', 'html');
 const PRELOAD    = path.join(__dirname, 'preload.js');
 const PRELOAD_AF = path.join(__dirname, '..', 'ActivoFijo', 'preload-activofijo.js');
 
-/* Ruta de la plantilla PDF
-   Estructura esperada:
-     ProyectoEquipos/
-       ├── Formatos/
-       │   └── ResponsivaCelulares.pdf
-       └── src/
-           └── js/
-               └── main.js
-*/
 const PLANTILLA_PDF = path.join(__dirname, '..', '..', 'Formatos', 'ResponsivaCelulares.pdf');
 
-/* Log de verificación al arrancar */
 console.log('===========================================');
 console.log('Ruta plantilla PDF:');
 console.log(PLANTILLA_PDF);
@@ -173,18 +164,14 @@ function crearVentana(nombre, archivo, opciones = {}) {
 /* =========================================================
    VENTANAS — SISTEMA EXISTENTE
    ========================================================= */
-const crearLoginWindow     = () => crearVentana('login',     'login.html',     { width: 420, height: 500, title: 'Iniciar sesión', maximizar: false, resizable: false });
+const crearLoginWindow     = () => crearVentana('login',     'login.html',     { title:  'Iniciar Sesión' });
 const crearMenuWindow      = () => crearVentana('menu',      'menu.html',      { title: 'Menú Principal' });
-const crearClientesWindow  = () => crearVentana('clientes',  'clientes.html',  { title: 'Clientes' });
-const crearRolesWindow     = () => crearVentana('roles',     'roles.html',     { title: 'Roles de Equipo' });
-const crearLugaresWindow   = () => crearVentana('lugares',   'lugares.html',   { title: 'Lugares de Clientes' });
+const crearCatalogosWindow = () => crearVentana('catalogos', 'catalogos.html', { title: 'Catálogos del Sistema' });
 const crearRangosWindow    = () => crearVentana('rangos',    'rangos.html',    { title: 'Rangos IP' });
 const crearEquiposWindow   = () => crearVentana('equipos',   'equipos.html',   { title: 'Equipos' });
 const crearPlanoWindow     = () => crearVentana('plano',     'plano.html',     { title: 'Plano Visual' });
 const crearUsuariosWindow  = () => crearVentana('usuarios',  'usuarios.html',  { title: 'Usuarios' });
 const crearHistoricoWindow = () => crearVentana('historico', 'historico.html', { title: 'Histórico del Plano' });
-const crearDominiosWindow  = () => crearVentana('dominios',  'dominios.html',  { title: 'Dominios Admin' });
-const crearConfigRedWindow = () => crearVentana('configred', 'configred.html', { title: 'Configuraciones de Red' });
 
 /* =========================================================
    VENTANAS — MÓDULO ACTIVO FIJO
@@ -193,39 +180,28 @@ const crearActivoFijoCatalogosWindow = () => crearVentana(
     'activofijo-catalogos', 'catalogos.html',
     { title: 'Catálogos - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
 );
-
 const crearActivoFijoActivosWindow = () => crearVentana(
     'activofijo-activos', 'activos.html',
     { title: 'Inventario - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
 );
-
 const crearActivoFijoResponsivasWindow = () => crearVentana(
     'activofijo-responsivas', 'responsivas.html',
     { title: 'Responsivas - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
 );
-
 const crearActivoFijoReportesWindow = () => crearVentana(
     'activofijo-reportes', 'reportes.html',
     { title: 'Reportes - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
 );
-
 const crearActivoFijoImportarWindow = () => crearVentana(
-    'activofijo-importar',
-    'importar.html',
-    {
-        title:    'Importar Masivo - Activo Fijo',
-        basePath: HTML_AF,
-        preload:  PRELOAD_AF
-    }
+    'activofijo-importar', 'importar.html',
+    { title: 'Importar Masivo - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
 );
 
 /* =========================================================
    UTILIDADES
    ========================================================= */
 function cerrarVentana(nombre) {
-    if (ventanas[nombre] && !ventanas[nombre].isDestroyed()) {
-        ventanas[nombre].close();
-    }
+    if (ventanas[nombre] && !ventanas[nombre].isDestroyed()) ventanas[nombre].close();
 }
 
 function asegurarMenuAbierto() {
@@ -245,25 +221,19 @@ ipcMain.handle('login', async (_e, nombreUsuario, password) => {
     if (res.ok) usuarioActual = res.usuario;
     return res;
 });
-
 ipcMain.handle('logout', () => { usuarioActual = null; return { ok: true }; });
 ipcMain.handle('usuario-actual', () => usuarioActual);
 
 /* =========================================================
    IPC: ABRIR VENTANAS DEL SISTEMA
    ========================================================= */
-ipcMain.handle('abrir-menu', () => { cerrarVentana('login'); asegurarMenuAbierto(); return { ok: true }; });
-
-ipcMain.handle('abrir-clientes',  () => { crearClientesWindow();  return { ok: true }; });
-ipcMain.handle('abrir-roles',     () => { crearRolesWindow();     return { ok: true }; });
-ipcMain.handle('abrir-lugares',   () => { crearLugaresWindow();   return { ok: true }; });
+ipcMain.handle('abrir-menu',      () => { cerrarVentana('login'); asegurarMenuAbierto(); return { ok: true }; });
+ipcMain.handle('abrir-catalogos', () => { crearCatalogosWindow(); return { ok: true }; });
 ipcMain.handle('abrir-rangos',    () => { crearRangosWindow();    return { ok: true }; });
 ipcMain.handle('abrir-equipos',   () => { crearEquiposWindow();   return { ok: true }; });
 ipcMain.handle('abrir-plano',     () => { crearPlanoWindow();     return { ok: true }; });
 ipcMain.handle('abrir-usuarios',  () => { crearUsuariosWindow();  return { ok: true }; });
 ipcMain.handle('abrir-historico', () => { crearHistoricoWindow(); return { ok: true }; });
-ipcMain.handle('abrir-dominios',  () => { crearDominiosWindow();  return { ok: true }; });
-ipcMain.handle('abrir-configred', () => { crearConfigRedWindow(); return { ok: true }; });
 
 ipcMain.handle('volver-menu', (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -280,8 +250,6 @@ ipcMain.handle('abrir-activofijo-activos',     () => { crearActivoFijoActivosWin
 ipcMain.handle('abrir-activofijo-responsivas', () => { crearActivoFijoResponsivasWindow(); return { ok: true }; });
 ipcMain.handle('abrir-activofijo-reportes',    () => { crearActivoFijoReportesWindow();    return { ok: true }; });
 ipcMain.handle('abrir-activofijo-importar',    () => { crearActivoFijoImportarWindow();    return { ok: true }; });
-
-/* Alias con prefijo af-* */
 ipcMain.handle('af-abrir-catalogos',   () => { crearActivoFijoCatalogosWindow();   return { ok: true }; });
 ipcMain.handle('af-abrir-activos',     () => { crearActivoFijoActivosWindow();     return { ok: true }; });
 ipcMain.handle('af-abrir-responsivas', () => { crearActivoFijoResponsivasWindow(); return { ok: true }; });
@@ -308,14 +276,12 @@ ipcMain.handle('af-activos-eliminar',   async (_e, id, motivo) => await activoFi
 ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo) => await activoFijoActivosDB.restaurar(id, usuarioActual?.IdUsuario, motivo || null));
 ipcMain.handle('af-activos-historico',  async (_e, id)         => await activoFijoActivosDB.historico(id));
 
-/* ----- Catálogos auxiliares originales ----- */
 ipcMain.handle('af-activos-lista-tipos',    async () => await activoFijoActivosDB.listarTipos());
 ipcMain.handle('af-activos-lista-marcas',   async () => await activoFijoActivosDB.listarMarcas());
 ipcMain.handle('af-activos-lista-estados',  async () => await activoFijoActivosDB.listarEstados());
 ipcMain.handle('af-activos-lista-estatus',  async () => await activoFijoActivosDB.listarEstatus());
 ipcMain.handle('af-activos-lista-carteras', async () => await activoFijoActivosDB.listarCarteras());
 
-/* ----- Catálogos auxiliares NUEVOS (periféricos) ----- */
 ipcMain.handle('af-activos-lista-sitios',          async () => await activoFijoActivosDB.listarSitios());
 ipcMain.handle('af-activos-lista-subtipos',        async () => await activoFijoActivosDB.listarSubtipos());
 ipcMain.handle('af-activos-lista-voltajes',        async () => await activoFijoActivosDB.listarVoltajes());
@@ -365,20 +331,13 @@ ipcMain.handle('af-import-procesar', async (_e, datos) => await activoFijoImport
 
 /* =========================================================
    IPC: GENERAR PDF DE RESPONSIVA (pdf-lib)
-   - Fuente pequeña (8pt)
-   - Campos se marcan como read-only al terminar
-   - Formulario aplanado (no editable)
    ========================================================= */
 ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
 
-    // 1. Traer datos de la BD
     const d = await activoFijoResponsivasDB.obtenerParaPDF(idResponsiva);
-    if (!d) {
-        return { ok: false, mensaje: 'Responsiva no encontrada.' };
-    }
+    if (!d) return { ok: false, mensaje: 'Responsiva no encontrada.' };
 
-    // 2. Verificar plantilla
     if (!fs.existsSync(PLANTILLA_PDF)) {
         return {
             ok: false,
@@ -386,7 +345,6 @@ ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
         };
     }
 
-    // 3. Pedir dónde guardar
     const nombreArchivo = `Responsiva-${(d.FolioTicket || 'sin-folio').replace(/[\/\\:*?"<>|]/g, '_')}.pdf`;
     const { canceled, filePath } = await dialog.showSaveDialog({
         title: 'Guardar PDF de responsiva',
@@ -394,12 +352,9 @@ ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
         filters: [{ name: 'PDF', extensions: ['pdf'] }]
     });
 
-    if (canceled || !filePath) {
-        return { ok: false, mensaje: 'Cancelado' };
-    }
+    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
 
     try {
-        // 4. Helpers
         const fmtFecha = (f) => {
             if (!f) return 'N/A';
             const fecha = new Date(f);
@@ -413,42 +368,25 @@ ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
             return '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 2 });
         };
 
-        // 5. Cargar plantilla
         const plantillaBytes = fs.readFileSync(PLANTILLA_PDF);
         const pdf  = await PDFDocument.load(plantillaBytes);
         const form = pdf.getForm();
 
-        /* =================================================
-           TAMAÑO DE FUENTE POR DEFECTO
-           ================================================= */
         const FUENTE = 6;
 
-        /* =================================================
-           setCampo(nombre, valor, tamaño?)
-           - tamaño es OPCIONAL. Si no se pasa, usa FUENTE.
-           ================================================= */
         const setCampo = (nombre, valor, tamaño = null) => {
             try {
                 const campo = form.getTextField(nombre);
-                if (!campo) {
-                    console.warn(`[PDF] ✗ Campo no encontrado: ${nombre}`);
-                    return;
-                }
-
+                if (!campo) { console.warn(`[PDF] ✗ Campo no encontrado: ${nombre}`); return; }
                 const sizeFinal = tamaño ?? FUENTE;
-
                 campo.setText(String(valor ?? ''));
                 campo.setFontSize(sizeFinal);
-
                 console.log(`[PDF] ✓ ${nombre} = "${valor}" (${sizeFinal}pt)`);
             } catch (err) {
                 console.warn(`[PDF] ✗ Error en campo ${nombre}: ${err.message}`);
             }
         };
 
-        /* =================================================
-           MAPEO — con tamaños personalizados donde se necesite
-           ================================================= */
         setCampo('ticket',                d.FolioTicket);
         setCampo('nombreproyecto',        d.NombreProyecto);
         setCampo('descripcion_solicitud', d.DescripcionSolicitud);
@@ -457,7 +395,6 @@ ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
         setCampo('fecha_devolucion',      fmtFecha(d.FechaDevolucionProgramada));
         setCampo('estatus',               d.EstatusResponsiva);
         setCampo('motivo_salida',         d.MotivoSalida);
-
         setCampo('tipo_equipo',           d.Tipo);
         setCampo('marca',                 d.Marca);
         setCampo('modelo',                d.Modelo);
@@ -467,49 +404,26 @@ ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
         setCampo('memoria_ram',           d.MemoriaRAM);
         setCampo('almacenamiento',        d.Almacenamiento);
         setCampo('accesorios',            d.Accesorios);
-
         setCampo('imei_uno',              d.IMEI1);
         setCampo('imei_dos',              d.IMEI2);
-
         setCampo('nombre_recibe',         d.NombreRecibe);
         setCampo('area_recibe',           d.AreaRecibe);
-        setCampo('puesto_recibe',         d.PuestoRecibe, 5);   // ← 5pt personalizado
-
+        setCampo('puesto_recibe',         d.PuestoRecibe, 5);
         setCampo('nombre_entrega',        d.NombreEntrega);
         setCampo('puesto_entrega',        d.PuestoEntrega);
         setCampo('area_entrega',          d.AreaEntrega);
 
-        /* =================================================
-           BLOQUEAR TODOS LOS CAMPOS
-           - readOnly(true): no se puede escribir
-           - flatten(): el formulario queda "plano"
-           ================================================= */
-
-        // Opción 1: Solo marcar como read-only
         try {
             form.getFields().forEach(campo => {
-                try {
-                    campo.enableReadOnly();
-                } catch (_) {
-                    // Algunos tipos no soportan readOnly, se ignora
-                }
+                try { campo.enableReadOnly(); } catch (_) {}
             });
-        } catch (err) {
-            console.warn('[PDF] Error marcando read-only:', err.message);
-        }
+        } catch (err) { console.warn('[PDF] Error marcando read-only:', err.message); }
 
-        // Opción 2 (opcional): Aplanar el formulario
-        try {
-            form.flatten();
-        } catch (err) {
-            console.warn('[PDF] Error aplanando formulario:', err.message);
-        }
+        try { form.flatten(); } catch (err) { console.warn('[PDF] Error aplanando formulario:', err.message); }
 
-        // 7. Guardar PDF
         const bytesFinales = await pdf.save();
         fs.writeFileSync(filePath, bytesFinales);
 
-        // 8. Actualizar ruta en BD
         await activoFijoResponsivasDB.actualizarRutaPDF(idResponsiva, filePath, usuarioActual.IdUsuario);
 
         return { ok: true, mensaje: 'PDF generado correctamente.', ruta: filePath };
@@ -520,7 +434,7 @@ ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
 });
 
 /* =========================================================
-   IPC: CLIENTES / ROLES / LUGARES / RANGOS
+   IPC: CLIENTES / ROLES / PISOS / RANGOS
    ========================================================= */
 ipcMain.handle('clientes:listar',     async () => await clientesDB.listar());
 ipcMain.handle('clientes:crear',      async (_e, codigo, nombre) => await clientesDB.crear(codigo, nombre));
@@ -532,14 +446,23 @@ ipcMain.handle('roles:crear',      async (_e, codigo, nombre, descripcion) => aw
 ipcMain.handle('roles:actualizar', async (_e, id, codigo, nombre, descripcion) => await rolesDB.actualizar(id, codigo, nombre, descripcion));
 ipcMain.handle('roles:eliminar',   async (_e, id) => await rolesDB.eliminar(id));
 
-ipcMain.handle('lugares:listar',     async () => await lugaresDB.listar());
-ipcMain.handle('lugares:crear',      async (_e, idCliente, nombre) => await lugaresDB.crear(idCliente, nombre));
-ipcMain.handle('lugares:actualizar', async (_e, id, idCliente, nombre) => await lugaresDB.actualizar(id, idCliente, nombre));
-ipcMain.handle('lugares:eliminar',   async (_e, id) => await lugaresDB.eliminar(id));
+/* =========================================================
+   IPC: PISOS
+   ========================================================= */
+ipcMain.handle('pisos:listar',                async ()                              => await pisosDB.listar());
+ipcMain.handle('pisos:obtener',               async (_e, id)                        => await pisosDB.obtener(id));
+ipcMain.handle('pisos:listarPorCliente',      async (_e, idCliente)                 => await pisosDB.listarPorCliente(idCliente));
+ipcMain.handle('pisos:clientesDePiso',        async (_e, idPiso)                    => await pisosDB.clientesDePiso(idPiso));
+ipcMain.handle('pisos:crear',                 async (_e, nombre, filas, cols, ids)  => await pisosDB.crear(nombre, filas, cols, ids));
+ipcMain.handle('pisos:actualizarConClientes', async (_e, id, nombre, filas, cols, ids) => await pisosDB.actualizarConClientes(id, nombre, filas, cols, ids));
+ipcMain.handle('pisos:eliminar',              async (_e, id)                        => await pisosDB.eliminar(id));
 
+/* =========================================================
+   IPC: RANGOS
+   ========================================================= */
 ipcMain.handle('rangos:listar',     async () => await rangosDB.listar());
-ipcMain.handle('rangos:crear',      async (_e, idCliente, idLugar, nombre, ipInicio, ipFin, desc) => await rangosDB.crear(idCliente, idLugar, nombre, ipInicio, ipFin, desc));
-ipcMain.handle('rangos:actualizar', async (_e, id, idCliente, idLugar, nombre, ipInicio, ipFin, desc) => await rangosDB.actualizar(id, idCliente, idLugar, nombre, ipInicio, ipFin, desc));
+ipcMain.handle('rangos:crear',      async (_e, idCliente, idPiso, nombre, ipInicio, ipFin, desc) => await rangosDB.crear(idCliente, idPiso, nombre, ipInicio, ipFin, desc));
+ipcMain.handle('rangos:actualizar', async (_e, id, idCliente, idPiso, nombre, ipInicio, ipFin, desc) => await rangosDB.actualizar(id, idCliente, idPiso, nombre, ipInicio, ipFin, desc));
 ipcMain.handle('rangos:eliminar',   async (_e, id) => await rangosDB.eliminar(id));
 
 /* =========================================================
@@ -577,62 +500,63 @@ ipcMain.handle('usuarios:crear',      async (_e, datos) => await usuariosDB.crea
 ipcMain.handle('usuarios:actualizar', async (_e, id, datos) => await usuariosDB.actualizar(id, datos));
 ipcMain.handle('usuarios:eliminar',   async (_e, id) => await usuariosDB.eliminar(id));
 
-ipcMain.handle('historicos:listarPorLugar', async (_e, idLugar) => await historicosDB.listarPorLugar(idLugar));
+ipcMain.handle('historicos:listarPorPiso', async (_e, idPiso) => await historicosDB.listarPorPiso(idPiso));
+ipcMain.handle('historicos:listar',        async (_e, idCliente, idPiso) => await historicosDB.listar(idCliente, idPiso));
 
 /* =========================================================
    IPC: PLANO
    ========================================================= */
-ipcMain.handle('plano:dimensiones', async (_e, idLugar) => await planoDB.obtenerDimensiones(idLugar));
+ipcMain.handle('plano:dimensiones', async (_e, idPiso) => await planoDB.obtenerDimensiones(idPiso));
 
-ipcMain.handle('plano:actualizarDim', async (_e, idLugar, filas, columnas) => {
+ipcMain.handle('plano:actualizarDim', async (_e, idPiso, filas, columnas) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.actualizarDimensiones(usuarioActual.IdUsuario, idLugar, filas, columnas);
+    return await planoDB.actualizarDimensiones(usuarioActual.IdUsuario, idPiso, filas, columnas);
 });
 
-ipcMain.handle('plano:listarPorLugar', async (_e, idLugar) => await planoDB.listarPorLugar(idLugar));
-ipcMain.handle('plano:sinUbicacion',   async (_e, idLugar) => await planoDB.equiposSinUbicacion(idLugar));
+ipcMain.handle('plano:listarPorLugar', async (_e, idPiso) => await planoDB.listarPorLugar(idPiso));
+ipcMain.handle('plano:sinUbicacion',   async (_e, idPiso) => await planoDB.equiposSinUbicacion(idPiso));
 
-ipcMain.handle('plano:asignar', async (_e, idLugar, idEquipo, fila, col) => {
+ipcMain.handle('plano:asignar', async (_e, idPiso, idEquipo, fila, col) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.asignar(usuarioActual.IdUsuario, idLugar, idEquipo, fila, col);
+    return await planoDB.asignar(usuarioActual.IdUsuario, idPiso, idEquipo, fila, col);
 });
 
-ipcMain.handle('plano:mover', async (_e, idEquipo, fila, col, filaAnt, colAnt, idLugar) => {
+ipcMain.handle('plano:mover', async (_e, idEquipo, fila, col, filaAnt, colAnt, idPiso) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.mover(usuarioActual.IdUsuario, idEquipo, fila, col, filaAnt, colAnt, idLugar);
+    return await planoDB.mover(usuarioActual.IdUsuario, idEquipo, fila, col, filaAnt, colAnt, idPiso);
 });
 
-ipcMain.handle('plano:quitar', async (_e, idEquipo, idLugar, hostname) => {
+ipcMain.handle('plano:quitar', async (_e, idEquipo, idPiso, hostname) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.quitar(usuarioActual.IdUsuario, idEquipo, idLugar, hostname);
+    return await planoDB.quitar(usuarioActual.IdUsuario, idEquipo, idPiso, hostname);
 });
 
-ipcMain.handle('plano:intercambiar', async (_e, idA, idB, idLugar, hostA, hostB, filaA, colA, filaB, colB) => {
+ipcMain.handle('plano:intercambiar', async (_e, idA, idB, idPiso, hostA, hostB, filaA, colA, filaB, colB) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.intercambiar(usuarioActual.IdUsuario, idA, idB, idLugar, hostA, hostB, filaA, colA, filaB, colB);
+    return await planoDB.intercambiar(usuarioActual.IdUsuario, idA, idB, idPiso, hostA, hostB, filaA, colA, filaB, colB);
 });
 
-ipcMain.handle('plano:listarZonas', async (_e, idLugar) => await planoDB.listarZonas(idLugar));
+ipcMain.handle('plano:listarZonas', async (_e, idPiso) => await planoDB.listarZonas(idPiso));
 
-ipcMain.handle('plano:crearZona', async (_e, idLugar, nombre, color, fi, ff, ci, cf) => {
+ipcMain.handle('plano:crearZona', async (_e, idPiso, nombre, color, fi, ff, ci, cf) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.crearZona(usuarioActual.IdUsuario, idLugar, nombre, color, fi, ff, ci, cf);
+    return await planoDB.crearZona(usuarioActual.IdUsuario, idPiso, nombre, color, fi, ff, ci, cf);
 });
 
-ipcMain.handle('plano:actualizarZona', async (_e, idZona, nombre, color, fi, ff, ci, cf, idLugar) => {
+ipcMain.handle('plano:actualizarZona', async (_e, idZona, nombre, color, fi, ff, ci, cf, idPiso) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.actualizarZona(usuarioActual.IdUsuario, idLugar, idZona, nombre, color, fi, ff, ci, cf);
+    return await planoDB.actualizarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre, color, fi, ff, ci, cf);
 });
 
-ipcMain.handle('plano:eliminarZona', async (_e, idZona, idLugar, nombre) => {
+ipcMain.handle('plano:eliminarZona', async (_e, idZona, idPiso, nombre) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.eliminarZona(usuarioActual.IdUsuario, idLugar, idZona, nombre);
+    return await planoDB.eliminarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre);
 });
 
-ipcMain.handle('plano:moverEntrePisos', async (_e, idEquipo, idLugarOrigen, idLugarDestino, fila, columna, nuevosDatos) => {
+ipcMain.handle('plano:moverEntrePisos', async (_e, idEquipo, idPisoOrigen, idPisoDestino, fila, columna, nuevosDatos) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
     return await planoDB.moverEntrePisos(
-        usuarioActual.IdUsuario, idEquipo, idLugarOrigen, idLugarDestino, fila, columna, nuevosDatos
+        usuarioActual.IdUsuario, idEquipo, idPisoOrigen, idPisoDestino, fila, columna, nuevosDatos
     );
 });
 
@@ -647,16 +571,16 @@ ipcMain.handle('plano:swapEntrePisos', async (_e, datos) => {
     );
 });
 
-ipcMain.handle('plano:listarZonasLibres', async (_e, idLugar) => await planoDB.listarZonasLibres(idLugar));
+ipcMain.handle('plano:listarZonasLibres', async (_e, idPiso) => await planoDB.listarZonasLibres(idPiso));
 
-ipcMain.handle('plano:guardarZonaLibre', async (_e, idLugar, nombre, color, celdas) => {
+ipcMain.handle('plano:guardarZonaLibre', async (_e, idPiso, nombre, color, celdas) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.guardarZonaLibre(usuarioActual.IdUsuario, idLugar, nombre, color, celdas);
+    return await planoDB.guardarZonaLibre(usuarioActual.IdUsuario, idPiso, nombre, color, celdas);
 });
 
-ipcMain.handle('plano:eliminarZonaLibre', async (_e, idLugar, nombre, color) => {
+ipcMain.handle('plano:eliminarZonaLibre', async (_e, idPiso, nombre, color) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
-    return await planoDB.eliminarZonaLibre(usuarioActual.IdUsuario, idLugar, nombre, color);
+    return await planoDB.eliminarZonaLibre(usuarioActual.IdUsuario, idPiso, nombre, color);
 });
 
 /* =========================================================
@@ -700,7 +624,7 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
     } finally {
         if (!winPDF.isDestroyed()) winPDF.destroy();
         if (tmpPath && fs.existsSync(tmpPath)) {
-            try { fs.unlinkSync(tmpPath); } catch (_) { /* ignore */ }
+            try { fs.unlinkSync(tmpPath); } catch (_) {}
         }
     }
 });

@@ -7,24 +7,19 @@
    ========================================================= */
 const MODULOS = {
     /* Sistema existente */
-    clientes:  () => window.api.abrirClientes(),
-    roles:     () => window.api.abrirRoles(),
-    lugares:   () => window.api.abrirLugares(),
+    catalogos: () => window.api.abrirCatalogos(),
     rangos:    () => window.api.abrirRangos(),
     equipos:   () => window.api.abrirEquipos(),
     plano:     () => window.api.abrirPlano(),
     usuarios:  () => window.api.abrirUsuarios(),
-    dominios:  () => window.api.abrirDominios(),
-    configred: () => window.api.abrirConfigRed(),
     historico: () => window.api.abrirHistorico(),
 
     /* Módulo Activo Fijo (aislado) */
-    activofijo_catalogos: () => window.api.abrirActivoFijoCatalogos(),
-    activofijo_activos:   () => window.api.abrirActivoFijoActivos(),
+    activofijo_catalogos:   () => window.api.abrirActivoFijoCatalogos(),
+    activofijo_activos:     () => window.api.abrirActivoFijoActivos(),
     activofijo_responsivas: () => window.api.abrirActivoFijoResponsivas(),
-    activofijo_reportes: () => window.api.abrirActivoFijoReportes(),
-    activofijo_importar: () => window.api.abrirActivoFijoImportar(),
-
+    activofijo_reportes:    () => window.api.abrirActivoFijoReportes(),
+    activofijo_importar:    () => window.api.abrirActivoFijoImportar()
 };
 
 document.querySelectorAll('.modulo-card').forEach(btn => {

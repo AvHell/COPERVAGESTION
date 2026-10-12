@@ -12,27 +12,22 @@ contextBridge.exposeInMainWorld('api', {
        NAVEGACIÓN / VENTANAS
        ========================================================= */
     abrirMenu:      () => ipcRenderer.invoke('abrir-menu'),
-    abrirClientes:  () => ipcRenderer.invoke('abrir-clientes'),
-    abrirRoles:     () => ipcRenderer.invoke('abrir-roles'),
-    abrirLugares:   () => ipcRenderer.invoke('abrir-lugares'),
+    abrirCatalogos: () => ipcRenderer.invoke('abrir-catalogos'),
     abrirRangos:    () => ipcRenderer.invoke('abrir-rangos'),
     abrirEquipos:   () => ipcRenderer.invoke('abrir-equipos'),
     abrirPlano:     () => ipcRenderer.invoke('abrir-plano'),
     abrirUsuarios:  () => ipcRenderer.invoke('abrir-usuarios'),
     abrirHistorico: () => ipcRenderer.invoke('abrir-historico'),
-    abrirDominios:  () => ipcRenderer.invoke('abrir-dominios'),
-    abrirConfigRed: () => ipcRenderer.invoke('abrir-configred'),
     volverMenu:     () => ipcRenderer.invoke('volver-menu'),
 
     /* =====================================================
-       MÓDULO ACTIVO FIJO (ventanas aisladas)
+       MÓDULO ACTIVO FIJO
        ===================================================== */
     abrirActivoFijoCatalogos:   () => ipcRenderer.invoke('abrir-activofijo-catalogos'),
     abrirActivoFijoActivos:     () => ipcRenderer.invoke('abrir-activofijo-activos'),
     abrirActivoFijoResponsivas: () => ipcRenderer.invoke('abrir-activofijo-responsivas'),
     abrirActivoFijoReportes:    () => ipcRenderer.invoke('abrir-activofijo-reportes'),
-    abrirActivoFijoImportar: () => ipcRenderer.invoke('af-abrir-importar'),
-
+    abrirActivoFijoImportar:    () => ipcRenderer.invoke('af-abrir-importar'),
 
     /* =========================================================
        CLIENTES
@@ -55,13 +50,16 @@ contextBridge.exposeInMainWorld('api', {
     },
 
     /* =========================================================
-       LUGARES
+       PISOS
        ========================================================= */
-    lugares: {
-        listar:     ()                          => ipcRenderer.invoke('lugares:listar'),
-        crear:      (idCliente, nombre)         => ipcRenderer.invoke('lugares:crear', idCliente, nombre),
-        actualizar: (id, idCliente, nombre)     => ipcRenderer.invoke('lugares:actualizar', id, idCliente, nombre),
-        eliminar:   (id)                        => ipcRenderer.invoke('lugares:eliminar', id)
+    pisos: {
+        listar:                ()                                              => ipcRenderer.invoke('pisos:listar'),
+        obtener:               (id)                                            => ipcRenderer.invoke('pisos:obtener', id),
+        listarPorCliente:      (idCliente)                                     => ipcRenderer.invoke('pisos:listarPorCliente', idCliente),
+        clientesDePiso:        (idPiso)                                        => ipcRenderer.invoke('pisos:clientesDePiso', idPiso),
+        crear:                 (nombre, filas, cols, ids)                      => ipcRenderer.invoke('pisos:crear', nombre, filas, cols, ids),
+        actualizarConClientes: (id, nombre, filas, cols, ids)                  => ipcRenderer.invoke('pisos:actualizarConClientes', id, nombre, filas, cols, ids),
+        eliminar:              (id)                                            => ipcRenderer.invoke('pisos:eliminar', id)
     },
 
     /* =========================================================
@@ -69,8 +67,8 @@ contextBridge.exposeInMainWorld('api', {
        ========================================================= */
     rangos: {
         listar:     ()                                                          => ipcRenderer.invoke('rangos:listar'),
-        crear:      (idCliente, idLugar, nombre, ipInicio, ipFin, desc)         => ipcRenderer.invoke('rangos:crear', idCliente, idLugar, nombre, ipInicio, ipFin, desc),
-        actualizar: (id, idCliente, idLugar, nombre, ipInicio, ipFin, desc)     => ipcRenderer.invoke('rangos:actualizar', id, idCliente, idLugar, nombre, ipInicio, ipFin, desc),
+        crear:      (idCliente, idPiso, nombre, ipInicio, ipFin, desc)          => ipcRenderer.invoke('rangos:crear', idCliente, idPiso, nombre, ipInicio, ipFin, desc),
+        actualizar: (id, idCliente, idPiso, nombre, ipInicio, ipFin, desc)      => ipcRenderer.invoke('rangos:actualizar', id, idCliente, idPiso, nombre, ipInicio, ipFin, desc),
         eliminar:   (id)                                                        => ipcRenderer.invoke('rangos:eliminar', id)
     },
 
@@ -120,47 +118,40 @@ contextBridge.exposeInMainWorld('api', {
     /* =========================================================
        HISTÓRICOS
        ========================================================= */
-    historicos: {
-        listarPorLugar: (idLugar) => ipcRenderer.invoke('historicos:listarPorLugar', idLugar)
-    },
-
+  historicos: {
+    listar:        (idCliente, idPiso) => ipcRenderer.invoke('historicos:listar', idCliente, idPiso),
+    listarPorPiso: (idPiso)            => ipcRenderer.invoke('historicos:listarPorPiso', idPiso)
+},
     /* =========================================================
        PLANO
        ========================================================= */
     plano: {
-        /* Dimensiones */
-        dimensiones:    (idLugar)                 => ipcRenderer.invoke('plano:dimensiones', idLugar),
-        actualizarDim:  (idLugar, f, c)           => ipcRenderer.invoke('plano:actualizarDim', idLugar, f, c),
+        dimensiones:    (idPiso)                 => ipcRenderer.invoke('plano:dimensiones', idPiso),
+        actualizarDim:  (idPiso, f, c)           => ipcRenderer.invoke('plano:actualizarDim', idPiso, f, c),
 
-        /* Listado */
-        listarPorLugar: (idLugar)                 => ipcRenderer.invoke('plano:listarPorLugar', idLugar),
-        sinUbicacion:   (idLugar)                 => ipcRenderer.invoke('plano:sinUbicacion', idLugar),
+        listarPorLugar: (idPiso)                 => ipcRenderer.invoke('plano:listarPorLugar', idPiso),
+        sinUbicacion:   (idPiso)                 => ipcRenderer.invoke('plano:sinUbicacion', idPiso),
 
-        /* Movimientos */
-        asignar:        (idLugar, idEquipo, fila, col)                              => ipcRenderer.invoke('plano:asignar', idLugar, idEquipo, fila, col),
-        mover:          (idEquipo, fila, col, filaAnt, colAnt, idLugar)             => ipcRenderer.invoke('plano:mover', idEquipo, fila, col, filaAnt, colAnt, idLugar),
-        quitar:         (idEquipo, idLugar, hostname)                               => ipcRenderer.invoke('plano:quitar', idEquipo, idLugar, hostname),
-        intercambiar:   (a, b, idLugar, hostA, hostB, filaA, colA, filaB, colB)     => ipcRenderer.invoke('plano:intercambiar', a, b, idLugar, hostA, hostB, filaA, colA, filaB, colB),
+        asignar:        (idPiso, idEquipo, fila, col)                              => ipcRenderer.invoke('plano:asignar', idPiso, idEquipo, fila, col),
+        mover:          (idEquipo, fila, col, filaAnt, colAnt, idPiso)             => ipcRenderer.invoke('plano:mover', idEquipo, fila, col, filaAnt, colAnt, idPiso),
+        quitar:         (idEquipo, idPiso, hostname)                               => ipcRenderer.invoke('plano:quitar', idEquipo, idPiso, hostname),
+        intercambiar:   (a, b, idPiso, hostA, hostB, filaA, colA, filaB, colB)     => ipcRenderer.invoke('plano:intercambiar', a, b, idPiso, hostA, hostB, filaA, colA, filaB, colB),
 
-        /* Movimientos entre pisos */
-        moverEntrePisos: (idEquipo, idLugarOrigen, idLugarDestino, fila, columna, nuevosDatos) =>
-            ipcRenderer.invoke('plano:moverEntrePisos', idEquipo, idLugarOrigen, idLugarDestino, fila, columna, nuevosDatos),
+        moverEntrePisos: (idEquipo, idPisoOrigen, idPisoDestino, fila, columna, nuevosDatos) =>
+            ipcRenderer.invoke('plano:moverEntrePisos', idEquipo, idPisoOrigen, idPisoDestino, fila, columna, nuevosDatos),
 
         swapEntrePisos: (datos) =>
             ipcRenderer.invoke('plano:swapEntrePisos', datos),
 
-        /* Zonas */
-        listarZonas:    (idLugar)                                                       => ipcRenderer.invoke('plano:listarZonas', idLugar),
-        crearZona:      (idLugar, nombre, color, fi, ff, ci, cf)                        => ipcRenderer.invoke('plano:crearZona', idLugar, nombre, color, fi, ff, ci, cf),
-        actualizarZona: (idZona, nombre, color, fi, ff, ci, cf, idLugar)                => ipcRenderer.invoke('plano:actualizarZona', idZona, nombre, color, fi, ff, ci, cf, idLugar),
-        eliminarZona:   (idZona, idLugar, nombre)                                       => ipcRenderer.invoke('plano:eliminarZona', idZona, idLugar, nombre),
+        listarZonas:    (idPiso)                                                       => ipcRenderer.invoke('plano:listarZonas', idPiso),
+        crearZona:      (idPiso, nombre, color, fi, ff, ci, cf)                        => ipcRenderer.invoke('plano:crearZona', idPiso, nombre, color, fi, ff, ci, cf),
+        actualizarZona: (idZona, nombre, color, fi, ff, ci, cf, idPiso)                => ipcRenderer.invoke('plano:actualizarZona', idZona, nombre, color, fi, ff, ci, cf, idPiso),
+        eliminarZona:   (idZona, idPiso, nombre)                                       => ipcRenderer.invoke('plano:eliminarZona', idZona, idPiso, nombre),
 
-        /* Zonas libres */
-        listarZonasLibres:  (idLugar)                          => ipcRenderer.invoke('plano:listarZonasLibres', idLugar),
-        guardarZonaLibre:   (idLugar, nombre, color, celdas)   => ipcRenderer.invoke('plano:guardarZonaLibre', idLugar, nombre, color, celdas),
-        eliminarZonaLibre:  (idLugar, nombre, color)           => ipcRenderer.invoke('plano:eliminarZonaLibre', idLugar, nombre, color),
+        listarZonasLibres:  (idPiso)                          => ipcRenderer.invoke('plano:listarZonasLibres', idPiso),
+        guardarZonaLibre:   (idPiso, nombre, color, celdas)   => ipcRenderer.invoke('plano:guardarZonaLibre', idPiso, nombre, color, celdas),
+        eliminarZonaLibre:  (idPiso, nombre, color)           => ipcRenderer.invoke('plano:eliminarZonaLibre', idPiso, nombre, color),
 
-        /* Exportar */
         exportarPDF: (opciones) => ipcRenderer.invoke('plano:exportarPDF', opciones)
     }
 });

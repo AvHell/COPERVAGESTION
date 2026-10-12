@@ -4,114 +4,144 @@
     <meta charset="UTF-8">
     <title>Equipos</title>
 
-    <!-- Fuente Poppins -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- SweetAlert2 por CDN (versión flotante 11) -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <!-- Estilos autocontenidos -->
     <link rel="stylesheet" href="../css/equipos.css">
 </head>
 <body>
 
-    <!-- =========================================================
-         BARRA SUPERIOR
-         ========================================================= -->
-    <div class="barra-acciones">
-        <button id="btn-volver" class="secundario">
-            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-            Volver al menú
-        </button>
-
-        <div class="buscador">
-            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input type="text" id="input-busqueda" placeholder="Buscar por hostname, cliente, lugar, rol o IP...">
-            <button type="button" id="btn-limpiar-busqueda" class="btn-limpiar oculto" title="Limpiar búsqueda">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
+    <!-- ========================================================= -->
+    <!-- HEADER PREMIUM -->
+    <!-- ========================================================= -->
+    <header class="header-global">
+        <div class="header-inner">
+            <button id="btn-volver" class="btn-back">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
                 </svg>
+                <span>Volver</span>
             </button>
+
+            <div class="header-titles">
+                <h1>Inventario de Equipos</h1>
+                <p>Gestión técnica de dispositivos de red</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- ========================================================= -->
+    <!-- MAIN -->
+    <!-- ========================================================= -->
+    <main class="main-content">
+
+        <div class="panel-header">
+            <div class="panel-title">
+                <h2>Equipos</h2>
+                <p>Administra el inventario técnico por cliente y piso</p>
+            </div>
+            <div class="panel-actions">
+                <div class="buscador">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="input-busqueda" placeholder="Buscar hostname, cliente, piso, rol o IP...">
+                    <button type="button" id="btn-limpiar-busqueda" class="btn-clear oculto">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <button id="btn-nuevo" class="btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Nuevo equipo
+                </button>
+            </div>
         </div>
 
-        <button id="btn-nuevo">
-            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M5 12h14"/>
-            </svg>
-            Nuevo equipo
-        </button>
-    </div>
+        <div id="sin-resultados" class="empty-state oculto">
+            <div class="empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+            </div>
+            <h3>Sin resultados</h3>
+            <p>No se encontraron equipos con ese criterio.</p>
+            <button type="button" id="btn-limpiar-filtro" class="btn-ghost">Limpiar búsqueda</button>
+        </div>
 
-    <h2>Equipos</h2>
+        <div id="contenedor-grupos"></div>
 
-    <!-- =========================================================
-         ESTADO VACÍO
-         ========================================================= -->
-    <div id="sin-resultados" class="sin-resultados oculto">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="11" cy="11" r="8"/>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <p>No se encontraron equipos con ese criterio.</p>
-        <button type="button" id="btn-limpiar-filtro" class="secundario">Limpiar búsqueda</button>
-    </div>
+    </main>
 
-    <!-- =========================================================
-         CONTENEDOR DE GRUPOS (por cliente y lugar)
-         ========================================================= -->
-    <div id="contenedor-grupos"></div>
-
-    <!-- =========================================================
-         MODAL DE EQUIPO
-         ========================================================= -->
+    <!-- ========================================================= -->
+    <!-- MODAL EQUIPO -->
+    <!-- ========================================================= -->
     <div id="modal-equipo" class="modal-overlay" style="display:none;">
-        <div class="modal-grande">
+        <div class="modal-base modal-xl" data-color="blue">
             <div class="modal-header">
-                <h3 id="modal-equipo-titulo">Nuevo equipo</h3>
-                <button id="modal-equipo-cerrar" class="btn-cerrar-modal" title="Cerrar">✕</button>
+                <div class="modal-header-content">
+                    <div class="modal-header-icon" data-color="blue">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2"/>
+                            <line x1="8" y1="21" x2="16" y2="21"/>
+                            <line x1="12" y1="17" x2="12" y2="21"/>
+                        </svg>
+                    </div>
+                    <h3 id="modal-equipo-titulo">Nuevo equipo</h3>
+                </div>
+                <button id="modal-equipo-cerrar" class="btn-cerrar-modal">✕</button>
             </div>
 
             <div class="modal-body">
 
-                <div class="seccion-titulo">Ubicación y rol</div>
-                <div class="grid-form">
-                    <div>
-                        <label for="cliente">Cliente *</label>
+                <!-- ===== Ubicación y rol ===== -->
+                <div class="section-title">
+                    <span>Ubicación y rol</span>
+                    <span class="section-hint">Cliente, piso asignado y tipo de equipo</span>
+                </div>
+                <div class="field-row-3">
+                    <div class="field">
+                        <label for="cliente">Cliente <span class="req">*</span></label>
                         <select id="cliente"></select>
                     </div>
-                    <div>
-                        <label for="lugar">Lugar *</label>
-                        <select id="lugar"></select>
+                    <div class="field">
+                        <label for="piso">Piso <span class="req">*</span></label>
+                        <select id="piso"></select>
                     </div>
-                    <div>
-                        <label for="rol">Rol *</label>
+                    <div class="field">
+                        <label for="rol">Rol <span class="req">*</span></label>
                         <select id="rol"></select>
                     </div>
                 </div>
 
-                <div class="seccion-titulo">Tipo de dirección</div>
-                <div class="grid-form">
-                    <div>
-                        <label for="tipoIP">Tipo IP *</label>
+                <!-- ===== Tipo de dirección ===== -->
+                <div class="section-title">
+                    <span>Tipo de dirección</span>
+                    <span class="section-hint">Estática o DHCP</span>
+                </div>
+                <div class="field-row-3">
+                    <div class="field">
+                        <label for="tipoIP">Tipo IP <span class="req">*</span></label>
                         <select id="tipoIP">
                             <option value="Estatica">Estática</option>
                             <option value="DHCP">DHCP</option>
                         </select>
                     </div>
-                    <div id="campoHostnameEstatico">
-                        <label for="hostnamePreview">Hostname *</label>
+                    <div class="field" id="campoHostnameEstatico">
+                        <label for="hostnamePreview">Hostname <span class="req">*</span></label>
                         <input type="text" id="hostnamePreview" readonly placeholder="Se armará automáticamente...">
                     </div>
-                    <div id="campoHostnameDHCP" class="campo-oculto">
-                        <label for="hostnameLibre">Hostname (libre) *</label>
+                    <div class="field campo-oculto" id="campoHostnameDHCP">
+                        <label for="hostnameLibre">Hostname (libre) <span class="req">*</span></label>
                         <input type="text" id="hostnameLibre" placeholder="Escribe el hostname...">
                     </div>
                 </div>
@@ -125,78 +155,85 @@
                 </div>
 
                 <div id="bloqueEstatico">
-                    <div class="seccion-titulo">Datos estáticos</div>
-                    <div class="grid-form">
-                        <div>
-                            <label for="ip">IP *</label>
+                    <div class="field-row-2">
+                        <div class="field">
+                            <label for="ip">IP <span class="req">*</span></label>
                             <input type="text" id="ip" placeholder="192.168.111.178" inputmode="numeric">
                         </div>
-                        <div>
+                        <div class="field">
                             <label for="numeroHost">Número Host</label>
                             <input type="number" id="numeroHost" readonly>
                         </div>
                     </div>
                 </div>
 
-                <div class="seccion-titulo">Red</div>
-                <div class="grid-form col4">
-                    <div>
-                        <label for="mascara">Máscara *</label>
-                        <div class="select-con-boton">
-                            <select id="mascara" disabled></select>
-                            <button type="button" class="btn-agregar-mini" data-tipo="Mascara" data-target="mascara" title="Agregar nueva máscara">+</button>
-                        </div>
+                <!-- ===== Red (solo Estática) ===== -->
+                <div id="seccion-red">
+                    <div class="section-title">
+                        <span>Red</span>
+                        <span class="section-hint">Parámetros de red configurados</span>
                     </div>
-                    <div>
-                        <label for="puertaEnlace">Puerta de enlace *</label>
-                        <div class="select-con-boton">
-                            <select id="puertaEnlace" disabled></select>
-                            <button type="button" class="btn-agregar-mini" data-tipo="PuertaEnlace" data-target="puertaEnlace" title="Agregar nueva puerta de enlace">+</button>
+                    <div class="field-row-4">
+                        <div class="field">
+                            <label for="mascara">Máscara <span class="req">*</span></label>
+                            <div class="select-con-boton">
+                                <select id="mascara" disabled></select>
+                                <button type="button" class="btn-agregar-mini" data-tipo="Mascara" data-target="mascara" title="Agregar máscara">+</button>
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <label for="dns1">DNS 1 *</label>
-                        <div class="select-con-boton">
-                            <select id="dns1" disabled></select>
-                            <button type="button" class="btn-agregar-mini" data-tipo="DNS1" data-target="dns1" title="Agregar nuevo DNS 1">+</button>
+                        <div class="field">
+                            <label for="puertaEnlace">Puerta de enlace <span class="req">*</span></label>
+                            <div class="select-con-boton">
+                                <select id="puertaEnlace" disabled></select>
+                                <button type="button" class="btn-agregar-mini" data-tipo="PuertaEnlace" data-target="puertaEnlace" title="Agregar puerta">+</button>
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <label for="dns2">DNS 2 (opcional)</label>
-                        <div class="select-con-boton">
-                            <select id="dns2" disabled></select>
-                            <button type="button" class="btn-agregar-mini" data-tipo="DNS2" data-target="dns2" title="Agregar nuevo DNS 2">+</button>
+                        <div class="field">
+                            <label for="dns1">DNS 1 <span class="req">*</span></label>
+                            <div class="select-con-boton">
+                                <select id="dns1" disabled></select>
+                                <button type="button" class="btn-agregar-mini" data-tipo="DNS1" data-target="dns1" title="Agregar DNS 1">+</button>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="dns2">DNS 2</label>
+                            <div class="select-con-boton">
+                                <select id="dns2" disabled></select>
+                                <button type="button" class="btn-agregar-mini" data-tipo="DNS2" data-target="dns2" title="Agregar DNS 2">+</button>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="seccion-titulo">Administración</div>
-                <div class="grid-form col2">
-                    <div>
-                        <label for="dominio">Dominio / Usuario admin *</label>
-                        <div class="select-con-boton">
-                            <select id="dominio" disabled></select>
-                            <button type="button" id="btn-nuevo-dominio" class="btn-agregar-mini" title="Agregar nuevo dominio">+</button>
-                        </div>
+                <!-- ===== Administración (SIEMPRE visible) ===== -->
+                <div id="seccion-admin">
+                    <div class="section-title">
+                        <span>Administración</span>
+                        <span class="section-hint">Credenciales del equipo</span>
                     </div>
-                    <div>
-                        <label for="passwordAdmin">Password admin *</label>
-                        <input type="text" id="passwordAdmin" placeholder="P@ssw0rd">
+                    <div class="field-row-2">
+                        <div class="field">
+                            <label for="dominio">Usuario admin <span class="req">*</span></label>
+                            <div class="select-con-boton">
+                                <select id="dominio" disabled></select>
+                                <button type="button" id="btn-nuevo-dominio" class="btn-agregar-mini" title="Agregar dominio">+</button>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="passwordAdmin">Password admin <span class="req">*</span></label>
+                            <input type="text" id="passwordAdmin" placeholder="P@ssw0rd">
+                        </div>
                     </div>
                 </div>
 
-                <div id="mensaje" class="mensaje oculto"></div>
+                <div id="mensaje" class="alert oculto"></div>
             </div>
 
             <div class="modal-footer">
-                <button id="btn-cancelar" class="secundario">Cancelar</button>
-                <button id="btn-guardar">
-                    <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                        <polyline points="17 21 17 13 7 13 7 21"/>
-                        <polyline points="7 3 7 8 15 8"/>
-                    </svg>
-                    Guardar
+                <button id="btn-cancelar" class="btn-ghost">Cancelar</button>
+                <button id="btn-guardar" class="btn-primary">
+                    <span class="btn-text">Guardar</span>
+                    <span class="btn-spinner oculto"></span>
                 </button>
             </div>
         </div>

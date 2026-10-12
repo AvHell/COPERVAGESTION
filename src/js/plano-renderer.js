@@ -3,8 +3,11 @@
    ========================================================= */
 
 let clientes = [];
-let lugares = [];
+let pisos = [];
 let roles = [];
+
+const clientesFiltroIzq = new Set();
+const clientesFiltroDer = new Set();
 
 const panelIzq = crearEstadoPanel('izq');
 const panelDer = crearEstadoPanel('der');
@@ -13,8 +16,8 @@ let panelActivo = panelIzq;
 function crearEstadoPanel(sufijo) {
     return {
         sufijo,
-        idCliente: null,
-        idLugar: null,
+        idPiso: null,
+        clientesDelPiso: [],
         dimensiones: { Filas: 8, Columnas: 12 },
         celdas: [],
         zonas: [],
@@ -32,6 +35,9 @@ let seleccionZona = null;
 let seleccionando = false;
 let celdaInicioSeleccion = null;
 
+let modoEdicion = false;
+let equipoEditando = null;
+
 let zonaEditando = null;
 let colorSeleccionado = '#e74c3c';
 
@@ -42,7 +48,6 @@ let tabActivo = '__todos__';
 let filtroRolActivo = '__todos__';
 let filtroBusquedaLateral = '';
 
-// 🔧 FIX: flag para evitar doble apertura del modal de zona libre
 let guardandoZonaLibre = false;
 
 const COLORES_DISPONIBLES = [
@@ -50,11 +55,45 @@ const COLORES_DISPONIBLES = [
     '#3498db', '#9b59b6', '#95a5a6', '#2c3e50'
 ];
 
-/* Dimensiones de celda en px (deben coincidir con el CSS) */
 const CELL_W = 74;
 const CELL_H = 52;
 const CELL_GAP = 5;
 const GRID_PADDING = 10;
+
+/* =========================================================
+   TOAST
+   ========================================================= */
+function mostrarToast(mensaje, tipo = 'exito', duracion = 2800) {
+    let cont = document.getElementById('toast-container');
+    if (!cont) {
+        cont = document.createElement('div');
+        cont.id = 'toast-container';
+        cont.className = 'toast-container';
+        document.body.appendChild(cont);
+    }
+
+    const iconos = {
+        exito: '✓',
+        error: '✕',
+        info: 'i',
+        warn: '!'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${tipo}`;
+    toast.innerHTML = `
+        <span class="toast-icon">${iconos[tipo] || '✓'}</span>
+        <span class="toast-texto">${mensaje}</span>
+    `;
+    cont.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('saliendo');
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 250);
+    }, duracion);
+}
 
 /* =========================================================
    REFERENCIAS DOM
@@ -62,14 +101,12 @@ const GRID_PADDING = 10;
 
 const contenedorPrincipal = document.getElementById('contenedor-principal');
 
-const selectClienteIzq = document.getElementById('select-cliente-izq');
 const selectLugarIzq   = document.getElementById('select-lugar-izq');
 const inputFilasIzq    = document.getElementById('input-filas-izq');
 const inputColumnasIzq = document.getElementById('input-columnas-izq');
 const gridIzq          = document.getElementById('grid-izq');
 const llavesIzq        = document.getElementById('llaves-izq');
 
-const selectClienteDer = document.getElementById('select-cliente-der');
 const selectLugarDer   = document.getElementById('select-lugar-der');
 const inputFilasDer    = document.getElementById('input-filas-der');
 const inputColumnasDer = document.getElementById('input-columnas-der');
@@ -92,9 +129,15 @@ const lateralFiltrosRol = document.getElementById('lateral-filtros-rol');
 const buscadorLateral  = document.getElementById('buscador-lateral');
 
 const btnModoZona         = document.getElementById('btn-modo-zona');
+const btnModoZonaLibre    = document.getElementById('btn-modo-zona-libre');
+const btnModoEdicion      = document.getElementById('btn-modo-edicion');
 const btnLimpiarSeleccion = document.getElementById('btn-limpiar-seleccion');
-const btnExportarPDF      = document.getElementById('btn-exportar-pdf');
+const btnVistaPrevia      = document.getElementById('btn-vista-previa');
 const btnExportarPDFDoc   = document.getElementById('btn-exportar-pdf-doc');
+
+const filtroClientesIzq = document.getElementById('filtro-clientes-izq');
+const filtroClientesDer = document.getElementById('filtro-clientes-der');
+const wrapFiltroDer     = document.getElementById('filtro-clientes-der-wrap');
 
 const modal          = document.getElementById('modal');
 const modalTitulo    = document.getElementById('modal-titulo');
@@ -131,8 +174,6 @@ const moverMensaje      = document.getElementById('mover-mensaje');
 const moverCancelar     = document.getElementById('mover-cancelar');
 const moverConfirmar    = document.getElementById('mover-confirmar');
 
-/* Zona libre */
-const btnModoZonaLibre        = document.getElementById('btn-modo-zona-libre');
 const modalZonaLibre          = document.getElementById('modal-zona-libre');
 const modalZonaLibreTitulo    = document.getElementById('modal-zona-libre-titulo');
 const modalZonaLibreNombre    = document.getElementById('zona-libre-nombre');
@@ -141,10 +182,27 @@ const modalZonaLibreAceptar   = document.getElementById('modal-zona-libre-acepta
 const modalZonaLibreCancelar  = document.getElementById('modal-zona-libre-cancelar');
 const coloresZonaLibreDiv     = document.getElementById('colores-zona-libre');
 
-/* =========================================================
-   TOOLTIP CUSTOM
-   ========================================================= */
+const modalEditarEquipo    = document.getElementById('modal-editar-equipo');
+const editarTitulo         = document.getElementById('editar-titulo');
+const editarInfo           = document.getElementById('editar-info');
+const edCliente            = document.getElementById('ed-cliente');
+const edRol                = document.getElementById('ed-rol');
+const edTipoIP             = document.getElementById('ed-tipoIP');
+const edHostname           = document.getElementById('ed-hostname');
+const edIP                 = document.getElementById('ed-ip');
+const edMascara            = document.getElementById('ed-mascara');
+const edPuerta             = document.getElementById('ed-puerta');
+const edDns1               = document.getElementById('ed-dns1');
+const edDns2               = document.getElementById('ed-dns2');
+const edUsuario            = document.getElementById('ed-usuario');
+const edPassword           = document.getElementById('ed-password');
+const editarMensaje        = document.getElementById('editar-mensaje');
+const editarCancelar       = document.getElementById('editar-cancelar');
+const editarConfirmar      = document.getElementById('editar-confirmar');
 
+/* =========================================================
+   TOOLTIP
+   ========================================================= */
 let tooltipDiv = null;
 
 function crearTooltip() {
@@ -163,6 +221,10 @@ function mostrarTooltip(ev, contenido) {
             <span class="hostname">${contenido.hostname}</span>
         </div>
         <div class="tooltip-body">
+            <div class="tooltip-row">
+                <span class="label">Cliente:</span>
+                <span class="valor">${contenido.cliente || '—'}</span>
+            </div>
             <div class="tooltip-row">
                 <span class="label">Tipo:</span>
                 <span class="valor">${contenido.tipoIP}</span>
@@ -183,12 +245,9 @@ function mostrarTooltip(ev, contenido) {
     const x = ev.clientX + 16;
     const y = ev.clientY + 16;
     const rect = tooltipDiv.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
+    const w = rect.width, h = rect.height;
 
-    let posX = x;
-    let posY = y;
-
+    let posX = x, posY = y;
     if (x + w > window.innerWidth - 12) posX = ev.clientX - w - 16;
     if (y + h > window.innerHeight - 12) posY = ev.clientY - h - 16;
 
@@ -201,15 +260,13 @@ function ocultarTooltip() {
 }
 
 /* =========================================================
-   PANEL LATERAL COLAPSABLE
+   PANEL LATERAL
    ========================================================= */
-
 function abrirLateral() {
     panelLateral.classList.add('abierto');
     lateralBackdrop.style.display = 'block';
     lateralBackdrop.style.pointerEvents = 'auto';
 }
-
 function cerrarLateral() {
     panelLateral.classList.remove('abierto');
     lateralBackdrop.style.display = 'none';
@@ -219,18 +276,14 @@ btnToggleLateral.addEventListener('click', () => {
     if (panelLateral.classList.contains('abierto')) cerrarLateral();
     else abrirLateral();
 });
-
 btnCerrarLateral.addEventListener('click', cerrarLateral);
 
-document.addEventListener('dragstart', (e) => {
+document.addEventListener('dragstart', () => {
     if (lateralBackdrop) lateralBackdrop.style.pointerEvents = 'none';
 }, true);
-
-document.addEventListener('dragend', (e) => {
+document.addEventListener('dragend', () => {
     if (lateralBackdrop) {
-        setTimeout(() => {
-            lateralBackdrop.style.pointerEvents = 'auto';
-        }, 100);
+        setTimeout(() => { lateralBackdrop.style.pointerEvents = 'auto'; }, 100);
     }
 }, true);
 
@@ -244,9 +297,8 @@ document.querySelectorAll('.grid-plano').forEach(grid => {
 });
 
 /* =========================================================
-   MODAL DE CONFIRMACIÓN
+   MODAL CONFIRMACIÓN
    ========================================================= */
-
 let accionPendiente = null;
 
 function mostrarConfirmacion(titulo, contenidoHTML, alAceptar) {
@@ -277,17 +329,13 @@ modalAceptar.addEventListener('click', async () => {
 /* =========================================================
    MODAL DE ZONA
    ========================================================= */
-
 function renderColoresZona() {
     coloresZonaDiv.innerHTML = '';
     COLORES_DISPONIBLES.forEach(c => {
         const d = document.createElement('div');
         d.className = 'color-opcion' + (c === colorSeleccionado ? ' seleccionado' : '');
         d.style.background = c;
-        d.addEventListener('click', () => {
-            colorSeleccionado = c;
-            renderColoresZona();
-        });
+        d.addEventListener('click', () => { colorSeleccionado = c; renderColoresZona(); });
         coloresZonaDiv.appendChild(d);
     });
 }
@@ -325,15 +373,8 @@ modalZonaCancelar.addEventListener('click', () => {
 
 modalZonaAceptar.addEventListener('click', async () => {
     const nombre = modalZonaNombre.value.trim();
-    if (!nombre) {
-        alert('El nombre es obligatorio.');
-        modalZonaNombre.focus();
-        return;
-    }
-    if (!panelActivo.idLugar) {
-        alert('Selecciona un piso en el panel activo.');
-        return;
-    }
+    if (!nombre) { alert('El nombre es obligatorio.'); modalZonaNombre.focus(); return; }
+    if (!panelActivo.idPiso) { alert('Selecciona un piso en el panel activo.'); return; }
 
     try {
         if (zonaEditando) {
@@ -341,21 +382,20 @@ modalZonaAceptar.addEventListener('click', async () => {
                 zonaEditando.IdZona, nombre, colorSeleccionado,
                 zonaEditando.FilaInicio, zonaEditando.FilaFin,
                 zonaEditando.ColumnaInicio, zonaEditando.ColumnaFin,
-                panelActivo.idLugar
+                panelActivo.idPiso
             );
+            mostrarToast(`Zona "${nombre}" actualizada`, 'exito');
         } else {
-            if (!seleccionZona) {
-                alert('Primero selecciona un rango de celdas.');
-                return;
-            }
+            if (!seleccionZona) { alert('Primero selecciona un rango de celdas.'); return; }
             await window.api.plano.crearZona(
-                panelActivo.idLugar, nombre, colorSeleccionado,
+                panelActivo.idPiso, nombre, colorSeleccionado,
                 seleccionZona.filaInicio, seleccionZona.filaFin,
                 seleccionZona.colInicio, seleccionZona.colFin
             );
+            mostrarToast(`Zona "${nombre}" creada`, 'exito');
         }
     } catch (err) {
-        alert('Error al guardar zona: ' + err.message);
+        mostrarToast('Error al guardar zona: ' + err.message, 'error', 4000);
         return;
     }
 
@@ -368,31 +408,25 @@ modalZonaAceptar.addEventListener('click', async () => {
 /* =========================================================
    MODAL ZONA LIBRE
    ========================================================= */
-
 function renderColoresZonaLibre() {
     coloresZonaLibreDiv.innerHTML = '';
     COLORES_DISPONIBLES.forEach(c => {
         const d = document.createElement('div');
         d.className = 'color-opcion' + (c === colorSeleccionadoLibre ? ' seleccionado' : '');
         d.style.background = c;
-        d.addEventListener('click', () => {
-            colorSeleccionadoLibre = c;
-            renderColoresZonaLibre();
-        });
+        d.addEventListener('click', () => { colorSeleccionadoLibre = c; renderColoresZonaLibre(); });
         coloresZonaLibreDiv.appendChild(d);
     });
 }
 
 function abrirModalZonaLibre() {
-    if (guardandoZonaLibre) return; // 🔧 FIX: evitar doble apertura
+    if (guardandoZonaLibre) return;
     if (celdasLibresSeleccionadas.length === 0) {
         alert('Primero selecciona una o más celdas vacías.');
         return;
     }
 
-    // 🔧 FIX: mantener estado consistente
     guardandoZonaLibre = true;
-
     modalZonaLibreTitulo.textContent = 'Nueva zona libre';
     modalZonaLibreNombre.value = '';
     colorSeleccionadoLibre = COLORES_DISPONIBLES[0];
@@ -408,92 +442,250 @@ function abrirModalZonaLibre() {
 
 modalZonaLibreCancelar.addEventListener('click', () => {
     modalZonaLibre.style.display = 'none';
-    guardandoZonaLibre = false; // 🔧 FIX
+    guardandoZonaLibre = false;
     celdasLibresSeleccionadas = [];
     renderGridPanel(panelIzq);
     renderGridPanel(panelDer);
 });
 
 modalZonaLibreAceptar.addEventListener('click', async () => {
-    if (!guardandoZonaLibre) return; // 🔧 FIX: evitar doble submit
+    if (!guardandoZonaLibre) return;
 
     const nombre = modalZonaLibreNombre.value.trim();
-    if (!nombre) {
-        alert('El texto es obligatorio.');
-        modalZonaLibreNombre.focus();
-        return;
-    }
-    if (!panelActivo.idLugar) {
-        alert('Selecciona un piso primero.');
-        return;
-    }
-    if (celdasLibresSeleccionadas.length === 0) {
-        alert('No hay celdas seleccionadas.');
-        return;
-    }
+    if (!nombre) { alert('El texto es obligatorio.'); modalZonaLibreNombre.focus(); return; }
+    if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
+    if (celdasLibresSeleccionadas.length === 0) { alert('No hay celdas seleccionadas.'); return; }
 
-    // 🔧 FIX: bloquear botón mientras guarda para evitar duplicados
     modalZonaLibreAceptar.disabled = true;
 
     try {
         await window.api.plano.guardarZonaLibre(
-            panelActivo.idLugar, nombre, colorSeleccionadoLibre,
-            celdasLibresSeleccionadas.slice() // 🔧 FIX: copia defensiva
+            panelActivo.idPiso, nombre, colorSeleccionadoLibre,
+            celdasLibresSeleccionadas.slice()
         );
+        mostrarToast(`Zona libre "${nombre}" guardada`, 'exito');
     } catch (err) {
-        alert('Error al guardar: ' + err.message);
+        mostrarToast('Error al guardar: ' + err.message, 'error', 4000);
         modalZonaLibreAceptar.disabled = false;
         return;
     }
 
     modalZonaLibre.style.display = 'none';
     modalZonaLibreAceptar.disabled = false;
-    guardandoZonaLibre = false; // 🔧 FIX
+    guardandoZonaLibre = false;
     celdasLibresSeleccionadas = [];
     await recargarPanel(panelActivo);
 });
 
 /* =========================================================
+   MODAL EDITAR EQUIPO (MODO EDICIÓN)
+   ========================================================= */
+function llenarSelectsEditar() {
+    edCliente.innerHTML = '';
+    clientes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.IdCliente;
+        opt.textContent = `${c.Codigo} - ${c.Nombre}`;
+        edCliente.appendChild(opt);
+    });
+
+    edRol.innerHTML = '';
+    roles.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.IdRolEquipo;
+        opt.textContent = `${r.Codigo} - ${r.Nombre}`;
+        edRol.appendChild(opt);
+    });
+}
+
+function abrirModalEditarEquipo(equipo, panel) {
+    equipoEditando = { equipo, panel };
+
+    editarTitulo.textContent = `Editar equipo — ${equipo.Hostname}`;
+    editarInfo.innerHTML = `
+        <div><b>Posición:</b> Fila ${equipo._fila}, Columna ${equipo._col}</div>
+        <div><b>Cliente actual:</b> ${equipo.ClienteCodigo || '—'}</div>
+        <div><b>Rol actual:</b> ${equipo.RolCodigo || '—'}</div>
+        <div><b>Piso:</b> ${pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso))?.Nombre || ''}</div>
+    `;
+
+    llenarSelectsEditar();
+
+    edCliente.value  = equipo.IdCliente != null ? String(equipo.IdCliente) : '';
+    edRol.value      = equipo.IdRolEquipo != null ? String(equipo.IdRolEquipo) : '';
+    edTipoIP.value   = equipo.TipoIP || 'Estatica';
+    edHostname.value = equipo.Hostname || '';
+    edIP.value       = equipo.IP || '';
+    edMascara.value  = equipo.Mascara || '';
+    edPuerta.value   = equipo.PuertaEnlace || '';
+    edDns1.value     = equipo.DNS1 || '';
+    edDns2.value     = equipo.DNS2 || '';
+    edUsuario.value  = equipo.UsuarioAdmin || '';
+    edPassword.value = equipo.PasswordAdmin || '';
+
+    editarMensaje.style.display = 'none';
+    modalEditarEquipo.style.display = 'flex';
+
+    setTimeout(() => edHostname.focus(), 50);
+}
+
+editarCancelar.addEventListener('click', () => {
+    modalEditarEquipo.style.display = 'none';
+    equipoEditando = null;
+});
+
+editarConfirmar.addEventListener('click', async () => {
+    if (!equipoEditando) return;
+
+    const { equipo, panel } = equipoEditando;
+
+    const datos = {
+        idCliente:     parseInt(edCliente.value, 10),
+        idRolEquipo:   parseInt(edRol.value, 10),
+        tipoIP:        edTipoIP.value,
+        hostname:      edHostname.value.trim(),
+        numeroHost:    edTipoIP.value === 'Estatica' && edIP.value
+                          ? parseInt(edIP.value.split('.')[3], 10) || null
+                          : null,
+        ip:            edTipoIP.value === 'Estatica' ? edIP.value.trim() : null,
+        mascara:       edMascara.value.trim(),
+        puertaEnlace:  edPuerta.value.trim(),
+        dns1:          edDns1.value.trim(),
+        dns2:          edDns2.value.trim(),
+        usuarioAdmin:  edUsuario.value.trim(),
+        passwordAdmin: edPassword.value.trim(),
+        idPiso:        panel.idPiso,
+        activo:        true
+    };
+
+    if (!datos.idCliente || !datos.idRolEquipo) {
+        editarMensaje.textContent = 'Cliente y rol son obligatorios.';
+        editarMensaje.className = 'mensaje error';
+        editarMensaje.style.display = 'block';
+        return;
+    }
+    if (!datos.hostname) {
+        editarMensaje.textContent = 'El hostname es obligatorio.';
+        editarMensaje.className = 'mensaje error';
+        editarMensaje.style.display = 'block';
+        return;
+    }
+    if (datos.tipoIP === 'Estatica' && !datos.ip) {
+        editarMensaje.textContent = 'La IP es obligatoria en estáticos.';
+        editarMensaje.className = 'mensaje error';
+        editarMensaje.style.display = 'block';
+        return;
+    }
+
+    editarConfirmar.disabled = true;
+    editarConfirmar.textContent = 'Guardando...';
+
+    try {
+        await window.api.equipos.actualizar(equipo.IdEquipo, datos);
+        modalEditarEquipo.style.display = 'none';
+        equipoEditando = null;
+        mostrarToast(`Equipo "${datos.hostname}" actualizado correctamente`, 'exito', 3200);
+        await recargarPanel(panel);
+    } catch (err) {
+        editarMensaje.textContent = 'Error: ' + err.message;
+        editarMensaje.className = 'mensaje error';
+        editarMensaje.style.display = 'block';
+        mostrarToast('Error al guardar equipo: ' + err.message, 'error', 4000);
+    } finally {
+        editarConfirmar.disabled = false;
+        editarConfirmar.textContent = 'Guardar cambios';
+    }
+});
+
+/* =========================================================
    NAVEGACIÓN
    ========================================================= */
-
 document.getElementById('btn-volver').addEventListener('click', () => window.api.volverMenu());
 
 /* =========================================================
    CAMBIO DE MODO
    ========================================================= */
-
 selectModo.addEventListener('change', () => {
     const doble = selectModo.value === 'doble';
     panelDerDiv.style.display = doble ? 'flex' : 'none';
+    wrapFiltroDer.style.display = doble ? 'flex' : 'none';
     contenedorPrincipal.classList.toggle('solo-simple', !doble);
 
-    if (doble && !panelDer.idLugar && panelIzq.idCliente) {
-        cargarLugaresPanel(panelDer, panelIzq.idCliente, false);
+    if (doble && !panelDer.idPiso) {
+        cargarPisosPanel(panelDer, false);
     }
 });
 
 /* =========================================================
    MODO ZONA
    ========================================================= */
-
 btnModoZona.addEventListener('click', () => {
     modoZona = !modoZona;
 
-    // Apagar modo zona libre
-    if (modoZona && modoZonaLibre) {
-        modoZonaLibre = false;
-        btnModoZonaLibre.classList.remove('activo');
-        btnModoZonaLibre.innerHTML = `
-            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
-                <path d="M4 20h16M4 4h16v16"/>
-                <path d="M9 4v16M4 9h16"/>
-            </svg>
-            Modo Zona Libre`;
+    if (modoZona) {
+        if (modoZonaLibre) modoZonaLibre = false;
+        if (modoEdicion) modoEdicion = false;
         celdasLibresSeleccionadas = [];
         [gridIzq, gridDer].forEach(g => { if (g) g.classList.remove('modo-zona-libre'); });
     }
 
+    actualizarBotonesModo();
+    renderGridPanel(panelIzq);
+    renderGridPanel(panelDer);
+});
+
+btnLimpiarSeleccion.addEventListener('click', () => {
+    seleccionZona = null;
+    celdaInicioSeleccion = null;
+    renderGridPanel(panelIzq);
+    renderGridPanel(panelDer);
+});
+
+/* =========================================================
+   MODO ZONA LIBRE
+   ========================================================= */
+btnModoZonaLibre.addEventListener('click', () => {
+    modoZonaLibre = !modoZonaLibre;
+
+    if (modoZonaLibre) {
+        if (modoZona) modoZona = false;
+        if (modoEdicion) modoEdicion = false;
+        celdasLibresSeleccionadas = [];
+    } else {
+        celdasLibresSeleccionadas = [];
+    }
+
+    actualizarBotonesModo();
+    [gridIzq, gridDer].forEach(g => {
+        if (g) g.classList.toggle('modo-zona-libre', modoZonaLibre);
+    });
+    renderGridPanel(panelIzq);
+    renderGridPanel(panelDer);
+});
+
+/* =========================================================
+   MODO EDICIÓN
+   ========================================================= */
+btnModoEdicion.addEventListener('click', () => {
+    modoEdicion = !modoEdicion;
+
+    if (modoEdicion) {
+        if (modoZona) modoZona = false;
+        if (modoZonaLibre) modoZonaLibre = false;
+        celdasLibresSeleccionadas = [];
+        seleccionZona = null;
+        [gridIzq, gridDer].forEach(g => { if (g) g.classList.remove('modo-zona-libre'); });
+    }
+
+    actualizarBotonesModo();
+    renderGridPanel(panelIzq);
+    renderGridPanel(panelDer);
+});
+
+/* =========================================================
+   ACTUALIZAR BOTONES DE MODO
+   ========================================================= */
+function actualizarBotonesModo() {
     if (modoZona) {
         btnModoZona.classList.add('activo');
         btnModoZona.innerHTML = `
@@ -516,38 +708,6 @@ btnModoZona.addEventListener('click', () => {
         seleccionZona = null;
         celdaInicioSeleccion = null;
     }
-    renderGridPanel(panelIzq);
-    renderGridPanel(panelDer);
-});
-
-btnLimpiarSeleccion.addEventListener('click', () => {
-    seleccionZona = null;
-    celdaInicioSeleccion = null;
-    renderGridPanel(panelIzq);
-    renderGridPanel(panelDer);
-});
-
-/* =========================================================
-   MODO ZONA LIBRE
-   ========================================================= */
-
-btnModoZonaLibre.addEventListener('click', () => {
-    modoZonaLibre = !modoZonaLibre;
-
-    // Apagar modo zona normal
-    if (modoZonaLibre && modoZona) {
-        modoZona = false;
-        btnModoZona.classList.remove('activo');
-        btnModoZona.innerHTML = `
-            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <path d="M3 9h18M9 21V9"/>
-            </svg>
-            Modo Zona`;
-        btnLimpiarSeleccion.style.display = 'none';
-        seleccionZona = null;
-        celdaInicioSeleccion = null;
-    }
 
     if (modoZonaLibre) {
         btnModoZonaLibre.classList.add('activo');
@@ -557,7 +717,6 @@ btnModoZonaLibre.addEventListener('click', () => {
                 <path d="M9 4v16M4 9h16"/>
             </svg>
             Modo Zona Libre (activo)`;
-        celdasLibresSeleccionadas = [];
     } else {
         btnModoZonaLibre.classList.remove('activo');
         btnModoZonaLibre.innerHTML = `
@@ -566,77 +725,144 @@ btnModoZonaLibre.addEventListener('click', () => {
                 <path d="M9 4v16M4 9h16"/>
             </svg>
             Modo Zona Libre`;
-        celdasLibresSeleccionadas = [];
     }
 
-    [gridIzq, gridDer].forEach(g => {
-        if (g) g.classList.toggle('modo-zona-libre', modoZonaLibre);
-    });
-
-    renderGridPanel(panelIzq);
-    renderGridPanel(panelDer);
-});
+    if (modoEdicion) {
+        btnModoEdicion.classList.add('activo');
+        btnModoEdicion.innerHTML = `
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+            Modo Edición (activo)`;
+    } else {
+        btnModoEdicion.classList.remove('activo');
+        btnModoEdicion.innerHTML = `
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+            Modo Edición`;
+    }
+}
 
 /* =========================================================
-   CARGA DE CLIENTES Y LUGARES
+   LIMPIEZA TOTAL DE UN PANEL
+   ========================================================= */
+function limpiarRenderPanel(panel) {
+    const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
+    const llaves = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
+    if (!grid) return;
+
+    grid.innerHTML = '';
+    if (llaves) llaves.innerHTML = '';
+
+    const wrapper = grid.closest('.grid-plano-wrapper');
+    if (wrapper) {
+        wrapper.querySelectorAll('.texto-zona-libre-overlay').forEach(el => el.remove());
+    }
+}
+
+/* =========================================================
+   CARGA DE DATOS
    ========================================================= */
 
 async function cargarClientes() {
     clientes = await window.api.clientes.listar();
-    llenarSelectCliente(selectClienteIzq);
-    llenarSelectCliente(selectClienteDer);
 }
 
-function llenarSelectCliente(select) {
-    select.innerHTML = '<option value="">-- Todos --</option>';
-    clientes.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.IdCliente;
-        opt.textContent = `${c.Codigo} - ${c.Nombre}`;
-        select.appendChild(opt);
-    });
-}
-
-async function cargarLugaresPanel(panel, idCliente, seleccionarPrimero) {
-    const todos = await window.api.lugares.listar();
-    lugares = todos;
-
-    const filtrados = idCliente
-        ? todos.filter(l => Number(l.IdCliente) === Number(idCliente))
-        : todos;
+async function cargarPisosPanel(panel, seleccionarPrimero) {
+    const todos = await window.api.pisos.listar();
+    pisos = todos;
 
     const select = panel.sufijo === 'izq' ? selectLugarIzq : selectLugarDer;
     select.innerHTML = '<option value="">-- Piso --</option>';
-    filtrados.forEach(l => {
+    todos.forEach(p => {
         const opt = document.createElement('option');
-        opt.value = l.IdLugarCliente;
-        opt.textContent = l.Nombre;
+        opt.value = p.IdPiso;
+        opt.textContent = p.Nombre;
         select.appendChild(opt);
     });
 
-    if (seleccionarPrimero && filtrados.length > 0) {
-        select.value = filtrados[0].IdLugarCliente;
-        panel.idLugar = filtrados[0].IdLugarCliente;
+    if (seleccionarPrimero && todos.length > 0) {
+        select.value = todos[0].IdPiso;
+        panel.idPiso = todos[0].IdPiso;
         await cargarPanel(panel);
     }
 }
 
 /* =========================================================
-   EVENTOS DE PANELES
+   FILTRO DE CLIENTES
    ========================================================= */
 
-function conectarEventosPanel(panel, selectCliente, selectLugar, inputFilas, inputColumnas, btnAplicar) {
-    selectCliente.addEventListener('change', async () => {
-        panel.idCliente = parseInt(selectCliente.value, 10) || null;
-        await cargarLugaresPanel(panel, panel.idCliente, false);
-        panel.idLugar = null;
-        limpiarPanel(panel);
-    });
+function renderFiltroClientes(panel) {
+    const contenedor = panel.sufijo === 'izq' ? filtroClientesIzq : filtroClientesDer;
+    const setFiltro  = panel.sufijo === 'izq' ? clientesFiltroIzq : clientesFiltroDer;
 
+    contenedor.innerHTML = '';
+
+    if (panel.clientesDelPiso.length === 0) {
+        contenedor.innerHTML = '<span class="filtro-vacio">Sin clientes en este piso</span>';
+        return;
+    }
+
+    panel.clientesDelPiso.forEach(c => {
+        const activo = setFiltro.has(Number(c.IdCliente));
+        const chip = document.createElement('button');
+        chip.className = 'chip-cliente' + (activo ? ' activo' : '');
+        chip.dataset.idCliente = c.IdCliente;
+        chip.innerHTML = `
+            <span class="chip-check">${activo ? '✓' : ''}</span>
+            <span class="chip-codigo">${c.Codigo}</span>
+            <span class="chip-nombre">${c.Nombre}</span>
+        `;
+        chip.addEventListener('click', () => {
+            if (setFiltro.has(Number(c.IdCliente))) {
+                setFiltro.delete(Number(c.IdCliente));
+            } else {
+                setFiltro.add(Number(c.IdCliente));
+            }
+            renderFiltroClientes(panel);
+            renderGridPanel(panel);
+        });
+        contenedor.appendChild(chip);
+    });
+}
+
+document.querySelectorAll('.btn-filtro-accion').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const panelSufijo = btn.dataset.panel;
+        const accion      = btn.dataset.accion;
+        const panel       = panelSufijo === 'izq' ? panelIzq : panelDer;
+        const setFiltro   = panelSufijo === 'izq' ? clientesFiltroIzq : clientesFiltroDer;
+
+        if (accion === 'todos') {
+            panel.clientesDelPiso.forEach(c => setFiltro.add(Number(c.IdCliente)));
+        } else {
+            setFiltro.clear();
+        }
+        renderFiltroClientes(panel);
+        renderGridPanel(panel);
+    });
+});
+
+/* =========================================================
+   EVENTOS DE PANELES
+   ========================================================= */
+function conectarEventosPanel(panel, selectLugar, inputFilas, inputColumnas, btnAplicar) {
     selectLugar.addEventListener('change', async () => {
-        panel.idLugar = parseInt(selectLugar.value, 10) || null;
+        const nuevoIdPiso = parseInt(selectLugar.value, 10) || null;
+
+        limpiarRenderPanel(panel);
+
+        seleccionZona = null;
+        celdaInicioSeleccion = null;
+        celdasLibresSeleccionadas = [];
+
+        panel.idPiso = nuevoIdPiso;
         panelActivo = panel;
-        if (panel.idLugar) {
+
+        if (panel.idPiso) {
             await cargarPanel(panel);
             renderPanelLateral();
         } else {
@@ -645,10 +871,7 @@ function conectarEventosPanel(panel, selectCliente, selectLugar, inputFilas, inp
     });
 
     btnAplicar.addEventListener('click', async () => {
-        if (!panel.idLugar) {
-            alert('Selecciona un piso primero.');
-            return;
-        }
+        if (!panel.idPiso) { alert('Selecciona un piso primero.'); return; }
         const nuevasFilas = parseInt(inputFilas.value, 10);
         const nuevasColumnas = parseInt(inputColumnas.value, 10);
 
@@ -681,37 +904,42 @@ function conectarEventosPanel(panel, selectCliente, selectLugar, inputFilas, inp
             contenidoModal = `<p>Se cambiará el grid a <b>${nuevasFilas} × ${nuevasColumnas}</b>. No hay equipos afectados.</p>`;
         }
 
-        mostrarConfirmacion(
-            'Cambiar dimensiones',
-            contenidoModal,
-            async () => {
-                const res = await window.api.plano.actualizarDim(panel.idLugar, nuevasFilas, nuevasColumnas);
-                await recargarPanel(panel);
+        mostrarConfirmacion('Cambiar dimensiones', contenidoModal, async () => {
+            const res = await window.api.plano.actualizarDim(panel.idPiso, nuevasFilas, nuevasColumnas);
+            await recargarPanel(panel);
 
-                if (res && res.expulsados && res.expulsados.length > 0) {
-                    const nombres = res.expulsados.map(e => e.Hostname).join(', ');
-                    setTimeout(() => {
-                        alert(`Se regresaron ${res.expulsados.length} equipo(s) a la lista:\n\n${nombres}`);
-                    }, 200);
-                }
+            if (res && res.expulsados && res.expulsados.length > 0) {
+                mostrarToast(`Se regresaron ${res.expulsados.length} equipo(s) a la lista`, 'warn', 4000);
+                console.warn('Expulsados:', res.expulsados.map(e => e.Hostname).join(', '));
+            } else {
+                mostrarToast(`Dimensiones cambiadas a ${nuevasFilas} × ${nuevasColumnas}`, 'exito');
             }
-        );
+        });
     });
 }
 
-conectarEventosPanel(panelIzq, selectClienteIzq, selectLugarIzq, inputFilasIzq, inputColumnasIzq,
+conectarEventosPanel(panelIzq, selectLugarIzq, inputFilasIzq, inputColumnasIzq,
     document.getElementById('btn-aplicar-dim-izq'));
-conectarEventosPanel(panelDer, selectClienteDer, selectLugarDer, inputFilasDer, inputColumnasDer,
+conectarEventosPanel(panelDer, selectLugarDer, inputFilasDer, inputColumnasDer,
     document.getElementById('btn-aplicar-dim-der'));
 
 /* =========================================================
    CARGA DE UN PANEL
    ========================================================= */
-
 async function cargarPanel(panel) {
-    if (!panel.idLugar) return;
+    if (!panel.idPiso) return;
 
-    panel.dimensiones = await window.api.plano.dimensiones(panel.idLugar);
+    limpiarRenderPanel(panel);
+
+    const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
+    panel.clientesDelPiso = piso ? piso.clientes : [];
+
+    const setFiltro = panel.sufijo === 'izq' ? clientesFiltroIzq : clientesFiltroDer;
+    setFiltro.clear();
+    panel.clientesDelPiso.forEach(c => setFiltro.add(Number(c.IdCliente)));
+    renderFiltroClientes(panel);
+
+    panel.dimensiones = await window.api.plano.dimensiones(panel.idPiso);
 
     const inputFilas = panel.sufijo === 'izq' ? inputFilasIzq : inputFilasDer;
     const inputColumnas = panel.sufijo === 'izq' ? inputColumnasIzq : inputColumnasDer;
@@ -722,33 +950,36 @@ async function cargarPanel(panel) {
         Array.from({ length: panel.dimensiones.Columnas }, () => null)
     );
 
-    const ubicaciones = await window.api.plano.listarPorLugar(panel.idLugar);
+    const ubicaciones = await window.api.plano.listarPorLugar(panel.idPiso);
     ubicaciones.forEach(u => {
         const f = u.Fila - 1;
         const c = u.Columna - 1;
         if (panel.celdas[f] && panel.celdas[f][c] !== undefined) {
             panel.celdas[f][c] = {
-    IdEquipo: u.IdEquipo,
-    IdCliente: u.IdCliente,
-    Hostname: u.Hostname,
-    TipoIP: u.TipoIP,
-    IP: u.IP,
-    Mascara: u.Mascara,
-    PuertaEnlace: u.PuertaEnlace,
-    DNS1: u.DNS1,
-    DNS2: u.DNS2,
-    UsuarioAdmin: u.UsuarioAdmin,
-    PasswordAdmin: u.PasswordAdmin,
-    RolCodigo: u.RolCodigo,
-    _fila: u.Fila,
-    _col: u.Columna
-};
+                IdEquipo:      u.IdEquipo,
+                IdCliente:     u.IdCliente,
+                IdRolEquipo:   u.IdRolEquipo,
+                ClienteCodigo: u.ClienteCodigo,
+                ClienteNombre: u.ClienteNombre,
+                Hostname:      u.Hostname,
+                TipoIP:        u.TipoIP,
+                IP:            u.IP,
+                Mascara:       u.Mascara,
+                PuertaEnlace:  u.PuertaEnlace,
+                DNS1:          u.DNS1,
+                DNS2:          u.DNS2,
+                UsuarioAdmin:  u.UsuarioAdmin,
+                PasswordAdmin: u.PasswordAdmin,
+                RolCodigo:     u.RolCodigo,
+                _fila:         u.Fila,
+                _col:          u.Columna
+            };
         }
     });
 
-    panel.equiposSinUbicar = await window.api.plano.sinUbicacion(panel.idLugar);
-    panel.zonas = await window.api.plano.listarZonas(panel.idLugar);
-    panel.zonasLibres = await window.api.plano.listarZonasLibres(panel.idLugar);
+    panel.equiposSinUbicar = await window.api.plano.sinUbicacion(panel.idPiso);
+    panel.zonas = await window.api.plano.listarZonas(panel.idPiso);
+    panel.zonasLibres = await window.api.plano.listarZonasLibres(panel.idPiso);
 
     renderGridPanel(panel);
     if (panel === panelActivo) renderPanelLateral();
@@ -763,11 +994,12 @@ function limpiarPanel(panel) {
     panel.zonas = [];
     panel.zonasLibres = [];
     panel.equiposSinUbicar = [];
+    panel.clientesDelPiso = [];
 
-    const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
-    const llaves = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
-    grid.innerHTML = '';
-    llaves.innerHTML = '';
+    limpiarRenderPanel(panel);
+
+    const contenedor = panel.sufijo === 'izq' ? filtroClientesIzq : filtroClientesDer;
+    contenedor.innerHTML = '';
 
     if (panel === panelActivo) renderPanelLateral();
 }
@@ -775,7 +1007,6 @@ function limpiarPanel(panel) {
 /* =========================================================
    ZONAS
    ========================================================= */
-
 function zonaEnCelda(panel, fila, columna) {
     return panel.zonas.find(z =>
         fila >= z.FilaInicio && fila <= z.FilaFin &&
@@ -790,7 +1021,6 @@ function zonaLibreEnCelda(panel, fila, columna) {
 /* =========================================================
    SVG ICONO PC
    ========================================================= */
-
 const SVG_PC = `
     <svg class="icono-pc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -802,18 +1032,18 @@ const SVG_PC = `
 /* =========================================================
    RENDER DEL GRID
    ========================================================= */
-
 function renderGridPanel(panel) {
     const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
     const llaves = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
     if (!grid) return;
 
-    grid.innerHTML = '';
-    llaves.innerHTML = '';
+    limpiarRenderPanel(panel);
 
     if (!panel.dimensiones.Filas) return;
 
     grid.style.gridTemplateColumns = `repeat(${panel.dimensiones.Columnas}, 1fr)`;
+
+    const setFiltro = panel.sufijo === 'izq' ? clientesFiltroIzq : clientesFiltroDer;
 
     for (let f = 0; f < panel.dimensiones.Filas; f++) {
         for (let c = 0; c < panel.dimensiones.Columnas; c++) {
@@ -832,25 +1062,32 @@ function renderGridPanel(panel) {
                 celda.dataset.rol = contenido.RolCodigo;
             }
 
-            // Aplicar color de zona libre SOLO si la celda NO tiene equipo
             if (zl && !contenido) {
                 celda.classList.add('celda-libre');
                 celda.style.backgroundColor = zl.Color;
             }
 
-            // Marcar selección en modo zona
+            if (contenido) {
+                const idCli = Number(contenido.IdCliente);
+                celda.dataset.cliente = idCli;
+                if (!setFiltro.has(idCli)) {
+                    celda.classList.add('celda-filtrada');
+                }
+            }
+
             if (seleccionZona && panel === panelActivo && enSeleccion(fila, columna)) {
                 celda.classList.add('seleccionada');
             }
 
-            // Marcar selección en modo zona libre
             if (modoZonaLibre && panel === panelActivo) {
                 const estaSeleccionada = celdasLibresSeleccionadas.some(
-                    c => c.fila === fila && c.columna === columna
+                    cc => cc.fila === fila && cc.columna === columna
                 );
-                if (estaSeleccionada) {
-                    celda.classList.add('seleccionada');
-                }
+                if (estaSeleccionada) celda.classList.add('seleccionada');
+            }
+
+            if (modoEdicion && panel === panelActivo && contenido) {
+                celda.classList.add('celda-editable');
             }
 
             if (contenido) {
@@ -860,26 +1097,26 @@ function renderGridPanel(panel) {
                 `;
 
                 celda.addEventListener('mouseenter', (ev) => {
-                    if (modoZona || modoZonaLibre) return;
+                    if (modoZona || modoZonaLibre || modoEdicion) return;
                     mostrarTooltip(ev, {
                         hostname: contenido.Hostname,
                         rol: contenido.RolCodigo || '',
                         tipoIP: contenido.TipoIP,
                         ip: contenido.IP,
-                        fila,
-                        col: columna
+                        cliente: contenido.ClienteCodigo || '',
+                        fila, col: columna
                     });
                 });
                 celda.addEventListener('mousemove', (ev) => {
-                    if (modoZona || modoZonaLibre) return;
+                    if (modoZona || modoZonaLibre || modoEdicion) return;
                     if (tooltipDiv && tooltipDiv.style.display === 'block') {
                         mostrarTooltip(ev, {
                             hostname: contenido.Hostname,
                             rol: contenido.RolCodigo || '',
                             tipoIP: contenido.TipoIP,
                             ip: contenido.IP,
-                            fila,
-                            col: columna
+                            cliente: contenido.ClienteCodigo || '',
+                            fila, col: columna
                         });
                     }
                 });
@@ -900,22 +1137,30 @@ function renderGridPanel(panel) {
                         ev.dataTransfer.effectAllowed = 'move';
                     });
                 }
+
+                if (modoEdicion && panel === panelActivo) {
+                    celda.style.cursor = 'pointer';
+                    celda.addEventListener('click', (ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        abrirModalEditarEquipo(contenido, panel);
+                    });
+                }
+
                 celda.querySelector('.cerrar').addEventListener('click', (ev) => {
                     ev.stopPropagation();
-                    if (!modoZona && !modoZonaLibre) confirmarQuitar(contenido, panel);
+                    if (!modoZona && !modoZonaLibre && !modoEdicion) confirmarQuitar(contenido, panel);
                 });
             }
 
-            if (!modoZona && !modoZonaLibre) {
+            if (!modoZona && !modoZonaLibre && !modoEdicion) {
                 celda.addEventListener('dragover', (ev) => {
                     if (dragOrigen) {
                         ev.preventDefault();
                         celda.classList.add('destino');
                     }
                 });
-                celda.addEventListener('dragleave', () => {
-                    celda.classList.remove('destino');
-                });
+                celda.addEventListener('dragleave', () => celda.classList.remove('destino'));
                 celda.addEventListener('drop', async (ev) => {
                     ev.preventDefault();
                     celda.classList.remove('destino');
@@ -923,7 +1168,6 @@ function renderGridPanel(panel) {
                 });
             }
 
-            // Modo zona normal: selección por arrastre
             if (modoZona && panel === panelActivo) {
                 celda.addEventListener('mousedown', (ev) => {
                     ev.preventDefault();
@@ -944,22 +1188,17 @@ function renderGridPanel(panel) {
                         renderGridPanel(panel);
                     }
                 });
-                celda.addEventListener('mouseup', () => {
-                    seleccionando = false;
-                });
+                celda.addEventListener('mouseup', () => { seleccionando = false; });
             }
 
-            // Modo zona libre: toggle por clic en celdas vacías
-            // 🔧 FIX: ya NO abre el modal aquí. Solo toglea la selección.
             if (modoZonaLibre && panel === panelActivo) {
                 celda.addEventListener('click', (ev) => {
                     ev.preventDefault();
                     ev.stopPropagation();
-
-                    if (contenido) return; // Solo celdas vacías
+                    if (contenido) return;
 
                     const idx = celdasLibresSeleccionadas.findIndex(
-                        c => c.fila === fila && c.columna === columna
+                        cc => cc.fila === fila && cc.columna === columna
                     );
 
                     if (idx >= 0) {
@@ -970,7 +1209,6 @@ function renderGridPanel(panel) {
                         celda.classList.add('seleccionada');
                     }
 
-                    // 🔧 FIX: solo actualizar contador si el modal ya está abierto
                     if (modalZonaLibre.style.display === 'flex') {
                         modalZonaLibreCeldas.textContent =
                             `Celdas seleccionadas: ${celdasLibresSeleccionadas.length}`;
@@ -982,10 +1220,7 @@ function renderGridPanel(panel) {
         }
     }
 
-    // Renderizar textos centrados en zonas libres
     renderizarTextosZonasLibres(panel);
-
-    // Renderizar llaves de zonas (bloques)
     renderizarLlavesZonas(panel);
 }
 
@@ -998,16 +1233,13 @@ function enSeleccion(fila, columna) {
 document.addEventListener('mouseup', () => {
     if (seleccionando) {
         seleccionando = false;
-        if (seleccionZona && modoZona) {
-            abrirModalZona();
-        }
+        if (seleccionZona && modoZona) abrirModalZona();
     }
 });
 
 /* =========================================================
    RENDERIZAR TEXTOS DE ZONAS LIBRES
    ========================================================= */
-
 function renderizarTextosZonasLibres(panel) {
     if (!panel.zonasLibres || panel.zonasLibres.length === 0) return;
 
@@ -1017,19 +1249,13 @@ function renderizarTextosZonasLibres(panel) {
     const wrapper = gridEl.closest('.grid-plano-wrapper');
     if (!wrapper) return;
 
-    // 🔧 FIX: limpiar overlays previos de ESTE panel antes de redibujar
     wrapper.querySelectorAll('.texto-zona-libre-overlay').forEach(el => el.remove());
 
-    // Agrupar por nombre+color
     const grupos = {};
     panel.zonasLibres.forEach(zl => {
         const key = `${zl.Nombre}||${zl.Color}`;
         if (!grupos[key]) {
-            grupos[key] = {
-                nombre: zl.Nombre,
-                color: zl.Color,
-                celdas: []
-            };
+            grupos[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
         }
         grupos[key].celdas.push({ fila: zl.Fila, columna: zl.Columna });
     });
@@ -1042,29 +1268,19 @@ function renderizarTextosZonasLibres(panel) {
         const colMin = Math.min(...cols);
         const colMax = Math.max(...cols);
 
-        const celdaTL = gridEl.querySelector(
-            `.celda[data-fila="${filaMin}"][data-columna="${colMin}"]`
-        );
-        const celdaBR = gridEl.querySelector(
-            `.celda[data-fila="${filaMax}"][data-columna="${colMax}"]`
-        );
+        const celdaTL = gridEl.querySelector(`.celda[data-fila="${filaMin}"][data-columna="${colMin}"]`);
+        const celdaBR = gridEl.querySelector(`.celda[data-fila="${filaMax}"][data-columna="${colMax}"]`);
         if (!celdaTL || !celdaBR) return;
 
-        const gridRect = gridEl.getBoundingClientRect();
         const rectTL = celdaTL.getBoundingClientRect();
         const rectBR = celdaBR.getBoundingClientRect();
 
-        const offsetX = rectTL.left - gridRect.left;
-        const offsetY = rectTL.top - gridRect.top;
         const anchoTotal = (rectBR.right - rectTL.left);
         const altoTotal = (rectBR.bottom - rectTL.top);
 
         const totalFilas = filaMax - filaMin + 1;
         const totalCols = colMax - colMin + 1;
-        const baseFontSize = Math.max(
-            0.6,
-            Math.min(1.5, 0.7 + Math.min(totalFilas, totalCols) * 0.08)
-        );
+        const baseFontSize = Math.max(0.6, Math.min(1.5, 0.7 + Math.min(totalFilas, totalCols) * 0.08));
 
         const overlay = document.createElement('div');
         overlay.className = 'texto-zona-libre-overlay';
@@ -1086,8 +1302,6 @@ function renderizarTextosZonasLibres(panel) {
         overlay.style.fontSize = baseFontSize + 'rem';
         overlay.style.zIndex = '5';
 
-        // 🔧 FIX: el wrapper tiene padding, entonces el offset debe restar
-        // ese padding para posicionarse correctamente sobre el grid.
         const wrapperRect = wrapper.getBoundingClientRect();
         const relX = (rectTL.left - wrapperRect.left) + wrapper.scrollLeft;
         const relY = (rectTL.top - wrapperRect.top) + wrapper.scrollTop;
@@ -1103,16 +1317,8 @@ function renderizarTextosZonasLibres(panel) {
 }
 
 /* =========================================================
-   RENDERIZAR LLAVES DE ZONA (tipo Google Charts)
+   RENDERIZAR LLAVES DE ZONA
    ========================================================= */
-
-/* =========================================================
-   RENDERIZAR LLAVES DE ZONA (tipo Google Charts)
-   Lógica inteligente: si la mesa está en la mitad derecha
-   del grid → llave a la derecha. Si está en la mitad
-   izquierda → llave a la izquierda.
-   ========================================================= */
-
 function renderizarLlavesZonas(panel) {
     const llaves = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
     if (!llaves || !panel.zonas || panel.zonas.length === 0) return;
@@ -1129,22 +1335,16 @@ function renderizarLlavesZonas(panel) {
     const offsetX = gridRect.left - wrapperRect.left;
     const offsetY = gridRect.top - wrapperRect.top;
 
-    // Ancho del grid en px
     const gridAnchoPx = gridRect.width;
-
-    // Mitad del grid (para decidir lado)
     const mitadGrid = offsetX + gridAnchoPx / 2;
 
-    // Espacio disponible a cada lado del wrapper
     const espacioDerecha = wrapperRect.width - (offsetX + gridRect.width);
     const espacioIzquierda = offsetX;
 
-    // Si no hay suficiente espacio a la derecha, forzamos izquierda
     const forzarIzquierda = espacioDerecha < 30 && espacioIzquierda >= 30;
 
     const zonasOrdenadas = [...panel.zonas].sort((a, b) => a.FilaInicio - b.FilaInicio);
 
-    // Trackear ocupación vertical por lado para no solapar llaves
     const ocupacionDerecha = [];
     const ocupacionIzquierda = [];
 
@@ -1153,30 +1353,19 @@ function renderizarLlavesZonas(panel) {
         const endFila = zona.FilaFin - 1;
         const endCol = zona.ColumnaFin - 1;
 
-        // Y (vertical) del bloque
         const zonaY = offsetY + GRID_PADDING + startFila * (CELL_H + CELL_GAP);
         const zonaH = (endFila - startFila) * (CELL_H + CELL_GAP) + CELL_H;
 
-        // X del extremo derecho del bloque
         const zonaXRight = offsetX + GRID_PADDING + (endCol + 1) * (CELL_W + CELL_GAP) - CELL_GAP;
-        // X del extremo izquierdo del bloque
         const zonaXLeft = offsetX + GRID_PADDING + (zona.ColumnaInicio - 1) * (CELL_W + CELL_GAP);
 
-        // Centro horizontal del bloque
         const centroBloque = (zonaXLeft + zonaXRight) / 2;
 
-        // Decidir lado: si el centro está en la mitad derecha → derecha
-        // Si está en la mitad izquierda → izquierda
         let lado;
-        if (forzarIzquierda) {
-            lado = 'izquierda';
-        } else if (centroBloque >= mitadGrid) {
-            lado = 'derecha';
-        } else {
-            lado = 'izquierda';
-        }
+        if (forzarIzquierda) lado = 'izquierda';
+        else if (centroBloque >= mitadGrid) lado = 'derecha';
+        else lado = 'izquierda';
 
-        // Ajustar Y si hay solapamiento con otra llave en el mismo lado
         const ocupacion = lado === 'derecha' ? ocupacionDerecha : ocupacionIzquierda;
         let yFinal = zonaY;
         const alturaMinLlave = 22;
@@ -1201,10 +1390,6 @@ function renderizarLlavesZonas(panel) {
     });
 }
 
-/* =========================================================
-   DIBUJAR UNA LLAVE (línea curva simple con etiqueta al final)
-   ========================================================= */
-
 function dibujarLlave(contenedor, opciones) {
     const { lado, x, y, h, color, nombre, zona } = opciones;
 
@@ -1212,35 +1397,17 @@ function dibujarLlave(contenedor, opciones) {
     cont.className = 'llave-zona';
     cont.style.position = 'absolute';
 
-    // Geometría de la llave (línea con codo)
-    const svgW = 20;         // ancho de la línea (codo horizontal)
+    const svgW = 20;
     const svgH = Math.max(h, 30);
 
-    let path;
-    let svgLeft;
+    let path, svgLeft;
 
     if (lado === 'derecha') {
-        // La llave sale desde x hacia la derecha
         svgLeft = x + 2;
-
-        // Forma: línea vertical + codo hacia la derecha que apunta a la etiqueta
-        // Empieza arriba del bloque, baja, hace un codo a la mitad
-        path = `
-            M 0 0
-            L 0 ${svgH}
-            M 0 ${svgH / 2}
-            L ${svgW} ${svgH / 2}
-        `;
+        path = `M 0 0 L 0 ${svgH} M 0 ${svgH / 2} L ${svgW} ${svgH / 2}`;
     } else {
-        // La llave sale desde x hacia la izquierda
         svgLeft = x - svgW - 2;
-
-        path = `
-            M ${svgW} 0
-            L ${svgW} ${svgH}
-            M ${svgW} ${svgH / 2}
-            L 0 ${svgH / 2}
-        `;
+        path = `M ${svgW} 0 L ${svgW} ${svgH} M ${svgW} ${svgH / 2} L 0 ${svgH / 2}`;
     }
 
     cont.style.left = svgLeft + 'px';
@@ -1256,7 +1423,6 @@ function dibujarLlave(contenedor, opciones) {
 
     cont.innerHTML = svg;
 
-    // Etiqueta al final del codo
     const etiqueta = document.createElement('div');
     etiqueta.className = 'etiqueta-llave';
     etiqueta.style.position = 'absolute';
@@ -1264,11 +1430,8 @@ function dibujarLlave(contenedor, opciones) {
     etiqueta.style.transform = 'translateY(-50%)';
     etiqueta.style.borderColor = color;
 
-    if (lado === 'derecha') {
-        etiqueta.style.left = (svgW + 4) + 'px';
-    } else {
-        etiqueta.style.right = (svgW + 4) + 'px';
-    }
+    if (lado === 'derecha') etiqueta.style.left = (svgW + 4) + 'px';
+    else etiqueta.style.right = (svgW + 4) + 'px';
 
     etiqueta.innerHTML = `
         <span class="punto-color" style="background:${color};"></span>
@@ -1282,89 +1445,8 @@ function dibujarLlave(contenedor, opciones) {
 }
 
 /* =========================================================
-   DIBUJAR UNA LLAVE (línea curva simple con etiqueta al final)
+   PANEL LATERAL — listas
    ========================================================= */
-
-function dibujarLlave(contenedor, opciones) {
-    const { lado, x, y, h, color, nombre, zona } = opciones;
-
-    const cont = document.createElement('div');
-    cont.className = 'llave-zona';
-    cont.style.position = 'absolute';
-
-    // Geometría de la llave (línea con codo)
-    const svgW = 20;         // ancho de la línea (codo horizontal)
-    const svgH = Math.max(h, 30);
-
-    let path;
-    let svgLeft;
-
-    if (lado === 'derecha') {
-        // La llave sale desde x hacia la derecha
-        svgLeft = x + 2;
-
-        // Forma: línea vertical + codo hacia la derecha que apunta a la etiqueta
-        // Empieza arriba del bloque, baja, hace un codo a la mitad
-        path = `
-            M 0 0
-            L 0 ${svgH}
-            M 0 ${svgH / 2}
-            L ${svgW} ${svgH / 2}
-        `;
-    } else {
-        // La llave sale desde x hacia la izquierda
-        svgLeft = x - svgW - 2;
-
-        path = `
-            M ${svgW} 0
-            L ${svgW} ${svgH}
-            M ${svgW} ${svgH / 2}
-            L 0 ${svgH / 2}
-        `;
-    }
-
-    cont.style.left = svgLeft + 'px';
-    cont.style.top = y + 'px';
-    cont.style.height = svgH + 'px';
-
-    const svg = `
-        <svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
-            <path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="${lado === 'derecha' ? svgW : 0}" cy="${svgH / 2}" r="3" fill="${color}"/>
-        </svg>
-    `;
-
-    cont.innerHTML = svg;
-
-    // Etiqueta al final del codo
-    const etiqueta = document.createElement('div');
-    etiqueta.className = 'etiqueta-llave';
-    etiqueta.style.position = 'absolute';
-    etiqueta.style.top = '50%';
-    etiqueta.style.transform = 'translateY(-50%)';
-    etiqueta.style.borderColor = color;
-
-    if (lado === 'derecha') {
-        etiqueta.style.left = (svgW + 4) + 'px';
-    } else {
-        etiqueta.style.right = (svgW + 4) + 'px';
-    }
-
-    etiqueta.innerHTML = `
-        <span class="punto-color" style="background:${color};"></span>
-        ${nombre}
-    `;
-
-    etiqueta.addEventListener('click', () => abrirModalZona(zona));
-
-    cont.appendChild(etiqueta);
-    contenedor.appendChild(cont);
-}
-
-/* =========================================================
-   PANEL LATERAL
-   ========================================================= */
-
 buscadorLateral.addEventListener('input', () => {
     filtroBusquedaLateral = buscadorLateral.value.trim().toLowerCase();
     renderPanelLateral();
@@ -1394,17 +1476,14 @@ function renderPanelLateral() {
 
 function renderTabs() {
     lateralTabs.innerHTML = '';
-
     const equipos = panelActivo.equiposSinUbicar || [];
 
     const porCliente = {};
     equipos.forEach(e => {
         if (!porCliente[e.IdCliente]) {
             porCliente[e.IdCliente] = {
-                id: e.IdCliente,
-                codigo: e.ClienteCodigo,
-                nombre: e.ClienteNombre,
-                total: 0
+                id: e.IdCliente, codigo: e.ClienteCodigo,
+                nombre: e.ClienteNombre, total: 0
             };
         }
         porCliente[e.IdCliente].total++;
@@ -1434,22 +1513,17 @@ function renderFiltrosRol() {
 
 function renderListaSinUbicarFiltrada() {
     listaSinUbicar.innerHTML = '';
-
     let equipos = panelActivo.equiposSinUbicar || [];
 
     if (tabActivo !== '__todos__') {
         const idCli = parseInt(tabActivo, 10);
         equipos = equipos.filter(e => Number(e.IdCliente) === idCli);
     }
-
     if (filtroRolActivo !== '__todos__') {
         equipos = equipos.filter(e => e.RolCodigo === filtroRolActivo);
     }
-
     if (filtroBusquedaLateral) {
-        equipos = equipos.filter(e =>
-            e.Hostname.toLowerCase().includes(filtroBusquedaLateral)
-        );
+        equipos = equipos.filter(e => e.Hostname.toLowerCase().includes(filtroBusquedaLateral));
     }
 
     if (equipos.length === 0) {
@@ -1463,8 +1537,8 @@ function renderListaSinUbicarFiltrada() {
         li.draggable = true;
 
         const clienteNom = e.ClienteCodigo || '?';
-        const pisoNom = lugares.find(l => Number(l.IdLugarCliente) === Number(e.IdLugarCliente))?.Nombre
-                       || `Piso ${e.IdLugarCliente || '?'}`;
+        const pisoNom = pisos.find(p => Number(p.IdPiso) === Number(e.IdPiso))?.Nombre
+                       || `Piso ${e.IdPiso || '?'}`;
 
         li.innerHTML = `
             <span class="rol-punto"></span>
@@ -1485,9 +1559,7 @@ function renderListaSinUbicarFiltrada() {
         });
         li.addEventListener('dragend', () => {
             if (lateralBackdrop) {
-                setTimeout(() => {
-                    lateralBackdrop.style.pointerEvents = 'auto';
-                }, 100);
+                setTimeout(() => { lateralBackdrop.style.pointerEvents = 'auto'; }, 100);
             }
         });
         listaSinUbicar.appendChild(li);
@@ -1501,7 +1573,6 @@ function actualizarBadge() {
 
 function renderListaZonas() {
     listaZonas.innerHTML = '';
-
     const zonasNormales = panelActivo.zonas || [];
     const zonasLibres   = panelActivo.zonasLibres || [];
 
@@ -1512,11 +1583,9 @@ function renderListaZonas() {
 
     zonasNormales.forEach(z => {
         const li = document.createElement('li');
-
         const colorDiv = document.createElement('div');
         colorDiv.className = 'muestra-color';
         colorDiv.style.background = z.Color || '#ccc';
-
         const nombreSpan = document.createElement('span');
         nombreSpan.className = 'nombre-zona';
         nombreSpan.textContent = z.Nombre;
@@ -1534,7 +1603,8 @@ function renderListaZonas() {
                 'Eliminar zona',
                 `¿Eliminar la zona "${z.Nombre}"? Los equipos permanecerán en sus posiciones.`,
                 async () => {
-                    await window.api.plano.eliminarZona(z.IdZona, panelActivo.idLugar, z.Nombre);
+                    await window.api.plano.eliminarZona(z.IdZona, panelActivo.idPiso, z.Nombre);
+                    mostrarToast(`Zona "${z.Nombre}" eliminada`, 'exito');
                     await recargarPanel(panelActivo);
                 }
             );
@@ -1544,7 +1614,6 @@ function renderListaZonas() {
         li.appendChild(nombreSpan);
         li.appendChild(btnEditar);
         li.appendChild(btnEliminar);
-
         listaZonas.appendChild(li);
     });
 
@@ -1552,23 +1621,18 @@ function renderListaZonas() {
         const grupos = {};
         zonasLibres.forEach(zl => {
             const key = `${zl.Nombre}||${zl.Color}`;
-            if (!grupos[key]) {
-                grupos[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
-            }
+            if (!grupos[key]) grupos[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
             grupos[key].celdas.push(zl);
         });
 
         Object.values(grupos).forEach(g => {
             const li = document.createElement('li');
-
             const colorDiv = document.createElement('div');
             colorDiv.className = 'muestra-color';
             colorDiv.style.background = g.color;
-
             const nombreSpan = document.createElement('span');
             nombreSpan.className = 'nombre-zona';
             nombreSpan.textContent = g.nombre + ' (libre)';
-
             const cantSpan = document.createElement('span');
             cantSpan.textContent = `${g.celdas.length} c.`;
             cantSpan.style.cssText = 'font-size:0.7rem;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:8px;';
@@ -1581,7 +1645,8 @@ function renderListaZonas() {
                     'Eliminar zona libre',
                     `¿Eliminar la zona libre "${g.nombre}"?`,
                     async () => {
-                        await window.api.plano.eliminarZonaLibre(panelActivo.idLugar, g.nombre, g.color);
+                        await window.api.plano.eliminarZonaLibre(panelActivo.idPiso, g.nombre, g.color);
+                        mostrarToast(`Zona libre "${g.nombre}" eliminada`, 'exito');
                         await recargarPanel(panelActivo);
                     }
                 );
@@ -1591,7 +1656,6 @@ function renderListaZonas() {
             li.appendChild(nombreSpan);
             li.appendChild(cantSpan);
             li.appendChild(btnEliminar);
-
             listaZonas.appendChild(li);
         });
     }
@@ -1600,7 +1664,6 @@ function renderListaZonas() {
 /* =========================================================
    DROP
    ========================================================= */
-
 async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
     if (!dragOrigen) return;
 
@@ -1612,7 +1675,6 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
         const idEq = dragOrigen.idEquipo;
         const equipo = panelActivo.equiposSinUbicar.find(e => Number(e.IdEquipo) === Number(idEq));
         dragOrigen = null;
-
         if (!equipo) return;
 
         if (mismoPanel) {
@@ -1622,8 +1684,9 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                     `La celda (${filaDestino}, ${columnaDestino}) ya tiene <b>${contenidoDestino.Hostname}</b>.<br><br>` +
                     `Si continúas, se quitará ese equipo y se colocará <b>${equipo.Hostname}</b>. ¿Continuar?`,
                     async () => {
-                        await window.api.plano.quitar(contenidoDestino.IdEquipo, panelDestino.idLugar, contenidoDestino.Hostname);
-                        await window.api.plano.asignar(panelDestino.idLugar, equipo.IdEquipo, filaDestino, columnaDestino);
+                        await window.api.plano.quitar(contenidoDestino.IdEquipo, panelDestino.idPiso, contenidoDestino.Hostname);
+                        await window.api.plano.asignar(panelDestino.idPiso, equipo.IdEquipo, filaDestino, columnaDestino);
+                        mostrarToast(`"${equipo.Hostname}" asignado en (${filaDestino}, ${columnaDestino})`, 'exito');
                         await recargarPanel(panelDestino);
                     }
                 );
@@ -1632,16 +1695,14 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                     'Asignar equipo',
                     `¿Colocar <b>${equipo.Hostname}</b> en la celda (${filaDestino}, ${columnaDestino})?`,
                     async () => {
-                        await window.api.plano.asignar(panelDestino.idLugar, equipo.IdEquipo, filaDestino, columnaDestino);
+                        await window.api.plano.asignar(panelDestino.idPiso, equipo.IdEquipo, filaDestino, columnaDestino);
+                        mostrarToast(`"${equipo.Hostname}" asignado en (${filaDestino}, ${columnaDestino})`, 'exito');
                         await recargarPanel(panelDestino);
                     }
                 );
             }
         } else {
-            if (!panelDestino.idLugar) {
-                alert('Selecciona un piso en el panel destino primero.');
-                return;
-            }
+            if (!panelDestino.idPiso) { alert('Selecciona un piso en el panel destino primero.'); return; }
 
             abrirModalMoverEntrePisos({
                 idEquipo: equipo.IdEquipo,
@@ -1675,8 +1736,9 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                     async () => {
                         await window.api.plano.mover(
                             equipoOrigen.IdEquipo, filaDestino, columnaDestino,
-                            origen.fila, origen.columna, panelDestino.idLugar
+                            origen.fila, origen.columna, panelDestino.idPiso
                         );
+                        mostrarToast(`"${equipoOrigen.Hostname}" movido`, 'exito');
                         await recargarPanel(panelDestino);
                     }
                 );
@@ -1687,10 +1749,11 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                     `Los datos de cada equipo permanecerán intactos. ¿Continuar?`,
                     async () => {
                         await window.api.plano.intercambiar(
-                            equipoOrigen.IdEquipo, contenidoDestino.IdEquipo, panelDestino.idLugar,
+                            equipoOrigen.IdEquipo, contenidoDestino.IdEquipo, panelDestino.idPiso,
                             equipoOrigen.Hostname, contenidoDestino.Hostname,
                             origen.fila, origen.columna, filaDestino, columnaDestino
                         );
+                        mostrarToast(`"${equipoOrigen.Hostname}" ↔ "${contenidoDestino.Hostname}"`, 'exito');
                         await recargarPanel(panelDestino);
                     }
                 );
@@ -1698,18 +1761,13 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
             return;
         }
 
-        if (!panelDestino.idLugar) {
-            alert('Selecciona un piso en el panel destino primero.');
-            return;
-        }
+        if (!panelDestino.idPiso) { alert('Selecciona un piso en el panel destino primero.'); return; }
 
         if (contenidoDestino) {
             abrirModalMoverEntrePisos({
                 idEquipo: equipoOrigen.IdEquipo,
-                panelOrigen,
-                panelDestino,
-                fila: filaDestino,
-                columna: columnaDestino,
+                panelOrigen, panelDestino,
+                fila: filaDestino, columna: columnaDestino,
                 equipoInfo: equipoOrigen,
                 conSwap: true,
                 equipoDestino: contenidoDestino,
@@ -1719,10 +1777,8 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
         } else {
             abrirModalMoverEntrePisos({
                 idEquipo: equipoOrigen.IdEquipo,
-                panelOrigen,
-                panelDestino,
-                fila: filaDestino,
-                columna: columnaDestino,
+                panelOrigen, panelDestino,
+                fila: filaDestino, columna: columnaDestino,
                 equipoInfo: equipoOrigen,
                 conSwap: false,
                 equipoDestino: null,
@@ -1736,19 +1792,19 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
 /* =========================================================
    MODAL MOVER ENTRE PISOS
    ========================================================= */
-
 async function abrirModalMoverEntrePisos(datos) {
     moverPendiente = datos;
 
     const { equipoInfo, panelOrigen, panelDestino, fila, columna, conSwap, equipoDestino } = datos;
 
-    const lugarOrigen = lugares.find(l => Number(l.IdLugarCliente) === Number(panelOrigen.idLugar));
-    const lugarDestino = lugares.find(l => Number(l.IdLugarCliente) === Number(panelDestino.idLugar));
+    const pisoOrigen = pisos.find(p => Number(p.IdPiso) === Number(panelOrigen.idPiso));
+    const pisoDestino = pisos.find(p => Number(p.IdPiso) === Number(panelDestino.idPiso));
 
     let infoHTML = `
         <div><b>Equipo:</b> ${equipoInfo.Hostname}</div>
-        <div><b>Desde:</b> ${lugarOrigen?.Nombre ?? 'Piso ' + panelOrigen.idLugar}${datos.filaOrigen ? ' (fila ' + datos.filaOrigen + ', col ' + datos.columnaOrigen + ')' : ''}</div>
-        <div><b>Hacia:</b> ${lugarDestino?.Nombre ?? 'Piso ' + panelDestino.idLugar}, celda (${fila}, ${columna})</div>
+        <div><b>Cliente:</b> ${equipoInfo.ClienteCodigo || '—'}</div>
+        <div><b>Desde:</b> ${pisoOrigen?.Nombre ?? 'Piso ' + panelOrigen.idPiso}${datos.filaOrigen ? ' (fila ' + datos.filaOrigen + ', col ' + datos.columnaOrigen + ')' : ''}</div>
+        <div><b>Hacia:</b> ${pisoDestino?.Nombre ?? 'Piso ' + panelDestino.idPiso}, celda (${fila}, ${columna})</div>
     `;
 
     if (conSwap) {
@@ -1773,12 +1829,12 @@ async function abrirModalMoverEntrePisos(datos) {
     llenarSelectRolesMover();
     await cargarDatosEquipoEnModal(equipoInfo.IdEquipo);
 
-    if (lugarDestino) {
-        mvLugar.innerHTML = `<option value="${lugarDestino.IdLugarCliente}">${lugarDestino.Nombre}</option>`;
-        mvLugar.value = lugarDestino.IdLugarCliente;
+    if (pisoDestino) {
+        mvLugar.innerHTML = `<option value="${pisoDestino.IdPiso}">${pisoDestino.Nombre}</option>`;
+        mvLugar.value = pisoDestino.IdPiso;
     } else {
-        mvLugar.innerHTML = `<option value="${panelDestino.idLugar}">Piso ${panelDestino.idLugar}</option>`;
-        mvLugar.value = panelDestino.idLugar;
+        mvLugar.innerHTML = `<option value="${panelDestino.idPiso}">Piso ${panelDestino.idPiso}</option>`;
+        mvLugar.value = panelDestino.idPiso;
     }
 
     modalMover.style.display = 'flex';
@@ -1808,10 +1864,10 @@ moverConfirmar.addEventListener('click', async () => {
             const res = await window.api.plano.swapEntrePisos({
                 idEquipoA: idEquipo,
                 idEquipoB: equipoDestino.IdEquipo,
-                idPisoA: panelOrigen.idLugar,
+                idPisoA: panelOrigen.idPiso,
                 filaA: filaOrigen,
                 colA: columnaOrigen,
-                idPisoB: panelDestino.idLugar,
+                idPisoB: panelDestino.idPiso,
                 filaB: fila,
                 colB: columna,
                 hostA: datos.equipoInfo.Hostname,
@@ -1822,6 +1878,7 @@ moverConfirmar.addEventListener('click', async () => {
                 mostrarMensajeMover(res?.mensaje || 'No se pudo intercambiar.', 'error');
                 return;
             }
+            mostrarToast(`Intercambio entre pisos completado`, 'exito');
         } else {
             let nuevosDatos = null;
 
@@ -1857,14 +1914,14 @@ moverConfirmar.addEventListener('click', async () => {
 
             if (datos.desdeLista) {
                 if (equipoDestino) {
-                    await window.api.plano.quitar(equipoDestino.IdEquipo, panelDestino.idLugar, equipoDestino.Hostname);
+                    await window.api.plano.quitar(equipoDestino.IdEquipo, panelDestino.idPiso, equipoDestino.Hostname);
                 }
-                const res = await window.api.plano.asignar(panelDestino.idLugar, idEquipo, fila, columna);
+                const res = await window.api.plano.asignar(panelDestino.idPiso, idEquipo, fila, columna);
 
                 if (nuevosDatos) {
                     await window.api.equipos.actualizar(idEquipo, {
                         ...nuevosDatos,
-                        idLugarCliente: panelDestino.idLugar,
+                        idPiso: panelDestino.idPiso,
                         activo: true
                     });
                 }
@@ -1873,15 +1930,17 @@ moverConfirmar.addEventListener('click', async () => {
                     mostrarMensajeMover(res?.mensaje || 'No se pudo asignar.', 'error');
                     return;
                 }
+                mostrarToast(`Equipo movido a otro piso`, 'exito');
             } else {
                 const res = await window.api.plano.moverEntrePisos(
-                    idEquipo, panelOrigen.idLugar, panelDestino.idLugar, fila, columna, nuevosDatos
+                    idEquipo, panelOrigen.idPiso, panelDestino.idPiso, fila, columna, nuevosDatos
                 );
 
                 if (!res || !res.ok) {
                     mostrarMensajeMover(res?.mensaje || 'No se pudo mover.', 'error');
                     return;
                 }
+                mostrarToast(`Equipo movido a otro piso`, 'exito');
             }
         }
 
@@ -1894,6 +1953,7 @@ moverConfirmar.addEventListener('click', async () => {
     } catch (err) {
         console.error(err);
         mostrarMensajeMover('Error: ' + err.message, 'error');
+        mostrarToast('Error al mover equipo', 'error', 4000);
     } finally {
         moverConfirmar.disabled = false;
         moverConfirmar.textContent = 'Confirmar';
@@ -1909,7 +1969,6 @@ function mostrarMensajeMover(texto, tipo) {
 /* =========================================================
    HELPERS MODAL MOVER
    ========================================================= */
-
 function llenarSelectClientesMover() {
     mvCliente.innerHTML = '';
     clientes.forEach(c => {
@@ -1935,388 +1994,60 @@ async function cargarDatosEquipoEnModal(idEquipo) {
     const eq = todos.find(x => Number(x.IdEquipo) === Number(idEquipo));
     if (!eq) return;
 
-    mvCliente.value = eq.IdCliente;
-    mvRol.value = eq.IdRolEquipo;
-    mvTipoIP.value = eq.TipoIP;
+    mvCliente.value  = eq.IdCliente != null ? String(eq.IdCliente) : '';
+    mvRol.value      = eq.IdRolEquipo != null ? String(eq.IdRolEquipo) : '';
+    mvTipoIP.value   = eq.TipoIP;
     mvHostname.value = eq.Hostname;
-    mvIP.value = eq.IP ?? '';
-    mvMascara.value = eq.Mascara ?? '';
-    mvPuerta.value = eq.PuertaEnlace ?? '';
-    mvDns1.value = eq.DNS1 ?? '';
-    mvDns2.value = eq.DNS2 ?? '';
-    mvUsuario.value = eq.UsuarioAdmin ?? '';
+    mvIP.value       = eq.IP ?? '';
+    mvMascara.value  = eq.Mascara ?? '';
+    mvPuerta.value   = eq.PuertaEnlace ?? '';
+    mvDns1.value     = eq.DNS1 ?? '';
+    mvDns2.value     = eq.DNS2 ?? '';
+    mvUsuario.value  = eq.UsuarioAdmin ?? '';
     mvPassword.value = eq.PasswordAdmin ?? '';
 }
 
 /* =========================================================
    QUITAR EQUIPO
    ========================================================= */
-
 function confirmarQuitar(equipo, panel) {
     mostrarConfirmacion(
         'Quitar del plano',
-        `¿Quitar <b>${equipo.Hostname}</b> del plano?<br><br>El equipo seguirá existiendo en el sistema, solo se eliminará su ubicación física.`,
+        `¿Quitar <b>${equipo.Hostname}</b> (${equipo.ClienteCodigo || ''}) del plano?<br><br>El equipo seguirá existiendo en el sistema, solo se eliminará su ubicación física.`,
         async () => {
-            await window.api.plano.quitar(equipo.IdEquipo, panel.idLugar, equipo.Hostname);
+            await window.api.plano.quitar(equipo.IdEquipo, panel.idPiso, equipo.Hostname);
+            mostrarToast(`"${equipo.Hostname}" quitado del plano`, 'exito');
             await recargarPanel(panel);
         }
     );
 }
 
 /* =========================================================
-   EXPORTAR PDF — VISUAL
+   VISTA PREVIA (sin generar PDF)
    ========================================================= */
-
-btnExportarPDF.addEventListener('click', async () => {
-    if (!panelActivo.idLugar) {
-        alert('Selecciona un piso primero.');
-        return;
-    }
+btnVistaPrevia.addEventListener('click', () => {
+    if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
 
     try {
-        btnExportarPDF.disabled = true;
-        const original = btnExportarPDF.innerHTML;
-        btnExportarPDF.innerHTML = 'Generando...';
-
-        const opciones = generarPDFVisual(panelActivo);
-        const res = await window.api.plano.exportarPDF(opciones);
-
-        if (res.ok) {
-            alert('✅ PDF Visual generado en:\n\n' + res.ruta);
-        } else {
-            alert('Generación cancelada.');
+        const opciones = generarPDFDocumentado(panelActivo);
+        const ventana = window.open('', '_blank');
+        if (!ventana) {
+            alert('El navegador bloqueó la ventana emergente. Permite las ventanas emergentes para ver la vista previa.');
+            return;
         }
-
-        btnExportarPDF.disabled = false;
-        btnExportarPDF.innerHTML = original;
+        ventana.document.open();
+        ventana.document.write(opciones.html);
+        ventana.document.close();
     } catch (err) {
-        alert('Error al generar PDF: ' + err.message);
-        btnExportarPDF.disabled = false;
+        mostrarToast('Error al generar vista previa: ' + err.message, 'error', 4000);
     }
 });
-
-function generarPDFVisual(panel) {
-    const lugar = lugares.find(l => Number(l.IdLugarCliente) === Number(panel.idLugar));
-    const cliente = clientes.find(c => Number(c.IdCliente) === Number(panel.idCliente)) ||
-                    clientes.find(c => panel.equiposSinUbicar.some(e => Number(e.IdCliente) === Number(c.IdCliente)));
-
-    const nombreCliente = cliente ? `${cliente.Codigo} · ${cliente.Nombre}` : '';
-    const nombrePiso = lugar ? lugar.Nombre : '';
-    const fecha = new Date().toLocaleString('es-MX');
-
-    /* ---------------------------------------------------------
-       Tamaño de celda del PDF (se puede ajustar)
-       --------------------------------------------------------- */
-    const CELL_W_PDF   = 110;
-    const CELL_H_PDF   = 85;
-    const GAP          = 6;
-    const GRID_PADDING = 28;
-    const BODY_PADDING = 40;
-
-    const cols = panel.dimensiones.Columnas;
-    const filas = panel.dimensiones.Filas;
-
-    /* Ancho/alto total del grid en px */
-    const gridW = cols * CELL_W_PDF + (cols - 1) * GAP + GRID_PADDING * 2;
-    const gridH = filas * CELL_H_PDF + (filas - 1) * GAP + GRID_PADDING * 2;
-
-    /* Ancho total de la hoja. Se genera una hoja del tamaño del contenido
-       así nunca se corta y siempre cabe todo. */
-    const totalW = gridW + BODY_PADDING * 2;
-    const totalH = gridH + BODY_PADDING * 2 + 200; /* 200px extra para el encabezado + leyenda */
-
-    /* ---------------------------------------------------------
-       MAPA de zonas libres por celda
-       --------------------------------------------------------- */
-    const zonasLibresMap = new Map();
-    (panel.zonasLibres || []).forEach(zl => {
-        zonasLibresMap.set(`${zl.Fila}-${zl.Columna}`, zl);
-    });
-
-    /* ---------------------------------------------------------
-       AGRUPAR zonas libres por nombre+color para el overlay de texto
-       --------------------------------------------------------- */
-    const gruposLibres = {};
-    (panel.zonasLibres || []).forEach(zl => {
-        const key = `${zl.Nombre}||${zl.Color}`;
-        if (!gruposLibres[key]) {
-            gruposLibres[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
-        }
-        gruposLibres[key].celdas.push({ fila: zl.Fila, columna: zl.Columna });
-    });
-
-    /* ---------------------------------------------------------
-       RENDERIZAR celdas
-       --------------------------------------------------------- */
-    let celdasHTML = '';
-    for (let f = 0; f < filas; f++) {
-        for (let c = 0; c < cols; c++) {
-            const fila = f + 1;
-            const col = c + 1;
-            const contenido = panel.celdas[f]?.[c];
-            const zl = zonasLibresMap.get(`${fila}-${col}`);
-
-            let styleCelda = '';
-            if (zl && !contenido) {
-                styleCelda = `background:${zl.Color};border-color:rgba(0,0,0,0.15);border-style:solid;`;
-            }
-
-            if (contenido) {
-                const ip = contenido.IP || 'DHCP';
-                const rol = contenido.RolCodigo || '';
-                celdasHTML += `
-                    <div class="celda ocupada" data-rol="${rol}">
-                        <div class="hostname">${contenido.Hostname}</div>
-                        <div class="ip">${ip}</div>
-                    </div>
-                `;
-            } else {
-                celdasHTML += `<div class="celda ${zl ? 'libre' : 'vacia'}" style="${styleCelda}"></div>`;
-            }
-        }
-    }
-
-    /* ---------------------------------------------------------
-       OVERLAYS de texto de zonas libres (posicionados en absoluto)
-       --------------------------------------------------------- */
-    let overlaysLibresHTML = '';
-    Object.values(gruposLibres).forEach(g => {
-        const filasArr = g.celdas.map(c => c.fila);
-        const colsArr = g.celdas.map(c => c.columna);
-        const filaMin = Math.min(...filasArr);
-        const filaMax = Math.max(...filasArr);
-        const colMin = Math.min(...colsArr);
-        const colMax = Math.max(...colsArr);
-
-        const x = (colMin - 1) * (CELL_W_PDF + GAP);
-        const y = (filaMin - 1) * (CELL_H_PDF + GAP);
-        const w = (colMax - colMin + 1) * (CELL_W_PDF + GAP) - GAP;
-        const h = (filaMax - filaMin + 1) * (CELL_H_PDF + GAP) - GAP;
-
-        const totalFilas = filaMax - filaMin + 1;
-        const totalCols = colMax - colMin + 1;
-        const fontSize = Math.max(0.7, Math.min(1.4, 0.75 + Math.min(totalFilas, totalCols) * 0.08));
-
-        overlaysLibresHTML += `
-            <div class="overlay-zona-libre" style="
-                position:absolute;
-                left:${x + GRID_PADDING}px;
-                top:${y + GRID_PADDING}px;
-                width:${w}px;
-                height:${h}px;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                text-align:center;
-                font-weight:700;
-                font-size:${fontSize}rem;
-                color:#1e293b;
-                text-transform:uppercase;
-                letter-spacing:0.05em;
-                text-shadow:0 1px 2px rgba(255,255,255,0.7);
-                pointer-events:none;
-                padding:4px;
-                line-height:1.1;
-                word-break:break-word;
-                z-index:5;
-            ">${g.nombre}</div>
-        `;
-    });
-
-    /* ---------------------------------------------------------
-       MARCOS PUNTEADOS de las MESAS (zonas normales)
-       NO tocan los colores de las celdas, solo dibujan un borde
-       por encima con la etiqueta del nombre.
-       --------------------------------------------------------- */
-    let mesasHTML = '';
-    (panel.zonas || []).forEach(z => {
-        const filaMin = z.FilaInicio;
-        const filaMax = z.FilaFin;
-        const colMin = z.ColumnaInicio;
-        const colMax = z.ColumnaFin;
-
-        const x = (colMin - 1) * (CELL_W_PDF + GAP);
-        const y = (filaMin - 1) * (CELL_H_PDF + GAP);
-        const w = (colMax - colMin + 1) * (CELL_W_PDF + GAP) - GAP;
-        const h = (filaMax - filaMin + 1) * (CELL_H_PDF + GAP) - GAP;
-
-        const color = z.Color || '#3b82f6';
-
-        mesasHTML += `
-            <div class="mesa-pdf" style="
-                position:absolute;
-                left:${x + GRID_PADDING}px;
-                top:${y + GRID_PADDING}px;
-                width:${w}px;
-                height:${h}px;
-                border:3px dashed ${color};
-                border-radius:10px;
-                pointer-events:none;
-                box-sizing:border-box;
-                z-index:6;
-            ">
-                <span class="etiqueta-mesa" style="
-                    position:absolute;
-                    top:-12px;
-                    left:10px;
-                    background:${color};
-                    color:#fff;
-                    font-size:0.72rem;
-                    font-weight:700;
-                    padding:2px 8px;
-                    border-radius:4px;
-                    letter-spacing:0.03em;
-                    text-transform:uppercase;
-                    white-space:nowrap;
-                    box-shadow:0 1px 3px rgba(0,0,0,0.2);
-                ">${z.Nombre}</span>
-            </div>
-        `;
-    });
-
-    /* ---------------------------------------------------------
-       CSS
-       --------------------------------------------------------- */
-    const css = `
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        /* 🔧 FIX: la hoja se genera del tamaño exacto del contenido.
-           Así nunca se corta y el plano siempre cabe completo. */
-        @page {
-            size: ${totalW}px ${totalH}px;
-            margin: 0;
-        }
-
-        body {
-            font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-            background: #fff;
-            color: #1e293b;
-            padding: ${BODY_PADDING}px;
-            width: ${totalW}px;
-            min-height: ${totalH}px;
-        }
-
-        .encabezado {
-            text-align: center;
-            padding-bottom: 16px;
-            border-bottom: 3px solid #1e293b;
-            margin-bottom: 20px;
-        }
-        .encabezado h1 { font-size: 1.8rem; color: #1e293b; margin-bottom: 6px; }
-        .encabezado .sub { font-size: 1rem; color: #64748b; margin-bottom: 4px; }
-        .encabezado .fecha { font-size: 0.78rem; color: #94a3b8; }
-
-        /* 🔧 FIX: el wrapper del grid es relative para contener
-           los overlays de zonas libres y los marcos de mesas. */
-        .grid-plano {
-            display: grid;
-            grid-template-columns: repeat(${cols}, ${CELL_W_PDF}px);
-            grid-template-rows: repeat(${filas}, ${CELL_H_PDF}px);
-            gap: ${GAP}px;
-            background: #e2e8f0;
-            padding: ${GRID_PADDING}px;
-            border-radius: 10px;
-            border: 2px solid #cbd5e1;
-            width: fit-content;
-            margin: 0 auto;
-            position: relative;
-        }
-
-        .celda {
-            width: ${CELL_W_PDF}px;
-            height: ${CELL_H_PDF}px;
-            background: #fff;
-            border: 2px dashed #cbd5e1;
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 4px;
-        }
-        .celda.ocupada { border-style: solid; border-width: 2px; }
-        .celda.libre { border-style: solid; border-width: 1px; }
-        .celda .hostname { font-weight: 700; font-size: 0.78rem; line-height: 1.15; word-break: break-all; }
-        .celda .ip { font-size: 0.68rem; margin-top: 4px; color: #475569; font-weight: 500; }
-
-        .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
-        .celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
-        .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
-        .celda[data-rol="GRN"] { background: #f3e8ff; border-color: #a855f7; }
-        .celda[data-rol="CRD"] { background: #ccfbf1; border-color: #14b8a6; }
-        .celda[data-rol="MIS"] { background: #fce7f3; border-color: #ec4899; }
-        .celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
-
-        .celda[data-rol="AGT"] .hostname { color: #1e40af; }
-        .celda[data-rol="SPR"] .hostname { color: #166534; }
-        .celda[data-rol="CLD"] .hostname { color: #9a3412; }
-        .celda[data-rol="GRN"] .hostname { color: #6b21a8; }
-        .celda[data-rol="CRD"] .hostname { color: #115e59; }
-        .celda[data-rol="MIS"] .hostname { color: #9d174d; }
-        .celda[data-rol="ADM"] .hostname { color: #1e293b; }
-
-        .leyenda-pdf {
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-items: center;
-            padding-top: 16px;
-            margin-top: 20px;
-            border-top: 2px solid #e2e8f0;
-        }
-        .leyenda-pdf .item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #334155; font-weight: 600; }
-        .leyenda-pdf .punto { width: 14px; height: 14px; border-radius: 3px; }
-    `;
-
-    /* ---------------------------------------------------------
-       HTML final
-       --------------------------------------------------------- */
-    const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <style>${css}</style>
-        </head>
-        <body>
-            <div class="encabezado">
-                <h1>Plano de Equipos</h1>
-                <div class="sub">${nombreCliente}${nombrePiso ? ' · ' + nombrePiso : ''}</div>
-                <div class="fecha">Generado: ${fecha}</div>
-            </div>
-            <div class="grid-plano">
-                ${celdasHTML}
-                ${overlaysLibresHTML}
-                ${mesasHTML}
-            </div>
-            <div class="leyenda-pdf">
-                <div class="item"><span class="punto" style="background:#3b82f6;"></span>AGT</div>
-                <div class="item"><span class="punto" style="background:#22c55e;"></span>SPR</div>
-                <div class="item"><span class="punto" style="background:#f97316;"></span>CLD</div>
-                <div class="item"><span class="punto" style="background:#a855f7;"></span>GRN</div>
-                <div class="item"><span class="punto" style="background:#14b8a6;"></span>CRD</div>
-                <div class="item"><span class="punto" style="background:#ec4899;"></span>MIS</div>
-                <div class="item"><span class="punto" style="background:#475569;"></span>ADM</div>
-            </div>
-        </body>
-        </html>
-    `;
-
-    const nombreArchivo = `Plano-Visual-${nombrePiso || 'Piso'}-${Date.now()}.pdf`;
-    return { html, nombreArchivo };
-}
 
 /* =========================================================
    EXPORTAR PDF — DOCUMENTADO
    ========================================================= */
-
 btnExportarPDFDoc.addEventListener('click', async () => {
-    if (!panelActivo.idLugar) {
-        alert('Selecciona un piso primero.');
-        return;
-    }
+    if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
 
     try {
         btnExportarPDFDoc.disabled = true;
@@ -2327,34 +2058,29 @@ btnExportarPDFDoc.addEventListener('click', async () => {
         const res = await window.api.plano.exportarPDF(opciones);
 
         if (res.ok) {
-            alert('✅ PDF Documentado generado en:\n\n' + res.ruta);
+            mostrarToast('PDF Documentado generado correctamente', 'exito', 4000);
+            console.log('Ruta:', res.ruta);
         } else {
-            alert('Generación cancelada.');
+            mostrarToast('Generación cancelada', 'info');
         }
 
         btnExportarPDFDoc.disabled = false;
         btnExportarPDFDoc.innerHTML = original;
     } catch (err) {
-        alert('Error al generar PDF: ' + err.message);
+        mostrarToast('Error al generar PDF: ' + err.message, 'error', 4000);
         btnExportarPDFDoc.disabled = false;
     }
 });
 
 function generarPDFDocumentado(panel) {
-    const lugar = lugares.find(l => Number(l.IdLugarCliente) === Number(panel.idLugar));
-    const cliente = clientes.find(c => Number(c.IdCliente) === Number(panel.idCliente)) ||
-                    clientes.find(c => panel.equiposSinUbicar.some(e => Number(e.IdCliente) === Number(c.IdCliente)));
-
-    const nombreCliente = cliente ? `${cliente.Codigo} · ${cliente.Nombre}` : '';
-    const nombrePiso = lugar ? lugar.Nombre : '';
+    const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
+    const nombrePiso = piso ? piso.Nombre : '';
     const fecha = new Date().toLocaleString('es-MX');
 
     const cols = panel.dimensiones.Columnas;
     const filas = panel.dimensiones.Filas;
 
-    /* ---------------------------------------------------------
-       MAPA de zonas por celda (para saber la mesa de cada equipo)
-       --------------------------------------------------------- */
+    /* MAPA DE ZONAS */
     const zonasMap = new Map();
     (panel.zonas || []).forEach(z => {
         for (let f = z.FilaInicio; f <= z.FilaFin; f++) {
@@ -2364,9 +2090,7 @@ function generarPDFDocumentado(panel) {
         }
     });
 
-    /* ---------------------------------------------------------
-       LISTA de equipos
-       --------------------------------------------------------- */
+    /* LISTA DE EQUIPOS */
     const equiposList = [];
     let contador = 1;
 
@@ -2376,12 +2100,10 @@ function generarPDFDocumentado(panel) {
             if (contenido) {
                 const fila = f + 1;
                 const col = c + 1;
-                const zona = zonasMap.get(`${fila}-${col}`);
                 equiposList.push({
                     num: contador++,
-                    fila,
-                    col,
-                    zona,
+                    fila, col,
+                    zona: zonasMap.get(`${fila}-${col}`),
                     ...contenido
                 });
             }
@@ -2390,29 +2112,119 @@ function generarPDFDocumentado(panel) {
 
     const totalEquipos = equiposList.length;
 
-    /* ---------------------------------------------------------
-       MAPA de zonas libres por celda (para pintar celdas)
-       --------------------------------------------------------- */
+    /* ZONAS LIBRES */
     const zonasLibresMap = new Map();
     (panel.zonasLibres || []).forEach(zl => {
         zonasLibresMap.set(`${zl.Fila}-${zl.Columna}`, zl);
     });
 
-    /* ---------------------------------------------------------
-       AGRUPAR zonas libres por nombre+color para overlay de texto
-       --------------------------------------------------------- */
     const gruposLibres = {};
     (panel.zonasLibres || []).forEach(zl => {
         const key = `${zl.Nombre}||${zl.Color}`;
-        if (!gruposLibres[key]) {
-            gruposLibres[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
-        }
+        if (!gruposLibres[key]) gruposLibres[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
         gruposLibres[key].celdas.push({ fila: zl.Fila, columna: zl.Columna });
     });
 
-    /* ---------------------------------------------------------
-       RENDERIZAR celdas del grid numerado
-       --------------------------------------------------------- */
+    /* AGRUPAR EQUIPOS POR CLIENTE */
+    const COLORES_CLIENTE = [
+        '#3b82f6', '#22c55e', '#f97316', '#a855f7',
+        '#14b8a6', '#ec4899', '#eab308', '#ef4444',
+        '#06b6d4', '#8b5cf6', '#84cc16', '#f43f5e'
+    ];
+
+    const colorPorCliente = new Map();
+    let colorIdx = 0;
+    equiposList.forEach(e => {
+        const id = e.IdCliente;
+        if (id != null && !colorPorCliente.has(id)) {
+            colorPorCliente.set(id, COLORES_CLIENTE[colorIdx % COLORES_CLIENTE.length]);
+            colorIdx++;
+        }
+    });
+
+    const gridClientes = Array.from({ length: filas }, () => Array(cols).fill(null));
+    equiposList.forEach(e => {
+        gridClientes[e.fila - 1][e.col - 1] = e.IdCliente;
+    });
+
+    const visitado = Array.from({ length: filas }, () => Array(cols).fill(false));
+    const gruposCliente = [];
+
+    for (let f = 0; f < filas; f++) {
+        for (let c = 0; c < cols; c++) {
+            const idCli = gridClientes[f][c];
+            if (idCli == null || visitado[f][c]) continue;
+
+            const cola = [[f, c]];
+            const celdasGrupo = [];
+            visitado[f][c] = true;
+
+            while (cola.length) {
+                const [cf, cc] = cola.shift();
+                celdasGrupo.push({ fila: cf + 1, col: cc + 1 });
+
+                const vecinos = [
+                    [cf - 1, cc], [cf + 1, cc],
+                    [cf, cc - 1], [cf, cc + 1]
+                ];
+                for (const [nf, nc] of vecinos) {
+                    if (nf < 0 || nf >= filas || nc < 0 || nc >= cols) continue;
+                    if (visitado[nf][nc]) continue;
+                    if (gridClientes[nf][nc] !== idCli) continue;
+                    visitado[nf][nc] = true;
+                    cola.push([nf, nc]);
+                }
+            }
+
+            if (celdasGrupo.length >= 2) {
+                const filasArr = celdasGrupo.map(x => x.fila);
+                const colsArr  = celdasGrupo.map(x => x.col);
+                gruposCliente.push({
+                    idCliente: idCli,
+                    color: colorPorCliente.get(idCli) || '#3b82f6',
+                    celdas: celdasGrupo,
+                    filaMin: Math.min(...filasArr),
+                    filaMax: Math.max(...filasArr),
+                    colMin:  Math.min(...colsArr),
+                    colMax:  Math.max(...colsArr)
+                });
+            }
+        }
+    }
+
+    /* CÁLCULO DE TAMAÑOS — A3 PORTRAIT */
+    const ANCHO_UTIL = 1060;
+    const ALTO_PLANO = 1420;
+
+    const GAP = 8;
+    const GRID_PADDING = 14;
+
+    const anchoDisponible = ANCHO_UTIL - GRID_PADDING * 2 - GAP * (cols - 1);
+    const altoDisponible  = ALTO_PLANO - GRID_PADDING * 2 - GAP * (filas - 1);
+
+    let CELL_W = Math.floor(anchoDisponible / cols);
+    let CELL_H = Math.floor(altoDisponible / filas);
+
+    const ALTO_MAX_CELDA = 46;
+    CELL_H = Math.min(CELL_H, ALTO_MAX_CELDA);
+
+    const MAX_RATIO_W_H = 1.8;
+    const anchoMaxPorAlto = Math.floor(CELL_H * MAX_RATIO_W_H);
+    CELL_W = Math.min(CELL_W, anchoMaxPorAlto);
+
+    CELL_W = Math.max(16, CELL_W);
+    CELL_H = Math.max(16, CELL_H);
+
+    const FONT_NUM = Math.max(0.5, Math.min(1.15, CELL_H / 28)).toFixed(2);
+
+    function normalizarColor(c, fallback = '#e2e8f0') {
+        if (!c || typeof c !== 'string') return fallback;
+        const s = c.trim();
+        if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s)) return s;
+        if (/^(rgb|rgba|hsl|hsla)\(/i.test(s)) return s;
+        return fallback;
+    }
+
     let celdasHTML = '';
     for (let f = 0; f < filas; f++) {
         for (let c = 0; c < cols; c++) {
@@ -2421,32 +2233,41 @@ function generarPDFDocumentado(panel) {
             const col = c + 1;
             const zl = zonasLibresMap.get(`${fila}-${col}`);
 
-            let styleCelda = '';
-            if (zl && !contenido) {
-                styleCelda = `background:${zl.Color};border-color:rgba(0,0,0,0.15);border-style:solid;`;
-            }
-
             if (contenido) {
                 const eq = equiposList.find(x => x.fila === fila && x.col === col);
-                const rol = contenido.RolCodigo || '';
-                celdasHTML += `
-                    <div class="celda ocupada" data-rol="${rol}">
-                        <div class="numero">${eq.num}</div>
-                    </div>
-                `;
+                celdasHTML += `<div class="celda ocupada" data-rol="${contenido.RolCodigo || ''}"><div class="numero">${eq.num}</div></div>`;
+            } else if (zl) {
+                const colorZL = normalizarColor(zl.Color, '#e2e8f0');
+                celdasHTML += `<div class="celda libre" style="background:${colorZL} !important;border:1px solid rgba(0,0,0,0.2) !important;"></div>`;
             } else {
-                celdasHTML += `<div class="celda ${zl ? 'libre' : 'vacia'}" style="${styleCelda}"></div>`;
+                celdasHTML += `<div class="celda vacia"></div>`;
             }
         }
     }
 
-    /* ---------------------------------------------------------
-       OVERLAYS de texto de zonas libres
-       --------------------------------------------------------- */
-    const CELL_W_PDF = 42;
-    const CELL_H_PDF = 34;
-    const GAP = 4;
-    const GRID_PADDING = 10;
+    let contornosClienteHTML = '';
+    gruposCliente.forEach(g => {
+        const x = (g.colMin - 1) * (CELL_W + GAP);
+        const y = (g.filaMin - 1) * (CELL_H + GAP);
+        const w = (g.colMax - g.colMin + 1) * (CELL_W + GAP) - GAP;
+        const h = (g.filaMax - g.filaMin + 1) * (CELL_H + GAP) - GAP;
+
+        contornosClienteHTML += `
+            <div style="
+                position:absolute;
+                left:${x + GRID_PADDING - 4}px;
+                top:${y + GRID_PADDING - 4}px;
+                width:${w + 8}px;
+                height:${h + 8}px;
+                border:3px solid ${g.color};
+                border-radius:8px;
+                pointer-events:none;
+                box-sizing:border-box;
+                z-index:4;
+                background:${g.color}0A;
+            "></div>
+        `;
+    });
 
     let overlaysLibresHTML = '';
     Object.values(gruposLibres).forEach(g => {
@@ -2457,120 +2278,67 @@ function generarPDFDocumentado(panel) {
         const colMin = Math.min(...colsArr);
         const colMax = Math.max(...colsArr);
 
-        const x = (colMin - 1) * (CELL_W_PDF + GAP);
-        const y = (filaMin - 1) * (CELL_H_PDF + GAP);
-        const w = (colMax - colMin + 1) * (CELL_W_PDF + GAP) - GAP;
-        const h = (filaMax - filaMin + 1) * (CELL_H_PDF + GAP) - GAP;
+        const x = (colMin - 1) * (CELL_W + GAP);
+        const y = (filaMin - 1) * (CELL_H + GAP);
+        const w = (colMax - colMin + 1) * (CELL_W + GAP) - GAP;
+        const h = (filaMax - filaMin + 1) * (CELL_H + GAP) - GAP;
 
         const totalFilas = filaMax - filaMin + 1;
         const totalCols = colMax - colMin + 1;
-        const fontSize = Math.max(0.55, Math.min(0.9, 0.5 + Math.min(totalFilas, totalCols) * 0.06));
+        const fontSize = Math.max(0.55, Math.min(1.15, 0.6 + Math.min(totalFilas, totalCols) * 0.06));
 
         overlaysLibresHTML += `
             <div style="
-                position:absolute;
-                left:${x + GRID_PADDING}px;
-                top:${y + GRID_PADDING}px;
-                width:${w}px;
-                height:${h}px;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                text-align:center;
-                font-weight:700;
-                font-size:${fontSize}rem;
-                color:#1e293b;
-                text-transform:uppercase;
-                letter-spacing:0.04em;
-                text-shadow:0 1px 1px rgba(255,255,255,0.6);
-                pointer-events:none;
-                padding:2px;
-                line-height:1;
-                word-break:break-word;
-                z-index:5;
+                position:absolute;left:${x + GRID_PADDING}px;top:${y + GRID_PADDING}px;
+                width:${w}px;height:${h}px;display:flex;align-items:center;justify-content:center;
+                text-align:center;font-weight:700;font-size:${fontSize}rem;color:#1e293b;
+                text-transform:uppercase;letter-spacing:0.04em;text-shadow:0 1px 2px rgba(255,255,255,0.85);
+                pointer-events:none;padding:4px;line-height:1.05;word-break:break-word;z-index:5;
             ">${g.nombre}</div>
         `;
     });
 
-    /* ---------------------------------------------------------
-       MARCOS de las MESAS (zonas normales)
-       --------------------------------------------------------- */
     let mesasHTML = '';
     (panel.zonas || []).forEach(z => {
-        const filaMin = z.FilaInicio;
-        const filaMax = z.FilaFin;
-        const colMin = z.ColumnaInicio;
-        const colMax = z.ColumnaFin;
-
-        const x = (colMin - 1) * (CELL_W_PDF + GAP);
-        const y = (filaMin - 1) * (CELL_H_PDF + GAP);
-        const w = (colMax - colMin + 1) * (CELL_W_PDF + GAP) - GAP;
-        const h = (filaMax - filaMin + 1) * (CELL_H_PDF + GAP) - GAP;
+        const x = (z.ColumnaInicio - 1) * (CELL_W + GAP);
+        const y = (z.FilaInicio - 1) * (CELL_H + GAP);
+        const w = (z.ColumnaFin - z.ColumnaInicio + 1) * (CELL_W + GAP) - GAP;
+        const h = (z.FilaFin - z.FilaInicio + 1) * (CELL_H + GAP) - GAP;
 
         mesasHTML += `
             <div style="
-                position:absolute;
-                left:${x + GRID_PADDING}px;
-                top:${y + GRID_PADDING}px;
-                width:${w}px;
-                height:${h}px;
-                border:2px dashed ${z.Color || '#3b82f6'};
-                border-radius:6px;
-                pointer-events:none;
-                box-sizing:border-box;
-                z-index:6;
-            ">
+                position:absolute;left:${x + GRID_PADDING}px;top:${y + GRID_PADDING}px;
+                width:${w}px;height:${h}px;border:2.5px dashed ${z.Color || '#3b82f6'};
+                border-radius:7px;pointer-events:none;box-sizing:border-box;z-index:6;">
                 <span style="
-                    position:absolute;
-                    top:-9px;
-                    left:6px;
-                    background:${z.Color || '#3b82f6'};
-                    color:#fff;
-                    font-size:0.55rem;
-                    font-weight:700;
-                    padding:1px 5px;
-                    border-radius:3px;
-                    letter-spacing:0.03em;
-                    text-transform:uppercase;
-                    white-space:nowrap;
-                ">${z.Nombre}</span>
+                    position:absolute;top:-10px;left:8px;background:${z.Color || '#3b82f6'};color:#fff;
+                    font-size:0.62rem;font-weight:700;padding:1px 7px;border-radius:3px;
+                    letter-spacing:0.03em;text-transform:uppercase;white-space:nowrap;">${z.Nombre}</span>
             </div>
         `;
     });
 
-    /* ---------------------------------------------------------
-       FILAS de la tabla de equipos
-       (SIN Fila, SIN Col, SIN Tipo — CON Mesa, Dominio, CDominio,
-        Máscara, Puerta, DNS1, DNS2)
-       --------------------------------------------------------- */
     const filasTabla = equiposList.map(e => {
         const mesaNombre = e.zona ? e.zona.Nombre : '';
         const mesaColor  = e.zona ? (e.zona.Color || '#3b82f6') : '';
-
         return `
             <tr>
                 <td class="center bold">${e.num}</td>
-                <td>${e.Hostname}</td>
-                <td class="center">
-                    <span class="badge-rol" data-rol="${e.RolCodigo || ''}">${e.RolCodigo || '-'}</span>
-                </td>
-                <td class="center">
-                    ${mesaNombre ? `<span class="badge-mesa" style="background:${mesaColor};">${mesaNombre}</span>` : '-'}
-                </td>
-                <td>${e.IP || '-'}</td>
-                <td>${e.Mascara || '-'}</td>
-                <td>${e.PuertaEnlace || '-'}</td>
-                <td>${e.DNS1 || '-'}</td>
-                <td>${e.DNS2 || '-'}</td>
-                <td>${e.UsuarioAdmin || '-'}</td>
-                <td>${e.PasswordAdmin || '-'}</td>
+                <td class="bold-host">${e.Hostname}</td>
+                <td class="center">${e.ClienteCodigo || '-'}</td>
+                <td class="center"><span class="badge-rol" data-rol="${e.RolCodigo || ''}">${e.RolCodigo || '-'}</span></td>
+                <td>${mesaNombre ? `<span class="badge-mesa" style="background:${mesaColor};">${mesaNombre}</span>` : '-'}</td>
+                <td class="mono">${e.IP || '-'}</td>
+                <td class="mono">${e.Mascara || '-'}</td>
+                <td class="mono">${e.PuertaEnlace || '-'}</td>
+                <td class="mono">${e.DNS1 || '-'}</td>
+                <td class="mono">${e.DNS2 || '-'}</td>
+                <td class="mono">${e.UsuarioAdmin || '-'}</td>
+                <td class="mono">${e.PasswordAdmin || '-'}</td>
             </tr>
         `;
     }).join('');
 
-    /* ---------------------------------------------------------
-       IDENTIFICADORES (roles + zonas libres)
-       --------------------------------------------------------- */
     const porRol = {};
     equiposList.forEach(e => {
         const r = e.RolCodigo || 'SIN ROL';
@@ -2586,38 +2354,165 @@ function generarPDFDocumentado(panel) {
             </div>
         `).join('');
 
+    const porCliente = {};
+    equiposList.forEach(e => {
+        const c = e.ClienteCodigo || 'SIN CLIENTE';
+        porCliente[c] = (porCliente[c] || 0) + 1;
+    });
+
+    const clientesHTML = Object.entries(porCliente)
+        .sort((a, b) => b[1] - a[1])
+        .map(([cli, cant]) => `
+            <div class="identificador-item">
+                <span class="badge-cli">${cli}</span>
+                <span class="cant">${cant}</span>
+            </div>
+        `).join('');
+
     const zonasLibresGrupos = Object.values(gruposLibres);
     const zonasLibresHTML = zonasLibresGrupos.length > 0
         ? zonasLibresGrupos.map(g => `
             <div class="identificador-item">
-                <span class="muestra-color-inline" style="background:${g.color};"></span>
+                <span class="muestra-color-inline" style="background:${normalizarColor(g.color)};"></span>
                 <span class="nombre-zona-libre">${g.nombre}</span>
                 <span class="cant">${g.celdas.length}</span>
             </div>
         `).join('')
         : '';
 
-    /* ---------------------------------------------------------
-       CSS
-       --------------------------------------------------------- */
     const css = `
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        @page { size: A3 landscape; margin: 12mm; }
-        body { font-family: 'Segoe UI', 'Inter', system-ui, sans-serif; background: #fff; color: #1e293b; font-size: 11px; }
 
-        .encabezado { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 12px; border-bottom: 3px solid #1e293b; margin-bottom: 18px; }
-        .encabezado .titulo h1 { font-size: 1.5rem; color: #1e293b; margin-bottom: 4px; }
-        .encabezado .titulo .sub { font-size: 0.95rem; color: #64748b; }
-        .encabezado .meta { text-align: right; font-size: 0.75rem; color: #64748b; line-height: 1.6; }
+        @page plano-page { size: A3 portrait; margin: 8mm; }
+        @page tabla-page { size: A3 landscape; margin: 8mm; }
+
+        /* Bloquear scroll del html/body — el único scroll vive en .zoom-scroll-area */
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+            font-size: 11px;
+            line-height: 1.2;
+        }
+
+        /* =========================================================
+           ZOOM — único contenedor de scroll (horizontal + vertical)
+           ========================================================= */
+        .zoom-scroll-area {
+            position: fixed;
+            inset: 0;                 /* ocupa toda la ventana */
+            overflow: auto;           /* ÚNICO scroll de la página */
+            padding: 24px;
+            background: #f1f5f9;
+        }
+
+        /* Contenedor que centra el contenido cuando zoom ≤ 1 */
+        .zoom-center {
+            display: block;
+            width: max-content;       /* el ancho lo define el contenido */
+            min-width: 100%;          /* asegura que si es más chico, se centre */
+            margin: 0 auto;           /* centrado horizontal */
+        }
+
+        #pdf-zoom-target {
+            transform-origin: top left;  /* el contenido crece a la derecha y abajo */
+            transition: transform 0.08s ease-out;
+            width: fit-content;
+            background: #fff;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+            border-radius: 4px;
+            margin: 0 auto;
+        }
+
+        /* ======= PÁGINAS ======= */
+        .pagina-plano {
+            page: plano-page;
+            page-break-after: always;
+            width: 1120px;           /* ancho fijo consistente con A3 portrait */
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            background: #fff;
+        }
+
+        .pagina-tabla {
+            page: tabla-page;
+            width: 1400px;           /* ancho fijo consistente con A3 landscape */
+            padding: 20px;
+            background: #fff;
+        }
+
+        /* ======= ENCABEZADO ======= */
+        .encabezado {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding-bottom: 6px;
+            border-bottom: 3px solid #1e293b;
+            margin-bottom: 10px;
+            flex-shrink: 0;
+        }
+        .encabezado .titulo h1 { font-size: 1.4rem; color: #1e293b; margin-bottom: 2px; }
+        .encabezado .titulo .sub { font-size: 0.92rem; color: #64748b; }
+        .encabezado .meta { text-align: right; font-size: 0.8rem; color: #64748b; line-height: 1.5; }
         .encabezado .meta strong { color: #1e293b; }
 
-        .seccion-titulo { font-size: 0.9rem; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 0.05em; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0; }
+        .seccion-titulo {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 10px 0 6px;
+            padding-bottom: 3px;
+            border-bottom: 2px solid #e2e8f0;
+        }
 
-        .grid-plano { display: grid; grid-template-columns: repeat(${cols}, 42px); grid-template-rows: repeat(${filas}, 34px); gap: 4px; background: #e2e8f0; padding: 10px; border-radius: 8px; border: 2px solid #cbd5e1; width: fit-content; margin: 0 auto 20px; position: relative; }
-        .celda { width: 42px; height: 34px; background: #fff; border: 1.5px dashed #cbd5e1; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
+        /* ======= PLANO ======= */
+        .plano-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 12px 0;
+        }
+        .grid-plano {
+            display: grid;
+            grid-template-columns: repeat(${cols}, ${CELL_W}px);
+            grid-template-rows: repeat(${filas}, ${CELL_H}px);
+            gap: ${GAP}px;
+            background: #e2e8f0;
+            padding: ${GRID_PADDING}px;
+            border-radius: 10px;
+            border: 2px solid #cbd5e1;
+            width: fit-content;
+            position: relative;
+        }
+        .celda {
+            width: ${CELL_W}px;
+            height: ${CELL_H}px;
+            background: #fff;
+            border: 1px dashed #cbd5e1;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .celda.ocupada { border-style: solid; border-width: 1.5px; }
         .celda.libre { border-style: solid; border-width: 1px; }
-        .celda .numero { font-weight: 700; font-size: 0.7rem; color: #1e293b; }
+        .celda .numero {
+            font-weight: 700;
+            font-size: ${FONT_NUM}rem;
+            color: #1e293b;
+            line-height: 1;
+        }
         .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
         .celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
         .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
@@ -2626,16 +2521,48 @@ function generarPDFDocumentado(panel) {
         .celda[data-rol="MIS"] { background: #fce7f3; border-color: #ec4899; }
         .celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
 
-        .tabla-equipos { width: 100%; border-collapse: collapse; font-size: 0.66rem; }
-        .tabla-equipos thead { background: #1e293b; color: #fff; }
-        .tabla-equipos thead th { padding: 5px 6px; text-align: left; font-weight: 600; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.02em; }
-        .tabla-equipos tbody tr { border-bottom: 1px solid #e2e8f0; }
+        /* ======= TABLA ======= */
+        .tabla-equipos {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.72rem;
+            page-break-inside: auto;
+            table-layout: fixed;
+            margin-top: 6px;
+        }
+        .tabla-equipos thead { background: #1e293b; color: #fff; display: table-header-group; }
+        .tabla-equipos thead th {
+            padding: 6px 6px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .tabla-equipos tbody tr { border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; }
         .tabla-equipos tbody tr:nth-child(even) { background: #f8fafc; }
-        .tabla-equipos tbody td { padding: 3px 6px; color: #334155; word-break: break-all; }
+        .tabla-equipos tbody td {
+            padding: 3px 6px;
+            color: #334155;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.3;
+        }
         .tabla-equipos .center { text-align: center; }
-        .tabla-equipos .bold { font-weight: 700; color: #1e293b; }
+        .tabla-equipos .bold { font-weight: 700; color: #64748b; }
+        .tabla-equipos .bold-host { font-weight: 600; color: #1e293b; }
+        .tabla-equipos .mono { font-family: 'Consolas', 'Monaco', monospace; font-size: 0.66rem; color: #475569; }
 
-        .badge-rol { display: inline-block; padding: 1px 5px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; color: #fff; background: #94a3b8; }
+        .badge-rol {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: #fff;
+            background: #94a3b8;
+        }
         .badge-rol[data-rol="AGT"] { background: #3b82f6; }
         .badge-rol[data-rol="SPR"] { background: #22c55e; }
         .badge-rol[data-rol="CLD"] { background: #f97316; }
@@ -2644,76 +2571,333 @@ function generarPDFDocumentado(panel) {
         .badge-rol[data-rol="MIS"] { background: #ec4899; }
         .badge-rol[data-rol="ADM"] { background: #475569; }
 
-        .badge-mesa { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; color: #fff; background: #3b82f6; }
+        .badge-mesa {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: #fff;
+            background: #3b82f6;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
 
-        .identificadores { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
-        .identificador-item { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: #fff; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 0.72rem; }
+        .identificadores {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            padding: 8px 10px;
+            background: #f8fafc;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            margin-top: 6px;
+        }
+        .identificador-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+            font-size: 0.72rem;
+        }
         .identificador-item .cant { font-weight: 700; color: #1e293b; font-size: 0.8rem; }
-        .identificador-item .muestra-color-inline { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.15); }
-        .identificador-item .nombre-zona-libre { font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.02em; }
+        .identificador-item .muestra-color-inline {
+            display: inline-block;
+            width: 13px;
+            height: 13px;
+            border-radius: 3px;
+            border: 1px solid rgba(0,0,0,0.15);
+        }
+        .identificador-item .nombre-zona-libre {
+            font-weight: 600;
+            color: #1e293b;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .badge-cli {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 0.62rem;
+            font-weight: 700;
+            color: #1e293b;
+            background: #e2e8f0;
+        }
 
-        .page-break { page-break-before: always; }
+        /* =========================================================
+           ZOOM — indicadores
+           ========================================================= */
+        .zoom-indicador {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.92);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            z-index: 99999;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.4),
+                        0 4px 12px rgba(0,0,0,0.25);
+            pointer-events: none;
+            user-select: none;
+        }
+        .zoom-indicador.visible { display: flex; }
+        .zoom-indicador .zoom-valor {
+            background: rgba(255,255,255,0.18);
+            padding: 3px 10px;
+            border-radius: 5px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .zoom-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(15, 23, 42, 0.82);
+            color: #cbd5e1;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+            z-index: 99999;
+            pointer-events: none;
+            user-select: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .zoom-hint.oculto {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        body.zoom-activo { cursor: zoom-in; }
+
+        /* =========================================================
+           IMPRESIÓN: desactivar el chrome del zoom
+           ========================================================= */
+        @media print {
+            html, body { overflow: visible; background: #fff; }
+            .zoom-scroll-area {
+                position: static;
+                overflow: visible;
+                padding: 0;
+                background: #fff;
+            }
+            .zoom-center { display: block; width: auto; min-width: auto; }
+            #pdf-zoom-target {
+                transform: none !important;
+                box-shadow: none;
+                border-radius: 0;
+                margin: 0;
+            }
+            .zoom-indicador,
+            .zoom-hint { display: none !important; }
+        }
     `;
 
-    /* ---------------------------------------------------------
-       HTML final
-       --------------------------------------------------------- */
     const html = `
         <!DOCTYPE html>
         <html>
-        <head>
-            <meta charset="UTF-8">
-            <style>${css}</style>
-        </head>
+        <head><meta charset="UTF-8"><title>Vista previa — ${nombrePiso || 'Plano'}</title><style>${css}</style></head>
         <body>
 
-            <div class="encabezado">
-                <div class="titulo">
-                    <h1>Plano de Equipos — Documentación</h1>
-                    <div class="sub">${nombreCliente}${nombrePiso ? ' · ' + nombrePiso : ''}</div>
+            <!-- Único contenedor de scroll (horizontal + vertical) -->
+            <div class="zoom-scroll-area" id="zoom-scroll-area">
+                <div class="zoom-center" id="zoom-center">
+                    <div id="pdf-zoom-target">
+
+                        <div class="pagina-plano">
+                            <div class="encabezado">
+                                <div class="titulo">
+                                    <h1>Plano de Equipos</h1>
+                                    <div class="sub">${nombrePiso}</div>
+                                </div>
+                                <div class="meta">
+                                    <div><strong>Fecha:</strong> ${fecha}</div>
+                                    <div><strong>Total equipos:</strong> ${totalEquipos}</div>
+                                    <div><strong>Dimensiones:</strong> ${cols} × ${filas}</div>
+                                </div>
+                            </div>
+
+                            <div class="plano-wrap">
+                                <div class="grid-plano">
+                                    ${celdasHTML}
+                                    ${contornosClienteHTML}
+                                    ${overlaysLibresHTML}
+                                    ${mesasHTML}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pagina-tabla">
+                            <div class="encabezado">
+                                <div class="titulo">
+                                    <h1>Tabla de Equipos</h1>
+                                    <div class="sub">${nombrePiso} — ${totalEquipos} equipos</div>
+                                </div>
+                                <div class="meta">
+                                    <div><strong>Fecha:</strong> ${fecha}</div>
+                                </div>
+                            </div>
+
+                            <div class="seccion-titulo">Identificadores</div>
+                            <div class="identificadores">
+                                ${clientesHTML}
+                                ${rolesHTML}
+                                ${zonasLibresHTML}
+                            </div>
+
+                            <div class="seccion-titulo">Equipos (${totalEquipos})</div>
+                            <table class="tabla-equipos">
+                                <thead>
+                                    <tr>
+                                        <th style="width:36px;">#</th>
+                                        <th style="width:130px;">Hostname</th>
+                                        <th style="width:60px;">Cliente</th>
+                                        <th style="width:50px;">Rol</th>
+                                        <th style="width:110px;">Mesa / Zona</th>
+                                        <th style="width:120px;">IP</th>
+                                        <th style="width:120px;">Máscara</th>
+                                        <th style="width:120px;">Puerta enlace</th>
+                                        <th style="width:120px;">DNS 1</th>
+                                        <th style="width:100px;">DNS 2</th>
+                                        <th style="width:120px;">Usuario admin</th>
+                                        <th style="width:140px;">Password admin</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${filasTabla}</tbody>
+                            </table>
+                        </div>
+
+                    </div>
                 </div>
-                <div class="meta">
-                    <div><strong>Fecha:</strong> ${fecha}</div>
-                    <div><strong>Total equipos:</strong> ${totalEquipos}</div>
-                    <div><strong>Dimensiones:</strong> ${cols} × ${filas}</div>
-                </div>
             </div>
 
-            <div class="seccion-titulo">Plano numerado</div>
-            <div class="grid-plano">
-                ${celdasHTML}
-                ${overlaysLibresHTML}
-                ${mesasHTML}
+            <!-- Indicador de zoom -->
+            <div class="zoom-indicador" id="zoom-indicador">
+                Zoom: <span class="zoom-valor" id="zoom-valor">100%</span>
             </div>
 
-            <div class="page-break"></div>
-
-            <div class="seccion-titulo">Tabla de equipos (${totalEquipos})</div>
-            <table class="tabla-equipos">
-                <thead>
-                    <tr>
-                        <th style="width:30px;">#</th>
-                        <th style="width:130px;">Hostname</th>
-                        <th style="width:50px;">Rol</th>
-                        <th style="width:60px;">Mesa</th>
-                        <th style="width:110px;">IP</th>
-                        <th style="width:110px;">Máscara</th>
-                        <th style="width:110px;">Puerta enlace</th>
-                        <th style="width:110px;">DNS 1</th>
-                        <th style="width:110px;">DNS 2</th>
-                        <th style="width:120px;">Dominio</th>
-                        <th style="width:120px;">CDominio</th>
-                    </tr>
-                </thead>
-                <tbody>${filasTabla}</tbody>
-            </table>
-
-            <div class="seccion-titulo" style="margin-top:24px;">Identificadores</div>
-            <div class="identificadores">
-                ${rolesHTML}
-                ${zonasLibresHTML}
+            <!-- Hint de ayuda -->
+            <div class="zoom-hint" id="zoom-hint">
+                Ctrl + rueda del ratón para hacer zoom · Ctrl + 0 para restablecer
             </div>
 
+            <script>
+            (function() {
+                let zoom = 1;
+                const MIN_ZOOM = 0.3;
+                const MAX_ZOOM = 4;
+                const PASO = 0.1;
+
+                const scrollArea = document.getElementById('zoom-scroll-area');
+                const target     = document.getElementById('pdf-zoom-target');
+                const indicador  = document.getElementById('zoom-indicador');
+                const valorTxt   = document.getElementById('zoom-valor');
+                const hint       = document.getElementById('zoom-hint');
+                let   ocultarTimer = null;
+                let   hintTimer    = null;
+
+                function aplicarZoom() {
+                    // Guardar el punto central del viewport (en coordenadas del contenido)
+                    // para que al hacer zoom el foco no se pierda.
+                    const rect = scrollArea.getBoundingClientRect();
+                    const centerX = scrollArea.scrollLeft + rect.width / 2;
+                    const centerY = scrollArea.scrollTop + rect.height / 2;
+
+                    target.style.transform = 'scale(' + zoom + ')';
+                    valorTxt.textContent = Math.round(zoom * 100) + '%';
+
+                    // Ajustar scroll para mantener el foco tras el zoom
+                    requestAnimationFrame(() => {
+                        const newScrollX = centerX * zoom - rect.width / 2;
+                        const newScrollY = centerY * zoom - rect.height / 2;
+                        scrollArea.scrollLeft = Math.max(0, newScrollX);
+                        scrollArea.scrollTop  = Math.max(0, newScrollY);
+                    });
+
+                    // Indicador %
+                    indicador.classList.add('visible');
+                    clearTimeout(ocultarTimer);
+                    ocultarTimer = setTimeout(() => {
+                        indicador.classList.remove('visible');
+                    }, 1200);
+
+                    // Refrescar hint
+                    if (hint) {
+                        hint.classList.remove('oculto');
+                        clearTimeout(hintTimer);
+                        hintTimer = setTimeout(() => {
+                            hint.classList.add('oculto');
+                        }, 2500);
+                    }
+                }
+
+                // Auto-ocultar hint a los 5s
+                if (hint) {
+                    setTimeout(() => {
+                        hint.classList.add('oculto');
+                    }, 5000);
+                }
+
+                // Ctrl + rueda
+                document.addEventListener('wheel', function(ev) {
+                    if (!ev.ctrlKey && !ev.metaKey) return;
+                    ev.preventDefault();
+
+                    const delta = ev.deltaY > 0 ? -PASO : PASO;
+                    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + delta));
+                    aplicarZoom();
+                }, { passive: false });
+
+                // Ctrl + teclas
+                document.addEventListener('keydown', function(ev) {
+                    if ((ev.ctrlKey || ev.metaKey) && ev.key === '0') {
+                        ev.preventDefault();
+                        zoom = 1;
+                        aplicarZoom();
+                        return;
+                    }
+                    if ((ev.ctrlKey || ev.metaKey) && (ev.key === '+' || ev.key === '=' || ev.key === 'Add')) {
+                        ev.preventDefault();
+                        zoom = Math.min(MAX_ZOOM, zoom + PASO);
+                        aplicarZoom();
+                        return;
+                    }
+                    if ((ev.ctrlKey || ev.metaKey) && (ev.key === '-' || ev.key === 'Subtract')) {
+                        ev.preventDefault();
+                        zoom = Math.max(MIN_ZOOM, zoom - PASO);
+                        aplicarZoom();
+                        return;
+                    }
+                });
+
+                // Feedback cursor zoom
+                document.addEventListener('keydown', function(ev) {
+                    if (ev.ctrlKey || ev.metaKey) document.body.classList.add('zoom-activo');
+                });
+                document.addEventListener('keyup', function(ev) {
+                    if (!ev.ctrlKey && !ev.metaKey) document.body.classList.remove('zoom-activo');
+                });
+                window.addEventListener('blur', function() {
+                    document.body.classList.remove('zoom-activo');
+                });
+            })();
+            </script>
         </body>
         </html>
     `;
@@ -2725,7 +2909,6 @@ function generarPDFDocumentado(panel) {
 /* =========================================================
    ATAJO: ENTER PARA GUARDAR ZONA LIBRE
    ========================================================= */
-
 document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && modoZonaLibre && celdasLibresSeleccionadas.length > 0 && !guardandoZonaLibre) {
         ev.preventDefault();
@@ -2736,16 +2919,16 @@ document.addEventListener('keydown', (ev) => {
 /* =========================================================
    INICIO
    ========================================================= */
-
 (async () => {
     await cargarClientes();
     roles = await window.api.roles.listar();
-    await cargarLugaresPanel(panelIzq, null, false);
+    await cargarPisosPanel(panelIzq, false);
     renderPanelLateral();
     crearTooltip();
+    actualizarBotonesModo();
 
     window.addEventListener('resize', () => {
-        if (panelIzq.idLugar) renderGridPanel(panelIzq);
-        if (panelDer.idLugar) renderGridPanel(panelDer);
+        if (panelIzq.idPiso) renderGridPanel(panelIzq);
+        if (panelDer.idPiso) renderGridPanel(panelDer);
     });
 })();

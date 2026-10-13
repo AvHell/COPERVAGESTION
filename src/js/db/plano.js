@@ -461,6 +461,7 @@ async function actualizarZona(idUsuario, idPiso, idZona, nombre, color, fi, ff, 
     return { ok: true, mensaje: 'Zona actualizada' };
 }
 
+/* Eliminar zona por IdZona (una sola, se usa al editar una específica) */
 async function eliminarZona(idUsuario, idPiso, idZona, nombre) {
     const pool = await getPool();
     await pool.request()
@@ -472,11 +473,33 @@ async function eliminarZona(idUsuario, idPiso, idZona, nombre) {
     return { ok: true, mensaje: 'Zona eliminada' };
 }
 
+/* Eliminar TODAS las zonas con el mismo Nombre+Color en un piso
+   (sirve cuando se generaron varias 1×1 con el mismo nombre) */
+async function eliminarZonasPorNombre(idUsuario, idPiso, nombre, color) {
+    const pool = await getPool();
+
+    const r = await pool.request()
+        .input('IdPiso', sql.Int, idPiso)
+        .input('Nombre', sql.NVarChar(100), nombre)
+        .input('Color', sql.VarChar(20), color || null)
+        .query(`
+            DELETE FROM PlanoZonas
+            WHERE IdPiso = @IdPiso
+              AND Nombre = @Nombre
+              AND (@Color IS NULL OR Color = @Color)
+        `);
+
+    await historicos.registrar(idUsuario, idPiso, null, 'EliminarZona',
+        `Zona(s) "${nombre}" eliminada(s) — ${r.rowsAffected[0]} registro(s)`);
+
+    return { ok: true, mensaje: `Se eliminaron ${r.rowsAffected[0]} zona(s)` };
+}
+
 module.exports = {
     obtenerDimensiones, actualizarDimensiones,
     listarPorLugar, equiposSinUbicacion,
     asignar, mover, quitar, intercambiar,
     moverEntrePisos, swapEntrePisos,
-    listarZonas, crearZona, actualizarZona, eliminarZona,
+    listarZonas, crearZona, actualizarZona, eliminarZona, eliminarZonasPorNombre,
     listarZonasLibres, guardarZonaLibre, eliminarZonaLibre
 };

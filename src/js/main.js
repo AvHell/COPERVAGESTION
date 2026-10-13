@@ -553,6 +553,12 @@ ipcMain.handle('plano:eliminarZona', async (_e, idZona, idPiso, nombre) => {
     return await planoDB.eliminarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre);
 });
 
+/* ⬇️ NUEVO: elimina TODAS las zonas con el mismo Nombre+Color en el piso */
+ipcMain.handle('plano:eliminarZonasPorNombre', async (_e, idPiso, nombre, color) => {
+    if (!usuarioActual) throw new Error('Sesión no iniciada');
+    return await planoDB.eliminarZonasPorNombre(usuarioActual.IdUsuario, idPiso, nombre, color);
+});
+
 ipcMain.handle('plano:moverEntrePisos', async (_e, idEquipo, idPisoOrigen, idPisoDestino, fila, columna, nuevosDatos) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
     return await planoDB.moverEntrePisos(

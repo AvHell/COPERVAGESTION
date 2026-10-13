@@ -5,6 +5,7 @@
 let clientes = [];
 let pisos = [];
 let roles = [];
+let dominiosCache = {};
 
 const clientesFiltroIzq = new Set();
 const clientesFiltroDer = new Set();
@@ -26,20 +27,21 @@ function crearEstadoPanel(sufijo) {
     };
 }
 
+/* Zona Libre: marcar celdas vacías */
 let modoZonaLibre = false;
 let celdasLibresSeleccionadas = [];
 let colorSeleccionadoLibre = '#e74c3c';
 
+/* Zona Normal: manual 1×1 acumulativo (permite celdas con o sin equipo) */
 let modoZona = false;
-let seleccionZona = null;
-let seleccionando = false;
-let celdaInicioSeleccion = null;
+let celdasZonaSeleccionadas = [];  // [{fila, columna}, ...]
+let colorSeleccionado = '#e74c3c';
 
+/* Edición */
 let modoEdicion = false;
 let equipoEditando = null;
 
 let zonaEditando = null;
-let colorSeleccionado = '#e74c3c';
 
 let dragOrigen = null;
 let moverPendiente = null;
@@ -49,6 +51,11 @@ let filtroRolActivo = '__todos__';
 let filtroBusquedaLateral = '';
 
 let guardandoZonaLibre = false;
+
+/* Estado del modal editar */
+let edDominiosCargados = [];
+let edPisosCliente = [];
+let edGuardando = false;
 
 const COLORES_DISPONIBLES = [
     '#e74c3c', '#e67e22', '#f1c40f', '#27ae60',
@@ -72,12 +79,7 @@ function mostrarToast(mensaje, tipo = 'exito', duracion = 2800) {
         document.body.appendChild(cont);
     }
 
-    const iconos = {
-        exito: '✓',
-        error: '✕',
-        info: 'i',
-        warn: '!'
-    };
+    const iconos = { exito: '✓', error: '✕', info: 'i', warn: '!' };
 
     const toast = document.createElement('div');
     toast.className = `toast ${tipo}`;
@@ -182,20 +184,34 @@ const modalZonaLibreAceptar   = document.getElementById('modal-zona-libre-acepta
 const modalZonaLibreCancelar  = document.getElementById('modal-zona-libre-cancelar');
 const coloresZonaLibreDiv     = document.getElementById('colores-zona-libre');
 
+/* ===== Modal Editar Equipo ===== */
 const modalEditarEquipo    = document.getElementById('modal-editar-equipo');
 const editarTitulo         = document.getElementById('editar-titulo');
 const editarInfo           = document.getElementById('editar-info');
+
 const edCliente            = document.getElementById('ed-cliente');
+const edPiso               = document.getElementById('ed-piso');
 const edRol                = document.getElementById('ed-rol');
 const edTipoIP             = document.getElementById('ed-tipoIP');
-const edHostname           = document.getElementById('ed-hostname');
+
 const edIP                 = document.getElementById('ed-ip');
+const edNumeroHost         = document.getElementById('ed-numeroHost');
+const edHostnamePreview    = document.getElementById('ed-hostnamePreview');
+const edChkManual          = document.getElementById('ed-chk-hostname-manual');
+const edFilaCheckbox       = document.getElementById('ed-filaCheckboxHostname');
+const edCampoHostEst       = document.getElementById('ed-campoHostnameEstatico');
+const edCampoHostDHCP      = document.getElementById('ed-campoHostnameDHCP');
+const edHostnameLibre      = document.getElementById('ed-hostname-libre');
+
+const edSeccionRed         = document.getElementById('ed-seccion-red');
 const edMascara            = document.getElementById('ed-mascara');
 const edPuerta             = document.getElementById('ed-puerta');
 const edDns1               = document.getElementById('ed-dns1');
 const edDns2               = document.getElementById('ed-dns2');
+
 const edUsuario            = document.getElementById('ed-usuario');
 const edPassword           = document.getElementById('ed-password');
+
 const editarMensaje        = document.getElementById('editar-mensaje');
 const editarCancelar       = document.getElementById('editar-cancelar');
 const editarConfirmar      = document.getElementById('editar-confirmar');
@@ -327,7 +343,7 @@ modalAceptar.addEventListener('click', async () => {
 });
 
 /* =========================================================
-   MODAL DE ZONA
+   MODAL DE ZONA (acumulativo — múltiples celdas 1×1)
    ========================================================= */
 function renderColoresZona() {
     coloresZonaDiv.innerHTML = '';
@@ -342,20 +358,25 @@ function renderColoresZona() {
 
 function abrirModalZona(zona = null) {
     zonaEditando = zona;
+
     if (zona) {
         modalZonaTitulo.textContent = 'Editar zona';
         modalZonaNombre.value = zona.Nombre;
         colorSeleccionado = zona.Color || COLORES_DISPONIBLES[0];
-        modalZonaRango.textContent = `Rango: fila ${zona.FilaInicio}-${zona.FilaFin}, columna ${zona.ColumnaInicio}-${zona.ColumnaFin}`;
+        modalZonaRango.textContent = `Celda: fila ${zona.FilaInicio}, columna ${zona.ColumnaInicio}`;
     } else {
-        modalZonaTitulo.textContent = 'Nueva zona';
+        if (celdasZonaSeleccionadas.length === 0) {
+            alert('Primero selecciona al menos una celda.');
+            return;
+        }
+        modalZonaTitulo.textContent = celdasZonaSeleccionadas.length > 1
+            ? `Nueva zona (${celdasZonaSeleccionadas.length} celdas)`
+            : 'Nueva zona';
         modalZonaNombre.value = '';
         colorSeleccionado = COLORES_DISPONIBLES[0];
-        if (seleccionZona) {
-            modalZonaRango.textContent = `Rango: fila ${seleccionZona.filaInicio}-${seleccionZona.filaFin}, columna ${seleccionZona.colInicio}-${seleccionZona.colFin}`;
-        } else {
-            modalZonaRango.textContent = 'Sin selección';
-        }
+        modalZonaRango.textContent = celdasZonaSeleccionadas.length === 1
+            ? `Celda seleccionada: fila ${celdasZonaSeleccionadas[0].fila}, columna ${celdasZonaSeleccionadas[0].columna}`
+            : `${celdasZonaSeleccionadas.length} celdas seleccionadas`;
     }
     renderColoresZona();
     modalZona.style.display = 'flex';
@@ -369,6 +390,9 @@ function abrirModalZona(zona = null) {
 modalZonaCancelar.addEventListener('click', () => {
     modalZona.style.display = 'none';
     zonaEditando = null;
+    celdasZonaSeleccionadas = [];
+    renderGridPanel(panelIzq);
+    renderGridPanel(panelDer);
 });
 
 modalZonaAceptar.addEventListener('click', async () => {
@@ -378,6 +402,7 @@ modalZonaAceptar.addEventListener('click', async () => {
 
     try {
         if (zonaEditando) {
+            // Editar zona existente (mantiene su rango)
             await window.api.plano.actualizarZona(
                 zonaEditando.IdZona, nombre, colorSeleccionado,
                 zonaEditando.FilaInicio, zonaEditando.FilaFin,
@@ -386,13 +411,34 @@ modalZonaAceptar.addEventListener('click', async () => {
             );
             mostrarToast(`Zona "${nombre}" actualizada`, 'exito');
         } else {
-            if (!seleccionZona) { alert('Primero selecciona un rango de celdas.'); return; }
+            if (celdasZonaSeleccionadas.length === 0) {
+                alert('No hay celdas seleccionadas.');
+                return;
+            }
+
+            // Calcular bounding box de TODAS las celdas seleccionadas
+            const filas = celdasZonaSeleccionadas.map(c => c.fila);
+            const cols  = celdasZonaSeleccionadas.map(c => c.columna);
+
+            const filaMin = Math.min(...filas);
+            const filaMax = Math.max(...filas);
+            const colMin  = Math.min(...cols);
+            const colMax  = Math.max(...cols);
+
+            // Crear UNA sola zona con el rango completo
             await window.api.plano.crearZona(
                 panelActivo.idPiso, nombre, colorSeleccionado,
-                seleccionZona.filaInicio, seleccionZona.filaFin,
-                seleccionZona.colInicio, seleccionZona.colFin
+                filaMin, filaMax, colMin, colMax
             );
-            mostrarToast(`Zona "${nombre}" creada`, 'exito');
+
+            if (celdasZonaSeleccionadas.length === 1) {
+                mostrarToast(`Zona "${nombre}" creada en (${filaMin}, ${colMin})`, 'exito');
+            } else {
+                mostrarToast(
+                    `Zona "${nombre}" creada (${filaMin}-${filaMax} × ${colMin}-${colMax})`,
+                    'exito'
+                );
+            }
         }
     } catch (err) {
         mostrarToast('Error al guardar zona: ' + err.message, 'error', 4000);
@@ -401,10 +447,9 @@ modalZonaAceptar.addEventListener('click', async () => {
 
     modalZona.style.display = 'none';
     zonaEditando = null;
-    seleccionZona = null;
+    celdasZonaSeleccionadas = [];
     await recargarPanel(panelActivo);
 });
-
 /* =========================================================
    MODAL ZONA LIBRE
    ========================================================= */
@@ -478,9 +523,53 @@ modalZonaLibreAceptar.addEventListener('click', async () => {
 });
 
 /* =========================================================
-   MODAL EDITAR EQUIPO (MODO EDICIÓN)
+   MODAL EDITAR EQUIPO — FLUJO TIPO equipos.js
    ========================================================= */
-function llenarSelectsEditar() {
+
+function edLimpiarSelectConMensaje(select, msg) {
+    if (!select) return;
+    select.innerHTML = `<option value="">${msg}</option>`;
+    select.disabled = true;
+}
+
+function edLlenarSelectConfig(select, items, placeholder) {
+    if (!select) return;
+    select.disabled = false;
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+
+    if (!items || items.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = ''; opt.disabled = true;
+        opt.textContent = 'Sin valores. Haz clic en + para agregar uno.';
+        select.appendChild(opt);
+        return;
+    }
+
+    items.forEach(it => {
+        const opt = document.createElement('option');
+        opt.value = it.Valor;
+        opt.dataset.descripcion = it.Descripcion || '';
+        opt.textContent = it.Descripcion ? `${it.Valor} — ${it.Descripcion}` : it.Valor;
+        select.appendChild(opt);
+    });
+}
+
+function edSetSelectValorConHuerfano(select, valor) {
+    if (!select) return;
+    if (!valor) { select.value = ''; return; }
+    const existe = Array.from(select.options).some(o => o.value === valor);
+    if (!existe) {
+        const opt = document.createElement('option');
+        opt.value = valor;
+        opt.textContent = `${valor} (ya no está en catálogo)`;
+        opt.style.color = '#b7791f';
+        select.appendChild(opt);
+    }
+    select.value = valor;
+}
+
+function edLlenarSelectClientes() {
+    if (!edCliente) return;
     edCliente.innerHTML = '';
     clientes.forEach(c => {
         const opt = document.createElement('option');
@@ -488,7 +577,10 @@ function llenarSelectsEditar() {
         opt.textContent = `${c.Codigo} - ${c.Nombre}`;
         edCliente.appendChild(opt);
     });
+}
 
+function edLlenarSelectRoles() {
+    if (!edRol) return;
     edRol.innerHTML = '';
     roles.forEach(r => {
         const opt = document.createElement('option');
@@ -498,104 +590,396 @@ function llenarSelectsEditar() {
     });
 }
 
-function abrirModalEditarEquipo(equipo, panel) {
+async function edCargarPisosDelCliente(idCliente) {
+    if (!edPiso) return;
+    if (!idCliente) {
+        edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente primero --');
+        return;
+    }
+    try {
+        const todos = await window.api.pisos.listar();
+        edPisosCliente = todos.filter(p =>
+            (p.clientes || []).some(c => Number(c.IdCliente) === Number(idCliente))
+        );
+
+        edPiso.disabled = false;
+        edPiso.innerHTML = '<option value="">-- Selecciona --</option>';
+        edPisosCliente.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.IdPiso;
+            opt.textContent = p.Nombre;
+            edPiso.appendChild(opt);
+        });
+
+        if (edPisosCliente.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.disabled = true;
+            opt.textContent = 'Este cliente no tiene pisos asignados.';
+            edPiso.appendChild(opt);
+        }
+    } catch (err) {
+        console.error(err);
+        edLimpiarSelectConMensaje(edPiso, '-- Error al cargar pisos --');
+    }
+}
+
+async function edCargarConfiguracionesDelCliente(idCliente) {
+    if (!idCliente) {
+        edLimpiarSelectConMensaje(edMascara, '-- Selecciona un cliente primero --');
+        edLimpiarSelectConMensaje(edPuerta,  '-- Selecciona un cliente primero --');
+        edLimpiarSelectConMensaje(edDns1,    '-- Selecciona un cliente primero --');
+        edLimpiarSelectConMensaje(edDns2,    '-- Selecciona un cliente primero --');
+        edLimpiarSelectConMensaje(edUsuario, '-- Selecciona un cliente primero --');
+        edDominiosCargados = [];
+        return;
+    }
+    try {
+        const [mascaras, puertas, dns1s, dns2s, doms] = await Promise.all([
+            window.api.config.listarPorClienteTipo(idCliente, 'Mascara'),
+            window.api.config.listarPorClienteTipo(idCliente, 'PuertaEnlace'),
+            window.api.config.listarPorClienteTipo(idCliente, 'DNS1'),
+            window.api.config.listarPorClienteTipo(idCliente, 'DNS2'),
+            window.api.dominios.listarPorCliente(idCliente)
+        ]);
+
+        edDominiosCargados = doms;
+        dominiosCache[idCliente] = doms;
+
+        edLlenarSelectConfig(edMascara, mascaras, '-- Máscara --');
+        edLlenarSelectConfig(edPuerta,  puertas,  '-- Puerta de enlace --');
+        edLlenarSelectConfig(edDns1,    dns1s,    '-- DNS 1 --');
+        edLlenarSelectConfig(edDns2,    dns2s,    '-- DNS 2 (opcional) --');
+
+        if (edUsuario) {
+            edUsuario.disabled = false;
+            edUsuario.innerHTML = '<option value="">-- Dominio admin --</option>';
+            doms.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.Usuario;
+                opt.dataset.password = d.Password;
+                opt.dataset.descripcion = d.Descripcion || '';
+                opt.textContent = d.Descripcion ? `${d.Usuario} (${d.Descripcion})` : d.Usuario;
+                edUsuario.appendChild(opt);
+            });
+            if (doms.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = ''; opt.disabled = true;
+                opt.textContent = 'Sin dominios configurados.';
+                edUsuario.appendChild(opt);
+            }
+        }
+    } catch (err) {
+        console.error('Error cargando configuraciones (editar):', err);
+    }
+}
+
+function edConstruirHostname(idRol, idCli, ip) {
+    if (!idRol || !idCli || !ip) return '';
+    const partes = ip.split('.');
+    if (partes.length !== 4) return '';
+    const ultimo = parseInt(partes[3], 10);
+    if (isNaN(ultimo)) return '';
+
+    const rol = roles.find(r => Number(r.IdRolEquipo) === Number(idRol));
+    const cli = clientes.find(c => Number(c.IdCliente) === Number(idCli));
+    if (!rol || !cli) return '';
+
+    return `${rol.Codigo}-${cli.Codigo}${ultimo}`;
+}
+
+function edActualizarNumeroHost() {
+    if (!edIP || !edNumeroHost) return;
+    const partes = edIP.value.trim().split('.');
+    if (partes.length === 4) {
+        const ultimo = parseInt(partes[3], 10);
+        edNumeroHost.value = isNaN(ultimo) ? '' : ultimo;
+    } else {
+        edNumeroHost.value = '';
+    }
+}
+
+function edActualizarPreviewHostname() {
+    if (!edChkManual || !edHostnamePreview) return;
+    if (edChkManual.checked) { edActualizarNumeroHost(); return; }
+    const idRol = parseInt(edRol.value, 10);
+    const idCli = parseInt(edCliente.value, 10);
+    const ip = edIP.value.trim();
+    edHostnamePreview.value = edConstruirHostname(idRol, idCli, ip);
+    edActualizarNumeroHost();
+}
+
+function edActualizarCamposSegunTipo() {
+    if (!edTipoIP) return;
+    const tipo = edTipoIP.value;
+    const esEstatica = tipo === 'Estatica';
+
+    if (esEstatica) {
+        // Estática: muestra bloque hostname estático (IP, númeroHost, hostnamePreview, checkbox) y red
+        if (edCampoHostEst) edCampoHostEst.classList.remove('campo-oculto');
+        if (edCampoHostDHCP) edCampoHostDHCP.classList.add('campo-oculto');
+        if (edFilaCheckbox) edFilaCheckbox.style.display = 'flex';
+        if (edSeccionRed) edSeccionRed.style.display = 'block';
+    } else {
+        // DHCP: solo hostname libre + admin. Oculta IP, númeroHost, hostnamePreview, red
+        if (edCampoHostEst) edCampoHostEst.classList.add('campo-oculto');
+        if (edCampoHostDHCP) edCampoHostDHCP.classList.remove('campo-oculto');
+        if (edFilaCheckbox) edFilaCheckbox.style.display = 'none';
+        if (edSeccionRed) edSeccionRed.style.display = 'none';
+
+        // Limpiar valores de red y de hostname estático
+        if (edMascara) edMascara.value = '';
+        if (edPuerta)  edPuerta.value  = '';
+        if (edDns1)    edDns1.value    = '';
+        if (edDns2)    edDns2.value    = '';
+        if (edIP)      edIP.value      = '';
+        if (edNumeroHost) edNumeroHost.value = '';
+        if (edHostnamePreview) edHostnamePreview.value = '';
+    }
+}
+
+function edConfigurarInputIP(input) {
+    if (!input) return;
+    input.addEventListener('input', () => {
+        let valor = input.value.replace(/[^0-9.]/g, '');
+        const partes = valor.split('.').slice(0, 4);
+        const partesLimpias = partes.map(p => p.slice(0, 3));
+        valor = partesLimpias.join('.');
+        if (partesLimpias.length < 4) {
+            const ultima = partesLimpias[partesLimpias.length - 1];
+            const puntoYaEscrito = input.value.endsWith('.');
+            if (ultima.length === 3 && !puntoYaEscrito) valor = valor + '.';
+        }
+        input.value = valor;
+        edActualizarPreviewHostname();
+    });
+    input.addEventListener('blur', () => {
+        const partes = input.value.split('.');
+        while (partes.length < 4 && partes[0] !== '') partes.push('0');
+        if (partes[0] !== '') {
+            input.value = partes.slice(0, 4).join('.');
+            edActualizarPreviewHostname();
+        }
+    });
+}
+
+async function abrirModalEditarEquipo(equipo, panel) {
     equipoEditando = { equipo, panel };
 
-    editarTitulo.textContent = `Editar equipo — ${equipo.Hostname}`;
-    editarInfo.innerHTML = `
+    if (editarTitulo) editarTitulo.textContent = `Editar equipo — ${equipo.Hostname}`;
+    if (editarInfo) editarInfo.innerHTML = `
         <div><b>Posición:</b> Fila ${equipo._fila}, Columna ${equipo._col}</div>
         <div><b>Cliente actual:</b> ${equipo.ClienteCodigo || '—'}</div>
         <div><b>Rol actual:</b> ${equipo.RolCodigo || '—'}</div>
         <div><b>Piso:</b> ${pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso))?.Nombre || ''}</div>
     `;
 
-    llenarSelectsEditar();
+    if (editarMensaje) editarMensaje.style.display = 'none';
 
-    edCliente.value  = equipo.IdCliente != null ? String(equipo.IdCliente) : '';
-    edRol.value      = equipo.IdRolEquipo != null ? String(equipo.IdRolEquipo) : '';
-    edTipoIP.value   = equipo.TipoIP || 'Estatica';
-    edHostname.value = equipo.Hostname || '';
-    edIP.value       = equipo.IP || '';
-    edMascara.value  = equipo.Mascara || '';
-    edPuerta.value   = equipo.PuertaEnlace || '';
-    edDns1.value     = equipo.DNS1 || '';
-    edDns2.value     = equipo.DNS2 || '';
-    edUsuario.value  = equipo.UsuarioAdmin || '';
-    edPassword.value = equipo.PasswordAdmin || '';
+    edLlenarSelectClientes();
+    edLlenarSelectRoles();
 
-    editarMensaje.style.display = 'none';
-    modalEditarEquipo.style.display = 'flex';
+    if (edCliente) edCliente.value = equipo.IdCliente != null ? String(equipo.IdCliente) : '';
 
-    setTimeout(() => edHostname.focus(), 50);
+    if (equipo.IdCliente != null) {
+        await edCargarPisosDelCliente(equipo.IdCliente);
+        if (equipo.IdPiso && edPiso) edSetSelectValorConHuerfano(edPiso, String(equipo.IdPiso));
+
+        await edCargarConfiguracionesDelCliente(equipo.IdCliente);
+    } else {
+        edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente --');
+        await edCargarConfiguracionesDelCliente(null);
+    }
+
+    if (edRol) edRol.value = equipo.IdRolEquipo != null ? String(equipo.IdRolEquipo) : '';
+    if (edTipoIP) edTipoIP.value = equipo.TipoIP || 'Estatica';
+
+    if (edChkManual) edChkManual.checked = false;
+
+    if (edHostnamePreview) {
+        edHostnamePreview.readOnly = true;
+        edHostnamePreview.placeholder = 'Se armará automáticamente...';
+    }
+    if (edHostnameLibre) edHostnameLibre.value = '';
+
+    // Aplicar visibilidad ANTES de setear valores, para que no se limpien al vuelo
+    edActualizarCamposSegunTipo();
+
+    if (equipo.TipoIP === 'Estatica') {
+        if (edIP) edIP.value = equipo.IP || '';
+        if (edNumeroHost) edNumeroHost.value = equipo.NumeroHost ?? '';
+        if (edHostnamePreview) edHostnamePreview.value = equipo.Hostname || '';
+
+        // Red
+        edSetSelectValorConHuerfano(edMascara, equipo.Mascara || '');
+        edSetSelectValorConHuerfano(edPuerta,  equipo.PuertaEnlace || '');
+        edSetSelectValorConHuerfano(edDns1,    equipo.DNS1 || '');
+        edSetSelectValorConHuerfano(edDns2,    equipo.DNS2 || '');
+    } else {
+        // DHCP
+        if (edHostnameLibre) edHostnameLibre.value = equipo.Hostname || '';
+    }
+
+    // Admin siempre
+    edSetSelectValorConHuerfano(edUsuario, equipo.UsuarioAdmin || '');
+    if (edPassword) edPassword.value = equipo.PasswordAdmin ?? '';
+
+    if (modalEditarEquipo) modalEditarEquipo.style.display = 'flex';
+    setTimeout(() => { if (edCliente) edCliente.focus(); }, 60);
 }
 
-editarCancelar.addEventListener('click', () => {
-    modalEditarEquipo.style.display = 'none';
-    equipoEditando = null;
-});
+if (edCliente) {
+    edCliente.addEventListener('change', async () => {
+        const id = parseInt(edCliente.value, 10);
+        edLimpiarSelectConMensaje(edPiso, '-- Cargando... --');
+        if (id) {
+            await edCargarPisosDelCliente(id);
+            await edCargarConfiguracionesDelCliente(id);
+        } else {
+            edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente primero --');
+            await edCargarConfiguracionesDelCliente(null);
+        }
+        edActualizarPreviewHostname();
+    });
+}
 
-editarConfirmar.addEventListener('click', async () => {
-    if (!equipoEditando) return;
+if (edRol) edRol.addEventListener('change', edActualizarPreviewHostname);
 
-    const { equipo, panel } = equipoEditando;
+if (edUsuario) {
+    edUsuario.addEventListener('change', () => {
+        const opt = edUsuario.options[edUsuario.selectedIndex];
+        if (edPassword) edPassword.value = (opt && opt.dataset.password) ? opt.dataset.password : '';
+    });
+}
 
-    const datos = {
-        idCliente:     parseInt(edCliente.value, 10),
-        idRolEquipo:   parseInt(edRol.value, 10),
-        tipoIP:        edTipoIP.value,
-        hostname:      edHostname.value.trim(),
-        numeroHost:    edTipoIP.value === 'Estatica' && edIP.value
-                          ? parseInt(edIP.value.split('.')[3], 10) || null
-                          : null,
-        ip:            edTipoIP.value === 'Estatica' ? edIP.value.trim() : null,
-        mascara:       edMascara.value.trim(),
-        puertaEnlace:  edPuerta.value.trim(),
-        dns1:          edDns1.value.trim(),
-        dns2:          edDns2.value.trim(),
-        usuarioAdmin:  edUsuario.value.trim(),
-        passwordAdmin: edPassword.value.trim(),
-        idPiso:        panel.idPiso,
-        activo:        true
-    };
+if (edTipoIP) edTipoIP.addEventListener('change', edActualizarCamposSegunTipo);
 
-    if (!datos.idCliente || !datos.idRolEquipo) {
-        editarMensaje.textContent = 'Cliente y rol son obligatorios.';
-        editarMensaje.className = 'mensaje error';
-        editarMensaje.style.display = 'block';
-        return;
-    }
-    if (!datos.hostname) {
-        editarMensaje.textContent = 'El hostname es obligatorio.';
-        editarMensaje.className = 'mensaje error';
-        editarMensaje.style.display = 'block';
-        return;
-    }
-    if (datos.tipoIP === 'Estatica' && !datos.ip) {
-        editarMensaje.textContent = 'La IP es obligatoria en estáticos.';
-        editarMensaje.className = 'mensaje error';
-        editarMensaje.style.display = 'block';
-        return;
-    }
+if (edChkManual) {
+    edChkManual.addEventListener('change', () => {
+        const manual = edChkManual.checked;
+        if (manual) {
+            edHostnamePreview.readOnly = false;
+            edHostnamePreview.focus();
+            edHostnamePreview.placeholder = 'Escribe el hostname manualmente...';
+        } else {
+            edHostnamePreview.readOnly = true;
+            edHostnamePreview.placeholder = 'Se armará automáticamente...';
+            edActualizarPreviewHostname();
+        }
+    });
+}
 
-    editarConfirmar.disabled = true;
-    editarConfirmar.textContent = 'Guardando...';
+edConfigurarInputIP(edIP);
 
-    try {
-        await window.api.equipos.actualizar(equipo.IdEquipo, datos);
+if (editarCancelar) {
+    editarCancelar.addEventListener('click', () => {
         modalEditarEquipo.style.display = 'none';
         equipoEditando = null;
-        mostrarToast(`Equipo "${datos.hostname}" actualizado correctamente`, 'exito', 3200);
-        await recargarPanel(panel);
-    } catch (err) {
-        editarMensaje.textContent = 'Error: ' + err.message;
-        editarMensaje.className = 'mensaje error';
-        editarMensaje.style.display = 'block';
-        mostrarToast('Error al guardar equipo: ' + err.message, 'error', 4000);
-    } finally {
-        editarConfirmar.disabled = false;
-        editarConfirmar.textContent = 'Guardar cambios';
-    }
-});
+        edGuardando = false;
+    });
+}
+
+function edMostrarError(texto) {
+    if (!editarMensaje) return;
+    editarMensaje.textContent = texto;
+    editarMensaje.className = 'mensaje error';
+    editarMensaje.style.display = 'block';
+}
+
+if (editarConfirmar) {
+    editarConfirmar.addEventListener('click', async () => {
+        if (!equipoEditando || edGuardando) return;
+
+        const { equipo, panel } = equipoEditando;
+        const tipo = edTipoIP.value;
+        const esEstatica = tipo === 'Estatica';
+        let hostnameFinal;
+
+        if (esEstatica) {
+            if (edChkManual.checked) {
+                hostnameFinal = edHostnamePreview.value.trim();
+                if (!hostnameFinal) { edMostrarError('Escribe el hostname manualmente o desmarca la casilla.'); return; }
+            } else {
+                const idRol = parseInt(edRol.value, 10);
+                const idCli = parseInt(edCliente.value, 10);
+                const ip = edIP.value.trim();
+                hostnameFinal = edConstruirHostname(idRol, idCli, ip);
+                if (!hostnameFinal) { edMostrarError('No se pudo armar el hostname. Verifica cliente, rol e IP.'); return; }
+            }
+        } else {
+            hostnameFinal = edHostnameLibre.value.trim();
+            if (!hostnameFinal) { edMostrarError('El hostname es obligatorio.'); return; }
+        }
+
+        const datos = {
+            idCliente:      parseInt(edCliente.value, 10),
+            idPiso:         edPiso.value ? parseInt(edPiso.value, 10) : null,
+            idRolEquipo:    parseInt(edRol.value, 10),
+            tipoIP:         tipo,
+            hostname:       hostnameFinal,
+            numeroHost:     esEstatica ? parseInt(edNumeroHost.value, 10) : null,
+            ip:             esEstatica ? edIP.value.trim() : null,
+            idRangoIP:      null,
+            mascara:        esEstatica ? (edMascara.value || null) : null,
+            puertaEnlace:   esEstatica ? (edPuerta.value  || null) : null,
+            dns1:           esEstatica ? (edDns1.value    || null) : null,
+            dns2:           esEstatica ? (edDns2.value    || null) : null,
+            usuarioAdmin:   edUsuario.value || null,
+            passwordAdmin:  edPassword.value.trim() || null,
+            activo:         true
+        };
+
+        // Validaciones base
+        if (!datos.idCliente || !datos.idRolEquipo) { edMostrarError('Cliente y rol son obligatorios.'); return; }
+        if (!datos.hostname) { edMostrarError('El hostname es obligatorio.'); return; }
+
+        if (!datos.usuarioAdmin || !datos.passwordAdmin) {
+            edMostrarError('Usuario admin y password son obligatorios.'); return;
+        }
+
+        // Reglas SOLO para Estática
+        if (esEstatica) {
+            if (!datos.idPiso)       { edMostrarError('El piso es obligatorio para equipos estáticos.'); return; }
+            if (!datos.ip)           { edMostrarError('La IP es obligatoria para equipos estáticos.'); return; }
+            if (!datos.mascara)      { edMostrarError('La máscara es obligatoria.'); return; }
+            if (!datos.puertaEnlace) { edMostrarError('La puerta de enlace es obligatoria.'); return; }
+            if (!datos.dns1)         { edMostrarError('El DNS 1 es obligatorio.'); return; }
+        }
+
+        edGuardando = true;
+        editarConfirmar.disabled = true;
+        editarConfirmar.textContent = 'Guardando...';
+
+        try {
+            const res = await window.api.equipos.actualizar(equipo.IdEquipo, datos);
+
+            if (res && res.ok) {
+                modalEditarEquipo.style.display = 'none';
+                equipoEditando = null;
+                mostrarToast(`Equipo "${datos.hostname}" actualizado correctamente`, 'exito', 3200);
+                await recargarPanel(panel);
+                return;
+            }
+
+            if (res && res.tipo === 'ip-duplicada') {
+                edMostrarError(`IP duplicada: ${res.mensaje || ''}`);
+                return;
+            }
+            if (res && res.tipo === 'hostname-duplicado') {
+                edMostrarError(`Hostname duplicado: ${res.mensaje || ''}`);
+                return;
+            }
+
+            edMostrarError(res?.mensaje || 'Error desconocido al guardar.');
+        } catch (err) {
+            edMostrarError('Error: ' + err.message);
+        } finally {
+            edGuardando = false;
+            editarConfirmar.disabled = false;
+            editarConfirmar.textContent = 'Guardar cambios';
+        }
+    });
+}
 
 /* =========================================================
    NAVEGACIÓN
@@ -617,7 +1001,7 @@ selectModo.addEventListener('change', () => {
 });
 
 /* =========================================================
-   MODO ZONA
+   MODO ZONA (acumulativo 1×1 con Enter)
    ========================================================= */
 btnModoZona.addEventListener('click', () => {
     modoZona = !modoZona;
@@ -626,7 +1010,10 @@ btnModoZona.addEventListener('click', () => {
         if (modoZonaLibre) modoZonaLibre = false;
         if (modoEdicion) modoEdicion = false;
         celdasLibresSeleccionadas = [];
+        celdasZonaSeleccionadas = [];
         [gridIzq, gridDer].forEach(g => { if (g) g.classList.remove('modo-zona-libre'); });
+    } else {
+        celdasZonaSeleccionadas = [];
     }
 
     actualizarBotonesModo();
@@ -635,8 +1022,8 @@ btnModoZona.addEventListener('click', () => {
 });
 
 btnLimpiarSeleccion.addEventListener('click', () => {
-    seleccionZona = null;
-    celdaInicioSeleccion = null;
+    celdasZonaSeleccionadas = [];
+    celdasLibresSeleccionadas = [];
     renderGridPanel(panelIzq);
     renderGridPanel(panelDer);
 });
@@ -651,6 +1038,7 @@ btnModoZonaLibre.addEventListener('click', () => {
         if (modoZona) modoZona = false;
         if (modoEdicion) modoEdicion = false;
         celdasLibresSeleccionadas = [];
+        celdasZonaSeleccionadas = [];
     } else {
         celdasLibresSeleccionadas = [];
     }
@@ -673,7 +1061,7 @@ btnModoEdicion.addEventListener('click', () => {
         if (modoZona) modoZona = false;
         if (modoZonaLibre) modoZonaLibre = false;
         celdasLibresSeleccionadas = [];
-        seleccionZona = null;
+        celdasZonaSeleccionadas = [];
         [gridIzq, gridDer].forEach(g => { if (g) g.classList.remove('modo-zona-libre'); });
     }
 
@@ -693,9 +1081,8 @@ function actualizarBotonesModo() {
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                 <path d="M3 9h18M9 21V9"/>
             </svg>
-            Modo Zona (activo)`;
+            Crear Zona (1×1) — activo`;
         btnLimpiarSeleccion.style.display = 'inline-block';
-        seleccionZona = null;
     } else {
         btnModoZona.classList.remove('activo');
         btnModoZona.innerHTML = `
@@ -703,10 +1090,9 @@ function actualizarBotonesModo() {
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                 <path d="M3 9h18M9 21V9"/>
             </svg>
-            Modo Zona`;
+            Crear Zona (1×1)`;
         btnLimpiarSeleccion.style.display = 'none';
-        seleccionZona = null;
-        celdaInicioSeleccion = null;
+        celdasZonaSeleccionadas = [];
     }
 
     if (modoZonaLibre) {
@@ -716,7 +1102,7 @@ function actualizarBotonesModo() {
                 <path d="M4 20h16M4 4h16v16"/>
                 <path d="M9 4v16M4 9h16"/>
             </svg>
-            Modo Zona Libre (activo)`;
+            Marcar Zona Libre — activo`;
     } else {
         btnModoZonaLibre.classList.remove('activo');
         btnModoZonaLibre.innerHTML = `
@@ -724,7 +1110,7 @@ function actualizarBotonesModo() {
                 <path d="M4 20h16M4 4h16v16"/>
                 <path d="M9 4v16M4 9h16"/>
             </svg>
-            Modo Zona Libre`;
+            Marcar Zona Libre`;
     }
 
     if (modoEdicion) {
@@ -734,7 +1120,7 @@ function actualizarBotonesModo() {
                 <path d="M12 20h9"/>
                 <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
             </svg>
-            Modo Edición (activo)`;
+            Editar Equipo — activo`;
     } else {
         btnModoEdicion.classList.remove('activo');
         btnModoEdicion.innerHTML = `
@@ -742,7 +1128,7 @@ function actualizarBotonesModo() {
                 <path d="M12 20h9"/>
                 <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
             </svg>
-            Modo Edición`;
+            Editar Equipo`;
     }
 }
 
@@ -855,8 +1241,7 @@ function conectarEventosPanel(panel, selectLugar, inputFilas, inputColumnas, btn
 
         limpiarRenderPanel(panel);
 
-        seleccionZona = null;
-        celdaInicioSeleccion = null;
+        celdasZonaSeleccionadas = [];
         celdasLibresSeleccionadas = [];
 
         panel.idPiso = nuevoIdPiso;
@@ -910,7 +1295,6 @@ function conectarEventosPanel(panel, selectLugar, inputFilas, inputColumnas, btn
 
             if (res && res.expulsados && res.expulsados.length > 0) {
                 mostrarToast(`Se regresaron ${res.expulsados.length} equipo(s) a la lista`, 'warn', 4000);
-                console.warn('Expulsados:', res.expulsados.map(e => e.Hostname).join(', '));
             } else {
                 mostrarToast(`Dimensiones cambiadas a ${nuevasFilas} × ${nuevasColumnas}`, 'exito');
             }
@@ -1034,7 +1418,6 @@ const SVG_PC = `
    ========================================================= */
 function renderGridPanel(panel) {
     const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
-    const llaves = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
     if (!grid) return;
 
     limpiarRenderPanel(panel);
@@ -1075,10 +1458,15 @@ function renderGridPanel(panel) {
                 }
             }
 
-            if (seleccionZona && panel === panelActivo && enSeleccion(fila, columna)) {
-                celda.classList.add('seleccionada');
+            /* Modo Zona: acumulativo (permite celdas con y sin equipo) */
+            if (modoZona && panel === panelActivo) {
+                const estaSel = celdasZonaSeleccionadas.some(
+                    cc => cc.fila === fila && cc.columna === columna
+                );
+                if (estaSel) celda.classList.add('seleccionada');
             }
 
+            /* Modo Zona Libre: solo vacías */
             if (modoZonaLibre && panel === panelActivo) {
                 const estaSeleccionada = celdasLibresSeleccionadas.some(
                     cc => cc.fila === fila && cc.columna === columna
@@ -1122,7 +1510,7 @@ function renderGridPanel(panel) {
                 });
                 celda.addEventListener('mouseleave', ocultarTooltip);
 
-                if (!modoZona && !modoZonaLibre) {
+                if (!modoZona && !modoZonaLibre && !modoEdicion) {
                     celda.draggable = true;
                     celda.addEventListener('dragstart', (ev) => {
                         ocultarTooltip();
@@ -1147,10 +1535,13 @@ function renderGridPanel(panel) {
                     });
                 }
 
-                celda.querySelector('.cerrar').addEventListener('click', (ev) => {
-                    ev.stopPropagation();
-                    if (!modoZona && !modoZonaLibre && !modoEdicion) confirmarQuitar(contenido, panel);
-                });
+                const btnCerrar = celda.querySelector('.cerrar');
+                if (btnCerrar) {
+                    btnCerrar.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        if (!modoZona && !modoZonaLibre && !modoEdicion) confirmarQuitar(contenido, panel);
+                    });
+                }
             }
 
             if (!modoZona && !modoZonaLibre && !modoEdicion) {
@@ -1168,30 +1559,34 @@ function renderGridPanel(panel) {
                 });
             }
 
+            /* ===== MODO ZONA (acumulativo 1×1) =====
+               Permite seleccionar CUALQUIER celda (con o sin equipo).
+               Cada clic agrega/quita del set.
+               Enter abre el modal.
+            */
             if (modoZona && panel === panelActivo) {
-                celda.addEventListener('mousedown', (ev) => {
+                celda.style.cursor = 'crosshair';
+                celda.addEventListener('click', (ev) => {
                     ev.preventDefault();
-                    seleccionando = true;
-                    celdaInicioSeleccion = { fila, columna };
-                    seleccionZona = { filaInicio: fila, colInicio: columna, filaFin: fila, colFin: columna };
-                    renderGridPanel(panel);
-                });
-                celda.addEventListener('mouseenter', () => {
-                    if (seleccionando && celdaInicioSeleccion) {
-                        const a = celdaInicioSeleccion;
-                        seleccionZona = {
-                            filaInicio: Math.min(a.fila, fila),
-                            filaFin: Math.max(a.fila, fila),
-                            colInicio: Math.min(a.columna, columna),
-                            colFin: Math.max(a.columna, columna)
-                        };
-                        renderGridPanel(panel);
+                    ev.stopPropagation();
+
+                    const idx = celdasZonaSeleccionadas.findIndex(
+                        cc => cc.fila === fila && cc.columna === columna
+                    );
+
+                    if (idx >= 0) {
+                        celdasZonaSeleccionadas.splice(idx, 1);
+                        celda.classList.remove('seleccionada');
+                    } else {
+                        celdasZonaSeleccionadas.push({ fila, columna });
+                        celda.classList.add('seleccionada');
                     }
                 });
-                celda.addEventListener('mouseup', () => { seleccionando = false; });
             }
 
+            /* ===== MODO ZONA LIBRE (solo vacías) ===== */
             if (modoZonaLibre && panel === panelActivo) {
+                celda.style.cursor = contenido ? 'not-allowed' : 'pointer';
                 celda.addEventListener('click', (ev) => {
                     ev.preventDefault();
                     ev.stopPropagation();
@@ -1223,19 +1618,6 @@ function renderGridPanel(panel) {
     renderizarTextosZonasLibres(panel);
     renderizarLlavesZonas(panel);
 }
-
-function enSeleccion(fila, columna) {
-    if (!seleccionZona) return false;
-    return fila >= seleccionZona.filaInicio && fila <= seleccionZona.filaFin &&
-           columna >= seleccionZona.colInicio && columna <= seleccionZona.colFin;
-}
-
-document.addEventListener('mouseup', () => {
-    if (seleccionando) {
-        seleccionando = false;
-        if (seleccionZona && modoZona) abrirModalZona();
-    }
-});
 
 /* =========================================================
    RENDERIZAR TEXTOS DE ZONAS LIBRES
@@ -1581,42 +1963,91 @@ function renderListaZonas() {
         return;
     }
 
+    /* ===== Agrupar zonas normales por Nombre+Color (para que "MEGA" aparezca 1 sola vez) ===== */
+    const gruposNormales = {};
     zonasNormales.forEach(z => {
+        const key = `${z.Nombre}||${z.Color || ''}`;
+        if (!gruposNormales[key]) {
+            gruposNormales[key] = {
+                nombre: z.Nombre,
+                color: z.Color,
+                zonas: []
+            };
+        }
+        gruposNormales[key].zonas.push(z);
+    });
+
+    Object.values(gruposNormales).forEach(g => {
         const li = document.createElement('li');
         const colorDiv = document.createElement('div');
         colorDiv.className = 'muestra-color';
-        colorDiv.style.background = z.Color || '#ccc';
+        colorDiv.style.background = g.color || '#ccc';
         const nombreSpan = document.createElement('span');
         nombreSpan.className = 'nombre-zona';
-        nombreSpan.textContent = z.Nombre;
+        nombreSpan.textContent = g.nombre;
+
+        // Si son varias zonas (1×1 repetidas), mostrar cuántas
+        if (g.zonas.length > 1) {
+            const cantSpan = document.createElement('span');
+            cantSpan.textContent = `${g.zonas.length}`;
+            cantSpan.style.cssText = 'font-size:0.7rem;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:8px;';
+            li.appendChild(colorDiv);
+            li.appendChild(nombreSpan);
+            li.appendChild(cantSpan);
+        } else {
+            li.appendChild(colorDiv);
+            li.appendChild(nombreSpan);
+        }
 
         const btnEditar = document.createElement('button');
         btnEditar.textContent = 'Editar';
         btnEditar.className = 'secundario';
-        btnEditar.addEventListener('click', () => abrirModalZona(z));
+        // Editar la primera (o única) zona del grupo
+        btnEditar.addEventListener('click', () => abrirModalZona(g.zonas[0]));
 
         const btnEliminar = document.createElement('button');
         btnEliminar.textContent = 'Eliminar';
         btnEliminar.className = 'peligro';
         btnEliminar.addEventListener('click', () => {
+            const total = g.zonas.length;
+            const mensaje = total > 1
+                ? `¿Eliminar TODAS las zonas llamadas <b>"${g.nombre}"</b> (${total} registros)?<br>
+                   <span style="color:#64748b;font-size:0.85rem;">Los equipos permanecerán en sus posiciones.</span>`
+                : `¿Eliminar la zona <b>"${g.nombre}"</b>?<br>
+                   <span style="color:#64748b;font-size:0.85rem;">Los equipos permanecerán en sus posiciones.</span>`;
+
             mostrarConfirmacion(
                 'Eliminar zona',
-                `¿Eliminar la zona "${z.Nombre}"? Los equipos permanecerán en sus posiciones.`,
+                mensaje,
                 async () => {
-                    await window.api.plano.eliminarZona(z.IdZona, panelActivo.idPiso, z.Nombre);
-                    mostrarToast(`Zona "${z.Nombre}" eliminada`, 'exito');
-                    await recargarPanel(panelActivo);
+                    try {
+                        const res = await window.api.plano.eliminarZonasPorNombre(
+                            panelActivo.idPiso, g.nombre, g.color
+                        );
+
+                        if (!res || res.ok === false) {
+                            mostrarToast(res?.mensaje || 'No se pudo eliminar la zona', 'error', 4000);
+                            return;
+                        }
+
+                        mostrarToast(
+                            res.mensaje || `Zona "${g.nombre}" eliminada`,
+                            'exito'
+                        );
+                        await recargarPanel(panelActivo);
+                    } catch (err) {
+                        mostrarToast('Error al eliminar: ' + err.message, 'error', 4000);
+                    }
                 }
             );
         });
 
-        li.appendChild(colorDiv);
-        li.appendChild(nombreSpan);
         li.appendChild(btnEditar);
         li.appendChild(btnEliminar);
         listaZonas.appendChild(li);
     });
 
+    /* ===== Zonas libres (sin cambios) ===== */
     if (zonasLibres.length > 0) {
         const grupos = {};
         zonasLibres.forEach(zl => {
@@ -1919,11 +2350,15 @@ moverConfirmar.addEventListener('click', async () => {
                 const res = await window.api.plano.asignar(panelDestino.idPiso, idEquipo, fila, columna);
 
                 if (nuevosDatos) {
-                    await window.api.equipos.actualizar(idEquipo, {
+                    const resUpd = await window.api.equipos.actualizar(idEquipo, {
                         ...nuevosDatos,
                         idPiso: panelDestino.idPiso,
                         activo: true
                     });
+                    if (resUpd && resUpd.ok === false) {
+                        mostrarMensajeMover(resUpd.mensaje || 'No se pudo actualizar.', 'error');
+                        return;
+                    }
                 }
 
                 if (!res || !res.ok) {
@@ -2023,7 +2458,7 @@ function confirmarQuitar(equipo, panel) {
 }
 
 /* =========================================================
-   VISTA PREVIA (sin generar PDF)
+   VISTA PREVIA
    ========================================================= */
 btnVistaPrevia.addEventListener('click', () => {
     if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
@@ -2044,7 +2479,7 @@ btnVistaPrevia.addEventListener('click', () => {
 });
 
 /* =========================================================
-   EXPORTAR PDF — DOCUMENTADO
+   EXPORTAR PDF
    ========================================================= */
 btnExportarPDFDoc.addEventListener('click', async () => {
     if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
@@ -2072,6 +2507,13 @@ btnExportarPDFDoc.addEventListener('click', async () => {
     }
 });
 
+/* =========================================================
+   GENERADOR PDF DOCUMENTADO
+   - Celdas: equipos (con número + fondo por rol) o vacías (fondo zona libre si aplica)
+   - Borde + chip de cliente arriba de cada equipo
+   - Texto de zona libre DENTRO del bloque de celdas vacías que la forman
+   - Llaves + etiquetas de zonas (mesas) FUERA del grid (izq/der), sin choque con los chips
+   ========================================================= */
 function generarPDFDocumentado(panel) {
     const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
     const nombrePiso = piso ? piso.Nombre : '';
@@ -2080,17 +2522,23 @@ function generarPDFDocumentado(panel) {
     const cols = panel.dimensiones.Columnas;
     const filas = panel.dimensiones.Filas;
 
-    /* MAPA DE ZONAS */
-    const zonasMap = new Map();
-    (panel.zonas || []).forEach(z => {
-        for (let f = z.FilaInicio; f <= z.FilaFin; f++) {
-            for (let c = z.ColumnaInicio; c <= z.ColumnaFin; c++) {
-                zonasMap.set(`${f}-${c}`, z);
-            }
-        }
+    /* ====== MAPA DE ZONAS LIBRES POR CELDA ====== */
+    const zonasLibresMap = new Map();
+    (panel.zonasLibres || []).forEach(zl => {
+        zonasLibresMap.set(`${zl.Fila}-${zl.Columna}`, zl);
     });
 
-    /* LISTA DE EQUIPOS */
+    /* ====== AGRUPAR ZONAS LIBRES POR NOMBRE+COLOR ====== */
+    const gruposLibres = {};
+    (panel.zonasLibres || []).forEach(zl => {
+        const key = `${zl.Nombre}||${zl.Color}`;
+        if (!gruposLibres[key]) {
+            gruposLibres[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
+        }
+        gruposLibres[key].celdas.push({ fila: zl.Fila, columna: zl.Columna });
+    });
+
+    /* ====== LISTA DE EQUIPOS ====== */
     const equiposList = [];
     let contador = 1;
 
@@ -2103,7 +2551,6 @@ function generarPDFDocumentado(panel) {
                 equiposList.push({
                     num: contador++,
                     fila, col,
-                    zona: zonasMap.get(`${fila}-${col}`),
                     ...contenido
                 });
             }
@@ -2112,87 +2559,51 @@ function generarPDFDocumentado(panel) {
 
     const totalEquipos = equiposList.length;
 
-    /* ZONAS LIBRES */
-    const zonasLibresMap = new Map();
-    (panel.zonasLibres || []).forEach(zl => {
-        zonasLibresMap.set(`${zl.Fila}-${zl.Columna}`, zl);
-    });
+   /* ====== COLOR POR CLIENTE (mapa FIJO por código) ====== */
+const COLORES_CLIENTE_POR_CODIGO = {
+    'MEGA':    '#22c55e',   // verde
+    'DIDI':    '#f97316',   // naranja
+    'NU':      '#a855f7',   // morado
+    'ATT':     '#0ea5e9',   // celeste
+    'ADAMA':   '#1e40af',   // azul oscuro
+    'CLD':     '#ec4899',   // rosa
+    'DMEX':    '#84cc16',   // lima
+    'HBAN':    '#eab308',   // amarillo
+    'KUBO':    '#16a34a',   // verde fuerte
+    'FESA':    '#0d9488',   // teal
+    'SHOP':    '#ea580c',   // naranja quemado
+    'TOY':     '#dc2626',   // rojo
+    'TOYL':    '#dc2626',   // rojo (alias)
+    'TPLAY':   '#6366f1',   // índigo
+    'PHIE':    '#f59e0b'    // ámbar
+};
 
-    const gruposLibres = {};
-    (panel.zonasLibres || []).forEach(zl => {
-        const key = `${zl.Nombre}||${zl.Color}`;
-        if (!gruposLibres[key]) gruposLibres[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
-        gruposLibres[key].celdas.push({ fila: zl.Fila, columna: zl.Columna });
-    });
+const COLORES_FALLBACK = [
+    '#3b82f6', '#22c55e', '#f97316', '#a855f7',
+    '#14b8a6', '#ec4899', '#eab308', '#ef4444',
+    '#06b6d4', '#8b5cf6', '#84cc16', '#f43f5e'
+];
 
-    /* AGRUPAR EQUIPOS POR CLIENTE */
-    const COLORES_CLIENTE = [
-        '#3b82f6', '#22c55e', '#f97316', '#a855f7',
-        '#14b8a6', '#ec4899', '#eab308', '#ef4444',
-        '#06b6d4', '#8b5cf6', '#84cc16', '#f43f5e'
-    ];
+const colorPorCliente = new Map();
+let fallbackIdx = 0;
 
-    const colorPorCliente = new Map();
-    let colorIdx = 0;
-    equiposList.forEach(e => {
-        const id = e.IdCliente;
-        if (id != null && !colorPorCliente.has(id)) {
-            colorPorCliente.set(id, COLORES_CLIENTE[colorIdx % COLORES_CLIENTE.length]);
-            colorIdx++;
-        }
-    });
+equiposList.forEach(e => {
+    const id = e.IdCliente;
+    if (id == null || colorPorCliente.has(id)) return;
 
-    const gridClientes = Array.from({ length: filas }, () => Array(cols).fill(null));
-    equiposList.forEach(e => {
-        gridClientes[e.fila - 1][e.col - 1] = e.IdCliente;
-    });
+    // Buscar el código en el mapa fijo
+    const codigo = String(e.ClienteCodigo || '').toUpperCase().trim();
+    let color = COLORES_CLIENTE_POR_CODIGO[codigo];
 
-    const visitado = Array.from({ length: filas }, () => Array(cols).fill(false));
-    const gruposCliente = [];
-
-    for (let f = 0; f < filas; f++) {
-        for (let c = 0; c < cols; c++) {
-            const idCli = gridClientes[f][c];
-            if (idCli == null || visitado[f][c]) continue;
-
-            const cola = [[f, c]];
-            const celdasGrupo = [];
-            visitado[f][c] = true;
-
-            while (cola.length) {
-                const [cf, cc] = cola.shift();
-                celdasGrupo.push({ fila: cf + 1, col: cc + 1 });
-
-                const vecinos = [
-                    [cf - 1, cc], [cf + 1, cc],
-                    [cf, cc - 1], [cf, cc + 1]
-                ];
-                for (const [nf, nc] of vecinos) {
-                    if (nf < 0 || nf >= filas || nc < 0 || nc >= cols) continue;
-                    if (visitado[nf][nc]) continue;
-                    if (gridClientes[nf][nc] !== idCli) continue;
-                    visitado[nf][nc] = true;
-                    cola.push([nf, nc]);
-                }
-            }
-
-            if (celdasGrupo.length >= 2) {
-                const filasArr = celdasGrupo.map(x => x.fila);
-                const colsArr  = celdasGrupo.map(x => x.col);
-                gruposCliente.push({
-                    idCliente: idCli,
-                    color: colorPorCliente.get(idCli) || '#3b82f6',
-                    celdas: celdasGrupo,
-                    filaMin: Math.min(...filasArr),
-                    filaMax: Math.max(...filasArr),
-                    colMin:  Math.min(...colsArr),
-                    colMax:  Math.max(...colsArr)
-                });
-            }
-        }
+    // Si no está en el mapa, usar el fallback rotativo
+    if (!color) {
+        color = COLORES_FALLBACK[fallbackIdx % COLORES_FALLBACK.length];
+        fallbackIdx++;
     }
 
-    /* CÁLCULO DE TAMAÑOS — A3 PORTRAIT */
+    colorPorCliente.set(id, color);
+});
+    /* ====== CÁLCULO DE TAMAÑOS — A3 PORTRAIT ====== */
     const ANCHO_UTIL = 1060;
     const ALTO_PLANO = 1420;
 
@@ -2225,12 +2636,32 @@ function generarPDFDocumentado(panel) {
         return fallback;
     }
 
+    /* Helper: calcular contraste de texto sobre un color de fondo */
+    function colorTextoContraste(hexColor) {
+        try {
+            const hex = String(hexColor).replace('#', '');
+            const full = hex.length === 3
+                ? hex.split('').map(c => c + c).join('')
+                : hex;
+            const r = parseInt(full.substr(0, 2), 16);
+            const g = parseInt(full.substr(2, 2), 16);
+            const b = parseInt(full.substr(4, 2), 16);
+            const luminancia = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return luminancia < 0.6 ? '#ffffff' : '#1e293b';
+        } catch {
+            return '#1e293b';
+        }
+    }
+
+    /* =========================================================
+       CELDAS BASE
+       ========================================================= */
     let celdasHTML = '';
     for (let f = 0; f < filas; f++) {
         for (let c = 0; c < cols; c++) {
-            const contenido = panel.celdas[f]?.[c];
             const fila = f + 1;
             const col = c + 1;
+            const contenido = panel.celdas[f]?.[c];
             const zl = zonasLibresMap.get(`${fila}-${col}`);
 
             if (contenido) {
@@ -2238,106 +2669,250 @@ function generarPDFDocumentado(panel) {
                 celdasHTML += `<div class="celda ocupada" data-rol="${contenido.RolCodigo || ''}"><div class="numero">${eq.num}</div></div>`;
             } else if (zl) {
                 const colorZL = normalizarColor(zl.Color, '#e2e8f0');
-                celdasHTML += `<div class="celda libre" style="background:${colorZL} !important;border:1px solid rgba(0,0,0,0.2) !important;"></div>`;
+                celdasHTML += `<div class="celda libre" style="background:${colorZL} !important;border:1px solid rgba(0,0,0,0.25) !important;"></div>`;
             } else {
                 celdasHTML += `<div class="celda vacia"></div>`;
             }
         }
     }
 
-    let contornosClienteHTML = '';
-    gruposCliente.forEach(g => {
-        const x = (g.colMin - 1) * (CELL_W + GAP);
-        const y = (g.filaMin - 1) * (CELL_H + GAP);
-        const w = (g.colMax - g.colMin + 1) * (CELL_W + GAP) - GAP;
-        const h = (g.filaMax - g.filaMin + 1) * (CELL_H + GAP) - GAP;
+    /* =========================================================
+       BORDE POR EQUIPO + CHIP DE CLIENTE ARRIBA
+       ========================================================= */
+    let bordesEquipoHTML = '';
+    let etiquetasEquipoHTML = '';
 
-        contornosClienteHTML += `
+    const BORDE_OFFSET = 2;
+    const CHIP_ALTO = 16;
+    const CHIP_FONT = 0.6;
+
+    equiposList.forEach(e => {
+        const colorCli = colorPorCliente.get(e.IdCliente) || '#3b82f6';
+
+        const x = (e.col - 1) * (CELL_W + GAP);
+        const y = (e.fila - 1) * (CELL_H + GAP);
+
+        bordesEquipoHTML += `
             <div style="
                 position:absolute;
-                left:${x + GRID_PADDING - 4}px;
-                top:${y + GRID_PADDING - 4}px;
-                width:${w + 8}px;
-                height:${h + 8}px;
-                border:3px solid ${g.color};
-                border-radius:8px;
+                left:${x + GRID_PADDING - BORDE_OFFSET}px;
+                top:${y + GRID_PADDING - BORDE_OFFSET}px;
+                width:${CELL_W + BORDE_OFFSET * 2}px;
+                height:${CELL_H + BORDE_OFFSET * 2}px;
+                border:2.5px solid ${colorCli};
+                border-radius:6px;
                 pointer-events:none;
                 box-sizing:border-box;
                 z-index:4;
-                background:${g.color}0A;
             "></div>
+        `;
+
+        const codigoCli = e.ClienteCodigo || '?';
+        etiquetasEquipoHTML += `
+            <div style="
+                position:absolute;
+                left:${x + GRID_PADDING - BORDE_OFFSET}px;
+                top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;
+                height:${CHIP_ALTO}px;
+                max-width:${CELL_W + BORDE_OFFSET * 2}px;
+                padding:0 6px;
+                background:${colorCli};
+                color:#ffffff;
+                font-size:${CHIP_FONT}rem;
+                font-weight:700;
+                letter-spacing:0.03em;
+                text-transform:uppercase;
+                border-radius:3px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                white-space:nowrap;
+                overflow:visible;
+                pointer-events:none;
+                box-sizing:border-box;
+                z-index:5;
+                text-shadow:0 1px 1px rgba(0,0,0,0.25);
+            ">${codigoCli}</div>
         `;
     });
 
-    let overlaysLibresHTML = '';
+    /* =========================================================
+       TEXTO DE ZONAS LIBRES — DENTRO del bloque de celdas
+       ========================================================= */
+    let textosLibresHTML = '';
+
     Object.values(gruposLibres).forEach(g => {
         const filasArr = g.celdas.map(c => c.fila);
-        const colsArr = g.celdas.map(c => c.columna);
-        const filaMin = Math.min(...filasArr);
-        const filaMax = Math.max(...filasArr);
-        const colMin = Math.min(...colsArr);
-        const colMax = Math.max(...colsArr);
+        const colsArr  = g.celdas.map(c => c.columna);
+        const filaMin  = Math.min(...filasArr);
+        const filaMax  = Math.max(...filasArr);
+        const colMin   = Math.min(...colsArr);
+        const colMax   = Math.max(...colsArr);
 
-        const x = (colMin - 1) * (CELL_W + GAP);
-        const y = (filaMin - 1) * (CELL_H + GAP);
-        const w = (colMax - colMin + 1) * (CELL_W + GAP) - GAP;
-        const h = (filaMax - filaMin + 1) * (CELL_H + GAP) - GAP;
+        const x0 = (colMin - 1) * (CELL_W + GAP) + GRID_PADDING;
+        const y0 = (filaMin - 1) * (CELL_H + GAP) + GRID_PADDING;
+        const w  = (colMax - colMin + 1) * (CELL_W + GAP) - GAP;
+        const h  = (filaMax - filaMin + 1) * (CELL_H + GAP) - GAP;
+
+        const colorZona  = normalizarColor(g.color, '#e2e8f0');
+        const colorTexto = colorTextoContraste(colorZona);
 
         const totalFilas = filaMax - filaMin + 1;
-        const totalCols = colMax - colMin + 1;
-        const fontSize = Math.max(0.55, Math.min(1.15, 0.6 + Math.min(totalFilas, totalCols) * 0.06));
+        const totalCols  = colMax - colMin + 1;
+        const fontSizeRem = Math.max(0.7, Math.min(1.4, 0.75 + Math.min(totalFilas, totalCols) * 0.08));
 
-        overlaysLibresHTML += `
+        textosLibresHTML += `
             <div style="
-                position:absolute;left:${x + GRID_PADDING}px;top:${y + GRID_PADDING}px;
-                width:${w}px;height:${h}px;display:flex;align-items:center;justify-content:center;
-                text-align:center;font-weight:700;font-size:${fontSize}rem;color:#1e293b;
-                text-transform:uppercase;letter-spacing:0.04em;text-shadow:0 1px 2px rgba(255,255,255,0.85);
-                pointer-events:none;padding:4px;line-height:1.05;word-break:break-word;z-index:5;
+                position:absolute;
+                left:${x0}px;
+                top:${y0}px;
+                width:${w}px;
+                height:${h}px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                text-align:center;
+                font-weight:700;
+                font-size:${fontSizeRem}rem;
+                color:${colorTexto};
+                text-transform:uppercase;
+                letter-spacing:0.05em;
+                text-shadow:0 1px 2px rgba(255,255,255,0.35);
+                pointer-events:none;
+                padding:2px;
+                line-height:1.05;
+                word-break:break-word;
+                box-sizing:border-box;
+                z-index:5;
             ">${g.nombre}</div>
         `;
     });
 
-    let mesasHTML = '';
-    (panel.zonas || []).forEach(z => {
-        const x = (z.ColumnaInicio - 1) * (CELL_W + GAP);
-        const y = (z.FilaInicio - 1) * (CELL_H + GAP);
-        const w = (z.ColumnaFin - z.ColumnaInicio + 1) * (CELL_W + GAP) - GAP;
-        const h = (z.FilaFin - z.FilaInicio + 1) * (CELL_H + GAP) - GAP;
+    /* =========================================================
+       ZONAS (MESAS) — llaves + etiquetas LATERALES fuera del grid
+       Se dibujan con padding lateral, igual que en el canvas en vivo.
+       ========================================================= */
+    let zonasLlavesHTML = '';
 
-        mesasHTML += `
+    const ZONA_ORDENADAS = [...(panel.zonas || [])].sort((a, b) => a.FilaInicio - b.FilaInicio);
+    const GRID_TOTAL_W = cols * CELL_W + (cols - 1) * GAP;
+
+    const ocupacionIzq = [];
+    const ocupacionDer = [];
+
+    ZONA_ORDENADAS.forEach(zona => {
+        const startFila = zona.FilaInicio - 1;
+        const endFila   = zona.FilaFin - 1;
+        const endCol    = zona.ColumnaFin - 1;
+
+        const zonaY = startFila * (CELL_H + GAP);
+        const zonaH = (endFila - startFila) * (CELL_H + GAP) + CELL_H;
+
+        const zonaXRight = (endCol + 1) * (CELL_W + GAP) - GAP;
+        const zonaXLeft  = (zona.ColumnaInicio - 1) * (CELL_W + GAP);
+
+        const centroBloque = (zonaXLeft + zonaXRight) / 2;
+        const mitadGrid    = GRID_TOTAL_W / 2;
+
+        let lado = centroBloque >= mitadGrid ? 'derecha' : 'izquierda';
+
+        const ocupacion = lado === 'derecha' ? ocupacionDer : ocupacionIzq;
+        let yFinal = zonaY;
+        const alturaMin = 24;
+
+        for (const oc of ocupacion) {
+            if (yFinal < oc.bottom && (yFinal + zonaH) > oc.top) {
+                yFinal = oc.bottom + 6;
+            }
+        }
+        ocupacion.push({ top: yFinal, bottom: yFinal + Math.max(zonaH, alturaMin) });
+
+        const colorZona = normalizarColor(zona.Color, '#3b82f6');
+
+        const OFFSET_LLAVE = 8;
+        const xBase = lado === 'derecha'
+            ? zonaXRight + OFFSET_LLAVE
+            : zonaXLeft  - OFFSET_LLAVE;
+
+        const hLlave = Math.max(zonaH, 30);
+
+        const svgW = 24;
+        const svgH = hLlave;
+        let path;
+        if (lado === 'derecha') {
+            path = `M 0 0 L 0 ${svgH} M 0 ${svgH / 2} L ${svgW} ${svgH / 2}`;
+        } else {
+            path = `M ${svgW} 0 L ${svgW} ${svgH} M ${svgW} ${svgH / 2} L 0 ${svgH / 2}`;
+        }
+
+        const leftLlave = xBase + GRID_PADDING + (lado === 'derecha' ? 2 : -svgW - 2);
+        const topLlave  = yFinal + GRID_PADDING;
+
+        const chipH = 20;
+        const chipFont = 0.7;
+
+        zonasLlavesHTML += `
             <div style="
-                position:absolute;left:${x + GRID_PADDING}px;top:${y + GRID_PADDING}px;
-                width:${w}px;height:${h}px;border:2.5px dashed ${z.Color || '#3b82f6'};
-                border-radius:7px;pointer-events:none;box-sizing:border-box;z-index:6;">
-                <span style="
-                    position:absolute;top:-10px;left:8px;background:${z.Color || '#3b82f6'};color:#fff;
-                    font-size:0.62rem;font-weight:700;padding:1px 7px;border-radius:3px;
-                    letter-spacing:0.03em;text-transform:uppercase;white-space:nowrap;">${z.Nombre}</span>
+                position:absolute;
+                left:${leftLlave}px;
+                top:${topLlave}px;
+                width:${svgW}px;
+                height:${svgH}px;
+                pointer-events:none;
+                z-index:6;
+            ">
+                <svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}"
+                     xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+                    <path d="${path}" fill="none" stroke="${colorZona}" stroke-width="2"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="${lado === 'derecha' ? svgW : 0}" cy="${svgH / 2}" r="3" fill="${colorZona}"/>
+                </svg>
+
+                <div style="
+                    position:absolute;
+                    top:50%;
+                    transform:translateY(-50%) ${lado === 'izquierda' ? ' translateX(-100%)' : ''};
+                    left:${lado === 'derecha' ? svgW + 6 : 0}px;
+                    background:#ffffff;
+                    border:1px solid ${colorZona};
+                    border-radius:4px;
+                    padding:2px 8px;
+                    height:${chipH}px;
+                    display:flex;
+                    align-items:center;
+                    gap:5px;
+                    font-size:${chipFont}rem;
+                    font-weight:700;
+                    color:#1e293b;
+                    text-transform:uppercase;
+                    letter-spacing:0.03em;
+                    white-space:nowrap;
+                    box-shadow:0 1px 3px rgba(0,0,0,0.08);
+                    box-sizing:border-box;
+                ">
+                    <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorZona};"></span>
+                    ${zona.Nombre}
+                </div>
             </div>
         `;
     });
 
-    const filasTabla = equiposList.map(e => {
-        const mesaNombre = e.zona ? e.zona.Nombre : '';
-        const mesaColor  = e.zona ? (e.zona.Color || '#3b82f6') : '';
-        return `
-            <tr>
-                <td class="center bold">${e.num}</td>
-                <td class="bold-host">${e.Hostname}</td>
-                <td class="center">${e.ClienteCodigo || '-'}</td>
-                <td class="center"><span class="badge-rol" data-rol="${e.RolCodigo || ''}">${e.RolCodigo || '-'}</span></td>
-                <td>${mesaNombre ? `<span class="badge-mesa" style="background:${mesaColor};">${mesaNombre}</span>` : '-'}</td>
-                <td class="mono">${e.IP || '-'}</td>
-                <td class="mono">${e.Mascara || '-'}</td>
-                <td class="mono">${e.PuertaEnlace || '-'}</td>
-                <td class="mono">${e.DNS1 || '-'}</td>
-                <td class="mono">${e.DNS2 || '-'}</td>
-                <td class="mono">${e.UsuarioAdmin || '-'}</td>
-                <td class="mono">${e.PasswordAdmin || '-'}</td>
-            </tr>
-        `;
-    }).join('');
+    /* ====== TABLA ====== */
+    const filasTabla = equiposList.map(e => `
+        <tr>
+            <td class="center bold">${e.num}</td>
+            <td class="bold-host">${e.Hostname}</td>
+            <td class="center">${e.ClienteCodigo || '-'}</td>
+            <td class="center"><span class="badge-rol" data-rol="${e.RolCodigo || ''}">${e.RolCodigo || '-'}</span></td>
+            <td class="mono">${e.IP || '-'}</td>
+            <td class="mono">${e.Mascara || '-'}</td>
+            <td class="mono">${e.PuertaEnlace || '-'}</td>
+            <td class="mono">${e.DNS1 || '-'}</td>
+            <td class="mono">${e.DNS2 || '-'}</td>
+            <td class="mono">${e.UsuarioAdmin || '-'}</td>
+            <td class="mono">${e.PasswordAdmin || '-'}</td>
+        </tr>
+    `).join('');
 
     const porRol = {};
     equiposList.forEach(e => {
@@ -2380,85 +2955,37 @@ function generarPDFDocumentado(panel) {
         `).join('')
         : '';
 
+    /* ====== CSS ====== */
     const css = `
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         @page plano-page { size: A3 portrait; margin: 8mm; }
         @page tabla-page { size: A3 landscape; margin: 8mm; }
 
-        /* Bloquear scroll del html/body — el único scroll vive en .zoom-scroll-area */
-        html, body {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-        }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
 
         body {
             font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-            background: #f1f5f9;
-            color: #1e293b;
-            font-size: 11px;
-            line-height: 1.2;
+            background: #f1f5f9; color: #1e293b; font-size: 11px; line-height: 1.2;
         }
 
-        /* =========================================================
-           ZOOM — único contenedor de scroll (horizontal + vertical)
-           ========================================================= */
-        .zoom-scroll-area {
-            position: fixed;
-            inset: 0;                 /* ocupa toda la ventana */
-            overflow: auto;           /* ÚNICO scroll de la página */
-            padding: 24px;
-            background: #f1f5f9;
-        }
-
-        /* Contenedor que centra el contenido cuando zoom ≤ 1 */
-        .zoom-center {
-            display: block;
-            width: max-content;       /* el ancho lo define el contenido */
-            min-width: 100%;          /* asegura que si es más chico, se centre */
-            margin: 0 auto;           /* centrado horizontal */
-        }
-
+        .zoom-scroll-area { position: fixed; inset: 0; overflow: auto; padding: 24px; background: #f1f5f9; }
+        .zoom-center { display: block; width: max-content; min-width: 100%; margin: 0 auto; }
         #pdf-zoom-target {
-            transform-origin: top left;  /* el contenido crece a la derecha y abajo */
-            transition: transform 0.08s ease-out;
-            width: fit-content;
-            background: #fff;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-            border-radius: 4px;
-            margin: 0 auto;
+            transform-origin: top left; transition: transform 0.08s ease-out;
+            width: fit-content; background: #fff;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08); border-radius: 4px; margin: 0 auto;
         }
 
-        /* ======= PÁGINAS ======= */
         .pagina-plano {
-            page: plano-page;
-            page-break-after: always;
-            width: 1120px;           /* ancho fijo consistente con A3 portrait */
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            background: #fff;
+            page: plano-page; page-break-after: always; width: 1120px;
+            display: flex; flex-direction: column; padding: 20px; background: #fff;
         }
+        .pagina-tabla { page: tabla-page; width: 1400px; padding: 20px; background: #fff; }
 
-        .pagina-tabla {
-            page: tabla-page;
-            width: 1400px;           /* ancho fijo consistente con A3 landscape */
-            padding: 20px;
-            background: #fff;
-        }
-
-        /* ======= ENCABEZADO ======= */
         .encabezado {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            padding-bottom: 6px;
-            border-bottom: 3px solid #1e293b;
-            margin-bottom: 10px;
-            flex-shrink: 0;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            padding-bottom: 6px; border-bottom: 3px solid #1e293b; margin-bottom: 10px; flex-shrink: 0;
         }
         .encabezado .titulo h1 { font-size: 1.4rem; color: #1e293b; margin-bottom: 2px; }
         .encabezado .titulo .sub { font-size: 0.92rem; color: #64748b; }
@@ -2466,53 +2993,35 @@ function generarPDFDocumentado(panel) {
         .encabezado .meta strong { color: #1e293b; }
 
         .seccion-titulo {
-            font-size: 0.82rem;
-            font-weight: 700;
-            color: #1e293b;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            margin: 10px 0 6px;
-            padding-bottom: 3px;
-            border-bottom: 2px solid #e2e8f0;
+            font-size: 0.82rem; font-weight: 700; color: #1e293b;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin: 10px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #e2e8f0;
         }
 
-        /* ======= PLANO ======= */
+        /* 👇 padding lateral para que las llaves y etiquetas no se corten */
         .plano-wrap {
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 12px 0;
+            padding: 12px 160px;
+            min-height: fit-content;
         }
         .grid-plano {
             display: grid;
             grid-template-columns: repeat(${cols}, ${CELL_W}px);
             grid-template-rows: repeat(${filas}, ${CELL_H}px);
-            gap: ${GAP}px;
-            background: #e2e8f0;
-            padding: ${GRID_PADDING}px;
-            border-radius: 10px;
-            border: 2px solid #cbd5e1;
-            width: fit-content;
-            position: relative;
+            gap: ${GAP}px; background: #e2e8f0; padding: ${GRID_PADDING}px;
+            border-radius: 10px; border: 2px solid #cbd5e1; width: fit-content; position: relative;
         }
         .celda {
-            width: ${CELL_W}px;
-            height: ${CELL_H}px;
-            background: #fff;
-            border: 1px dashed #cbd5e1;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: ${CELL_W}px; height: ${CELL_H}px; background: #fff;
+            border: 1px dashed #cbd5e1; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
         }
         .celda.ocupada { border-style: solid; border-width: 1.5px; }
         .celda.libre { border-style: solid; border-width: 1px; }
-        .celda .numero {
-            font-weight: 700;
-            font-size: ${FONT_NUM}rem;
-            color: #1e293b;
-            line-height: 1;
-        }
+        .celda.vacia { border-style: dashed; }
+        .celda .numero { font-weight: 700; font-size: ${FONT_NUM}rem; color: #1e293b; line-height: 1; }
         .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
         .celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
         .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
@@ -2521,48 +3030,18 @@ function generarPDFDocumentado(panel) {
         .celda[data-rol="MIS"] { background: #fce7f3; border-color: #ec4899; }
         .celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
 
-        /* ======= TABLA ======= */
-        .tabla-equipos {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.72rem;
-            page-break-inside: auto;
-            table-layout: fixed;
-            margin-top: 6px;
-        }
+        .tabla-equipos { width: 100%; border-collapse: collapse; font-size: 0.72rem; table-layout: fixed; margin-top: 6px; }
         .tabla-equipos thead { background: #1e293b; color: #fff; display: table-header-group; }
-        .tabla-equipos thead th {
-            padding: 6px 6px;
-            text-align: left;
-            font-weight: 700;
-            font-size: 0.62rem;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-        }
-        .tabla-equipos tbody tr { border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; }
+        .tabla-equipos thead th { padding: 6px 6px; text-align: left; font-weight: 700; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.03em; }
+        .tabla-equipos tbody tr { border-bottom: 1px solid #e2e8f0; }
         .tabla-equipos tbody tr:nth-child(even) { background: #f8fafc; }
-        .tabla-equipos tbody td {
-            padding: 3px 6px;
-            color: #334155;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: 1.3;
-        }
+        .tabla-equipos tbody td { padding: 3px 6px; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
         .tabla-equipos .center { text-align: center; }
         .tabla-equipos .bold { font-weight: 700; color: #64748b; }
         .tabla-equipos .bold-host { font-weight: 600; color: #1e293b; }
         .tabla-equipos .mono { font-family: 'Consolas', 'Monaco', monospace; font-size: 0.66rem; color: #475569; }
 
-        .badge-rol {
-            display: inline-block;
-            padding: 1px 6px;
-            border-radius: 3px;
-            font-size: 0.6rem;
-            font-weight: 700;
-            color: #fff;
-            background: #94a3b8;
-        }
+        .badge-rol { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.6rem; font-weight: 700; color: #fff; background: #94a3b8; }
         .badge-rol[data-rol="AGT"] { background: #3b82f6; }
         .badge-rol[data-rol="SPR"] { background: #22c55e; }
         .badge-rol[data-rol="CLD"] { background: #f97316; }
@@ -2571,151 +3050,49 @@ function generarPDFDocumentado(panel) {
         .badge-rol[data-rol="MIS"] { background: #ec4899; }
         .badge-rol[data-rol="ADM"] { background: #475569; }
 
-        .badge-mesa {
-            display: inline-block;
-            padding: 1px 6px;
-            border-radius: 3px;
-            font-size: 0.6rem;
-            font-weight: 700;
-            color: #fff;
-            background: #3b82f6;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
-        }
-
-        .identificadores {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            padding: 8px 10px;
-            background: #f8fafc;
-            border-radius: 6px;
-            border: 1px solid #e2e8f0;
-            margin-top: 6px;
-        }
-        .identificador-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            padding: 3px 9px;
-            background: #fff;
-            border-radius: 4px;
-            border: 1px solid #e2e8f0;
-            font-size: 0.72rem;
-        }
+        .identificadores { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 10px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; margin-top: 6px; }
+        .identificador-item { display: flex; align-items: center; gap: 5px; padding: 3px 9px; background: #fff; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 0.72rem; }
         .identificador-item .cant { font-weight: 700; color: #1e293b; font-size: 0.8rem; }
-        .identificador-item .muestra-color-inline {
-            display: inline-block;
-            width: 13px;
-            height: 13px;
-            border-radius: 3px;
-            border: 1px solid rgba(0,0,0,0.15);
-        }
-        .identificador-item .nombre-zona-libre {
-            font-weight: 600;
-            color: #1e293b;
-            text-transform: uppercase;
-            letter-spacing: 0.02em;
-        }
-        .badge-cli {
-            display: inline-block;
-            padding: 1px 6px;
-            border-radius: 3px;
-            font-size: 0.62rem;
-            font-weight: 700;
-            color: #1e293b;
-            background: #e2e8f0;
-        }
+        .identificador-item .muestra-color-inline { display: inline-block; width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.15); }
+        .identificador-item .nombre-zona-libre { font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.02em; }
+        .badge-cli { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.62rem; font-weight: 700; color: #1e293b; background: #e2e8f0; }
 
-        /* =========================================================
-           ZOOM — indicadores
-           ========================================================= */
         .zoom-indicador {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(15, 23, 42, 0.92);
-            color: #fff;
-            padding: 10px 16px;
-            border-radius: 10px;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            font-size: 13px;
-            font-weight: 600;
-            letter-spacing: 0.02em;
-            z-index: 99999;
-            display: none;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 12px 32px rgba(0,0,0,0.4),
-                        0 4px 12px rgba(0,0,0,0.25);
-            pointer-events: none;
-            user-select: none;
+            position: fixed; bottom: 20px; right: 20px; background: rgba(15, 23, 42, 0.92); color: #fff;
+            padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+            z-index: 99999; display: none; align-items: center; gap: 8px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25);
+            pointer-events: none; user-select: none;
         }
         .zoom-indicador.visible { display: flex; }
-        .zoom-indicador .zoom-valor {
-            background: rgba(255,255,255,0.18);
-            padding: 3px 10px;
-            border-radius: 5px;
-            font-variant-numeric: tabular-nums;
-        }
+        .zoom-indicador .zoom-valor { background: rgba(255,255,255,0.18); padding: 3px 10px; border-radius: 5px; font-variant-numeric: tabular-nums; }
 
         .zoom-hint {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(15, 23, 42, 0.82);
-            color: #cbd5e1;
-            padding: 8px 14px;
-            border-radius: 10px;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            font-size: 12px;
-            font-weight: 500;
-            z-index: 99999;
-            pointer-events: none;
-            user-select: none;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+            position: fixed; bottom: 20px; left: 20px; background: rgba(15, 23, 42, 0.82); color: #cbd5e1;
+            padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 500; z-index: 99999;
+            pointer-events: none; user-select: none; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
             transition: opacity 0.6s ease, transform 0.6s ease;
         }
-
-        .zoom-hint.oculto {
-            opacity: 0;
-            transform: translateY(10px);
-        }
+        .zoom-hint.oculto { opacity: 0; transform: translateY(10px); }
 
         body.zoom-activo { cursor: zoom-in; }
 
-        /* =========================================================
-           IMPRESIÓN: desactivar el chrome del zoom
-           ========================================================= */
         @media print {
             html, body { overflow: visible; background: #fff; }
-            .zoom-scroll-area {
-                position: static;
-                overflow: visible;
-                padding: 0;
-                background: #fff;
-            }
+            .zoom-scroll-area { position: static; overflow: visible; padding: 0; background: #fff; }
             .zoom-center { display: block; width: auto; min-width: auto; }
-            #pdf-zoom-target {
-                transform: none !important;
-                box-shadow: none;
-                border-radius: 0;
-                margin: 0;
-            }
-            .zoom-indicador,
-            .zoom-hint { display: none !important; }
+            #pdf-zoom-target { transform: none !important; box-shadow: none; border-radius: 0; margin: 0; }
+            .zoom-indicador, .zoom-hint { display: none !important; }
         }
     `;
 
+    /* ====== HTML ====== */
     const html = `
         <!DOCTYPE html>
         <html>
         <head><meta charset="UTF-8"><title>Vista previa — ${nombrePiso || 'Plano'}</title><style>${css}</style></head>
         <body>
 
-            <!-- Único contenedor de scroll (horizontal + vertical) -->
             <div class="zoom-scroll-area" id="zoom-scroll-area">
                 <div class="zoom-center" id="zoom-center">
                     <div id="pdf-zoom-target">
@@ -2736,9 +3113,10 @@ function generarPDFDocumentado(panel) {
                             <div class="plano-wrap">
                                 <div class="grid-plano">
                                     ${celdasHTML}
-                                    ${contornosClienteHTML}
-                                    ${overlaysLibresHTML}
-                                    ${mesasHTML}
+                                    ${bordesEquipoHTML}
+                                    ${etiquetasEquipoHTML}
+                                    ${textosLibresHTML}
+                                    ${zonasLlavesHTML}
                                 </div>
                             </div>
                         </div>
@@ -2769,7 +3147,6 @@ function generarPDFDocumentado(panel) {
                                         <th style="width:130px;">Hostname</th>
                                         <th style="width:60px;">Cliente</th>
                                         <th style="width:50px;">Rol</th>
-                                        <th style="width:110px;">Mesa / Zona</th>
                                         <th style="width:120px;">IP</th>
                                         <th style="width:120px;">Máscara</th>
                                         <th style="width:120px;">Puerta enlace</th>
@@ -2787,12 +3164,10 @@ function generarPDFDocumentado(panel) {
                 </div>
             </div>
 
-            <!-- Indicador de zoom -->
             <div class="zoom-indicador" id="zoom-indicador">
                 Zoom: <span class="zoom-valor" id="zoom-valor">100%</span>
             </div>
 
-            <!-- Hint de ayuda -->
             <div class="zoom-hint" id="zoom-hint">
                 Ctrl + rueda del ratón para hacer zoom · Ctrl + 0 para restablecer
             </div>
@@ -2800,102 +3175,61 @@ function generarPDFDocumentado(panel) {
             <script>
             (function() {
                 let zoom = 1;
-                const MIN_ZOOM = 0.3;
-                const MAX_ZOOM = 4;
-                const PASO = 0.1;
-
+                const MIN_ZOOM = 0.3, MAX_ZOOM = 4, PASO = 0.1;
                 const scrollArea = document.getElementById('zoom-scroll-area');
                 const target     = document.getElementById('pdf-zoom-target');
                 const indicador  = document.getElementById('zoom-indicador');
                 const valorTxt   = document.getElementById('zoom-valor');
                 const hint       = document.getElementById('zoom-hint');
-                let   ocultarTimer = null;
-                let   hintTimer    = null;
+                let ocultarTimer = null, hintTimer = null;
 
                 function aplicarZoom() {
-                    // Guardar el punto central del viewport (en coordenadas del contenido)
-                    // para que al hacer zoom el foco no se pierda.
                     const rect = scrollArea.getBoundingClientRect();
                     const centerX = scrollArea.scrollLeft + rect.width / 2;
                     const centerY = scrollArea.scrollTop + rect.height / 2;
-
                     target.style.transform = 'scale(' + zoom + ')';
                     valorTxt.textContent = Math.round(zoom * 100) + '%';
-
-                    // Ajustar scroll para mantener el foco tras el zoom
                     requestAnimationFrame(() => {
-                        const newScrollX = centerX * zoom - rect.width / 2;
-                        const newScrollY = centerY * zoom - rect.height / 2;
-                        scrollArea.scrollLeft = Math.max(0, newScrollX);
-                        scrollArea.scrollTop  = Math.max(0, newScrollY);
+                        scrollArea.scrollLeft = Math.max(0, centerX * zoom - rect.width / 2);
+                        scrollArea.scrollTop  = Math.max(0, centerY * zoom - rect.height / 2);
                     });
-
-                    // Indicador %
                     indicador.classList.add('visible');
                     clearTimeout(ocultarTimer);
-                    ocultarTimer = setTimeout(() => {
-                        indicador.classList.remove('visible');
-                    }, 1200);
-
-                    // Refrescar hint
+                    ocultarTimer = setTimeout(() => indicador.classList.remove('visible'), 1200);
                     if (hint) {
                         hint.classList.remove('oculto');
                         clearTimeout(hintTimer);
-                        hintTimer = setTimeout(() => {
-                            hint.classList.add('oculto');
-                        }, 2500);
+                        hintTimer = setTimeout(() => hint.classList.add('oculto'), 2500);
                     }
                 }
 
-                // Auto-ocultar hint a los 5s
-                if (hint) {
-                    setTimeout(() => {
-                        hint.classList.add('oculto');
-                    }, 5000);
-                }
+                if (hint) setTimeout(() => hint.classList.add('oculto'), 5000);
 
-                // Ctrl + rueda
                 document.addEventListener('wheel', function(ev) {
                     if (!ev.ctrlKey && !ev.metaKey) return;
                     ev.preventDefault();
-
                     const delta = ev.deltaY > 0 ? -PASO : PASO;
                     zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + delta));
                     aplicarZoom();
                 }, { passive: false });
 
-                // Ctrl + teclas
                 document.addEventListener('keydown', function(ev) {
-                    if ((ev.ctrlKey || ev.metaKey) && ev.key === '0') {
-                        ev.preventDefault();
-                        zoom = 1;
-                        aplicarZoom();
-                        return;
-                    }
+                    if ((ev.ctrlKey || ev.metaKey) && ev.key === '0') { ev.preventDefault(); zoom = 1; aplicarZoom(); return; }
                     if ((ev.ctrlKey || ev.metaKey) && (ev.key === '+' || ev.key === '=' || ev.key === 'Add')) {
-                        ev.preventDefault();
-                        zoom = Math.min(MAX_ZOOM, zoom + PASO);
-                        aplicarZoom();
-                        return;
+                        ev.preventDefault(); zoom = Math.min(MAX_ZOOM, zoom + PASO); aplicarZoom(); return;
                     }
                     if ((ev.ctrlKey || ev.metaKey) && (ev.key === '-' || ev.key === 'Subtract')) {
-                        ev.preventDefault();
-                        zoom = Math.max(MIN_ZOOM, zoom - PASO);
-                        aplicarZoom();
-                        return;
+                        ev.preventDefault(); zoom = Math.max(MIN_ZOOM, zoom - PASO); aplicarZoom(); return;
                     }
                 });
 
-                // Feedback cursor zoom
                 document.addEventListener('keydown', function(ev) {
                     if (ev.ctrlKey || ev.metaKey) document.body.classList.add('zoom-activo');
                 });
                 document.addEventListener('keyup', function(ev) {
                     if (!ev.ctrlKey && !ev.metaKey) document.body.classList.remove('zoom-activo');
                 });
-                window.addEventListener('blur', function() {
-                    document.body.classList.remove('zoom-activo');
-                });
+                window.addEventListener('blur', function() { document.body.classList.remove('zoom-activo'); });
             })();
             </script>
         </body>
@@ -2907,12 +3241,23 @@ function generarPDFDocumentado(panel) {
 }
 
 /* =========================================================
-   ATAJO: ENTER PARA GUARDAR ZONA LIBRE
+   ATAJOS: ENTER para guardar (Zona Libre y Zona 1×1)
    ========================================================= */
 document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' && modoZonaLibre && celdasLibresSeleccionadas.length > 0 && !guardandoZonaLibre) {
+    if (ev.key !== 'Enter') return;
+
+    // Modo Zona Libre: guardar
+    if (modoZonaLibre && celdasLibresSeleccionadas.length > 0 && !guardandoZonaLibre) {
         ev.preventDefault();
         abrirModalZonaLibre();
+        return;
+    }
+
+    // Modo Zona (1×1 acumulativo): abrir modal para asignar nombre/color
+    if (modoZona && celdasZonaSeleccionadas.length > 0 && modalZona.style.display !== 'flex') {
+        ev.preventDefault();
+        abrirModalZona(null);
+        return;
     }
 });
 

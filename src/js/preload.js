@@ -118,10 +118,11 @@ contextBridge.exposeInMainWorld('api', {
     /* =========================================================
        HISTÓRICOS
        ========================================================= */
-  historicos: {
-    listar:        (idCliente, idPiso) => ipcRenderer.invoke('historicos:listar', idCliente, idPiso),
-    listarPorPiso: (idPiso)            => ipcRenderer.invoke('historicos:listarPorPiso', idPiso)
-},
+    historicos: {
+        listar:        (idCliente, idPiso) => ipcRenderer.invoke('historicos:listar', idCliente, idPiso),
+        listarPorPiso: (idPiso)            => ipcRenderer.invoke('historicos:listarPorPiso', idPiso)
+    },
+
     /* =========================================================
        PLANO
        ========================================================= */
@@ -147,6 +148,9 @@ contextBridge.exposeInMainWorld('api', {
         crearZona:      (idPiso, nombre, color, fi, ff, ci, cf)                        => ipcRenderer.invoke('plano:crearZona', idPiso, nombre, color, fi, ff, ci, cf),
         actualizarZona: (idZona, nombre, color, fi, ff, ci, cf, idPiso)                => ipcRenderer.invoke('plano:actualizarZona', idZona, nombre, color, fi, ff, ci, cf, idPiso),
         eliminarZona:   (idZona, idPiso, nombre)                                       => ipcRenderer.invoke('plano:eliminarZona', idZona, idPiso, nombre),
+
+        /* NUEVO: elimina TODAS las zonas con el mismo nombre+color del piso */
+        eliminarZonasPorNombre: (idPiso, nombre, color)                                => ipcRenderer.invoke('plano:eliminarZonasPorNombre', idPiso, nombre, color),
 
         listarZonasLibres:  (idPiso)                          => ipcRenderer.invoke('plano:listarZonasLibres', idPiso),
         guardarZonaLibre:   (idPiso, nombre, color, celdas)   => ipcRenderer.invoke('plano:guardarZonaLibre', idPiso, nombre, color, celdas),

@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { PDFDocument } = require('pdf-lib');
+const { autoUpdater } = require('electron-updater');
 
 /* =========================================================
    BASE DE DATOS — MÓDULOS EXISTENTES
@@ -17,6 +18,7 @@ const usuariosDB   = require('./db/usuarios');
 const historicosDB = require('./db/historicos');
 const dominiosDB   = require('./db/dominios');
 const configDB     = require('./db/configuraciones');
+const permisosDB   = require('./db/permisos');
 
 /* =========================================================
    BASE DE DATOS — MÓDULO ACTIVO FIJO
@@ -26,7 +28,6 @@ const activoFijoActivosDB     = require('../ActivoFijo/consultas/activos');
 const activoFijoResponsivasDB = require('../ActivoFijo/consultas/responsivas');
 const activoFijoReportesDB    = require('../ActivoFijo/consultas/reportes');
 const activoFijoImportacionDB = require('../ActivoFijo/consultas/importacion');
-const { title } = require('process');
 
 /* =========================================================
    RUTAS
@@ -55,6 +56,113 @@ let usuarioActual = null;
    ========================================================= */
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 app.commandLine.appendSwitch('disable-http-cache');
+
+/* =========================================================
+   AUTO-UPDATER — CONFIGURACIÓN
+   ========================================================= */
+autoUpdater.autoDownload = false;      // No descargar solo; preguntar al usuario
+autoUpdater.autoInstallOnAppQuit = true; // Instalar al cerrar si ya se descargó
+
+// Logs (opcional, pero muy útil para depurar)
+try {
+    autoUpdater.logger = require('electron-log');
+    autoUpdater.logger.transports.file.level = 'info';
+} catch (_) {
+    // Si no tienes electron-log instalado, simplemente no loguea a archivo
+    autoUpdater.logger = console;
+}
+
+/* ---------------------------------------------------------
+   Funciones auxiliares para mostrar diálogos
+   --------------------------------------------------------- */
+async function preguntarDescargar(info) {
+    const { response } = await dialog.showMessageBox({
+        type: 'info',
+        title: 'Actualización disponible',
+        message: `Hay una nueva versión disponible (${info.version}).`,
+        detail: '¿Deseas descargarla ahora? La aplicación seguirá funcionando normalmente mientras se descarga.',
+        buttons: ['Sí, descargar', 'Más tarde'],
+        defaultId: 0,
+        cancelId: 1
+    });
+    return response === 0;
+}
+
+async function preguntarInstalar(info) {
+    const { response } = await dialog.showMessageBox({
+        type: 'info',
+        title: 'Actualización lista',
+        message: `La versión ${info.version} se ha descargado correctamente.`,
+        detail: 'La aplicación se reiniciará para aplicar la actualización. ¿Deseas reiniciar ahora?',
+        buttons: ['Reiniciar ahora', 'Más tarde'],
+        defaultId: 0,
+        cancelId: 1
+    });
+    return response === 0;
+}
+
+/* ---------------------------------------------------------
+   Eventos del autoUpdater
+   --------------------------------------------------------- */
+autoUpdater.on('checking-for-update', () => {
+    console.log('[Updater] Buscando actualizaciones...');
+});
+
+autoUpdater.on('update-available', async (info) => {
+    console.log('[Updater] Actualización disponible:', info.version);
+    const quiere = await preguntarDescargar(info);
+    if (quiere) {
+        autoUpdater.downloadUpdate();
+    }
+});
+
+autoUpdater.on('update-not-available', (info) => {
+    console.log('[Updater] No hay actualizaciones disponibles.', info?.version || '');
+});
+
+autoUpdater.on('download-progress', (progress) => {
+    const pct = Math.round(progress.percent);
+    console.log(`[Updater] Descargando: ${pct}% (${progress.bytesPerSecond} B/s)`);
+    // Aquí podrías emitir el progreso a la ventana si quieres mostrarlo
+});
+
+autoUpdater.on('update-downloaded', async (info) => {
+    console.log('[Updater] Actualización descargada:', info.version);
+    const reiniciar = await preguntarInstalar(info);
+    if (reiniciar) {
+        setImmediate(() => autoUpdater.quitAndInstall());
+    }
+});
+
+autoUpdater.on('error', (err) => {
+    console.error('[Updater] Error:', err);
+    dialog.showErrorBox(
+        'Error de actualización',
+        'No se pudo comprobar o descargar la actualización.\n\n' + (err?.message || err)
+    );
+});
+
+/* ---------------------------------------------------------
+   Función para verificar manualmente
+   --------------------------------------------------------- */
+function verificarActualizaciones(manual = false) {
+    if (!app.isPackaged) {
+        if (manual) {
+            dialog.showMessageBox({
+                type: 'info',
+                title: 'Modo desarrollo',
+                message: 'Las actualizaciones automáticas solo funcionan en la versión empaquetada (instalada).'
+            });
+        }
+        return;
+    }
+    autoUpdater.checkForUpdates().catch(err => {
+        console.error('[Updater] Error al verificar:', err);
+        if (manual) {
+            dialog.showErrorBox('Error', 'No se pudo verificar si hay actualizaciones.');
+        }
+    });
+}
 
 /* =========================================================
    MENÚ DE LA APLICACIÓN
@@ -105,13 +213,18 @@ function construirMenuApp() {
             label: 'Ayuda',
             submenu: [
                 {
+                    label: 'Buscar actualizaciones',
+                    click: () => verificarActualizaciones(true)
+                },
+                { type: 'separator' },
+                {
                     label: 'Acerca de',
                     click: () => {
                         dialog.showMessageBox({
                             type: 'info',
                             title: 'Acerca de',
                             message: 'Inventario de Equipos',
-                            detail: 'Sistema interno de gestión de red · v1.0'
+                            detail: `Sistema interno de gestión de red · v${app.getVersion()}`
                         });
                     }
                 }
@@ -122,24 +235,31 @@ function construirMenuApp() {
 }
 
 /* =========================================================
-   FÁBRICA DE VENTANAS
+   FÁBRICA DE VENTANAS (robusta)
    ========================================================= */
 function crearVentana(nombre, archivo, opciones = {}) {
-    if (ventanas[nombre] && !ventanas[nombre].isDestroyed()) {
-        ventanas[nombre].focus();
-        return ventanas[nombre];
+    const existente = ventanas[nombre];
+
+    if (existente && !existente.isDestroyed()) {
+        if (existente.isMinimized()) existente.restore();
+        if (!existente.isVisible())  existente.show();
+        existente.focus();
+        return existente;
     }
 
     const basePath    = opciones.basePath || HTML;
     const preloadPath = opciones.preload  || PRELOAD;
 
     const win = new BrowserWindow({
-        width:  opciones.width  || 1000,
-        height: opciones.height || 700,
-        title:  opciones.title  || nombre,
-        show: false,
+        width:     opciones.width     || 1200,
+        height:    opciones.height    || 800,
+        minWidth:  opciones.minWidth  || 900,
+        minHeight: opciones.minHeight || 600,
+        title:     opciones.title     || nombre,
+        show:      false,
         resizable: opciones.resizable !== false,
         autoHideMenuBar: false,
+        backgroundColor: '#f4f6f9',
         webPreferences: {
             preload: preloadPath,
             contextIsolation: true,
@@ -151,23 +271,27 @@ function crearVentana(nombre, archivo, opciones = {}) {
     win.loadFile(path.join(basePath, archivo));
 
     if (opciones.maximizar !== false) {
-        win.once('ready-to-show', () => { win.maximize(); win.show(); });
+        win.once('ready-to-show', () => { win.maximize(); win.show(); win.focus(); });
     } else {
-        win.once('ready-to-show', () => win.show());
+        win.once('ready-to-show', () => { win.show(); win.focus(); });
     }
 
-    ventanas[nombre] = win;
+    win.webContents.on('did-finish-load', () => {
+        if (!win.isDestroyed() && win.isVisible()) win.focus();
+    });
+
     win.on('closed', () => { ventanas[nombre] = null; });
+
+    ventanas[nombre] = win;
     return win;
 }
 
 /* =========================================================
    VENTANAS — SISTEMA EXISTENTE
    ========================================================= */
-const crearLoginWindow     = () => crearVentana('login',     'login.html',     { title:  'Iniciar Sesión' });
+const crearLoginWindow     = () => crearVentana('login',     'login.html',     { title: 'Iniciar Sesión' });
 const crearMenuWindow      = () => crearVentana('menu',      'menu.html',      { title: 'Menú Principal' });
 const crearCatalogosWindow = () => crearVentana('catalogos', 'catalogos.html', { title: 'Catálogos del Sistema' });
-const crearRangosWindow    = () => crearVentana('rangos',    'rangos.html',    { title: 'Rangos IP' });
 const crearEquiposWindow   = () => crearVentana('equipos',   'equipos.html',   { title: 'Equipos' });
 const crearPlanoWindow     = () => crearVentana('plano',     'plano.html',     { title: 'Plano Visual' });
 const crearUsuariosWindow  = () => crearVentana('usuarios',  'usuarios.html',  { title: 'Usuarios' });
@@ -201,16 +325,36 @@ const crearActivoFijoImportarWindow = () => crearVentana(
    UTILIDADES
    ========================================================= */
 function cerrarVentana(nombre) {
-    if (ventanas[nombre] && !ventanas[nombre].isDestroyed()) ventanas[nombre].close();
+    const w = ventanas[nombre];
+    if (w && !w.isDestroyed()) w.close();
 }
 
 function asegurarMenuAbierto() {
     if (!ventanas['menu'] || ventanas['menu'].isDestroyed()) {
         crearMenuWindow();
     } else {
-        if (ventanas['menu'].isMinimized()) ventanas['menu'].restore();
-        ventanas['menu'].focus();
+        const w = ventanas['menu'];
+        if (w.isMinimized()) w.restore();
+        if (!w.isVisible()) w.show();
+        w.focus();
     }
+}
+
+/* =========================================================
+   GATE DE PERMISOS
+   ========================================================= */
+function tienePermiso(modulo) {
+    if (!usuarioActual) return false;
+    if (usuarioActual.Rol === 'ADMIN') return true;
+    return !!usuarioActual.Permisos?.[modulo];
+}
+
+function negarAcceso(modulo) {
+    console.warn(`[Permisos] Acceso denegado a "${modulo}" para usuario ${usuarioActual?.NombreUsuario || '?'}`);
+    return {
+        ok: false,
+        mensaje: `No tienes permisos para acceder al módulo "${modulo}".`
+    };
 }
 
 /* =========================================================
@@ -218,22 +362,120 @@ function asegurarMenuAbierto() {
    ========================================================= */
 ipcMain.handle('login', async (_e, nombreUsuario, password) => {
     const res = await usuariosDB.login(nombreUsuario, password);
-    if (res.ok) usuarioActual = res.usuario;
+
+    if (res.ok) {
+        usuarioActual = res.usuario;
+
+        try {
+            const rol = await permisosDB.obtenerRolDeUsuario(usuarioActual.IdUsuario);
+            const permisos = await permisosDB.obtenerPermisosDeUsuario(usuarioActual.IdUsuario);
+
+            usuarioActual.Rol        = rol ? rol.Codigo : 'SIN_ROL';
+            usuarioActual.RolNombre  = rol ? rol.Nombre : 'Sin rol asignado';
+            usuarioActual.Permisos   = permisos;
+
+            console.log(`[Login] ${usuarioActual.NombreUsuario} → Rol: ${usuarioActual.Rol}, Permisos: ${Object.keys(permisos).length}`);
+        } catch (err) {
+            console.error('Error cargando permisos:', err);
+            usuarioActual.Rol       = 'SIN_ROL';
+            usuarioActual.RolNombre = 'Sin rol asignado';
+            usuarioActual.Permisos  = {};
+        }
+    }
+
     return res;
 });
+
 ipcMain.handle('logout', () => { usuarioActual = null; return { ok: true }; });
 ipcMain.handle('usuario-actual', () => usuarioActual);
 
 /* =========================================================
-   IPC: ABRIR VENTANAS DEL SISTEMA
+   IPC: PERMISOS
    ========================================================= */
-ipcMain.handle('abrir-menu',      () => { cerrarVentana('login'); asegurarMenuAbierto(); return { ok: true }; });
-ipcMain.handle('abrir-catalogos', () => { crearCatalogosWindow(); return { ok: true }; });
-ipcMain.handle('abrir-rangos',    () => { crearRangosWindow();    return { ok: true }; });
-ipcMain.handle('abrir-equipos',   () => { crearEquiposWindow();   return { ok: true }; });
-ipcMain.handle('abrir-plano',     () => { crearPlanoWindow();     return { ok: true }; });
-ipcMain.handle('abrir-usuarios',  () => { crearUsuariosWindow();  return { ok: true }; });
-ipcMain.handle('abrir-historico', () => { crearHistoricoWindow(); return { ok: true }; });
+ipcMain.handle('permisos:mios', () => {
+    if (!usuarioActual) return {};
+    return usuarioActual.Permisos || {};
+});
+
+ipcMain.handle('permisos:mi-rol', () => {
+    if (!usuarioActual) return null;
+    return {
+        codigo: usuarioActual.Rol,
+        nombre: usuarioActual.RolNombre
+    };
+});
+
+ipcMain.handle('permisos:listar-roles', async () => await permisosDB.listarRoles());
+ipcMain.handle('permisos:listar-todos', async () => await permisosDB.listarPermisos());
+
+ipcMain.handle('permisos:actualizar', async (_e, idRol, modulo, permitido) => {
+    if (!tienePermiso('usuarios')) return negarAcceso('usuarios');
+    return await permisosDB.actualizarPermiso(idRol, modulo, permitido);
+});
+
+ipcMain.handle('permisos:asignar-rol', async (_e, idUsuario, idRol) => {
+    if (!tienePermiso('usuarios')) return negarAcceso('usuarios');
+    return await permisosDB.asignarRolAUsuario(idUsuario, idRol);
+});
+
+ipcMain.handle('permisos:crear-rol', async (_e, datos) => {
+    if (!tienePermiso('usuarios')) return negarAcceso('usuarios');
+    return await permisosDB.crearRol(datos);
+});
+
+ipcMain.handle('permisos:actualizar-rol', async (_e, idRol, datos) => {
+    if (!tienePermiso('usuarios')) return negarAcceso('usuarios');
+    return await permisosDB.actualizarRol(idRol, datos);
+});
+
+ipcMain.handle('permisos:cambiar-estado-rol', async (_e, idRol, activo) => {
+    if (!tienePermiso('usuarios')) return negarAcceso('usuarios');
+    return await permisosDB.cambiarEstadoRol(idRol, activo);
+});
+
+ipcMain.handle('permisos:eliminar-rol', async (_e, idRol) => {
+    if (!tienePermiso('usuarios')) return negarAcceso('usuarios');
+    return await permisosDB.eliminarRol(idRol);
+});
+
+/* =========================================================
+   IPC: ABRIR VENTANAS DEL SISTEMA (con gate)
+   ========================================================= */
+ipcMain.handle('abrir-menu', () => {
+    cerrarVentana('login');
+    asegurarMenuAbierto();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-catalogos', () => {
+    if (!tienePermiso('catalogos')) return negarAcceso('catalogos');
+    crearCatalogosWindow();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-equipos', () => {
+    if (!tienePermiso('equipos')) return negarAcceso('equipos');
+    crearEquiposWindow();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-plano', () => {
+    if (!tienePermiso('plano')) return negarAcceso('plano');
+    crearPlanoWindow();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-usuarios', () => {
+    if (!tienePermiso('usuarios')) return negarAcceso('usuarios');
+    crearUsuariosWindow();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-historico', () => {
+    if (!tienePermiso('historico')) return negarAcceso('historico');
+    crearHistoricoWindow();
+    return { ok: true };
+});
 
 ipcMain.handle('volver-menu', (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -243,18 +485,44 @@ ipcMain.handle('volver-menu', (e) => {
 });
 
 /* =========================================================
-   IPC: ABRIR VENTANAS DE ACTIVO FIJO
+   IPC: ABRIR VENTANAS DE ACTIVO FIJO (con gate)
    ========================================================= */
-ipcMain.handle('abrir-activofijo-catalogos',   () => { crearActivoFijoCatalogosWindow();   return { ok: true }; });
-ipcMain.handle('abrir-activofijo-activos',     () => { crearActivoFijoActivosWindow();     return { ok: true }; });
-ipcMain.handle('abrir-activofijo-responsivas', () => { crearActivoFijoResponsivasWindow(); return { ok: true }; });
-ipcMain.handle('abrir-activofijo-reportes',    () => { crearActivoFijoReportesWindow();    return { ok: true }; });
-ipcMain.handle('abrir-activofijo-importar',    () => { crearActivoFijoImportarWindow();    return { ok: true }; });
-ipcMain.handle('af-abrir-catalogos',   () => { crearActivoFijoCatalogosWindow();   return { ok: true }; });
-ipcMain.handle('af-abrir-activos',     () => { crearActivoFijoActivosWindow();     return { ok: true }; });
-ipcMain.handle('af-abrir-responsivas', () => { crearActivoFijoResponsivasWindow(); return { ok: true }; });
-ipcMain.handle('af-abrir-reportes',    () => { crearActivoFijoReportesWindow();    return { ok: true }; });
-ipcMain.handle('af-abrir-importar',    () => { crearActivoFijoImportarWindow();    return { ok: true }; });
+ipcMain.handle('abrir-activofijo-catalogos', () => {
+    if (!tienePermiso('activofijo_catalogos')) return negarAcceso('activofijo_catalogos');
+    crearActivoFijoCatalogosWindow();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-activofijo-activos', () => {
+    if (!tienePermiso('activofijo_activos')) return negarAcceso('activofijo_activos');
+    crearActivoFijoActivosWindow();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-activofijo-responsivas', () => {
+    if (!tienePermiso('activofijo_responsivas')) return negarAcceso('activofijo_responsivas');
+    crearActivoFijoResponsivasWindow();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-activofijo-reportes', () => {
+    if (!tienePermiso('activofijo_reportes')) return negarAcceso('activofijo_reportes');
+    crearActivoFijoReportesWindow();
+    return { ok: true };
+});
+
+ipcMain.handle('abrir-activofijo-importar', () => {
+    if (!tienePermiso('activofijo_importar')) return negarAcceso('activofijo_importar');
+    crearActivoFijoImportarWindow();
+    return { ok: true };
+});
+
+/* Aliases con gate */
+ipcMain.handle('af-abrir-catalogos',   () => ipcMain.emit('abrir-activofijo-catalogos'));
+ipcMain.handle('af-abrir-activos',     () => ipcMain.emit('abrir-activofijo-activos'));
+ipcMain.handle('af-abrir-responsivas', () => ipcMain.emit('abrir-activofijo-responsivas'));
+ipcMain.handle('af-abrir-reportes',    () => ipcMain.emit('abrir-activofijo-reportes'));
+ipcMain.handle('af-abrir-importar',    () => ipcMain.emit('abrir-activofijo-importar'));
 
 /* =========================================================
    IPC: CATÁLOGOS DE ACTIVO FIJO
@@ -553,7 +821,6 @@ ipcMain.handle('plano:eliminarZona', async (_e, idZona, idPiso, nombre) => {
     return await planoDB.eliminarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre);
 });
 
-/* ⬇️ NUEVO: elimina TODAS las zonas con el mismo Nombre+Color en el piso */
 ipcMain.handle('plano:eliminarZonasPorNombre', async (_e, idPiso, nombre, color) => {
     if (!usuarioActual) throw new Error('Sesión no iniciada');
     return await planoDB.eliminarZonasPorNombre(usuarioActual.IdUsuario, idPiso, nombre, color);
@@ -641,6 +908,12 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
 app.whenReady().then(() => {
     construirMenuApp();
     crearLoginWindow();
+
+    // Verificar actualizaciones al iniciar (solo si está empaquetada)
+    if (app.isPackaged) {
+        // Pequeño delay para no bloquear el arranque
+        setTimeout(() => verificarActualizaciones(false), 3000);
+    }
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) crearLoginWindow();

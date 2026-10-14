@@ -4,90 +4,88 @@
 const Swal = window.Swal;
 
 /* =========================================================
-   TOASTS — versión limpia
+   TOASTS
    ========================================================= */
 function toastExito(titulo) {
     Swal.fire({
-        toast: true,
-        position: 'bottom-end',
-        icon: 'success',
-        title: titulo,
-        showConfirmButton: false,
-        timer: 2600,
-        timerProgressBar: true,
-        background: '#ffffff',
-        color: '#1a202c',
+        toast: true, position: 'bottom-end', icon: 'success', title: titulo,
+        showConfirmButton: false, timer: 2600, timerProgressBar: true,
+        background: '#ffffff', color: '#1a202c',
         customClass: { popup: 'cl-toast cl-toast-success' },
-        didOpen: (toast) => {
-            toast.style.boxShadow = 'none';
-            toast.style.webkitBoxShadow = 'none';
-            toast.style.filter = 'none';
-            toast.style.webkitFilter = 'none';
-            toast.addEventListener('mouseenter', Swal.stopTimer);
-            toast.addEventListener('mouseleave', Swal.resumeTimer);
+        didOpen: (t) => {
+            t.style.boxShadow = 'none'; t.style.webkitBoxShadow = 'none';
+            t.style.filter = 'none'; t.style.webkitFilter = 'none';
+            t.addEventListener('mouseenter', Swal.stopTimer);
+            t.addEventListener('mouseleave', Swal.resumeTimer);
         }
     });
 }
-
 function toastError(titulo, texto = '') {
     Swal.fire({
-        toast: true,
-        position: 'bottom-end',
-        icon: 'error',
+        toast: true, position: 'bottom-end', icon: 'error',
         title: texto ? `${titulo} — ${texto}` : titulo,
-        showConfirmButton: false,
-        timer: 3400,
-        timerProgressBar: true,
-        background: '#ffffff',
-        color: '#1a202c',
+        showConfirmButton: false, timer: 3400, timerProgressBar: true,
+        background: '#ffffff', color: '#1a202c',
         customClass: { popup: 'cl-toast cl-toast-error' },
-        didOpen: (toast) => {
-            toast.style.boxShadow = 'none';
-            toast.style.webkitBoxShadow = 'none';
-            toast.style.filter = 'none';
-            toast.style.webkitFilter = 'none';
-            toast.addEventListener('mouseenter', Swal.stopTimer);
-            toast.addEventListener('mouseleave', Swal.resumeTimer);
+        didOpen: (t) => {
+            t.style.boxShadow = 'none'; t.style.webkitBoxShadow = 'none';
+            t.style.filter = 'none'; t.style.webkitFilter = 'none';
+            t.addEventListener('mouseenter', Swal.stopTimer);
+            t.addEventListener('mouseleave', Swal.resumeTimer);
         }
     });
 }
 
 /* =========================================================
-   LIMPIEZA DE RESIDUOS DE SWEETALERT2
+   LIMPIEZA
    ========================================================= */
 function limpiarResiduosSwal() {
     document.querySelectorAll('body > .swal2-container').forEach(c => {
-        if (!c.querySelector('.swal2-popup') && !c.classList.contains('swal2-backdrop-show')) {
-            c.remove();
-        }
+        if (!c.querySelector('.swal2-popup') && !c.classList.contains('swal2-backdrop-show')) c.remove();
     });
-    const selectoresInternos = [
-        'body > input.swal2-input',
-        'body > input.swal2-file',
-        'body > input.swal2-radio',
-        'body > input.swal2-checkbox',
-        'body > select.swal2-select',
-        'body > textarea.swal2-textarea',
-        'body > .swal2-validation-message',
-        'body > .swal2-input-label',
-        'body > .swal2-select-label'
+    const sel = [
+        'body > input.swal2-input', 'body > input.swal2-file',
+        'body > input.swal2-radio', 'body > input.swal2-checkbox',
+        'body > select.swal2-select', 'body > textarea.swal2-textarea',
+        'body > .swal2-validation-message', 'body > .swal2-input-label', 'body > .swal2-select-label'
     ];
-    document.querySelectorAll(selectoresInternos.join(',')).forEach(el => el.remove());
+    document.querySelectorAll(sel.join(',')).forEach(el => el.remove());
     document.querySelectorAll('body > [id^="swal2-"]').forEach(el => {
         if (!el.closest('.swal2-popup')) el.remove();
     });
 }
 
 /* =========================================================
-   ESTADO
+   CATÁLOGO DE MÓDULOS
    ========================================================= */
-let usuarios    = [];
-let modoEdicion = false;
-let idEditando  = null;
-let guardando   = false;
+const MODULOS_DISPONIBLES = [
+    { key: 'catalogos',              label: 'Catálogos del Sistema', grupo: 'Mapeo Red y Plano' },
+    { key: 'equipos',                label: 'Equipos',               grupo: 'Mapeo Red y Plano' },
+    { key: 'plano',                  label: 'Plano Visual',          grupo: 'Mapeo Red y Plano' },
+    { key: 'historico',              label: 'Histórico del Plano',   grupo: 'Mapeo Red y Plano' },
+    { key: 'usuarios',               label: 'Usuarios',              grupo: 'Administración' },
+    { key: 'activofijo_catalogos',   label: 'Catálogos AF',          grupo: 'Activo Fijo' },
+    { key: 'activofijo_activos',     label: 'Activos Fijos',         grupo: 'Activo Fijo' },
+    { key: 'activofijo_responsivas', label: 'Responsivas',           grupo: 'Activo Fijo' },
+    { key: 'activofijo_reportes',    label: 'Reportes AF',           grupo: 'Activo Fijo' },
+    { key: 'activofijo_importar',    label: 'Importar Masivo',       grupo: 'Activo Fijo' }
+];
 
 /* =========================================================
-   REFERENCIAS DOM
+   ESTADO
+   ========================================================= */
+let usuarios        = [];
+let roles           = [];
+let permisos        = [];
+let modoEdicion     = false;
+let idEditando      = null;
+let guardando       = false;
+let rolActivo       = null;
+let rolEditandoId   = null;   // para editar rol
+let rolModoEdicion  = false;
+
+/* =========================================================
+   DOM
    ========================================================= */
 const tabla           = document.getElementById('tabla-usuarios');
 const formulario      = document.getElementById('formulario');
@@ -99,21 +97,38 @@ const inputNombres    = document.getElementById('nombres');
 const inputApellidos  = document.getElementById('apellidos');
 const inputUsuario    = document.getElementById('nombreUsuario');
 const inputPassword   = document.getElementById('password');
+const inputIdRol      = document.getElementById('idRol');
 const ayudaPassword   = document.getElementById('ayuda-password');
 
 const modalUsuario    = document.getElementById('modal-usuario');
 const modalTitulo     = document.getElementById('modal-usuario-titulo');
+
+const modalPermisos   = document.getElementById('modal-permisos');
+const permisosTabs    = document.getElementById('permisos-tabs');
+const permisosTbody   = document.getElementById('permisos-tbody');
+
+const permisosRolAcciones = document.getElementById('permisos-rol-acciones');
+const btnEditarRol        = document.getElementById('btn-editar-rol');
+const btnToggleRol        = document.getElementById('btn-toggle-rol');
+const txtToggleRol        = document.getElementById('txt-toggle-rol');
+const btnEliminarRol      = document.getElementById('btn-eliminar-rol');
+
+const modalRol        = document.getElementById('modal-rol');
+const formRol         = document.getElementById('form-rol');
+const modalRolTitulo  = document.getElementById('modal-rol-titulo');
+const rolCodigo       = document.getElementById('rol-codigo');
+const rolNombre       = document.getElementById('rol-nombre');
+const rolDescripcion  = document.getElementById('rol-descripcion');
+const rolMensaje      = document.getElementById('rol-mensaje');
+const btnGuardarRol   = document.getElementById('btn-guardar-rol');
 
 /* =========================================================
    UTILIDADES
    ========================================================= */
 function escaparHTML(str) {
     return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function mostrarMensaje(texto, tipo) {
@@ -121,23 +136,16 @@ function mostrarMensaje(texto, tipo) {
     mensaje.className = 'mensaje ' + tipo;
     mensaje.classList.remove('oculto');
 }
-
-function ocultarMensaje() {
-    mensaje.classList.add('oculto');
+function ocultarMensaje() { mensaje.classList.add('oculto'); }
+function setGuardando(v) {
+    guardando = v;
+    btnGuardar.disabled = v;
+    btnGuardar.style.opacity = v ? '0.6' : '';
 }
-
-function setGuardando(valor) {
-    guardando = valor;
-    btnGuardar.disabled = valor;
-    btnGuardar.style.opacity = valor ? '0.6' : '';
-}
-
 function buscarUsuarioPorId(id) {
-    const idNum = Number(id);
-    return usuarios.find(x => Number(x.IdUsuario) === idNum);
+    return usuarios.find(x => Number(x.IdUsuario) === Number(id));
 }
 
-/* Icono SVG para badge de usuario */
 function iconoUsuarioSVG() {
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-linecap="round" stroke-linejoin="round">
@@ -145,16 +153,12 @@ function iconoUsuarioSVG() {
                 <circle cx="12" cy="7" r="4"></circle>
             </svg>`;
 }
-
-/* Icono SVG para badge de estado activo */
 function iconoCheckSVG() {
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
             </svg>`;
 }
-
-/* Icono SVG para badge de estado inactivo */
 function iconoXSVG() {
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-linecap="round" stroke-linejoin="round">
@@ -164,13 +168,12 @@ function iconoXSVG() {
 }
 
 /* =========================================================
-   MODAL
+   MODAL USUARIO
    ========================================================= */
 function abrirModal() {
     modalUsuario.style.display = 'flex';
     document.body.style.overflow = 'hidden';
 }
-
 function cerrarModal() {
     modalUsuario.style.display = 'none';
     document.body.style.overflow = '';
@@ -178,16 +181,63 @@ function cerrarModal() {
     modoEdicion = false;
     idEditando  = null;
 }
-
 document.getElementById('modal-usuario-cerrar').addEventListener('click', cerrarModal);
 document.getElementById('btn-cancelar').addEventListener('click', cerrarModal);
 modalUsuario.addEventListener('click', (e) => {
     if (e.target === modalUsuario) cerrarModal();
 });
 
+/* =========================================================
+   MODAL PERMISOS
+   ========================================================= */
+function abrirModalPermisos() {
+    modalPermisos.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    renderPermisosTabs();
+}
+function cerrarModalPermisos() {
+    modalPermisos.style.display = 'none';
+    document.body.style.overflow = '';
+}
+document.getElementById('modal-permisos-cerrar').addEventListener('click', cerrarModalPermisos);
+modalPermisos.addEventListener('click', (e) => {
+    if (e.target === modalPermisos) cerrarModalPermisos();
+});
+
+/* =========================================================
+   MODAL ROL (crear/editar)
+   ========================================================= */
+function abrirModalRol(rol = null) {
+    rolModoEdicion = !!rol;
+    rolEditandoId  = rol ? rol.IdRol : null;
+
+    modalRolTitulo.textContent = rolModoEdicion ? 'Editar rol' : 'Nuevo rol';
+
+    rolCodigo.value      = rol ? rol.Codigo : '';
+    rolNombre.value      = rol ? rol.Nombre : '';
+    rolDescripcion.value = rol ? (rol.Descripcion || '') : '';
+
+    rolMensaje.classList.add('oculto');
+    modalRol.style.display = 'flex';
+
+    setTimeout(() => rolCodigo.focus(), 40);
+}
+function cerrarModalRol() {
+    modalRol.style.display = 'none';
+    rolModoEdicion = false;
+    rolEditandoId  = null;
+}
+document.getElementById('modal-rol-cerrar').addEventListener('click', cerrarModalRol);
+document.getElementById('btn-cancelar-rol').addEventListener('click', cerrarModalRol);
+modalRol.addEventListener('click', (e) => {
+    if (e.target === modalRol) cerrarModalRol();
+});
+
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modalUsuario.style.display === 'flex') {
-        cerrarModal();
+    if (e.key === 'Escape') {
+        if (modalRol.style.display === 'flex')      { cerrarModalRol(); return; }
+        if (modalUsuario.style.display === 'flex')  { cerrarModal();    return; }
+        if (modalPermisos.style.display === 'flex') { cerrarModalPermisos(); }
     }
 });
 
@@ -199,19 +249,33 @@ document.getElementById('btn-volver').addEventListener('click', () => {
 });
 
 /* =========================================================
-   LISTAR
+   CARGAR
    ========================================================= */
 async function cargar() {
     try {
-        usuarios = await window.api.usuarios.listar();
+        const [listaUsuarios, listaRoles] = await Promise.all([
+            window.api.usuarios.listar(),
+            window.api.permisos.listarRoles()
+        ]);
+        usuarios = listaUsuarios || [];
+        roles    = listaRoles    || [];
         renderTabla();
     } catch (err) {
         toastError('No se pudieron cargar los usuarios', err.message);
     }
 }
 
+async function cargarPermisos() {
+    try {
+        permisos = await window.api.permisos.listarTodos() || [];
+    } catch (err) {
+        toastError('No se pudieron cargar los permisos', err.message);
+        permisos = [];
+    }
+}
+
 /* =========================================================
-   RENDER TABLA
+   TABLA USUARIOS
    ========================================================= */
 function renderTabla() {
     tabla.innerHTML = '';
@@ -220,7 +284,6 @@ function renderTabla() {
         sinResultados.classList.remove('oculto');
         return;
     }
-
     sinResultados.classList.add('oculto');
 
     usuarios.forEach(u => {
@@ -229,6 +292,10 @@ function renderTabla() {
         const estadoHTML = u.Activo
             ? `<span class="badge-estado activo">${iconoCheckSVG()} Activo</span>`
             : `<span class="badge-estado inactivo">${iconoXSVG()} Inactivo</span>`;
+
+        const rolHTML = u.RolNombre
+            ? `<span class="badge-rol">${escaparHTML(u.RolNombre)}</span>`
+            : `<span class="badge-rol badge-rol-vacio">—</span>`;
 
         tr.innerHTML = `
             <td>
@@ -239,6 +306,7 @@ function renderTabla() {
             </td>
             <td><span class="texto-plano">${escaparHTML(u.Nombres)}</span></td>
             <td><span class="texto-plano">${escaparHTML(u.Apellidos)}</span></td>
+            <td>${rolHTML}</td>
             <td>${estadoHTML}</td>
             <td class="acciones-tabla"></td>
         `;
@@ -277,7 +345,20 @@ function renderTabla() {
 }
 
 /* =========================================================
-   CREAR
+   SELECT DE ROLES
+   ========================================================= */
+function cargarSelectRoles() {
+    inputIdRol.innerHTML = '<option value="">— Sin rol —</option>';
+    roles.filter(r => r.Activo).forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.IdRol;
+        opt.textContent = `${r.Nombre} (${r.Codigo})`;
+        inputIdRol.appendChild(opt);
+    });
+}
+
+/* =========================================================
+   CREAR USUARIO
    ========================================================= */
 document.getElementById('btn-nuevo').addEventListener('click', () => {
     modoEdicion = false;
@@ -288,34 +369,34 @@ document.getElementById('btn-nuevo').addEventListener('click', () => {
     inputApellidos.value = '';
     inputUsuario.value = '';
     inputPassword.value = '';
+    inputIdRol.value = '';
     ayudaPassword.textContent = '(obligatoria al crear)';
 
+    cargarSelectRoles();
     ocultarMensaje();
     abrirModal();
     inputNombres.focus();
 });
 
 /* =========================================================
-   EDITAR
+   EDITAR USUARIO
    ========================================================= */
 function abrirEdicion(id) {
     const u = buscarUsuarioPorId(id);
-
-    if (!u) {
-        toastError('Usuario no encontrado');
-        cargar();
-        return;
-    }
+    if (!u) { toastError('Usuario no encontrado'); cargar(); return; }
 
     modoEdicion = true;
     idEditando  = u.IdUsuario;
     modalTitulo.textContent = 'Editar usuario';
 
-    inputNombres.value = u.Nombres ?? '';
+    inputNombres.value   = u.Nombres ?? '';
     inputApellidos.value = u.Apellidos ?? '';
-    inputUsuario.value = u.NombreUsuario ?? '';
-    inputPassword.value = '';
+    inputUsuario.value   = u.NombreUsuario ?? '';
+    inputPassword.value  = '';
     ayudaPassword.textContent = '(dejar vacío para no cambiar)';
+
+    cargarSelectRoles();
+    inputIdRol.value = u.IdRol ?? '';
 
     ocultarMensaje();
     abrirModal();
@@ -324,7 +405,7 @@ function abrirEdicion(id) {
 }
 
 /* =========================================================
-   GUARDAR
+   GUARDAR USUARIO
    ========================================================= */
 formulario.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -335,7 +416,8 @@ formulario.addEventListener('submit', async (e) => {
         apellidos:     inputApellidos.value.trim(),
         nombreUsuario: inputUsuario.value.trim(),
         password:      inputPassword.value,
-        activo:        true
+        activo:        true,
+        idRol:         inputIdRol.value ? Number(inputIdRol.value) : null
     };
 
     if (!datos.nombres || !datos.apellidos || !datos.nombreUsuario) {
@@ -358,7 +440,7 @@ formulario.addEventListener('submit', async (e) => {
     setGuardando(true);
     try {
         let res;
-        if (modoEdicion && idEditando !== null && idEditando !== undefined) {
+        if (modoEdicion && idEditando != null) {
             res = await window.api.usuarios.actualizar(idEditando, datos);
         } else {
             res = await window.api.usuarios.crear(datos);
@@ -379,13 +461,13 @@ formulario.addEventListener('submit', async (e) => {
 });
 
 /* =========================================================
-   DESACTIVAR
+   DESACTIVAR USUARIO
    ========================================================= */
 async function desactivar(id) {
     const u = buscarUsuarioPorId(id);
     const nombreMostrar = u ? `${u.NombreUsuario} (${u.Nombres} ${u.Apellidos})` : `#${id}`;
 
-    const confirmacion = await Swal.fire({
+    const c = await Swal.fire({
         icon: 'warning',
         title: '¿Desactivar usuario?',
         html: `Se desactivará <strong>${escaparHTML(nombreMostrar)}</strong>.<br>
@@ -402,8 +484,7 @@ async function desactivar(id) {
             cancelButton:  'swal2-cancel swal2-styled'
         }
     });
-
-    if (!confirmacion.isConfirmed) return;
+    if (!c.isConfirmed) return;
 
     try {
         const res = await window.api.usuarios.eliminar(id);
@@ -417,6 +498,296 @@ async function desactivar(id) {
         toastError('Error al desactivar', err.message);
     }
 }
+
+/* =========================================================
+   PERMISOS — Tabs + Tabla
+   ========================================================= */
+function renderPermisosTabs() {
+    permisosTabs.innerHTML = '';
+
+    if (!roles.length) {
+        permisosTabs.innerHTML = '<span class="permisos-vacio">No hay roles configurados.</span>';
+        permisosRolAcciones.style.display = 'none';
+        permisosTbody.innerHTML = '<tr><td colspan="2" class="permisos-vacio">Crea un rol para empezar.</td></tr>';
+        return;
+    }
+
+    roles.forEach(r => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'permisos-tab' + (rolActivo === r.IdRol ? ' activo' : '');
+        btn.dataset.idRol = r.IdRol;
+
+        const inactivo = !r.Activo ? ' <em style="opacity:.6;">(inactivo)</em>' : '';
+        btn.innerHTML = `${escaparHTML(r.Nombre)}${inactivo}`;
+
+        btn.addEventListener('click', () => {
+            rolActivo = r.IdRol;
+            renderPermisosTabs();
+            renderPermisosTabla();
+            actualizarAccionesRol();
+        });
+        permisosTabs.appendChild(btn);
+    });
+
+    if (!rolActivo && roles.length) rolActivo = roles[0].IdRol;
+
+    renderPermisosTabla();
+    actualizarAccionesRol();
+}
+
+function permisoActual(idRol, modulo) {
+    const p = permisos.find(x => x.IdRol === idRol && x.Modulo === modulo);
+    return p ? !!p.Permitido : false;
+}
+
+function renderPermisosTabla() {
+    permisosTbody.innerHTML = '';
+
+    if (!rolActivo) {
+        permisosTbody.innerHTML = '<tr><td colspan="2" class="permisos-vacio">Selecciona un rol arriba.</td></tr>';
+        return;
+    }
+
+    const rol = roles.find(r => r.IdRol === rolActivo);
+    const deshabilitado = rol && !rol.Activo;
+
+    const grupos = {};
+    MODULOS_DISPONIBLES.forEach(m => {
+        if (!grupos[m.grupo]) grupos[m.grupo] = [];
+        grupos[m.grupo].push(m);
+    });
+
+    Object.entries(grupos).forEach(([nombreGrupo, mods]) => {
+        const trGrupo = document.createElement('tr');
+        trGrupo.className = 'permisos-grupo';
+        trGrupo.innerHTML = `<td colspan="2">${escaparHTML(nombreGrupo)}</td>`;
+        permisosTbody.appendChild(trGrupo);
+
+        mods.forEach(m => {
+            const activo = permisoActual(rolActivo, m.key);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <label class="permisos-label">
+                        <span>${escaparHTML(m.label)}</span>
+                        <code>${escaparHTML(m.key)}</code>
+                    </label>
+                </td>
+                <td style="text-align:center;">
+                    <label class="switch">
+                        <input type="checkbox" data-modulo="${escaparHTML(m.key)}"
+                               ${activo ? 'checked' : ''} ${deshabilitado ? 'disabled' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                </td>
+            `;
+            const cb = tr.querySelector('input[type="checkbox"]');
+            cb.addEventListener('change', () => togglePermiso(rolActivo, m.key, cb.checked, cb));
+            permisosTbody.appendChild(tr);
+        });
+    });
+}
+
+async function togglePermiso(idRol, modulo, permitido, checkbox) {
+    try {
+        const res = await window.api.permisos.actualizar(idRol, modulo, permitido);
+        if (res && res.ok) {
+            const ex = permisos.find(x => x.IdRol === idRol && x.Modulo === modulo);
+            if (ex) ex.Permitido = permitido;
+            else permisos.push({ IdRol: idRol, Modulo: modulo, Permitido: permitido });
+            toastExito('Permiso actualizado');
+        } else {
+            checkbox.checked = !permitido;
+            toastError('No se pudo actualizar el permiso', res?.mensaje || '');
+        }
+    } catch (err) {
+        checkbox.checked = !permitido;
+        toastError('Error al actualizar', err.message);
+    }
+}
+
+/* =========================================================
+   ACCIONES DE ROL (editar/toggle/eliminar)
+   ========================================================= */
+function actualizarAccionesRol() {
+    const rol = roles.find(r => r.IdRol === rolActivo);
+    if (!rol) {
+        permisosRolAcciones.style.display = 'none';
+        return;
+    }
+
+    permisosRolAcciones.style.display = 'flex';
+    txtToggleRol.textContent = rol.Activo ? 'Desactivar' : 'Activar';
+
+    // No se puede desactivar el rol ADMIN
+    const esAdmin = rol.Codigo === 'ADMIN';
+    btnToggleRol.disabled = esAdmin;
+    btnEliminarRol.disabled = esAdmin;
+    btnToggleRol.title = esAdmin ? 'El rol ADMIN no se puede desactivar' : '';
+    btnEliminarRol.title = esAdmin ? 'El rol ADMIN no se puede eliminar' : '';
+}
+
+btnEditarRol.addEventListener('click', () => {
+    const rol = roles.find(r => r.IdRol === rolActivo);
+    if (!rol) return;
+    abrirModalRol(rol);
+});
+
+btnToggleRol.addEventListener('click', async () => {
+    const rol = roles.find(r => r.IdRol === rolActivo);
+    if (!rol) return;
+
+    const nuevoEstado = !rol.Activo;
+    const confirmacion = await Swal.fire({
+        icon: 'question',
+        title: nuevoEstado ? '¿Activar rol?' : '¿Desactivar rol?',
+        html: nuevoEstado
+            ? `Se activará <strong>${escaparHTML(rol.Nombre)}</strong>.`
+            : `Se desactivará <strong>${escaparHTML(rol.Nombre)}</strong>.<br>
+               Los usuarios con este rol no podrán iniciar sesión.`,
+        showCancelButton: true,
+        confirmButtonText: nuevoEstado ? 'Sí, activar' : 'Sí, desactivar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        buttonsStyling: false,
+        customClass: {
+            popup:         'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            cancelButton:  'swal2-cancel swal2-styled'
+        }
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+        const res = await window.api.permisos.cambiarEstadoRol(rol.IdRol, nuevoEstado);
+        if (res && res.ok) {
+            await cargar();
+            renderPermisosTabs();
+            actualizarAccionesRol();
+            toastExito(res.mensaje);
+        } else {
+            toastError('No se pudo cambiar el estado', res?.mensaje || '');
+        }
+    } catch (err) {
+        toastError('Error al cambiar estado', err.message);
+    }
+});
+
+btnEliminarRol.addEventListener('click', async () => {
+    const rol = roles.find(r => r.IdRol === rolActivo);
+    if (!rol) return;
+
+    const confirmacion = await Swal.fire({
+        icon: 'warning',
+        title: '¿Eliminar rol?',
+        html: `Se eliminará permanentemente <strong>${escaparHTML(rol.Nombre)}</strong>
+               y todos sus permisos configurados.<br>
+               <small>Esta acción no se puede deshacer.</small>`,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        focusCancel: true,
+        buttonsStyling: false,
+        customClass: {
+            popup:         'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
+            cancelButton:  'swal2-cancel swal2-styled'
+        }
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+        const res = await window.api.permisos.eliminarRol(rol.IdRol);
+        if (res && res.ok) {
+            rolActivo = null;
+            await cargar();
+            await cargarPermisos();
+            renderPermisosTabs();
+            toastExito(res.mensaje);
+        } else {
+            toastError('No se pudo eliminar', res?.mensaje || 'Error desconocido');
+        }
+    } catch (err) {
+        toastError('Error al eliminar rol', err.message);
+    }
+});
+
+/* =========================================================
+   NUEVO ROL (botón + submit)
+   ========================================================= */
+document.getElementById('btn-nuevo-rol').addEventListener('click', () => {
+    abrirModalRol(null);
+});
+
+formRol.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const codigo      = rolCodigo.value.trim().toUpperCase();
+    const nombre      = rolNombre.value.trim();
+    const descripcion = rolDescripcion.value.trim();
+
+    rolMensaje.classList.add('oculto');
+    btnGuardarRol.disabled = true;
+
+    // Validaciones
+    if (!codigo || !nombre) {
+        rolMensaje.textContent = 'Código y nombre son obligatorios.';
+        rolMensaje.className = 'mensaje error';
+        rolMensaje.classList.remove('oculto');
+        btnGuardarRol.disabled = false;
+        return;
+    }
+    if (!/^[A-Z0-9_]+$/.test(codigo)) {
+        rolMensaje.textContent = 'El código solo admite letras mayúsculas, números y guion bajo.';
+        rolMensaje.className = 'mensaje error';
+        rolMensaje.classList.remove('oculto');
+        btnGuardarRol.disabled = false;
+        return;
+    }
+
+    try {
+        let res;
+        if (rolModoEdicion && rolEditandoId) {
+            res = await window.api.permisos.actualizarRol(rolEditandoId, { codigo, nombre, descripcion });
+        } else {
+            res = await window.api.permisos.crearRol({ codigo, nombre, descripcion });
+        }
+
+        if (res && res.ok) {
+            cerrarModalRol();
+            await cargar();
+            await cargarPermisos();
+
+            // Si es nuevo, activarlo automáticamente
+            if (!rolModoEdicion && res.idRol) rolActivo = res.idRol;
+
+            renderPermisosTabs();
+            toastExito(res.mensaje);
+        } else {
+            rolMensaje.textContent = res?.mensaje || 'No se pudo guardar el rol.';
+            rolMensaje.className = 'mensaje error';
+            rolMensaje.classList.remove('oculto');
+        }
+    } catch (err) {
+        rolMensaje.textContent = 'Error: ' + err.message;
+        rolMensaje.className = 'mensaje error';
+        rolMensaje.classList.remove('oculto');
+    } finally {
+        btnGuardarRol.disabled = false;
+    }
+});
+
+/* =========================================================
+   ABRIR MODAL DE PERMISOS
+   ========================================================= */
+document.getElementById('btn-permisos').addEventListener('click', async () => {
+    await cargar();           // recarga roles (para ver cambios si los hubiera)
+    await cargarPermisos();
+    rolActivo = roles[0]?.IdRol || null;
+    abrirModalPermisos();
+});
 
 /* =========================================================
    INICIO

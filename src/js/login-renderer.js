@@ -68,7 +68,9 @@ async function hacerLogin() {
         const res = await window.api.login(usuario, password);
 
         if (res.ok) {
-            mostrarMensaje('¡Bienvenido, ' + res.usuario.Nombres + '!', 'ok');
+       const nombre = res.usuario?.Nombres || usuario || 'usuario';
+const rol    = res.usuario?.RolNombre ? ` · ${res.usuario.RolNombre}` : '';
+mostrarMensaje(`¡Bienvenido, ${nombre}${rol}!`, 'ok');
 
             // Esperar un poco y abrir el menú
             setTimeout(async () => {

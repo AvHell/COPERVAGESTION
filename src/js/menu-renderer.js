@@ -6,15 +6,14 @@
    MAPA DE MÓDULOS
    ========================================================= */
 const MODULOS = {
-    /* Sistema existente */
+    /* Sistema */
     catalogos: () => window.api.abrirCatalogos(),
-    rangos:    () => window.api.abrirRangos(),
     equipos:   () => window.api.abrirEquipos(),
     plano:     () => window.api.abrirPlano(),
     usuarios:  () => window.api.abrirUsuarios(),
     historico: () => window.api.abrirHistorico(),
 
-    /* Módulo Activo Fijo (aislado) */
+    /* Activo Fijo */
     activofijo_catalogos:   () => window.api.abrirActivoFijoCatalogos(),
     activofijo_activos:     () => window.api.abrirActivoFijoActivos(),
     activofijo_responsivas: () => window.api.abrirActivoFijoResponsivas(),
@@ -22,22 +21,120 @@ const MODULOS = {
     activofijo_importar:    () => window.api.abrirActivoFijoImportar()
 };
 
+/* =========================================================
+   ESTADO
+   ========================================================= */
+let permisosUsuario = {};
+let rolUsuario      = null;
+let esAdmin         = false;
+
+/* =========================================================
+   CLICK EN TARJETA
+   ========================================================= */
 document.querySelectorAll('.modulo-card').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
         const key = btn.dataset.modulo;
-        const fn = MODULOS[key];
-        if (typeof fn === 'function') {
-            fn();
-        } else {
+        const fn  = MODULOS[key];
+
+        if (typeof fn !== 'function') {
             console.warn(`Módulo desconocido: ${key}`);
+            return;
+        }
+
+        // — Guard defensivo: aunque esté oculto, si alguien forzara click —
+        if (!puedeAcceder(key)) {
+            mostrarToast(`No tienes permisos para acceder a este módulo.`, 'error');
+            return;
+        }
+
+        // Feedback visual
+        btn.classList.add('modulo-card--abriendo');
+        setTimeout(() => btn.classList.remove('modulo-card--abriendo'), 320);
+
+        try {
+            const res = await fn();
+
+            /* Si el backend rechazó por permisos → avisar */
+            if (res && res.ok === false && res.mensaje) {
+                mostrarToast(res.mensaje, 'error');
+                // Re-consultar permisos por si cambiaron
+                await aplicarPermisos();
+            }
+        } catch (err) {
+            console.error(`Error al abrir ${key}:`, err);
+            mostrarToast('No se pudo abrir el módulo.', 'error');
         }
     });
 });
 
 /* =========================================================
+   PERMISOS — consulta y aplica visibilidad al menú
+   ========================================================= */
+function puedeAcceder(modulo) {
+    if (esAdmin) return true;
+    return !!permisosUsuario[modulo];
+}
+
+async function aplicarPermisos() {
+    try {
+        permisosUsuario = (await window.api.permisos.mios()) || {};
+        const rol = await window.api.permisos.miRol();
+        rolUsuario = rol?.codigo || null;
+        esAdmin    = rolUsuario === 'ADMIN';
+
+        console.log('[Permisos] Rol:', rolUsuario, '| Permisos:', Object.keys(permisosUsuario).length);
+    } catch (err) {
+        console.error('[Permisos] Error consultando permisos:', err);
+        permisosUsuario = {};
+        rolUsuario = null;
+        esAdmin = false;
+    }
+
+    /* Ocultar/mostrar tarjetas según permiso */
+    document.querySelectorAll('.modulo-card').forEach(card => {
+        const modulo = card.dataset.modulo;
+        const permitido = puedeAcceder(modulo);
+
+        if (!permitido) {
+            card.style.display = 'none';
+            card.setAttribute('aria-hidden', 'true');
+        } else {
+            card.style.display = '';
+            card.removeAttribute('aria-hidden');
+        }
+    });
+
+    /* Ocultar categorías que quedaron sin tarjetas visibles */
+    document.querySelectorAll('.categoria').forEach(seccion => {
+        const visibles = seccion.querySelectorAll('.modulo-card:not([style*="display: none"])');
+        seccion.style.display = visibles.length ? '' : 'none';
+    });
+}
+
+/* =========================================================
+   TOAST
+   ========================================================= */
+function mostrarToast(mensaje, tipo = 'info') {
+    // Elimina toasts previos para no apilar
+    document.querySelectorAll('.menu-toast').forEach(t => t.remove());
+
+    const toast = document.createElement('div');
+    toast.className = `menu-toast menu-toast--${tipo}`;
+    toast.textContent = mensaje;
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(() => toast.classList.add('visible'));
+
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        setTimeout(() => toast.remove(), 320);
+    }, 3200);
+}
+
+/* =========================================================
    CERRAR SESIÓN
    ========================================================= */
-document.getElementById('btn-salir').addEventListener('click', async () => {
+document.getElementById('btn-salir')?.addEventListener('click', async () => {
     await window.api.logout();
     window.close();
 });
@@ -72,7 +169,7 @@ function obtenerSaludo() {
 }
 
 /* =========================================================
-   INICIO: usuario actual + fecha
+   INICIO: usuario actual + fecha + permisos
    ========================================================= */
 (async () => {
     const fechaEl = document.getElementById('fecha-hoy');
@@ -96,7 +193,7 @@ function obtenerSaludo() {
 
             if (avatarEl) avatarEl.textContent = iniciales;
             if (nameEl)   nameEl.textContent   = nombreCompleto;
-            if (roleEl)   roleEl.textContent   = (u.Rol ?? u.TipoUsuario ?? 'Usuario').toString();
+            if (roleEl)   roleEl.textContent   = (u.RolNombre ?? u.Rol ?? u.TipoUsuario ?? 'Usuario').toString();
 
             if (saludoEl) saludoEl.textContent = `${obtenerSaludo()}, ${u.Nombres ?? nombreCompleto}`;
             if (bienvEl)  bienvEl.textContent  = 'Selecciona un módulo para comenzar a trabajar.';
@@ -113,4 +210,7 @@ function obtenerSaludo() {
         if (nameEl)   nameEl.textContent   = 'Error';
         if (roleEl)   roleEl.textContent   = '—';
     }
+
+    /* 🔐 Aplicar permisos al menú */
+    await aplicarPermisos();
 })();

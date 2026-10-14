@@ -563,3 +563,391 @@ body > .swal2-select-label {
     .swal2-toast.cl-toast { min-width: 0; width: 100%; }
     .swal2-popup.cl-confirm { width: calc(100% - 32px); }
 }
+
+/* =========================================================
+   BARRA SUPERIOR — agrupación derecha
+   ========================================================= */
+.barra-derecha {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* =========================================================
+   BADGE DE ROL EN TABLA
+   ========================================================= */
+.badge-rol {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.badge-rol-vacio {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+    font-weight: 500;
+}
+
+/* =========================================================
+   SELECT EN FORMULARIO
+   ========================================================= */
+select#idRol {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    color: #1a202c;
+    background: #ffffff;
+    border: 1px solid #d7dde5;
+    border-radius: 8px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+}
+
+select#idRol:hover {
+    border-color: #b8c1ce;
+}
+
+select#idRol:focus {
+    outline: none;
+    border-color: #1e3a5f;
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.12);
+}
+
+/* =========================================================
+   MODAL PERMISOS
+   ========================================================= */
+.modal-permisos {
+    background: #ffffff;
+    border-radius: 16px;
+    width: min(680px, 92vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 30px 80px rgba(15, 23, 42, 0.25);
+    overflow: hidden;
+    animation: modalPopIn 0.22s cubic-bezier(.4, 0, .2, 1);
+}
+
+@keyframes modalPopIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-permisos .modal-body {
+    padding: 20px 24px 24px;
+    overflow-y: auto;
+}
+
+/* =========================================================
+   TABS DE ROLES
+   ========================================================= */
+.permisos-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.permisos-tab {
+    padding: 8px 14px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a5568;
+    background: #f4f6f9;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    letter-spacing: 0.01em;
+}
+
+.permisos-tab:hover {
+    background: #e8edf3;
+    color: #1e3a5f;
+}
+
+.permisos-tab.activo {
+    background: #1e3a5f;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.25);
+}
+
+/* =========================================================
+   TABLA DE PERMISOS
+   ========================================================= */
+.permisos-tabla-wrap {
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+.permisos-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+}
+
+.permisos-tabla thead {
+    background: #f4f6f9;
+    position: sticky;
+    top: 0;
+}
+
+.permisos-tabla th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.permisos-tabla td {
+    padding: 8px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.permisos-tabla tr:last-child td {
+    border-bottom: none;
+}
+
+.permisos-tabla tr.permisos-grupo td {
+    background: #eef2f7;
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #1e3a5f;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid #d7dde5;
+}
+
+.permisos-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-weight: 500;
+    color: #1a202c;
+}
+
+.permisos-label code {
+    font-size: 11px;
+    color: #94a3b8;
+    background: #f4f6f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.permisos-vacio {
+    padding: 30px 14px;
+    text-align: center;
+    color: #94a3b8;
+    font-style: italic;
+    font-size: 13px;
+}
+
+/* =========================================================
+   SWITCH (TOGGLE)
+   ========================================================= */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    cursor: pointer;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch .slider {
+    position: absolute;
+    inset: 0;
+    background-color: #cbd5e1;
+    border-radius: 999px;
+    transition: background-color 0.2s ease;
+}
+
+.switch .slider::before {
+    content: '';
+    position: absolute;
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    top: 3px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.20);
+    transition: transform 0.2s cubic-bezier(.4, 0, .2, 1);
+}
+
+.switch input:checked + .slider {
+    background-color: #2f855a;
+}
+
+.switch input:checked + .slider::before {
+    transform: translateX(18px);
+}
+
+.switch input:focus-visible + .slider {
+    outline: 2px solid #1e3a5f;
+    outline-offset: 2px;
+}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+@media (max-width: 640px) {
+    .barra-acciones {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .barra-derecha {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .barra-derecha button {
+        justify-content: center;
+    }
+}
+
+/* =========================================================
+   BOTONES PEQUEÑOS
+   ========================================================= */
+.primario-sm,
+.secundario-sm,
+.peligro-sm {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.primario-sm {
+    background: #1e3a5f;
+    color: #ffffff;
+    border-color: #1e3a5f;
+}
+.primario-sm:hover { background: #274d7a; border-color: #274d7a; }
+
+.secundario-sm {
+    background: #ffffff;
+    color: #4a5568;
+    border-color: #d7dde5;
+}
+.secundario-sm:hover {
+    background: #f4f6f9;
+    color: #1e3a5f;
+    border-color: #b8c1ce;
+}
+
+.peligro-sm {
+    background: #ffffff;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+.peligro-sm:hover {
+    background: #fef2f2;
+    border-color: #fca5a5;
+}
+
+.primario-sm:disabled,
+.secundario-sm:disabled,
+.peligro-sm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.primario-sm svg,
+.secundario-sm svg,
+.peligro-sm svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   ACCIONES DE ROL EN MODAL PERMISOS
+   ========================================================= */
+.permisos-rol-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px dashed #d7dde5;
+    border-radius: 8px;
+    align-items: center;
+}
+
+.permisos-rol-acciones::before {
+    content: 'Acciones del rol:';
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: auto;
+}
+
+/* =========================================================
+   MODAL ROL
+   ========================================================= */
+.modal-rol {
+    background: #ffffff;
+    border-radius: 16px;
+    width: min(560px, 92vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 30px 80px rgba(15, 23, 42, 0.25);
+    overflow: hidden;
+    animation: modalPopIn 0.22s cubic-bezier(.4, 0, .2, 1);
+}
+
+.modal-rol .modal-body {
+    padding: 20px 24px 24px;
+    overflow-y: auto;
+}
+
+.field-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: #94a3b8;
+    letter-spacing: 0.01em;
+}

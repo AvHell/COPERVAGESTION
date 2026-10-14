@@ -9,11 +9,27 @@ contextBridge.exposeInMainWorld('api', {
     usuarioActual: ()     => ipcRenderer.invoke('usuario-actual'),
 
     /* =========================================================
+       PERMISOS
+       ========================================================= */
+    permisos: {
+    mios:            ()                    => ipcRenderer.invoke('permisos:mios'),
+    miRol:           ()                    => ipcRenderer.invoke('permisos:mi-rol'),
+    listarRoles:     ()                    => ipcRenderer.invoke('permisos:listar-roles'),
+    listarTodos:     ()                    => ipcRenderer.invoke('permisos:listar-todos'),
+    actualizar:      (idRol, modulo, perm) => ipcRenderer.invoke('permisos:actualizar', idRol, modulo, perm),
+    asignarRol:      (idUsuario, idRol)    => ipcRenderer.invoke('permisos:asignar-rol', idUsuario, idRol),
+
+    /* CRUD de roles */
+    crearRol:        (datos)               => ipcRenderer.invoke('permisos:crear-rol', datos),
+    actualizarRol:   (idRol, datos)        => ipcRenderer.invoke('permisos:actualizar-rol', idRol, datos),
+    cambiarEstadoRol:(idRol, activo)       => ipcRenderer.invoke('permisos:cambiar-estado-rol', idRol, activo),
+    eliminarRol:     (idRol)               => ipcRenderer.invoke('permisos:eliminar-rol', idRol)
+},
+    /* =========================================================
        NAVEGACIÓN / VENTANAS
        ========================================================= */
     abrirMenu:      () => ipcRenderer.invoke('abrir-menu'),
     abrirCatalogos: () => ipcRenderer.invoke('abrir-catalogos'),
-    abrirRangos:    () => ipcRenderer.invoke('abrir-rangos'),
     abrirEquipos:   () => ipcRenderer.invoke('abrir-equipos'),
     abrirPlano:     () => ipcRenderer.invoke('abrir-plano'),
     abrirUsuarios:  () => ipcRenderer.invoke('abrir-usuarios'),
@@ -40,7 +56,7 @@ contextBridge.exposeInMainWorld('api', {
     },
 
     /* =========================================================
-       ROLES
+       ROLES (equipos)
        ========================================================= */
     roles: {
         listar:     ()                                  => ipcRenderer.invoke('roles:listar'),
@@ -149,7 +165,6 @@ contextBridge.exposeInMainWorld('api', {
         actualizarZona: (idZona, nombre, color, fi, ff, ci, cf, idPiso)                => ipcRenderer.invoke('plano:actualizarZona', idZona, nombre, color, fi, ff, ci, cf, idPiso),
         eliminarZona:   (idZona, idPiso, nombre)                                       => ipcRenderer.invoke('plano:eliminarZona', idZona, idPiso, nombre),
 
-        /* NUEVO: elimina TODAS las zonas con el mismo nombre+color del piso */
         eliminarZonasPorNombre: (idPiso, nombre, color)                                => ipcRenderer.invoke('plano:eliminarZonasPorNombre', idPiso, nombre, color),
 
         listarZonasLibres:  (idPiso)                          => ipcRenderer.invoke('plano:listarZonasLibres', idPiso),

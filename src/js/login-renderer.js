@@ -31,7 +31,6 @@ btnTogglePassword.addEventListener('click', () => {
         btnTogglePassword.setAttribute('aria-label', 'Ocultar contraseña');
     }
 
-    // Mantener foco en el input para no perder el cursor
     inputPassword.focus();
 });
 
@@ -46,6 +45,30 @@ function mostrarMensaje(texto, tipo) {
 
 function ocultarMensaje() {
     mensaje.classList.add('oculto');
+}
+
+/* =========================================================
+   AVISO DE SESIÓN (SweetAlert2)
+   ========================================================= */
+function avisoSesion(motivo) {
+    if (motivo === 'logout') {
+        Swal.fire({
+            title: 'Sesión cerrada',
+            text: 'Has cerrado sesión correctamente.',
+            icon: 'success',
+            timer: 2000,
+            showConfirmButton: false,
+            timerProgressBar: true
+        });
+    } else if (motivo === 'expirada') {
+        Swal.fire({
+            title: 'Sesión expirada',
+            text: 'Tu sesión ha expirado. Inicia sesión nuevamente.',
+            icon: 'warning',
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#2563eb'
+        });
+    }
 }
 
 /* =========================================================
@@ -68,9 +91,9 @@ async function hacerLogin() {
         const res = await window.api.login(usuario, password);
 
         if (res.ok) {
-       const nombre = res.usuario?.Nombres || usuario || 'usuario';
-const rol    = res.usuario?.RolNombre ? ` · ${res.usuario.RolNombre}` : '';
-mostrarMensaje(`¡Bienvenido, ${nombre}${rol}!`, 'ok');
+            const nombre = res.usuario?.Nombres || usuario || 'usuario';
+            const rol    = res.usuario?.RolNombre ? ` · ${res.usuario.RolNombre}` : '';
+            mostrarMensaje(`¡Bienvenido, ${nombre}${rol}!`, 'ok');
 
             // Esperar un poco y abrir el menú
             setTimeout(async () => {
@@ -93,7 +116,6 @@ mostrarMensaje(`¡Bienvenido, ${nombre}${rol}!`, 'ok');
 
 /* =========================================================
    SUBMIT DEL FORMULARIO
-   (Enter en cualquier campo dispara el submit)
    ========================================================= */
 formLogin.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -109,3 +131,18 @@ inputUsuario.addEventListener('keydown', (e) => {
         inputPassword.focus();
     }
 });
+
+/* =========================================================
+   INICIO: mostrar aviso si venimos de logout / expiración
+   ========================================================= */
+(async () => {
+    try {
+        const motivo = await window.api.consumirMotivoLogin?.();
+        if (motivo) avisoSesion(motivo);
+
+        // Por si la ventana del login YA estaba abierta cuando se dispara el motivo
+        window.api.onLoginMotivo?.((m) => avisoSesion(m));
+    } catch (err) {
+        console.warn('[Login] No se pudo obtener motivo de sesión:', err);
+    }
+})();

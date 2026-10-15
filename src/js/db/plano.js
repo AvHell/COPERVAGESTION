@@ -82,11 +82,15 @@ async function listarPorLugar(idPiso) {
                    E.UsuarioAdmin, E.PasswordAdmin,
                    R.Codigo AS RolCodigo,
                    C.Codigo AS ClienteCodigo,
-                   C.Nombre AS ClienteNombre
+                   C.Nombre AS ClienteNombre,
+                   DA.Descripcion AS DescripcionAdmin
             FROM PlanoUbicaciones P
             INNER JOIN Equipos E ON E.IdEquipo = P.IdEquipo
             INNER JOIN RolesEquipo R ON R.IdRolEquipo = E.IdRolEquipo
             INNER JOIN Clientes C ON C.IdCliente = E.IdCliente
+            LEFT JOIN DominiosAdmin DA
+                   ON DA.IdCliente = E.IdCliente
+                  AND DA.Usuario   = E.UsuarioAdmin
             WHERE P.IdPiso = @IdPiso
         `);
     return r.recordset;
@@ -101,10 +105,14 @@ async function equiposSinUbicacion(idPiso) {
                    E.Mascara, E.PuertaEnlace, E.DNS1, E.DNS2,
                    E.UsuarioAdmin, E.PasswordAdmin,
                    C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
-                   R.Codigo AS RolCodigo
+                   R.Codigo AS RolCodigo,
+                   DA.Descripcion AS DescripcionAdmin
             FROM Equipos E
             INNER JOIN RolesEquipo R ON R.IdRolEquipo = E.IdRolEquipo
             INNER JOIN Clientes C ON C.IdCliente = E.IdCliente
+            LEFT JOIN DominiosAdmin DA
+                   ON DA.IdCliente = E.IdCliente
+                  AND DA.Usuario   = E.UsuarioAdmin
             WHERE E.IdPiso = @IdPiso
               AND E.IdEquipo NOT IN (
                   SELECT IdEquipo FROM PlanoUbicaciones WHERE IdPiso = @IdPiso

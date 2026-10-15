@@ -57,6 +57,12 @@ let edDominiosCargados = [];
 let edPisosCliente = [];
 let edGuardando = false;
 
+/* =========================================================
+   REFERENCIA A LA VENTANA DE VISTA PREVIA
+   (para cerrarla cuando se cierre el plano)
+   ========================================================= */
+let ventanaVistaPrevia = null;
+
 const COLORES_DISPONIBLES = [
     '#e74c3c', '#e67e22', '#f1c40f', '#27ae60',
     '#3498db', '#9b59b6', '#95a5a6', '#2c3e50'
@@ -217,7 +223,7 @@ const editarCancelar       = document.getElementById('editar-cancelar');
 const editarConfirmar      = document.getElementById('editar-confirmar');
 
 /* =========================================================
-   TOOLTIP
+   TOOLTIP — MEJORADO (más grande, detallado y legible)
    ========================================================= */
 let tooltipDiv = null;
 
@@ -231,41 +237,70 @@ function crearTooltip() {
 function mostrarTooltip(ev, contenido) {
     if (!tooltipDiv) crearTooltip();
 
+    const clienteTexto = contenido.clienteNombre
+        ? `${contenido.cliente || ''} — ${contenido.clienteNombre}`
+        : (contenido.cliente || '—');
+
+    const ipTexto = contenido.ip
+        ? contenido.ip
+        : 'DHCP (sin IP estática)';
+
+    const usuarioTexto = contenido.usuarioAdmin
+        ? contenido.usuarioAdmin
+        : '—';
+
+    const descripcionTexto = contenido.descripcionAdmin
+        ? contenido.descripcionAdmin
+        : '—';
+
     tooltipDiv.innerHTML = `
         <div class="tooltip-header">
-            <span class="rol-badge" data-rol="${contenido.rol}">${contenido.rol}</span>
-            <span class="hostname">${contenido.hostname}</span>
+            <span class="rol-badge" data-rol="${contenido.rol || ''}">${contenido.rol || 'SIN ROL'}</span>
+            <span class="hostname">${contenido.hostname || '—'}</span>
         </div>
         <div class="tooltip-body">
             <div class="tooltip-row">
                 <span class="label">Cliente:</span>
-                <span class="valor">${contenido.cliente || '—'}</span>
+                <span class="valor">${clienteTexto}</span>
             </div>
             <div class="tooltip-row">
-                <span class="label">Tipo:</span>
-                <span class="valor">${contenido.tipoIP}</span>
+                <span class="label">Tipo de IP:</span>
+                <span class="valor">${contenido.tipoIP || '—'}</span>
             </div>
             <div class="tooltip-row">
-                <span class="label">IP:</span>
-                <span class="valor">${contenido.ip || 'DHCP (sin IP)'}</span>
+                <span class="label">Dirección IP:</span>
+                <span class="valor mono">${ipTexto}</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="label">Dominio:</span>
+                <span class="valor mono">${usuarioTexto}</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="label">Usuario admin:</span>
+                <span class="valor">${descripcionTexto}</span>
             </div>
             <div class="tooltip-row">
                 <span class="label">Posición:</span>
-                <span class="valor">Fila ${contenido.fila}, Col ${contenido.col}</span>
+                <span class="valor">Fila <b>${contenido.fila}</b>, Columna <b>${contenido.col}</b></span>
             </div>
+            ${contenido.pisoNombre ? `
+            <div class="tooltip-row">
+                <span class="label">Piso:</span>
+                <span class="valor">${contenido.pisoNombre}</span>
+            </div>` : ''}
         </div>
     `;
 
     tooltipDiv.style.display = 'block';
 
-    const x = ev.clientX + 16;
-    const y = ev.clientY + 16;
+    const x = ev.clientX + 18;
+    const y = ev.clientY + 18;
     const rect = tooltipDiv.getBoundingClientRect();
     const w = rect.width, h = rect.height;
 
     let posX = x, posY = y;
-    if (x + w > window.innerWidth - 12) posX = ev.clientX - w - 16;
-    if (y + h > window.innerHeight - 12) posY = ev.clientY - h - 16;
+    if (x + w > window.innerWidth - 12) posX = ev.clientX - w - 18;
+    if (y + h > window.innerHeight - 12) posY = ev.clientY - h - 18;
 
     tooltipDiv.style.left = posX + 'px';
     tooltipDiv.style.top = posY + 'px';
@@ -402,7 +437,6 @@ modalZonaAceptar.addEventListener('click', async () => {
 
     try {
         if (zonaEditando) {
-            // Editar zona existente (mantiene su rango)
             await window.api.plano.actualizarZona(
                 zonaEditando.IdZona, nombre, colorSeleccionado,
                 zonaEditando.FilaInicio, zonaEditando.FilaFin,
@@ -416,7 +450,6 @@ modalZonaAceptar.addEventListener('click', async () => {
                 return;
             }
 
-            // Calcular bounding box de TODAS las celdas seleccionadas
             const filas = celdasZonaSeleccionadas.map(c => c.fila);
             const cols  = celdasZonaSeleccionadas.map(c => c.columna);
 
@@ -425,7 +458,6 @@ modalZonaAceptar.addEventListener('click', async () => {
             const colMin  = Math.min(...cols);
             const colMax  = Math.max(...cols);
 
-            // Crear UNA sola zona con el rango completo
             await window.api.plano.crearZona(
                 panelActivo.idPiso, nombre, colorSeleccionado,
                 filaMin, filaMax, colMin, colMax
@@ -715,19 +747,16 @@ function edActualizarCamposSegunTipo() {
     const esEstatica = tipo === 'Estatica';
 
     if (esEstatica) {
-        // Estática: muestra bloque hostname estático (IP, númeroHost, hostnamePreview, checkbox) y red
         if (edCampoHostEst) edCampoHostEst.classList.remove('campo-oculto');
         if (edCampoHostDHCP) edCampoHostDHCP.classList.add('campo-oculto');
         if (edFilaCheckbox) edFilaCheckbox.style.display = 'flex';
         if (edSeccionRed) edSeccionRed.style.display = 'block';
     } else {
-        // DHCP: solo hostname libre + admin. Oculta IP, númeroHost, hostnamePreview, red
         if (edCampoHostEst) edCampoHostEst.classList.add('campo-oculto');
         if (edCampoHostDHCP) edCampoHostDHCP.classList.remove('campo-oculto');
         if (edFilaCheckbox) edFilaCheckbox.style.display = 'none';
         if (edSeccionRed) edSeccionRed.style.display = 'none';
 
-        // Limpiar valores de red y de hostname estático
         if (edMascara) edMascara.value = '';
         if (edPuerta)  edPuerta.value  = '';
         if (edDns1)    edDns1.value    = '';
@@ -802,7 +831,6 @@ async function abrirModalEditarEquipo(equipo, panel) {
     }
     if (edHostnameLibre) edHostnameLibre.value = '';
 
-    // Aplicar visibilidad ANTES de setear valores, para que no se limpien al vuelo
     edActualizarCamposSegunTipo();
 
     if (equipo.TipoIP === 'Estatica') {
@@ -810,17 +838,14 @@ async function abrirModalEditarEquipo(equipo, panel) {
         if (edNumeroHost) edNumeroHost.value = equipo.NumeroHost ?? '';
         if (edHostnamePreview) edHostnamePreview.value = equipo.Hostname || '';
 
-        // Red
         edSetSelectValorConHuerfano(edMascara, equipo.Mascara || '');
         edSetSelectValorConHuerfano(edPuerta,  equipo.PuertaEnlace || '');
         edSetSelectValorConHuerfano(edDns1,    equipo.DNS1 || '');
         edSetSelectValorConHuerfano(edDns2,    equipo.DNS2 || '');
     } else {
-        // DHCP
         if (edHostnameLibre) edHostnameLibre.value = equipo.Hostname || '';
     }
 
-    // Admin siempre
     edSetSelectValorConHuerfano(edUsuario, equipo.UsuarioAdmin || '');
     if (edPassword) edPassword.value = equipo.PasswordAdmin ?? '';
 
@@ -929,7 +954,6 @@ if (editarConfirmar) {
             activo:         true
         };
 
-        // Validaciones base
         if (!datos.idCliente || !datos.idRolEquipo) { edMostrarError('Cliente y rol son obligatorios.'); return; }
         if (!datos.hostname) { edMostrarError('El hostname es obligatorio.'); return; }
 
@@ -937,7 +961,6 @@ if (editarConfirmar) {
             edMostrarError('Usuario admin y password son obligatorios.'); return;
         }
 
-        // Reglas SOLO para Estática
         if (esEstatica) {
             if (!datos.idPiso)       { edMostrarError('El piso es obligatorio para equipos estáticos.'); return; }
             if (!datos.ip)           { edMostrarError('La IP es obligatoria para equipos estáticos.'); return; }
@@ -984,7 +1007,10 @@ if (editarConfirmar) {
 /* =========================================================
    NAVEGACIÓN
    ========================================================= */
-document.getElementById('btn-volver').addEventListener('click', () => window.api.volverMenu());
+document.getElementById('btn-volver').addEventListener('click', () => {
+    cerrarVistaPrevia();
+    window.api.volverMenu();
+});
 
 /* =========================================================
    CAMBIO DE MODO
@@ -1354,6 +1380,7 @@ async function cargarPanel(panel) {
                 DNS2:          u.DNS2,
                 UsuarioAdmin:  u.UsuarioAdmin,
                 PasswordAdmin: u.PasswordAdmin,
+                DescripcionAdmin: u.DescripcionAdmin,
                 RolCodigo:     u.RolCodigo,
                 _fila:         u.Fila,
                 _col:          u.Columna
@@ -1403,7 +1430,7 @@ function zonaLibreEnCelda(panel, fila, columna) {
 }
 
 /* =========================================================
-   SVG ICONO PC
+   SVG ICONO PC (para el canvas en vivo)
    ========================================================= */
 const SVG_PC = `
     <svg class="icono-pc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1414,7 +1441,8 @@ const SVG_PC = `
 `;
 
 /* =========================================================
-   RENDER DEL GRID
+   RENDER DEL GRID — CANVAS EN VIVO
+   (vuelve al ícono de PC original, sin hostname ni IP)
    ========================================================= */
 function renderGridPanel(panel) {
     const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
@@ -1458,7 +1486,6 @@ function renderGridPanel(panel) {
                 }
             }
 
-            /* Modo Zona: acumulativo (permite celdas con y sin equipo) */
             if (modoZona && panel === panelActivo) {
                 const estaSel = celdasZonaSeleccionadas.some(
                     cc => cc.fila === fila && cc.columna === columna
@@ -1466,7 +1493,6 @@ function renderGridPanel(panel) {
                 if (estaSel) celda.classList.add('seleccionada');
             }
 
-            /* Modo Zona Libre: solo vacías */
             if (modoZonaLibre && panel === panelActivo) {
                 const estaSeleccionada = celdasLibresSeleccionadas.some(
                     cc => cc.fila === fila && cc.columna === columna
@@ -1479,6 +1505,7 @@ function renderGridPanel(panel) {
             }
 
             if (contenido) {
+                // 👇 Canvas en vivo: ícono de PC original (sin hostname/IP)
                 celda.innerHTML = `
                     <button class="cerrar" data-id="${contenido.IdEquipo}">✕</button>
                     ${SVG_PC}
@@ -1492,6 +1519,10 @@ function renderGridPanel(panel) {
                         tipoIP: contenido.TipoIP,
                         ip: contenido.IP,
                         cliente: contenido.ClienteCodigo || '',
+                        clienteNombre: contenido.ClienteNombre || '',
+                        usuarioAdmin: contenido.UsuarioAdmin || '',
+                        descripcionAdmin: contenido.DescripcionAdmin || '',
+                        pisoNombre: pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso))?.Nombre || '',
                         fila, col: columna
                     });
                 });
@@ -1504,6 +1535,10 @@ function renderGridPanel(panel) {
                             tipoIP: contenido.TipoIP,
                             ip: contenido.IP,
                             cliente: contenido.ClienteCodigo || '',
+                            clienteNombre: contenido.ClienteNombre || '',
+                            usuarioAdmin: contenido.UsuarioAdmin || '',
+                            descripcionAdmin: contenido.DescripcionAdmin || '',
+                            pisoNombre: pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso))?.Nombre || '',
                             fila, col: columna
                         });
                     }
@@ -1559,11 +1594,6 @@ function renderGridPanel(panel) {
                 });
             }
 
-            /* ===== MODO ZONA (acumulativo 1×1) =====
-               Permite seleccionar CUALQUIER celda (con o sin equipo).
-               Cada clic agrega/quita del set.
-               Enter abre el modal.
-            */
             if (modoZona && panel === panelActivo) {
                 celda.style.cursor = 'crosshair';
                 celda.addEventListener('click', (ev) => {
@@ -1584,7 +1614,6 @@ function renderGridPanel(panel) {
                 });
             }
 
-            /* ===== MODO ZONA LIBRE (solo vacías) ===== */
             if (modoZonaLibre && panel === panelActivo) {
                 celda.style.cursor = contenido ? 'not-allowed' : 'pointer';
                 celda.addEventListener('click', (ev) => {
@@ -1963,7 +1992,6 @@ function renderListaZonas() {
         return;
     }
 
-    /* ===== Agrupar zonas normales por Nombre+Color (para que "MEGA" aparezca 1 sola vez) ===== */
     const gruposNormales = {};
     zonasNormales.forEach(z => {
         const key = `${z.Nombre}||${z.Color || ''}`;
@@ -1986,7 +2014,6 @@ function renderListaZonas() {
         nombreSpan.className = 'nombre-zona';
         nombreSpan.textContent = g.nombre;
 
-        // Si son varias zonas (1×1 repetidas), mostrar cuántas
         if (g.zonas.length > 1) {
             const cantSpan = document.createElement('span');
             cantSpan.textContent = `${g.zonas.length}`;
@@ -2002,7 +2029,6 @@ function renderListaZonas() {
         const btnEditar = document.createElement('button');
         btnEditar.textContent = 'Editar';
         btnEditar.className = 'secundario';
-        // Editar la primera (o única) zona del grupo
         btnEditar.addEventListener('click', () => abrirModalZona(g.zonas[0]));
 
         const btnEliminar = document.createElement('button');
@@ -2047,7 +2073,6 @@ function renderListaZonas() {
         listaZonas.appendChild(li);
     });
 
-    /* ===== Zonas libres (sin cambios) ===== */
     if (zonasLibres.length > 0) {
         const grupos = {};
         zonasLibres.forEach(zl => {
@@ -2458,10 +2483,24 @@ function confirmarQuitar(equipo, panel) {
 }
 
 /* =========================================================
-   VISTA PREVIA
+   VISTA PREVIA — CON CIERRE AUTOMÁTICO
    ========================================================= */
+function cerrarVistaPrevia() {
+    if (ventanaVistaPrevia && !ventanaVistaPrevia.closed) {
+        try {
+            ventanaVistaPrevia.close();
+        } catch (e) {
+            console.warn('No se pudo cerrar la vista previa:', e);
+        }
+    }
+    ventanaVistaPrevia = null;
+}
+
 btnVistaPrevia.addEventListener('click', () => {
     if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
+
+    // Cerrar vista previa anterior si existe
+    cerrarVistaPrevia();
 
     try {
         const opciones = generarPDFDocumentado(panelActivo);
@@ -2470,12 +2509,25 @@ btnVistaPrevia.addEventListener('click', () => {
             alert('El navegador bloqueó la ventana emergente. Permite las ventanas emergentes para ver la vista previa.');
             return;
         }
+        ventanaVistaPrevia = ventana;
+
         ventana.document.open();
         ventana.document.write(opciones.html);
         ventana.document.close();
     } catch (err) {
         mostrarToast('Error al generar vista previa: ' + err.message, 'error', 4000);
+        ventanaVistaPrevia = null;
     }
+});
+
+/* Cerrar la vista previa al cerrar/recargar la ventana del plano */
+window.addEventListener('beforeunload', () => {
+    cerrarVistaPrevia();
+});
+
+/* Cerrar la vista previa también si el usuario cierra la pestaña desde la barra */
+window.addEventListener('pagehide', () => {
+    cerrarVistaPrevia();
 });
 
 /* =========================================================
@@ -2509,10 +2561,9 @@ btnExportarPDFDoc.addEventListener('click', async () => {
 
 /* =========================================================
    GENERADOR PDF DOCUMENTADO
-   - Celdas: equipos (con número + fondo por rol) o vacías (fondo zona libre si aplica)
-   - Borde + chip de cliente arriba de cada equipo
-   - Texto de zona libre DENTRO del bloque de celdas vacías que la forman
-   - Llaves + etiquetas de zonas (mesas) FUERA del grid (izq/der), sin choque con los chips
+   - Celdas: Hostname (arriba, negrita) + IP (abajo, mono)
+   - Tabla: sin columna #, con "Dominio" y "UsuarioAdmin" correctos
+   - Llaves + etiquetas de zonas fuera del grid
    ========================================================= */
 function generarPDFDocumentado(panel) {
     const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
@@ -2522,13 +2573,11 @@ function generarPDFDocumentado(panel) {
     const cols = panel.dimensiones.Columnas;
     const filas = panel.dimensiones.Filas;
 
-    /* ====== MAPA DE ZONAS LIBRES POR CELDA ====== */
     const zonasLibresMap = new Map();
     (panel.zonasLibres || []).forEach(zl => {
         zonasLibresMap.set(`${zl.Fila}-${zl.Columna}`, zl);
     });
 
-    /* ====== AGRUPAR ZONAS LIBRES POR NOMBRE+COLOR ====== */
     const gruposLibres = {};
     (panel.zonasLibres || []).forEach(zl => {
         const key = `${zl.Nombre}||${zl.Color}`;
@@ -2538,10 +2587,7 @@ function generarPDFDocumentado(panel) {
         gruposLibres[key].celdas.push({ fila: zl.Fila, columna: zl.Columna });
     });
 
-    /* ====== LISTA DE EQUIPOS ====== */
     const equiposList = [];
-    let contador = 1;
-
     for (let f = 0; f < filas; f++) {
         for (let c = 0; c < cols; c++) {
             const contenido = panel.celdas[f]?.[c];
@@ -2549,7 +2595,6 @@ function generarPDFDocumentado(panel) {
                 const fila = f + 1;
                 const col = c + 1;
                 equiposList.push({
-                    num: contador++,
                     fila, col,
                     ...contenido
                 });
@@ -2559,51 +2604,50 @@ function generarPDFDocumentado(panel) {
 
     const totalEquipos = equiposList.length;
 
-   /* ====== COLOR POR CLIENTE (mapa FIJO por código) ====== */
-const COLORES_CLIENTE_POR_CODIGO = {
-    'MEGA':    '#22c55e',   // verde
-    'DIDI':    '#f97316',   // naranja
-    'NU':      '#a855f7',   // morado
-    'ATT':     '#0ea5e9',   // celeste
-    'ADAMA':   '#1e40af',   // azul oscuro
-    'CLD':     '#ec4899',   // rosa
-    'DMEX':    '#84cc16',   // lima
-    'HBAN':    '#eab308',   // amarillo
-    'KUBO':    '#16a34a',   // verde fuerte
-    'FESA':    '#0d9488',   // teal
-    'SHOP':    '#ea580c',   // naranja quemado
-    'TOY':     '#dc2626',   // rojo
-    'TOYL':    '#dc2626',   // rojo (alias)
-    'TPLAY':   '#6366f1',   // índigo
-    'PHIE':    '#f59e0b'    // ámbar
-};
+    /* COLORES POR CLIENTE */
+    const COLORES_CLIENTE_POR_CODIGO = {
+        'MEGA':    '#22c55e',
+        'DIDI':    '#f97316',
+        'NU':      '#a855f7',
+        'ATT':     '#0ea5e9',
+        'ADAMA':   '#1e40af',
+        'CLD':     '#ec4899',
+        'DMEX':    '#84cc16',
+        'HBAN':    '#eab308',
+        'KUBO':    '#16a34a',
+        'FESA':    '#0d9488',
+        'SHOP':    '#ea580c',
+        'TOY':     '#dc2626',
+        'TOYL':    '#dc2626',
+        'TPLAY':   '#6366f1',
+        'PHIE':    '#f59e0b'
+    };
 
-const COLORES_FALLBACK = [
-    '#3b82f6', '#22c55e', '#f97316', '#a855f7',
-    '#14b8a6', '#ec4899', '#eab308', '#ef4444',
-    '#06b6d4', '#8b5cf6', '#84cc16', '#f43f5e'
-];
+    const COLORES_FALLBACK = [
+        '#3b82f6', '#22c55e', '#f97316', '#a855f7',
+        '#14b8a6', '#ec4899', '#eab308', '#ef4444',
+        '#06b6d4', '#8b5cf6', '#84cc16', '#f43f5e'
+    ];
 
-const colorPorCliente = new Map();
-let fallbackIdx = 0;
+    const colorPorCliente = new Map();
+    let fallbackIdx = 0;
 
-equiposList.forEach(e => {
-    const id = e.IdCliente;
-    if (id == null || colorPorCliente.has(id)) return;
+    equiposList.forEach(e => {
+        const id = e.IdCliente;
+        if (id == null || colorPorCliente.has(id)) return;
 
-    // Buscar el código en el mapa fijo
-    const codigo = String(e.ClienteCodigo || '').toUpperCase().trim();
-    let color = COLORES_CLIENTE_POR_CODIGO[codigo];
+        const codigo = String(e.ClienteCodigo || '').toUpperCase().trim();
+        let color = COLORES_CLIENTE_POR_CODIGO[codigo];
 
-    // Si no está en el mapa, usar el fallback rotativo
-    if (!color) {
-        color = COLORES_FALLBACK[fallbackIdx % COLORES_FALLBACK.length];
-        fallbackIdx++;
-    }
+        if (!color) {
+            color = COLORES_FALLBACK[fallbackIdx % COLORES_FALLBACK.length];
+            fallbackIdx++;
+        }
 
-    colorPorCliente.set(id, color);
-});
-    /* ====== CÁLCULO DE TAMAÑOS — A3 PORTRAIT ====== */
+        colorPorCliente.set(id, color);
+    });
+
+    /* TAMAÑOS — A3 PORTRAIT */
     const ANCHO_UTIL = 1060;
     const ALTO_PLANO = 1420;
 
@@ -2626,7 +2670,9 @@ equiposList.forEach(e => {
     CELL_W = Math.max(16, CELL_W);
     CELL_H = Math.max(16, CELL_H);
 
-    const FONT_NUM = Math.max(0.5, Math.min(1.15, CELL_H / 28)).toFixed(2);
+    // Fuentes del PDF (ajustadas a gusto del usuario)
+    const FONT_HOST = Math.max(0.17, Math.min(0.68, CELL_H / 54)).toFixed(2);
+    const FONT_IP   = Math.max(0.09, Math.min(0.55, CELL_H / 60)).toFixed(2);
 
     function normalizarColor(c, fallback = '#e2e8f0') {
         if (!c || typeof c !== 'string') return fallback;
@@ -2636,7 +2682,6 @@ equiposList.forEach(e => {
         return fallback;
     }
 
-    /* Helper: calcular contraste de texto sobre un color de fondo */
     function colorTextoContraste(hexColor) {
         try {
             const hex = String(hexColor).replace('#', '');
@@ -2653,9 +2698,7 @@ equiposList.forEach(e => {
         }
     }
 
-    /* =========================================================
-       CELDAS BASE
-       ========================================================= */
+    /* CELDAS BASE */
     let celdasHTML = '';
     for (let f = 0; f < filas; f++) {
         for (let c = 0; c < cols; c++) {
@@ -2665,8 +2708,14 @@ equiposList.forEach(e => {
             const zl = zonasLibresMap.get(`${fila}-${col}`);
 
             if (contenido) {
-                const eq = equiposList.find(x => x.fila === fila && x.col === col);
-                celdasHTML += `<div class="celda ocupada" data-rol="${contenido.RolCodigo || ''}"><div class="numero">${eq.num}</div></div>`;
+                const ipMostrar = contenido.IP ? contenido.IP : 'DHCP';
+                celdasHTML += `
+                    <div class="celda ocupada" data-rol="${contenido.RolCodigo || ''}">
+                        <div class="celda-contenido">
+                            <div class="celda-hostname">${contenido.Hostname || ''}</div>
+                            <div class="celda-ip">${ipMostrar}</div>
+                        </div>
+                    </div>`;
             } else if (zl) {
                 const colorZL = normalizarColor(zl.Color, '#e2e8f0');
                 celdasHTML += `<div class="celda libre" style="background:${colorZL} !important;border:1px solid rgba(0,0,0,0.25) !important;"></div>`;
@@ -2676,9 +2725,7 @@ equiposList.forEach(e => {
         }
     }
 
-    /* =========================================================
-       BORDE POR EQUIPO + CHIP DE CLIENTE ARRIBA
-       ========================================================= */
+    /* BORDE POR EQUIPO + CHIP DE CLIENTE ARRIBA */
     let bordesEquipoHTML = '';
     let etiquetasEquipoHTML = '';
 
@@ -2736,9 +2783,7 @@ equiposList.forEach(e => {
         `;
     });
 
-    /* =========================================================
-       TEXTO DE ZONAS LIBRES — DENTRO del bloque de celdas
-       ========================================================= */
+    /* TEXTO DE ZONAS LIBRES */
     let textosLibresHTML = '';
 
     Object.values(gruposLibres).forEach(g => {
@@ -2788,10 +2833,7 @@ equiposList.forEach(e => {
         `;
     });
 
-    /* =========================================================
-       ZONAS (MESAS) — llaves + etiquetas LATERALES fuera del grid
-       Se dibujan con padding lateral, igual que en el canvas en vivo.
-       ========================================================= */
+    /* ZONAS (MESAS) — llaves + etiquetas laterales */
     let zonasLlavesHTML = '';
 
     const ZONA_ORDENADAS = [...(panel.zonas || [])].sort((a, b) => a.FilaInicio - b.FilaInicio);
@@ -2897,11 +2939,16 @@ equiposList.forEach(e => {
         `;
     });
 
-    /* ====== TABLA ====== */
+    /* TABLA — SIN COLUMNA #
+       Orden correcto:
+       Hostname, Cliente, Rol, IP, Máscara, Puerta enlace, DNS 1, DNS 2,
+       Dominio (= UsuarioAdmin de la BD),
+       Password admin (= PasswordAdmin),
+       UsuarioAdmin (= DescripcionAdmin de DominiosAdmin)
+    */
     const filasTabla = equiposList.map(e => `
         <tr>
-            <td class="center bold">${e.num}</td>
-            <td class="bold-host">${e.Hostname}</td>
+            <td class="bold-host">${e.Hostname || '-'}</td>
             <td class="center">${e.ClienteCodigo || '-'}</td>
             <td class="center"><span class="badge-rol" data-rol="${e.RolCodigo || ''}">${e.RolCodigo || '-'}</span></td>
             <td class="mono">${e.IP || '-'}</td>
@@ -2911,6 +2958,7 @@ equiposList.forEach(e => {
             <td class="mono">${e.DNS2 || '-'}</td>
             <td class="mono">${e.UsuarioAdmin || '-'}</td>
             <td class="mono">${e.PasswordAdmin || '-'}</td>
+            <td class="mono">${e.DescripcionAdmin || '-'}</td>
         </tr>
     `).join('');
 
@@ -2955,7 +3003,7 @@ equiposList.forEach(e => {
         `).join('')
         : '';
 
-    /* ====== CSS ====== */
+    /* CSS */
     const css = `
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -2998,7 +3046,6 @@ equiposList.forEach(e => {
             margin: 10px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #e2e8f0;
         }
 
-        /* 👇 padding lateral para que las llaves y etiquetas no se corten */
         .plano-wrap {
             display: flex;
             justify-content: center;
@@ -3017,11 +3064,47 @@ equiposList.forEach(e => {
             width: ${CELL_W}px; height: ${CELL_H}px; background: #fff;
             border: 1px dashed #cbd5e1; border-radius: 4px;
             display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
         }
         .celda.ocupada { border-style: solid; border-width: 1.5px; }
         .celda.libre { border-style: solid; border-width: 1px; }
         .celda.vacia { border-style: dashed; }
-        .celda .numero { font-weight: 700; font-size: ${FONT_NUM}rem; color: #1e293b; line-height: 1; }
+
+        .celda-contenido {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            width: 100%;
+            height: 100%;
+            padding: 2px 3px;
+            text-align: center;
+            line-height: 1.05;
+            overflow: hidden;
+        }
+        .celda-hostname {
+            font-weight: 700;
+            font-size: ${FONT_HOST}rem;
+            color: #1e293b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            letter-spacing: -0.01em;
+        }
+        .celda-ip {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: ${FONT_IP}rem;
+            font-weight: 600;
+            color: #334155;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            letter-spacing: -0.01em;
+        }
+
         .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
         .celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
         .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
@@ -3086,7 +3169,7 @@ equiposList.forEach(e => {
         }
     `;
 
-    /* ====== HTML ====== */
+    /* HTML */
     const html = `
         <!DOCTYPE html>
         <html>
@@ -3143,17 +3226,17 @@ equiposList.forEach(e => {
                             <table class="tabla-equipos">
                                 <thead>
                                     <tr>
-                                        <th style="width:36px;">#</th>
                                         <th style="width:130px;">Hostname</th>
-                                        <th style="width:60px;">Cliente</th>
+                                        <th style="width:55px;">Cliente</th>
                                         <th style="width:50px;">Rol</th>
-                                        <th style="width:120px;">IP</th>
-                                        <th style="width:120px;">Máscara</th>
-                                        <th style="width:120px;">Puerta enlace</th>
-                                        <th style="width:120px;">DNS 1</th>
-                                        <th style="width:100px;">DNS 2</th>
-                                        <th style="width:120px;">Usuario admin</th>
-                                        <th style="width:140px;">Password admin</th>
+                                        <th style="width:110px;">IP</th>
+                                        <th style="width:110px;">Máscara</th>
+                                        <th style="width:110px;">Puerta enlace</th>
+                                        <th style="width:100px;">DNS 1</th>
+                                        <th style="width:90px;">DNS 2</th>
+                                        <th style="width:120px;">Dominio</th>
+                                        <th style="width:130px;">Password admin</th>
+                                        <th style="width:150px;">UsuarioAdmin</th>
                                     </tr>
                                 </thead>
                                 <tbody>${filasTabla}</tbody>
@@ -3231,7 +3314,7 @@ equiposList.forEach(e => {
                 });
                 window.addEventListener('blur', function() { document.body.classList.remove('zoom-activo'); });
             })();
-            </script>
+            <\/script>
         </body>
         </html>
     `;
@@ -3246,14 +3329,12 @@ equiposList.forEach(e => {
 document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter') return;
 
-    // Modo Zona Libre: guardar
     if (modoZonaLibre && celdasLibresSeleccionadas.length > 0 && !guardandoZonaLibre) {
         ev.preventDefault();
         abrirModalZonaLibre();
         return;
     }
 
-    // Modo Zona (1×1 acumulativo): abrir modal para asignar nombre/color
     if (modoZona && celdasZonaSeleccionadas.length > 0 && modalZona.style.display !== 'flex') {
         ev.preventDefault();
         abrirModalZona(null);

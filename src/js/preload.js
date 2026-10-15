@@ -7,24 +7,29 @@ contextBridge.exposeInMainWorld('api', {
     login:         (u, p) => ipcRenderer.invoke('login', u, p),
     logout:        ()     => ipcRenderer.invoke('logout'),
     usuarioActual: ()     => ipcRenderer.invoke('usuario-actual'),
+    haySesion:     ()     => ipcRenderer.invoke('sesion:hay'),
+
+    /* Motivo de llegada al login (logout, expirada, etc.) */
+    consumirMotivoLogin: () => ipcRenderer.invoke('login:motivo-consumir'),
+    onLoginMotivo:       (cb) => ipcRenderer.on('login:motivo', (_e, m) => cb(m)),
+    onSesionCerrada:     (cb) => ipcRenderer.on('sesion:cerrada', (_e, data) => cb(data)),
 
     /* =========================================================
        PERMISOS
        ========================================================= */
     permisos: {
-    mios:            ()                    => ipcRenderer.invoke('permisos:mios'),
-    miRol:           ()                    => ipcRenderer.invoke('permisos:mi-rol'),
-    listarRoles:     ()                    => ipcRenderer.invoke('permisos:listar-roles'),
-    listarTodos:     ()                    => ipcRenderer.invoke('permisos:listar-todos'),
-    actualizar:      (idRol, modulo, perm) => ipcRenderer.invoke('permisos:actualizar', idRol, modulo, perm),
-    asignarRol:      (idUsuario, idRol)    => ipcRenderer.invoke('permisos:asignar-rol', idUsuario, idRol),
+        mios:            ()                    => ipcRenderer.invoke('permisos:mios'),
+        miRol:           ()                    => ipcRenderer.invoke('permisos:mi-rol'),
+        listarRoles:     ()                    => ipcRenderer.invoke('permisos:listar-roles'),
+        listarTodos:     ()                    => ipcRenderer.invoke('permisos:listar-todos'),
+        actualizar:      (idRol, modulo, perm) => ipcRenderer.invoke('permisos:actualizar', idRol, modulo, perm),
+        asignarRol:      (idUsuario, idRol)    => ipcRenderer.invoke('permisos:asignar-rol', idUsuario, idRol),
+        crearRol:        (datos)               => ipcRenderer.invoke('permisos:crear-rol', datos),
+        actualizarRol:   (idRol, datos)        => ipcRenderer.invoke('permisos:actualizar-rol', idRol, datos),
+        cambiarEstadoRol:(idRol, activo)       => ipcRenderer.invoke('permisos:cambiar-estado-rol', idRol, activo),
+        eliminarRol:     (idRol)               => ipcRenderer.invoke('permisos:eliminar-rol', idRol)
+    },
 
-    /* CRUD de roles */
-    crearRol:        (datos)               => ipcRenderer.invoke('permisos:crear-rol', datos),
-    actualizarRol:   (idRol, datos)        => ipcRenderer.invoke('permisos:actualizar-rol', idRol, datos),
-    cambiarEstadoRol:(idRol, activo)       => ipcRenderer.invoke('permisos:cambiar-estado-rol', idRol, activo),
-    eliminarRol:     (idRol)               => ipcRenderer.invoke('permisos:eliminar-rol', idRol)
-},
     /* =========================================================
        NAVEGACIÓN / VENTANAS
        ========================================================= */
@@ -35,15 +40,16 @@ contextBridge.exposeInMainWorld('api', {
     abrirUsuarios:  () => ipcRenderer.invoke('abrir-usuarios'),
     abrirHistorico: () => ipcRenderer.invoke('abrir-historico'),
     volverMenu:     () => ipcRenderer.invoke('volver-menu'),
+    cerrarVentana:  () => ipcRenderer.invoke('ventana:cerrar-actual'),
 
-    /* =====================================================
+    /* =========================================================
        MÓDULO ACTIVO FIJO
-       ===================================================== */
+       ========================================================= */
     abrirActivoFijoCatalogos:   () => ipcRenderer.invoke('abrir-activofijo-catalogos'),
     abrirActivoFijoActivos:     () => ipcRenderer.invoke('abrir-activofijo-activos'),
     abrirActivoFijoResponsivas: () => ipcRenderer.invoke('abrir-activofijo-responsivas'),
     abrirActivoFijoReportes:    () => ipcRenderer.invoke('abrir-activofijo-reportes'),
-    abrirActivoFijoImportar:    () => ipcRenderer.invoke('af-abrir-importar'),
+    abrirActivoFijoImportar:    () => ipcRenderer.invoke('abrir-activofijo-importar'),
 
     /* =========================================================
        CLIENTES

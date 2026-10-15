@@ -41,23 +41,19 @@ document.querySelectorAll('.modulo-card').forEach(btn => {
             return;
         }
 
-        // — Guard defensivo: aunque esté oculto, si alguien forzara click —
         if (!puedeAcceder(key)) {
             mostrarToast(`No tienes permisos para acceder a este módulo.`, 'error');
             return;
         }
 
-        // Feedback visual
         btn.classList.add('modulo-card--abriendo');
         setTimeout(() => btn.classList.remove('modulo-card--abriendo'), 320);
 
         try {
             const res = await fn();
 
-            /* Si el backend rechazó por permisos → avisar */
             if (res && res.ok === false && res.mensaje) {
                 mostrarToast(res.mensaje, 'error');
-                // Re-consultar permisos por si cambiaron
                 await aplicarPermisos();
             }
         } catch (err) {
@@ -68,7 +64,7 @@ document.querySelectorAll('.modulo-card').forEach(btn => {
 });
 
 /* =========================================================
-   PERMISOS — consulta y aplica visibilidad al menú
+   PERMISOS
    ========================================================= */
 function puedeAcceder(modulo) {
     if (esAdmin) return true;
@@ -90,7 +86,6 @@ async function aplicarPermisos() {
         esAdmin = false;
     }
 
-    /* Ocultar/mostrar tarjetas según permiso */
     document.querySelectorAll('.modulo-card').forEach(card => {
         const modulo = card.dataset.modulo;
         const permitido = puedeAcceder(modulo);
@@ -104,7 +99,6 @@ async function aplicarPermisos() {
         }
     });
 
-    /* Ocultar categorías que quedaron sin tarjetas visibles */
     document.querySelectorAll('.categoria').forEach(seccion => {
         const visibles = seccion.querySelectorAll('.modulo-card:not([style*="display: none"])');
         seccion.style.display = visibles.length ? '' : 'none';
@@ -115,7 +109,6 @@ async function aplicarPermisos() {
    TOAST
    ========================================================= */
 function mostrarToast(mensaje, tipo = 'info') {
-    // Elimina toasts previos para no apilar
     document.querySelectorAll('.menu-toast').forEach(t => t.remove());
 
     const toast = document.createElement('div');
@@ -132,12 +125,55 @@ function mostrarToast(mensaje, tipo = 'info') {
 }
 
 /* =========================================================
-   CERRAR SESIÓN
+   CERRAR SESIÓN — SweetAlert2
    ========================================================= */
 document.getElementById('btn-salir')?.addEventListener('click', async () => {
-    await window.api.logout();
-    window.close();
+    const result = await Swal.fire({
+        title: '¿Cerrar sesión?',
+        html: 'Se cerrarán <b>todas las ventanas abiertas</b> y volverás a la pantalla de inicio de sesión.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, cerrar sesión',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#e11d48',
+        cancelButtonColor: '#6b7280',
+        reverseButtons: true,
+        focusCancel: true
+    });
+
+    if (!result.isConfirmed) return;
+
+    // Bloquear UI mientras se procesa
+    Swal.fire({
+        title: 'Cerrando sesión…',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        await window.api.logout();
+        // El main process se encarga de cerrar todo y abrir el login.
+        Swal.close();
+    } catch (err) {
+        Swal.fire({
+            title: 'Error',
+            text: 'No se pudo cerrar la sesión. Intenta de nuevo.',
+            icon: 'error',
+            confirmButtonColor: '#2563eb'
+        });
+    }
 });
+
+/* =========================================================
+   ESCUCHAR CIERRE DE SESIÓN DESDE EL MAIN
+   ========================================================= */
+if (window.api && window.api.onSesionCerrada) {
+    window.api.onSesionCerrada(({ motivo }) => {
+        console.warn('[Menú] Sesión cerrada por el sistema:', motivo);
+        // El main ya se encarga de cerrar esta ventana y abrir login.
+    });
+}
 
 /* =========================================================
    UTILIDADES
@@ -198,11 +234,17 @@ function obtenerSaludo() {
             if (saludoEl) saludoEl.textContent = `${obtenerSaludo()}, ${u.Nombres ?? nombreCompleto}`;
             if (bienvEl)  bienvEl.textContent  = 'Selecciona un módulo para comenzar a trabajar.';
         } else {
+            // No hay sesión: el main nos va a redirigir al login.
             if (avatarEl) avatarEl.textContent = '?';
             if (nameEl)   nameEl.textContent   = 'Invitado';
             if (roleEl)   roleEl.textContent   = 'Sin sesión';
             if (saludoEl) saludoEl.textContent = 'Bienvenido';
             if (bienvEl)  bienvEl.textContent  = 'Inicia sesión para acceder al sistema.';
+
+            setTimeout(() => {
+                window.api.volverMenu?.();
+            }, 500);
+            return;
         }
     } catch (err) {
         console.error('Error obteniendo usuario actual:', err);
@@ -211,6 +253,5 @@ function obtenerSaludo() {
         if (roleEl)   roleEl.textContent   = '—';
     }
 
-    /* 🔐 Aplicar permisos al menú */
     await aplicarPermisos();
 })();

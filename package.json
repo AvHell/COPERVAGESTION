@@ -1,6 +1,6 @@
 {
   "name": "proyectoequipos",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Sistema de inventario de equipos por cliente, piso y rol",
   "main": "src/js/main.js",
   "author": "Coperva Servicios",
@@ -43,6 +43,12 @@
       "src/**/*",
       "node_modules/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "src/img/logo.ico",
+        "to": "logo.ico"
+      }
     ],
     "extraMetadata": {
       "main": "src/js/main.js"

@@ -1281,3 +1281,104 @@ body.plano-body {
     background: #3b82f6;
     color: #fff;
 }
+
+.celda-contenido {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    width: 100%;
+    height: 100%;
+    padding: 2px;
+    text-align: center;
+    line-height: 1.05;
+    overflow: hidden;
+}
+.celda-hostname {
+    font-weight: 700;
+    font-size: 0.62rem;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.celda-ip {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.52rem;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.tooltip-plano {
+    position: fixed;
+    z-index: 9999;
+    min-width: 280px;
+    max-width: 360px;
+    padding: 12px 14px;
+    background: #1e293b;
+    color: #f1f5f9;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+    font-size: 0.82rem;
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+}
+.tooltip-plano .tooltip-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+}
+.tooltip-plano .tooltip-header .hostname {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #ffffff;
+}
+.tooltip-plano .tooltip-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.tooltip-plano .tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    line-height: 1.35;
+}
+.tooltip-plano .tooltip-row .label {
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.tooltip-plano .tooltip-row .valor {
+    color: #f1f5f9;
+    font-weight: 500;
+    font-size: 0.85rem;
+    text-align: right;
+}
+.tooltip-plano .tooltip-row .valor.mono {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.82rem;
+    letter-spacing: -0.02em;
+}
+.tooltip-plano .rol-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #fff;
+    background: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}

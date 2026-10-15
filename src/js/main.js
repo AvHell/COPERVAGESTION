@@ -64,7 +64,7 @@ console.log('===========================================');
    APP USER MODEL ID (Windows — barra de tareas)
    ========================================================= */
 if (process.platform === 'win32') {
-    app.setAppUserModelId('com.coperva.proyectoequipos');
+    app.setAppUserModelId('com.coperva.proyectoequipos.v2'); 
 }
 
 /* =========================================================

@@ -74,6 +74,258 @@ const CELL_GAP = 5;
 const GRID_PADDING = 10;
 
 /* =========================================================
+   CSS EMBEBIDO PARA EL PDF
+   ---------------------------------------------------------
+   Este bloque se inyecta inline en el HTML que va al PDF.
+   No usamos <link> porque el HTML se guarda en %TEMP% y no
+   puede resolver rutas relativas al proyecto.
+   ========================================================= */
+const CSS_PDF = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @page {
+        size: A3 var(--pdf-orientation, landscape);
+        margin: 6mm;
+    }
+
+    html, body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+        color: #1e293b;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        font-size: 11px;
+        line-height: 1.2;
+    }
+
+    .pagina-plano {
+        width: 100%;
+        height: 100%;
+        padding: 8px 12px;
+        overflow: hidden;
+        page-break-after: always;
+        page-break-inside: avoid;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+    }
+
+    .pagina-tabla {
+        width: 100%;
+        padding: 12px 16px;
+        page-break-before: always;
+        background: #fff;
+    }
+
+    .encabezado {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding-bottom: 6px;
+        border-bottom: 3px solid #1e293b;
+        margin-bottom: 10px;
+        flex-shrink: 0;
+    }
+    .encabezado .titulo h1 { font-size: 1.4rem; color: #1e293b; margin-bottom: 2px; }
+    .encabezado .titulo .sub { font-size: 0.92rem; color: #64748b; }
+    .encabezado .meta { text-align: right; font-size: 0.8rem; color: #64748b; line-height: 1.5; }
+    .encabezado .meta strong { color: #1e293b; }
+
+    .seccion-titulo {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: #1e293b;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 10px 0 6px;
+        padding-bottom: 3px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .plano-wrap {
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 12px 40px;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .grid-plano {
+        display: grid;
+        background: #e2e8f0;
+        border-radius: 10px;
+        border: 2px solid #cbd5e1;
+        width: fit-content;
+        position: relative;
+    }
+
+    .celda {
+        background: #fff;
+        border: 1px dashed #cbd5e1;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .celda.ocupada { border-style: solid; border-width: 1.5px; }
+    .celda.libre { border-style: solid; border-width: 1px; }
+    .celda.vacia { border-style: dashed; }
+
+    .celda-contenido {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        width: 100%;
+        height: 100%;
+        padding: 2px 3px;
+        text-align: center;
+        line-height: 1.05;
+        overflow: hidden;
+    }
+
+    .celda-hostname {
+        font-weight: 700;
+        color: #1e293b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        letter-spacing: -0.01em;
+    }
+
+    .celda-ip {
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-weight: 600;
+        color: #334155;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        letter-spacing: -0.01em;
+    }
+
+    .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
+    .celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
+    .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
+    .celda[data-rol="GRN"] { background: #f3e8ff; border-color: #a855f7; }
+    .celda[data-rol="CRD"] { background: #ccfbf1; border-color: #14b8a6; }
+    .celda[data-rol="MIS"] { background: #fce7f3; border-color: #ec4899; }
+    .celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
+
+    .tabla-equipos {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.72rem;
+        table-layout: fixed;
+        margin-top: 6px;
+    }
+    .tabla-equipos thead {
+        background: #1e293b;
+        color: #fff;
+        display: table-header-group;
+    }
+    .tabla-equipos thead th {
+        padding: 6px 6px;
+        text-align: left;
+        font-weight: 700;
+        font-size: 0.62rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+    .tabla-equipos tbody tr { border-bottom: 1px solid #e2e8f0; }
+    .tabla-equipos tbody tr:nth-child(even) { background: #f8fafc; }
+    .tabla-equipos tbody td {
+        padding: 3px 6px;
+        color: #334155;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.3;
+    }
+    .tabla-equipos .center { text-align: center; }
+    .tabla-equipos .bold { font-weight: 700; color: #64748b; }
+    .tabla-equipos .bold-host { font-weight: 600; color: #1e293b; }
+    .tabla-equipos .mono {
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.66rem;
+        color: #475569;
+    }
+
+    .badge-rol {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: #fff;
+        background: #94a3b8;
+    }
+    .badge-rol[data-rol="AGT"] { background: #3b82f6; }
+    .badge-rol[data-rol="SPR"] { background: #22c55e; }
+    .badge-rol[data-rol="CLD"] { background: #f97316; }
+    .badge-rol[data-rol="GRN"] { background: #a855f7; }
+    .badge-rol[data-rol="CRD"] { background: #14b8a6; }
+    .badge-rol[data-rol="MIS"] { background: #ec4899; }
+    .badge-rol[data-rol="ADM"] { background: #475569; }
+
+    .badge-cli {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        color: #1e293b;
+        background: #e2e8f0;
+    }
+
+    .identificadores {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        padding: 8px 10px;
+        background: #f8fafc;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        margin-top: 6px;
+    }
+    .identificador-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 9px;
+        background: #fff;
+        border-radius: 4px;
+        border: 1px solid #e2e8f0;
+        font-size: 0.72rem;
+    }
+    .identificador-item .cant {
+        font-weight: 700;
+        color: #1e293b;
+        font-size: 0.8rem;
+    }
+    .identificador-item .muestra-color-inline {
+        display: inline-block;
+        width: 13px;
+        height: 13px;
+        border-radius: 3px;
+        border: 1px solid rgba(0,0,0,0.15);
+    }
+    .identificador-item .nombre-zona-libre {
+        font-weight: 600;
+        color: #1e293b;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+`;
+
+/* =========================================================
    TOAST
    ========================================================= */
 function mostrarToast(mensaje, tipo = 'exito', duracion = 2800) {
@@ -223,7 +475,7 @@ const editarCancelar       = document.getElementById('editar-cancelar');
 const editarConfirmar      = document.getElementById('editar-confirmar');
 
 /* =========================================================
-   TOOLTIP — MEJORADO (más grande, detallado y legible)
+   TOOLTIP
    ========================================================= */
 let tooltipDiv = null;
 
@@ -241,17 +493,9 @@ function mostrarTooltip(ev, contenido) {
         ? `${contenido.cliente || ''} — ${contenido.clienteNombre}`
         : (contenido.cliente || '—');
 
-    const ipTexto = contenido.ip
-        ? contenido.ip
-        : 'DHCP (sin IP estática)';
-
-    const usuarioTexto = contenido.usuarioAdmin
-        ? contenido.usuarioAdmin
-        : '—';
-
-    const descripcionTexto = contenido.descripcionAdmin
-        ? contenido.descripcionAdmin
-        : '—';
+    const ipTexto = contenido.ip ? contenido.ip : 'DHCP (sin IP estática)';
+    const usuarioTexto = contenido.usuarioAdmin ? contenido.usuarioAdmin : '—';
+    const descripcionTexto = contenido.descripcionAdmin ? contenido.descripcionAdmin : '—';
 
     tooltipDiv.innerHTML = `
         <div class="tooltip-header">
@@ -259,35 +503,13 @@ function mostrarTooltip(ev, contenido) {
             <span class="hostname">${contenido.hostname || '—'}</span>
         </div>
         <div class="tooltip-body">
-            <div class="tooltip-row">
-                <span class="label">Cliente:</span>
-                <span class="valor">${clienteTexto}</span>
-            </div>
-            <div class="tooltip-row">
-                <span class="label">Tipo de IP:</span>
-                <span class="valor">${contenido.tipoIP || '—'}</span>
-            </div>
-            <div class="tooltip-row">
-                <span class="label">Dirección IP:</span>
-                <span class="valor mono">${ipTexto}</span>
-            </div>
-            <div class="tooltip-row">
-                <span class="label">Dominio:</span>
-                <span class="valor mono">${usuarioTexto}</span>
-            </div>
-            <div class="tooltip-row">
-                <span class="label">Usuario admin:</span>
-                <span class="valor">${descripcionTexto}</span>
-            </div>
-            <div class="tooltip-row">
-                <span class="label">Posición:</span>
-                <span class="valor">Fila <b>${contenido.fila}</b>, Columna <b>${contenido.col}</b></span>
-            </div>
-            ${contenido.pisoNombre ? `
-            <div class="tooltip-row">
-                <span class="label">Piso:</span>
-                <span class="valor">${contenido.pisoNombre}</span>
-            </div>` : ''}
+            <div class="tooltip-row"><span class="label">Cliente:</span><span class="valor">${clienteTexto}</span></div>
+            <div class="tooltip-row"><span class="label">Tipo de IP:</span><span class="valor">${contenido.tipoIP || '—'}</span></div>
+            <div class="tooltip-row"><span class="label">Dirección IP:</span><span class="valor mono">${ipTexto}</span></div>
+            <div class="tooltip-row"><span class="label">Dominio:</span><span class="valor mono">${usuarioTexto}</span></div>
+            <div class="tooltip-row"><span class="label">Usuario admin:</span><span class="valor">${descripcionTexto}</span></div>
+            <div class="tooltip-row"><span class="label">Posición:</span><span class="valor">Fila <b>${contenido.fila}</b>, Columna <b>${contenido.col}</b></span></div>
+            ${contenido.pisoNombre ? `<div class="tooltip-row"><span class="label">Piso:</span><span class="valor">${contenido.pisoNombre}</span></div>` : ''}
         </div>
     `;
 
@@ -482,6 +704,7 @@ modalZonaAceptar.addEventListener('click', async () => {
     celdasZonaSeleccionadas = [];
     await recargarPanel(panelActivo);
 });
+
 /* =========================================================
    MODAL ZONA LIBRE
    ========================================================= */
@@ -813,7 +1036,6 @@ async function abrirModalEditarEquipo(equipo, panel) {
     if (equipo.IdCliente != null) {
         await edCargarPisosDelCliente(equipo.IdCliente);
         if (equipo.IdPiso && edPiso) edSetSelectValorConHuerfano(edPiso, String(equipo.IdPiso));
-
         await edCargarConfiguracionesDelCliente(equipo.IdCliente);
     } else {
         edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente --');
@@ -822,7 +1044,6 @@ async function abrirModalEditarEquipo(equipo, panel) {
 
     if (edRol) edRol.value = equipo.IdRolEquipo != null ? String(equipo.IdRolEquipo) : '';
     if (edTipoIP) edTipoIP.value = equipo.TipoIP || 'Estatica';
-
     if (edChkManual) edChkManual.checked = false;
 
     if (edHostnamePreview) {
@@ -1442,7 +1663,6 @@ const SVG_PC = `
 
 /* =========================================================
    RENDER DEL GRID — CANVAS EN VIVO
-   (vuelve al ícono de PC original, sin hostname ni IP)
    ========================================================= */
 function renderGridPanel(panel) {
     const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
@@ -1505,7 +1725,6 @@ function renderGridPanel(panel) {
             }
 
             if (contenido) {
-                // 👇 Canvas en vivo: ícono de PC original (sin hostname/IP)
                 celda.innerHTML = `
                     <button class="cerrar" data-id="${contenido.IdEquipo}">✕</button>
                     ${SVG_PC}
@@ -2244,7 +2463,6 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
         }
     }
 }
-
 /* =========================================================
    MODAL MOVER ENTRE PISOS
    ========================================================= */
@@ -2483,7 +2701,7 @@ function confirmarQuitar(equipo, panel) {
 }
 
 /* =========================================================
-   VISTA PREVIA — CON CIERRE AUTOMÁTICO
+   VISTA PREVIA
    ========================================================= */
 function cerrarVistaPrevia() {
     if (ventanaVistaPrevia && !ventanaVistaPrevia.closed) {
@@ -2499,11 +2717,10 @@ function cerrarVistaPrevia() {
 btnVistaPrevia.addEventListener('click', () => {
     if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
 
-    // Cerrar vista previa anterior si existe
     cerrarVistaPrevia();
 
     try {
-        const opciones = generarPDFDocumentado(panelActivo);
+        const opciones = generarHTMLVistaPrevia(panelActivo);
         const ventana = window.open('', '_blank');
         if (!ventana) {
             alert('El navegador bloqueó la ventana emergente. Permite las ventanas emergentes para ver la vista previa.');
@@ -2520,12 +2737,10 @@ btnVistaPrevia.addEventListener('click', () => {
     }
 });
 
-/* Cerrar la vista previa al cerrar/recargar la ventana del plano */
 window.addEventListener('beforeunload', () => {
     cerrarVistaPrevia();
 });
 
-/* Cerrar la vista previa también si el usuario cierra la pestaña desde la barra */
 window.addEventListener('pagehide', () => {
     cerrarVistaPrevia();
 });
@@ -2536,42 +2751,93 @@ window.addEventListener('pagehide', () => {
 btnExportarPDFDoc.addEventListener('click', async () => {
     if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
 
-    try {
-        btnExportarPDFDoc.disabled = true;
-        const original = btnExportarPDFDoc.innerHTML;
-        btnExportarPDFDoc.innerHTML = 'Generando...';
+    const original = btnExportarPDFDoc.innerHTML;
+    btnExportarPDFDoc.disabled = true;
+    btnExportarPDFDoc.innerHTML = 'Generando...';
 
-        const opciones = generarPDFDocumentado(panelActivo);
+    try {
+        const opciones = generarHTMLParaPDF(panelActivo);
+        // opciones = { html, nombreArchivo, orientacion }
         const res = await window.api.plano.exportarPDF(opciones);
 
         if (res.ok) {
             mostrarToast('PDF Documentado generado correctamente', 'exito', 4000);
             console.log('Ruta:', res.ruta);
         } else {
-            mostrarToast('Generación cancelada', 'info');
+            mostrarToast(res.mensaje || 'Generación cancelada', 'info');
         }
-
-        btnExportarPDFDoc.disabled = false;
-        btnExportarPDFDoc.innerHTML = original;
     } catch (err) {
         mostrarToast('Error al generar PDF: ' + err.message, 'error', 4000);
+    } finally {
         btnExportarPDFDoc.disabled = false;
+        btnExportarPDFDoc.innerHTML = original;
     }
 });
-
 /* =========================================================
-   GENERADOR PDF DOCUMENTADO
-   - Celdas: Hostname (arriba, negrita) + IP (abajo, mono)
-   - Tabla: sin columna #, con "Dominio" y "UsuarioAdmin" correctos
-   - Llaves + etiquetas de zonas fuera del grid
+   HELPERS COMPARTIDOS ENTRE VISTA PREVIA Y PDF
    ========================================================= */
-function generarPDFDocumentado(panel) {
-    const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
-    const nombrePiso = piso ? piso.Nombre : '';
-    const fecha = new Date().toLocaleString('es-MX');
 
+/**
+ * Calcula los tamaños adaptativos de celda y devuelve
+ * toda la metadata de layout (orientación, cellW/H, fuentes).
+ * Se usa tanto por la vista previa como por el PDF.
+ */
+function calcularLayoutPlano(panel) {
     const cols = panel.dimensiones.Columnas;
     const filas = panel.dimensiones.Filas;
+
+    const HOJA_A3_LANDSCAPE = { ancho: 1540, alto: 1050 };
+    const HOJA_A3_PORTRAIT  = { ancho: 1060, alto: 1480 };
+
+    const ratioGrid = cols / filas;
+    const esHorizontal = ratioGrid >= 1.15;
+    const hoja = esHorizontal ? HOJA_A3_LANDSCAPE : HOJA_A3_PORTRAIT;
+
+    const ANCHO_UTIL = hoja.ancho;
+    const ALTO_PLANO = hoja.alto;
+
+    const GAP = 4;
+    const GRID_PADDING = 14;
+
+    const anchoDisponible = ANCHO_UTIL - GRID_PADDING * 2 - GAP * (cols - 1);
+    const altoDisponible  = ALTO_PLANO - GRID_PADDING * 2 - GAP * (filas - 1);
+
+    let CELL_W = Math.floor(anchoDisponible / cols);
+    let CELL_H = Math.floor(altoDisponible / filas);
+
+    const ANCHO_MAX_CELDA = 160;
+    const ALTO_MAX_CELDA  = 100;
+    CELL_W = Math.min(CELL_W, ANCHO_MAX_CELDA);
+    CELL_H = Math.min(CELL_H, ALTO_MAX_CELDA);
+    CELL_W = Math.max(28, CELL_W);
+    CELL_H = Math.max(24, CELL_H);
+
+    const orientacionPagina = esHorizontal ? 'landscape' : 'portrait';
+
+    // Fuentes más grandes SIN tocar el tamaño de las celdas
+    const FONT_HOST = Math.max(0.18, Math.min(0.70, CELL_H / 54)).toFixed(2);
+    const FONT_IP = Math.max(0.10, Math.min(0.52, CELL_H / 70)).toFixed(2);
+
+    return {
+        cols, filas,
+        esHorizontal,
+        orientacionPagina,
+        GAP,
+        GRID_PADDING,
+        CELL_W,
+        CELL_H,
+        FONT_HOST,
+        FONT_IP
+    };
+}
+
+/**
+ * Construye todos los bloques HTML del plano (celdas, bordes, chips,
+ * zonas libres, llaves de zonas, tabla, identificadores).
+ * Devuelve un objeto con cada fragmento listo para inyectar.
+ */
+function construirBloquesPlano(panel, layout) {
+    const { cols, filas, GAP, GRID_PADDING, CELL_W, CELL_H, FONT_HOST, FONT_IP } = layout;
 
     const zonasLibresMap = new Map();
     (panel.zonasLibres || []).forEach(zl => {
@@ -2592,87 +2858,33 @@ function generarPDFDocumentado(panel) {
         for (let c = 0; c < cols; c++) {
             const contenido = panel.celdas[f]?.[c];
             if (contenido) {
-                const fila = f + 1;
-                const col = c + 1;
-                equiposList.push({
-                    fila, col,
-                    ...contenido
-                });
+                equiposList.push({ fila: f + 1, col: c + 1, ...contenido });
             }
         }
     }
-
     const totalEquipos = equiposList.length;
 
-    /* COLORES POR CLIENTE */
     const COLORES_CLIENTE_POR_CODIGO = {
-        'MEGA':    '#22c55e',
-        'DIDI':    '#f97316',
-        'NU':      '#a855f7',
-        'ATT':     '#0ea5e9',
-        'ADAMA':   '#1e40af',
-        'CLD':     '#ec4899',
-        'DMEX':    '#84cc16',
-        'HBAN':    '#eab308',
-        'KUBO':    '#16a34a',
-        'FESA':    '#0d9488',
-        'SHOP':    '#ea580c',
-        'TOY':     '#dc2626',
-        'TOYL':    '#dc2626',
-        'TPLAY':   '#6366f1',
-        'PHIE':    '#f59e0b'
+        'MEGA':'#22c55e','DIDI':'#f97316','NU':'#a855f7','ATT':'#0ea5e9',
+        'ADAMA':'#1e40af','CLD':'#ec4899','DMEX':'#84cc16','HBAN':'#eab308',
+        'KUBO':'#16a34a','FESA':'#0d9488','SHOP':'#ea580c','TOY':'#dc2626',
+        'TOYL':'#dc2626','TPLAY':'#6366f1','PHIE':'#f59e0b'
     };
-
     const COLORES_FALLBACK = [
-        '#3b82f6', '#22c55e', '#f97316', '#a855f7',
-        '#14b8a6', '#ec4899', '#eab308', '#ef4444',
-        '#06b6d4', '#8b5cf6', '#84cc16', '#f43f5e'
+        '#3b82f6','#22c55e','#f97316','#a855f7','#14b8a6','#ec4899',
+        '#eab308','#ef4444','#06b6d4','#8b5cf6','#84cc16','#f43f5e'
     ];
 
     const colorPorCliente = new Map();
     let fallbackIdx = 0;
-
     equiposList.forEach(e => {
         const id = e.IdCliente;
         if (id == null || colorPorCliente.has(id)) return;
-
         const codigo = String(e.ClienteCodigo || '').toUpperCase().trim();
         let color = COLORES_CLIENTE_POR_CODIGO[codigo];
-
-        if (!color) {
-            color = COLORES_FALLBACK[fallbackIdx % COLORES_FALLBACK.length];
-            fallbackIdx++;
-        }
-
+        if (!color) { color = COLORES_FALLBACK[fallbackIdx % COLORES_FALLBACK.length]; fallbackIdx++; }
         colorPorCliente.set(id, color);
     });
-
-    /* TAMAÑOS — A3 PORTRAIT */
-    const ANCHO_UTIL = 1060;
-    const ALTO_PLANO = 1420;
-
-    const GAP = 8;
-    const GRID_PADDING = 14;
-
-    const anchoDisponible = ANCHO_UTIL - GRID_PADDING * 2 - GAP * (cols - 1);
-    const altoDisponible  = ALTO_PLANO - GRID_PADDING * 2 - GAP * (filas - 1);
-
-    let CELL_W = Math.floor(anchoDisponible / cols);
-    let CELL_H = Math.floor(altoDisponible / filas);
-
-    const ALTO_MAX_CELDA = 46;
-    CELL_H = Math.min(CELL_H, ALTO_MAX_CELDA);
-
-    const MAX_RATIO_W_H = 1.8;
-    const anchoMaxPorAlto = Math.floor(CELL_H * MAX_RATIO_W_H);
-    CELL_W = Math.min(CELL_W, anchoMaxPorAlto);
-
-    CELL_W = Math.max(16, CELL_W);
-    CELL_H = Math.max(16, CELL_H);
-
-    // Fuentes del PDF (ajustadas a gusto del usuario)
-    const FONT_HOST = Math.max(0.17, Math.min(0.68, CELL_H / 54)).toFixed(2);
-    const FONT_IP   = Math.max(0.09, Math.min(0.55, CELL_H / 60)).toFixed(2);
 
     function normalizarColor(c, fallback = '#e2e8f0') {
         if (!c || typeof c !== 'string') return fallback;
@@ -2681,24 +2893,19 @@ function generarPDFDocumentado(panel) {
         if (/^(rgb|rgba|hsl|hsla)\(/i.test(s)) return s;
         return fallback;
     }
-
     function colorTextoContraste(hexColor) {
         try {
             const hex = String(hexColor).replace('#', '');
-            const full = hex.length === 3
-                ? hex.split('').map(c => c + c).join('')
-                : hex;
+            const full = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
             const r = parseInt(full.substr(0, 2), 16);
             const g = parseInt(full.substr(2, 2), 16);
             const b = parseInt(full.substr(4, 2), 16);
             const luminancia = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
             return luminancia < 0.6 ? '#ffffff' : '#1e293b';
-        } catch {
-            return '#1e293b';
-        }
+        } catch { return '#1e293b'; }
     }
 
-    /* CELDAS BASE */
+    /* CELDAS */
     let celdasHTML = '';
     for (let f = 0; f < filas; f++) {
         for (let c = 0; c < cols; c++) {
@@ -2725,74 +2932,35 @@ function generarPDFDocumentado(panel) {
         }
     }
 
-    /* BORDE POR EQUIPO + CHIP DE CLIENTE ARRIBA */
+    /* BORDES + CHIPS DE CLIENTE */
     let bordesEquipoHTML = '';
     let etiquetasEquipoHTML = '';
-
     const BORDE_OFFSET = 2;
     const CHIP_ALTO = 16;
     const CHIP_FONT = 0.6;
 
     equiposList.forEach(e => {
         const colorCli = colorPorCliente.get(e.IdCliente) || '#3b82f6';
-
         const x = (e.col - 1) * (CELL_W + GAP);
         const y = (e.fila - 1) * (CELL_H + GAP);
 
         bordesEquipoHTML += `
-            <div style="
-                position:absolute;
-                left:${x + GRID_PADDING - BORDE_OFFSET}px;
-                top:${y + GRID_PADDING - BORDE_OFFSET}px;
-                width:${CELL_W + BORDE_OFFSET * 2}px;
-                height:${CELL_H + BORDE_OFFSET * 2}px;
-                border:2.5px solid ${colorCli};
-                border-radius:6px;
-                pointer-events:none;
-                box-sizing:border-box;
-                z-index:4;
-            "></div>
-        `;
+            <div style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET}px;width:${CELL_W + BORDE_OFFSET * 2}px;height:${CELL_H + BORDE_OFFSET * 2}px;border:2.5px solid ${colorCli};border-radius:6px;pointer-events:none;box-sizing:border-box;z-index:4;"></div>`;
 
         const codigoCli = e.ClienteCodigo || '?';
         etiquetasEquipoHTML += `
-            <div style="
-                position:absolute;
-                left:${x + GRID_PADDING - BORDE_OFFSET}px;
-                top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;
-                height:${CHIP_ALTO}px;
-                max-width:${CELL_W + BORDE_OFFSET * 2}px;
-                padding:0 6px;
-                background:${colorCli};
-                color:#ffffff;
-                font-size:${CHIP_FONT}rem;
-                font-weight:700;
-                letter-spacing:0.03em;
-                text-transform:uppercase;
-                border-radius:3px;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                white-space:nowrap;
-                overflow:visible;
-                pointer-events:none;
-                box-sizing:border-box;
-                z-index:5;
-                text-shadow:0 1px 1px rgba(0,0,0,0.25);
-            ">${codigoCli}</div>
-        `;
+            <div style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;height:${CHIP_ALTO}px;max-width:${CELL_W + BORDE_OFFSET * 2}px;padding:0 6px;background:${colorCli};color:#fff;font-size:${CHIP_FONT}rem;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;border-radius:3px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:visible;pointer-events:none;box-sizing:border-box;z-index:5;text-shadow:0 1px 1px rgba(0,0,0,0.25);">${codigoCli}</div>`;
     });
 
-    /* TEXTO DE ZONAS LIBRES */
+    /* TEXTOS DE ZONAS LIBRES */
     let textosLibresHTML = '';
-
     Object.values(gruposLibres).forEach(g => {
         const filasArr = g.celdas.map(c => c.fila);
         const colsArr  = g.celdas.map(c => c.columna);
-        const filaMin  = Math.min(...filasArr);
-        const filaMax  = Math.max(...filasArr);
-        const colMin   = Math.min(...colsArr);
-        const colMax   = Math.max(...colsArr);
+        const filaMin = Math.min(...filasArr);
+        const filaMax = Math.max(...filasArr);
+        const colMin  = Math.min(...colsArr);
+        const colMax  = Math.max(...colsArr);
 
         const x0 = (colMin - 1) * (CELL_W + GAP) + GRID_PADDING;
         const y0 = (filaMin - 1) * (CELL_H + GAP) + GRID_PADDING;
@@ -2807,38 +2975,13 @@ function generarPDFDocumentado(panel) {
         const fontSizeRem = Math.max(0.7, Math.min(1.4, 0.75 + Math.min(totalFilas, totalCols) * 0.08));
 
         textosLibresHTML += `
-            <div style="
-                position:absolute;
-                left:${x0}px;
-                top:${y0}px;
-                width:${w}px;
-                height:${h}px;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                text-align:center;
-                font-weight:700;
-                font-size:${fontSizeRem}rem;
-                color:${colorTexto};
-                text-transform:uppercase;
-                letter-spacing:0.05em;
-                text-shadow:0 1px 2px rgba(255,255,255,0.35);
-                pointer-events:none;
-                padding:2px;
-                line-height:1.05;
-                word-break:break-word;
-                box-sizing:border-box;
-                z-index:5;
-            ">${g.nombre}</div>
-        `;
+            <div style="position:absolute;left:${x0}px;top:${y0}px;width:${w}px;height:${h}px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:${fontSizeRem}rem;color:${colorTexto};text-transform:uppercase;letter-spacing:0.05em;text-shadow:0 1px 2px rgba(255,255,255,0.35);pointer-events:none;padding:2px;line-height:1.05;word-break:break-word;box-sizing:border-box;z-index:5;">${g.nombre}</div>`;
     });
 
-    /* ZONAS (MESAS) — llaves + etiquetas laterales */
+    /* LLAVES DE ZONAS */
     let zonasLlavesHTML = '';
-
     const ZONA_ORDENADAS = [...(panel.zonas || [])].sort((a, b) => a.FilaInicio - b.FilaInicio);
     const GRID_TOTAL_W = cols * CELL_W + (cols - 1) * GAP;
-
     const ocupacionIzq = [];
     const ocupacionDer = [];
 
@@ -2849,103 +2992,48 @@ function generarPDFDocumentado(panel) {
 
         const zonaY = startFila * (CELL_H + GAP);
         const zonaH = (endFila - startFila) * (CELL_H + GAP) + CELL_H;
-
         const zonaXRight = (endCol + 1) * (CELL_W + GAP) - GAP;
         const zonaXLeft  = (zona.ColumnaInicio - 1) * (CELL_W + GAP);
 
         const centroBloque = (zonaXLeft + zonaXRight) / 2;
         const mitadGrid    = GRID_TOTAL_W / 2;
-
         let lado = centroBloque >= mitadGrid ? 'derecha' : 'izquierda';
 
         const ocupacion = lado === 'derecha' ? ocupacionDer : ocupacionIzq;
         let yFinal = zonaY;
         const alturaMin = 24;
-
         for (const oc of ocupacion) {
-            if (yFinal < oc.bottom && (yFinal + zonaH) > oc.top) {
-                yFinal = oc.bottom + 6;
-            }
+            if (yFinal < oc.bottom && (yFinal + zonaH) > oc.top) yFinal = oc.bottom + 6;
         }
         ocupacion.push({ top: yFinal, bottom: yFinal + Math.max(zonaH, alturaMin) });
 
         const colorZona = normalizarColor(zona.Color, '#3b82f6');
-
         const OFFSET_LLAVE = 8;
-        const xBase = lado === 'derecha'
-            ? zonaXRight + OFFSET_LLAVE
-            : zonaXLeft  - OFFSET_LLAVE;
-
+        const xBase = lado === 'derecha' ? zonaXRight + OFFSET_LLAVE : zonaXLeft - OFFSET_LLAVE;
         const hLlave = Math.max(zonaH, 30);
-
         const svgW = 24;
         const svgH = hLlave;
-        let path;
-        if (lado === 'derecha') {
-            path = `M 0 0 L 0 ${svgH} M 0 ${svgH / 2} L ${svgW} ${svgH / 2}`;
-        } else {
-            path = `M ${svgW} 0 L ${svgW} ${svgH} M ${svgW} ${svgH / 2} L 0 ${svgH / 2}`;
-        }
+        const path = lado === 'derecha'
+            ? `M 0 0 L 0 ${svgH} M 0 ${svgH / 2} L ${svgW} ${svgH / 2}`
+            : `M ${svgW} 0 L ${svgW} ${svgH} M ${svgW} ${svgH / 2} L 0 ${svgH / 2}`;
 
         const leftLlave = xBase + GRID_PADDING + (lado === 'derecha' ? 2 : -svgW - 2);
         const topLlave  = yFinal + GRID_PADDING;
 
-        const chipH = 20;
-        const chipFont = 0.7;
-
         zonasLlavesHTML += `
-            <div style="
-                position:absolute;
-                left:${leftLlave}px;
-                top:${topLlave}px;
-                width:${svgW}px;
-                height:${svgH}px;
-                pointer-events:none;
-                z-index:6;
-            ">
-                <svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}"
-                     xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
-                    <path d="${path}" fill="none" stroke="${colorZona}" stroke-width="2"
-                          stroke-linecap="round" stroke-linejoin="round"/>
+            <div style="position:absolute;left:${leftLlave}px;top:${topLlave}px;width:${svgW}px;height:${svgH}px;pointer-events:none;z-index:6;">
+                <svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+                    <path d="${path}" fill="none" stroke="${colorZona}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     <circle cx="${lado === 'derecha' ? svgW : 0}" cy="${svgH / 2}" r="3" fill="${colorZona}"/>
                 </svg>
-
-                <div style="
-                    position:absolute;
-                    top:50%;
-                    transform:translateY(-50%) ${lado === 'izquierda' ? ' translateX(-100%)' : ''};
-                    left:${lado === 'derecha' ? svgW + 6 : 0}px;
-                    background:#ffffff;
-                    border:1px solid ${colorZona};
-                    border-radius:4px;
-                    padding:2px 8px;
-                    height:${chipH}px;
-                    display:flex;
-                    align-items:center;
-                    gap:5px;
-                    font-size:${chipFont}rem;
-                    font-weight:700;
-                    color:#1e293b;
-                    text-transform:uppercase;
-                    letter-spacing:0.03em;
-                    white-space:nowrap;
-                    box-shadow:0 1px 3px rgba(0,0,0,0.08);
-                    box-sizing:border-box;
-                ">
+                <div style="position:absolute;top:50%;transform:translateY(-50%) ${lado === 'izquierda' ? ' translateX(-100%)' : ''};left:${lado === 'derecha' ? svgW + 6 : 0}px;background:#fff;border:1px solid ${colorZona};border-radius:4px;padding:2px 8px;height:20px;display:flex;align-items:center;gap:5px;font-size:0.7rem;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:0.03em;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.08);box-sizing:border-box;">
                     <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${colorZona};"></span>
                     ${zona.Nombre}
                 </div>
-            </div>
-        `;
+            </div>`;
     });
 
-    /* TABLA — SIN COLUMNA #
-       Orden correcto:
-       Hostname, Cliente, Rol, IP, Máscara, Puerta enlace, DNS 1, DNS 2,
-       Dominio (= UsuarioAdmin de la BD),
-       Password admin (= PasswordAdmin),
-       UsuarioAdmin (= DescripcionAdmin de DominiosAdmin)
-    */
+    /* TABLA */
     const filasTabla = equiposList.map(e => `
         <tr>
             <td class="bold-host">${e.Hostname || '-'}</td>
@@ -2967,30 +3055,24 @@ function generarPDFDocumentado(panel) {
         const r = e.RolCodigo || 'SIN ROL';
         porRol[r] = (porRol[r] || 0) + 1;
     });
-
-    const rolesHTML = Object.entries(porRol)
-        .sort((a, b) => b[1] - a[1])
+    const rolesHTML = Object.entries(porRol).sort((a, b) => b[1] - a[1])
         .map(([rol, cant]) => `
             <div class="identificador-item">
                 <span class="badge-rol" data-rol="${rol}">${rol}</span>
                 <span class="cant">${cant}</span>
-            </div>
-        `).join('');
+            </div>`).join('');
 
     const porCliente = {};
     equiposList.forEach(e => {
         const c = e.ClienteCodigo || 'SIN CLIENTE';
         porCliente[c] = (porCliente[c] || 0) + 1;
     });
-
-    const clientesHTML = Object.entries(porCliente)
-        .sort((a, b) => b[1] - a[1])
+    const clientesHTML = Object.entries(porCliente).sort((a, b) => b[1] - a[1])
         .map(([cli, cant]) => `
             <div class="identificador-item">
                 <span class="badge-cli">${cli}</span>
                 <span class="cant">${cant}</span>
-            </div>
-        `).join('');
+            </div>`).join('');
 
     const zonasLibresGrupos = Object.values(gruposLibres);
     const zonasLibresHTML = zonasLibresGrupos.length > 0
@@ -2999,182 +3081,71 @@ function generarPDFDocumentado(panel) {
                 <span class="muestra-color-inline" style="background:${normalizarColor(g.color)};"></span>
                 <span class="nombre-zona-libre">${g.nombre}</span>
                 <span class="cant">${g.celdas.length}</span>
-            </div>
-        `).join('')
+            </div>`).join('')
         : '';
 
-    /* CSS */
-    const css = `
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+    return {
+        celdasHTML,
+        bordesEquipoHTML,
+        etiquetasEquipoHTML,
+        textosLibresHTML,
+        zonasLlavesHTML,
+        filasTabla,
+        rolesHTML,
+        clientesHTML,
+        zonasLibresHTML,
+        totalEquipos,
+        equiposList
+    };
+}
 
-        @page plano-page { size: A3 portrait; margin: 8mm; }
-        @page tabla-page { size: A3 landscape; margin: 8mm; }
+/* =========================================================
+   GENERAR HTML — VISTA PREVIA
+   ---------------------------------------------------------
+   - Incluye zoom, scroll, layout fluido.
+   - Usa el CSS externo css/planorenderer.css
+   - NO respeta @page (es para ver en pantalla).
+   ========================================================= */
+function generarHTMLVistaPrevia(panel) {
+    const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
+    const nombrePiso = piso ? piso.Nombre : '';
+    const fecha = new Date().toLocaleString('es-MX');
 
-        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+    const layout = calcularLayoutPlano(panel);
+    const bloques = construirBloquesPlano(panel, layout);
 
-        body {
-            font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
-            background: #f1f5f9; color: #1e293b; font-size: 11px; line-height: 1.2;
-        }
+    const { cols, filas, GAP, GRID_PADDING, CELL_W, CELL_H, FONT_HOST, FONT_IP } = layout;
+    const {
+        celdasHTML, bordesEquipoHTML, etiquetasEquipoHTML,
+        textosLibresHTML, zonasLlavesHTML,
+        filasTabla, rolesHTML, clientesHTML, zonasLibresHTML,
+        totalEquipos
+    } = bloques;
 
-        .zoom-scroll-area { position: fixed; inset: 0; overflow: auto; padding: 24px; background: #f1f5f9; }
-        .zoom-center { display: block; width: max-content; min-width: 100%; margin: 0 auto; }
-        #pdf-zoom-target {
-            transform-origin: top left; transition: transform 0.08s ease-out;
-            width: fit-content; background: #fff;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08); border-radius: 4px; margin: 0 auto;
-        }
-
-        .pagina-plano {
-            page: plano-page; page-break-after: always; width: 1120px;
-            display: flex; flex-direction: column; padding: 20px; background: #fff;
-        }
-        .pagina-tabla { page: tabla-page; width: 1400px; padding: 20px; background: #fff; }
-
-        .encabezado {
-            display: flex; justify-content: space-between; align-items: flex-end;
-            padding-bottom: 6px; border-bottom: 3px solid #1e293b; margin-bottom: 10px; flex-shrink: 0;
-        }
-        .encabezado .titulo h1 { font-size: 1.4rem; color: #1e293b; margin-bottom: 2px; }
-        .encabezado .titulo .sub { font-size: 0.92rem; color: #64748b; }
-        .encabezado .meta { text-align: right; font-size: 0.8rem; color: #64748b; line-height: 1.5; }
-        .encabezado .meta strong { color: #1e293b; }
-
-        .seccion-titulo {
-            font-size: 0.82rem; font-weight: 700; color: #1e293b;
-            text-transform: uppercase; letter-spacing: 0.06em;
-            margin: 10px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #e2e8f0;
-        }
-
-        .plano-wrap {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 12px 160px;
-            min-height: fit-content;
-        }
-        .grid-plano {
-            display: grid;
-            grid-template-columns: repeat(${cols}, ${CELL_W}px);
-            grid-template-rows: repeat(${filas}, ${CELL_H}px);
-            gap: ${GAP}px; background: #e2e8f0; padding: ${GRID_PADDING}px;
-            border-radius: 10px; border: 2px solid #cbd5e1; width: fit-content; position: relative;
-        }
-        .celda {
-            width: ${CELL_W}px; height: ${CELL_H}px; background: #fff;
-            border: 1px dashed #cbd5e1; border-radius: 4px;
-            display: flex; align-items: center; justify-content: center;
-            overflow: hidden;
-        }
-        .celda.ocupada { border-style: solid; border-width: 1.5px; }
-        .celda.libre { border-style: solid; border-width: 1px; }
-        .celda.vacia { border-style: dashed; }
-
-        .celda-contenido {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 2px;
-            width: 100%;
-            height: 100%;
-            padding: 2px 3px;
-            text-align: center;
-            line-height: 1.05;
-            overflow: hidden;
-        }
-        .celda-hostname {
-            font-weight: 700;
-            font-size: ${FONT_HOST}rem;
-            color: #1e293b;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
-            letter-spacing: -0.01em;
-        }
-        .celda-ip {
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: ${FONT_IP}rem;
-            font-weight: 600;
-            color: #334155;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
-            letter-spacing: -0.01em;
-        }
-
-        .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
-        .celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
-        .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
-        .celda[data-rol="GRN"] { background: #f3e8ff; border-color: #a855f7; }
-        .celda[data-rol="CRD"] { background: #ccfbf1; border-color: #14b8a6; }
-        .celda[data-rol="MIS"] { background: #fce7f3; border-color: #ec4899; }
-        .celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
-
-        .tabla-equipos { width: 100%; border-collapse: collapse; font-size: 0.72rem; table-layout: fixed; margin-top: 6px; }
-        .tabla-equipos thead { background: #1e293b; color: #fff; display: table-header-group; }
-        .tabla-equipos thead th { padding: 6px 6px; text-align: left; font-weight: 700; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.03em; }
-        .tabla-equipos tbody tr { border-bottom: 1px solid #e2e8f0; }
-        .tabla-equipos tbody tr:nth-child(even) { background: #f8fafc; }
-        .tabla-equipos tbody td { padding: 3px 6px; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
-        .tabla-equipos .center { text-align: center; }
-        .tabla-equipos .bold { font-weight: 700; color: #64748b; }
-        .tabla-equipos .bold-host { font-weight: 600; color: #1e293b; }
-        .tabla-equipos .mono { font-family: 'Consolas', 'Monaco', monospace; font-size: 0.66rem; color: #475569; }
-
-        .badge-rol { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.6rem; font-weight: 700; color: #fff; background: #94a3b8; }
-        .badge-rol[data-rol="AGT"] { background: #3b82f6; }
-        .badge-rol[data-rol="SPR"] { background: #22c55e; }
-        .badge-rol[data-rol="CLD"] { background: #f97316; }
-        .badge-rol[data-rol="GRN"] { background: #a855f7; }
-        .badge-rol[data-rol="CRD"] { background: #14b8a6; }
-        .badge-rol[data-rol="MIS"] { background: #ec4899; }
-        .badge-rol[data-rol="ADM"] { background: #475569; }
-
-        .identificadores { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 10px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; margin-top: 6px; }
-        .identificador-item { display: flex; align-items: center; gap: 5px; padding: 3px 9px; background: #fff; border-radius: 4px; border: 1px solid #e2e8f0; font-size: 0.72rem; }
-        .identificador-item .cant { font-weight: 700; color: #1e293b; font-size: 0.8rem; }
-        .identificador-item .muestra-color-inline { display: inline-block; width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.15); }
-        .identificador-item .nombre-zona-libre { font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.02em; }
-        .badge-cli { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.62rem; font-weight: 700; color: #1e293b; background: #e2e8f0; }
-
-        .zoom-indicador {
-            position: fixed; bottom: 20px; right: 20px; background: rgba(15, 23, 42, 0.92); color: #fff;
-            padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
-            z-index: 99999; display: none; align-items: center; gap: 8px;
-            box-shadow: 0 12px 32px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25);
-            pointer-events: none; user-select: none;
-        }
-        .zoom-indicador.visible { display: flex; }
-        .zoom-indicador .zoom-valor { background: rgba(255,255,255,0.18); padding: 3px 10px; border-radius: 5px; font-variant-numeric: tabular-nums; }
-
-        .zoom-hint {
-            position: fixed; bottom: 20px; left: 20px; background: rgba(15, 23, 42, 0.82); color: #cbd5e1;
-            padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 500; z-index: 99999;
-            pointer-events: none; user-select: none; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-            transition: opacity 0.6s ease, transform 0.6s ease;
-        }
-        .zoom-hint.oculto { opacity: 0; transform: translateY(10px); }
-
-        body.zoom-activo { cursor: zoom-in; }
-
-        @media print {
-            html, body { overflow: visible; background: #fff; }
-            .zoom-scroll-area { position: static; overflow: visible; padding: 0; background: #fff; }
-            .zoom-center { display: block; width: auto; min-width: auto; }
-            #pdf-zoom-target { transform: none !important; box-shadow: none; border-radius: 0; margin: 0; }
-            .zoom-indicador, .zoom-hint { display: none !important; }
-        }
-    `;
-
-    /* HTML */
     const html = `
         <!DOCTYPE html>
         <html>
-        <head><meta charset="UTF-8"><title>Vista previa — ${nombrePiso || 'Plano'}</title><style>${css}</style></head>
-        <body>
+        <head>
+            <meta charset="UTF-8">
+            <title>Vista previa — ${nombrePiso || 'Plano'}</title>
+            <link rel="stylesheet" href="../css/planorenderer.css">
+            <style>
+                /* Overrides dinámicos de tamaño de celdas */
+                .grid-plano {
+                    grid-template-columns: repeat(${cols}, ${CELL_W}px);
+                    grid-template-rows: repeat(${filas}, ${CELL_H}px);
+                    gap: ${GAP}px;
+                    padding: ${GRID_PADDING}px;
+                }
+                .celda {
+                    width: ${CELL_W}px;
+                    height: ${CELL_H}px;
+                }
+                .celda-hostname { font-size: ${FONT_HOST}rem; }
+                .celda-ip       { font-size: ${FONT_IP}rem; }
+            </style>
+        </head>
+        <body class="vista-previa-body">
 
             <div class="zoom-scroll-area" id="zoom-scroll-area">
                 <div class="zoom-center" id="zoom-center">
@@ -3319,8 +3290,133 @@ function generarPDFDocumentado(panel) {
         </html>
     `;
 
-    const nombreArchivo = `Plano-Documentado-${nombrePiso || 'Piso'}-${Date.now()}.pdf`;
+    const nombreArchivo = `Plano-${nombrePiso || 'Piso'}-${Date.now()}.pdf`;
     return { html, nombreArchivo };
+}
+
+/* =========================================================
+   GENERAR HTML — PARA PDF
+   ---------------------------------------------------------
+   - SIN zoom, SIN scroll, SIN wrappers de vista.
+   - @page controla la orientación real (landscape o portrait).
+   - page-break-after para que SOLO se generen 2 hojas:
+     una con el plano y otra con la tabla.
+   - Usa el mismo CSS externo ../css/planorenderer.css
+     (el layout se sobreescribe localmente para impresión).
+   ========================================================= */
+function generarHTMLParaPDF(panel) {
+    const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
+    const nombrePiso = piso ? piso.Nombre : '';
+    const fecha = new Date().toLocaleString('es-MX');
+
+    const layout = calcularLayoutPlano(panel);
+    const bloques = construirBloquesPlano(panel, layout);
+
+    const { cols, filas, GAP, GRID_PADDING, CELL_W, CELL_H, FONT_HOST, FONT_IP, orientacionPagina } = layout;
+    const {
+        celdasHTML, bordesEquipoHTML, etiquetasEquipoHTML,
+        textosLibresHTML, zonasLlavesHTML,
+        filasTabla, rolesHTML, clientesHTML, zonasLibresHTML,
+        totalEquipos
+    } = bloques;
+
+    // Sustituir la variable CSS de orientación por el valor real
+    const cssFinal = CSS_PDF.replace('var(--pdf-orientation, landscape)', orientacionPagina);
+
+    const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>PDF — ${nombrePiso || 'Plano'}</title>
+            <style>${cssFinal}</style>
+            <style>
+                /* Overrides dinámicos de tamaño de celdas (van DESPUÉS del CSS base) */
+                .grid-plano {
+                    grid-template-columns: repeat(${cols}, ${CELL_W}px);
+                    grid-template-rows: repeat(${filas}, ${CELL_H}px);
+                    gap: ${GAP}px;
+                    padding: ${GRID_PADDING}px;
+                }
+                .celda {
+                    width: ${CELL_W}px;
+                    height: ${CELL_H}px;
+                }
+                .celda-hostname { font-size: ${FONT_HOST}rem; }
+                .celda-ip       { font-size: ${FONT_IP}rem; }
+            </style>
+        </head>
+        <body>
+
+            <div class="pagina-plano">
+                <div class="encabezado">
+                    <div class="titulo">
+                        <h1>Plano de Equipos</h1>
+                        <div class="sub">${nombrePiso}</div>
+                    </div>
+                    <div class="meta">
+                        <div><strong>Fecha:</strong> ${fecha}</div>
+                        <div><strong>Total equipos:</strong> ${totalEquipos}</div>
+                        <div><strong>Dimensiones:</strong> ${cols} × ${filas}</div>
+                    </div>
+                </div>
+
+                <div class="plano-wrap">
+                    <div class="grid-plano">
+                        ${celdasHTML}
+                        ${bordesEquipoHTML}
+                        ${etiquetasEquipoHTML}
+                        ${textosLibresHTML}
+                        ${zonasLlavesHTML}
+                    </div>
+                </div>
+            </div>
+
+            <div class="pagina-tabla">
+                <div class="encabezado">
+                    <div class="titulo">
+                        <h1>Tabla de Equipos</h1>
+                        <div class="sub">${nombrePiso} — ${totalEquipos} equipos</div>
+                    </div>
+                    <div class="meta">
+                        <div><strong>Fecha:</strong> ${fecha}</div>
+                    </div>
+                </div>
+
+                <div class="seccion-titulo">Identificadores</div>
+                <div class="identificadores">
+                    ${clientesHTML}
+                    ${rolesHTML}
+                    ${zonasLibresHTML}
+                </div>
+
+                <div class="seccion-titulo">Equipos (${totalEquipos})</div>
+                <table class="tabla-equipos">
+                    <thead>
+                        <tr>
+                            <th style="width:130px;">Hostname</th>
+                            <th style="width:55px;">Cliente</th>
+                            <th style="width:50px;">Rol</th>
+                            <th style="width:110px;">IP</th>
+                            <th style="width:110px;">Máscara</th>
+                            <th style="width:110px;">Puerta enlace</th>
+                            <th style="width:100px;">DNS 1</th>
+                            <th style="width:90px;">DNS 2</th>
+                            <th style="width:120px;">Dominio</th>
+                            <th style="width:130px;">Password admin</th>
+                            <th style="width:150px;">UsuarioAdmin</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filasTabla}</tbody>
+                </table>
+            </div>
+
+        </body>
+        </html>
+    `;
+
+    const nombreArchivo = `Plano-Documentado-${nombrePiso || 'Piso'}-${Date.now()}.pdf`;
+    return { html, nombreArchivo, orientacion: orientacionPagina };
 }
 
 /* =========================================================

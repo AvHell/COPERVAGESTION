@@ -64,7 +64,7 @@ console.log('===========================================');
    APP USER MODEL ID (Windows — barra de tareas)
    ========================================================= */
 if (process.platform === 'win32') {
-    app.setAppUserModelId('com.coperva.proyectoequipos.v2'); 
+    app.setAppUserModelId('com.coperva.proyectoequipos.v2');
 }
 
 /* =========================================================
@@ -1013,14 +1013,42 @@ ipcMain.handle('plano:eliminarZonaLibre', async (_e, idPiso, nombre, color) => {
 
 /* =========================================================
    IPC: EXPORTAR PDF DEL PLANO
+   ---------------------------------------------------------
+   El renderer nos envía { html, nombreArchivo, orientacion }.
+   - `orientacion` es 'landscape' | 'portrait' y define cómo
+     Chromium debe imprimir la hoja A3.
+   - El HTML ya trae su propio @page y sus propias reglas de
+     impresión, así que aquí solo decidimos la ventana y el
+     tamaño de papel.
    ========================================================= */
 ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
     const err = requerirSesion('plano'); if (err) return err;
 
+    // 1) Preguntar la ruta ANTES de crear cualquier ventana.
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Guardar PDF',
+        defaultPath: opciones.nombreArchivo || `Plano-${Date.now()}.pdf`,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    });
+
+    if (canceled || !filePath) {
+        return { ok: false, mensaje: 'Cancelado' };
+    }
+
+    // 2) Orientación recibida desde el renderer (por defecto landscape).
+    const esLandscape = (opciones.orientacion || 'landscape') === 'landscape';
+
+    // 3) Crear la ventana oculta del tamaño correcto para que Chromium no "adivine".
     const winPDF = new BrowserWindow({
-        width: 1400, height: 900, show: false,
+        width:  esLandscape ? 1600 : 1120,
+        height: esLandscape ? 1120 : 1600,
+        show: false,
         icon: ICONO_APP,
-        webPreferences: { contextIsolation: true, nodeIntegration: false }
+        webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            offscreen: false
+        }
     });
 
     let tmpPath = null;
@@ -1029,27 +1057,29 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
         tmpPath = path.join(os.tmpdir(), `plano-${Date.now()}.html`);
         fs.writeFileSync(tmpPath, opciones.html, 'utf-8');
 
-        await winPDF.loadFile(tmpPath);
-        await new Promise(resolve => setTimeout(resolve, 700));
-
-        const { canceled, filePath } = await dialog.showSaveDialog({
-            title: 'Guardar PDF',
-            defaultPath: opciones.nombreArchivo || `Plano-${Date.now()}.pdf`,
-            filters: [{ name: 'PDF', extensions: ['pdf'] }]
+        // Cargar y esperar a que el DOM esté listo
+        await new Promise((resolve, reject) => {
+            winPDF.webContents.once('did-finish-load', resolve);
+            winPDF.webContents.once('did-fail-load', (_e, code, desc) => reject(new Error(`did-fail-load ${code}: ${desc}`)));
+            winPDF.loadFile(tmpPath);
         });
 
-        if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+        // Dar tiempo a que apliquen estilos, fuentes y layout
+        await new Promise(r => setTimeout(r, 900));
 
         const datosPDF = await winPDF.webContents.printToPDF({
             printBackground: true,
             preferCSSPageSize: true,
-            margins: { marginType: 'none' }
+            margins: { marginType: 'none' },
+            landscape: esLandscape,
+            pageSize: 'A3'
         });
 
         fs.writeFileSync(filePath, datosPDF);
         return { ok: true, mensaje: 'PDF generado', ruta: filePath };
     } catch (err) {
-        throw err;
+        console.error('[PDF] Error al generar:', err);
+        return { ok: false, mensaje: 'Error al generar PDF: ' + err.message };
     } finally {
         if (!winPDF.isDestroyed()) winPDF.destroy();
         if (tmpPath && fs.existsSync(tmpPath)) {

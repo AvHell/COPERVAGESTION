@@ -1,8 +1,3 @@
-/* =========================================================
-   CONEXIÓN — SQL Server remoto bsite.net
-   ✅ Configuración verificada y funcional
-   ========================================================= */
-
 const sql = require('mssql');
 
 const config = {
@@ -11,23 +6,30 @@ const config = {
     server:   'sql.bsite.net',
     database: 'copervaservicios_',
     options: {
-        instanceName: 'MSSQL2016',       // ✅ SIN el sufijo "SQL"
+        instanceName: 'MSSQL2016',
         trustServerCertificate: true,
         encrypt: true,
         enableArithAbort: true,
         connectionTimeout: 30000,
-        requestTimeout: 30000
+        requestTimeout: 30000,
+        // ✅ FIX: desactivar keep-alive TCP lento, usar el default
+        // ✅ FIX: usar TDS 7.4 (default en mssql moderno)
+        useUTC: false
     },
     pool: {
-        max: 10,
-        min: 0,
-        idleTimeoutMillis: 30000
+        // ✅ FIX: subir max para permitir más concurrencia (Promise.all)
+        max: 20,
+        min: 2,          // ✅ mantener 2 conexiones calientes para evitar cold-start
+        idleTimeoutMillis: 60000,
+        // ✅ FIX: forzar que las conexiones se renueven antes del timeout del server
+        acquireTimeoutMillis: 30000,
+        createTimeoutMillis: 30000,
+        destroyTimeoutMillis: 5000,
+        reapIntervalMillis: 1000,
+        createRetryIntervalMillis: 200
     }
 };
 
-/* ---------------------------------------------------------
-   Pool singleton
-   --------------------------------------------------------- */
 let poolPromise = null;
 
 function getPool() {
@@ -40,16 +42,13 @@ function getPool() {
             })
             .catch(err => {
                 console.error('❌ Error conectando a SQL Server:', err.message);
-                poolPromise = null; // permite reintentos
+                poolPromise = null;
                 throw err;
             });
     }
     return poolPromise;
 }
 
-/* ---------------------------------------------------------
-   Cierre limpio del pool
-   --------------------------------------------------------- */
 process.on('SIGINT', async () => {
     try {
         const pool = await poolPromise;

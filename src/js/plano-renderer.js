@@ -56,10 +56,10 @@ let guardandoZonaLibre = false;
 let edDominiosCargados = [];
 let edPisosCliente = [];
 let edGuardando = false;
+let edEsModoCreacion = false; // por si en el futuro se reutiliza para crear
 
 /* =========================================================
    REFERENCIA A LA VENTANA DE VISTA PREVIA
-   (para cerrarla cuando se cierre el plano)
    ========================================================= */
 let ventanaVistaPrevia = null;
 
@@ -75,10 +75,6 @@ const GRID_PADDING = 10;
 
 /* =========================================================
    CSS EMBEBIDO PARA EL PDF
-   ---------------------------------------------------------
-   Este bloque se inyecta inline en el HTML que va al PDF.
-   No usamos <link> porque el HTML se guarda en %TEMP% y no
-   puede resolver rutas relativas al proyecto.
    ========================================================= */
 const CSS_PDF = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -779,6 +775,17 @@ modalZonaLibreAceptar.addEventListener('click', async () => {
 
 /* =========================================================
    MODAL EDITAR EQUIPO — FLUJO TIPO equipos.js
+   ---------------------------------------------------------
+   FIXES APLICADOS:
+   1) edCargarPisosDelCliente ahora incluye el piso actual
+      del equipo aunque no esté vinculado al cliente.
+   2) edActualizarCamposSegunTipo ahora DESHABILITA y limpia
+      los campos de la sección oculta (evita validaciones
+      fantasma y datos residuales).
+   3) Validaciones y UI según tipo IP (DHCP no pide red,
+      no pide IP, no pide número host; Estática no pide
+      hostname libre).
+   4) Indicadores visuales de campos obligatorios y estados.
    ========================================================= */
 
 function edLimpiarSelectConMensaje(select, msg) {
@@ -809,18 +816,19 @@ function edLlenarSelectConfig(select, items, placeholder) {
     });
 }
 
-function edSetSelectValorConHuerfano(select, valor) {
+function edSetSelectValorConHuerfano(select, valor, etiquetaHuerfano) {
     if (!select) return;
     if (!valor) { select.value = ''; return; }
-    const existe = Array.from(select.options).some(o => o.value === valor);
+    const existe = Array.from(select.options).some(o => o.value === String(valor));
     if (!existe) {
         const opt = document.createElement('option');
         opt.value = valor;
-        opt.textContent = `${valor} (ya no está en catálogo)`;
+        opt.textContent = etiquetaHuerfano || `${valor} (valor guardado, no está en catálogo)`;
         opt.style.color = '#b7791f';
+        opt.style.fontStyle = 'italic';
         select.appendChild(opt);
     }
-    select.value = valor;
+    select.value = String(valor);
 }
 
 function edLlenarSelectClientes() {
@@ -845,7 +853,13 @@ function edLlenarSelectRoles() {
     });
 }
 
-async function edCargarPisosDelCliente(idCliente) {
+/**
+ * FIX PRINCIPAL:
+ * Carga los pisos del cliente seleccionado.
+ * Si se pasa `idPisoActual`, se asegura de incluirlo en la lista
+ * aunque el piso ya no esté vinculado al cliente.
+ */
+async function edCargarPisosDelCliente(idCliente, idPisoActual = null) {
     if (!edPiso) return;
     if (!idCliente) {
         edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente primero --');
@@ -853,12 +867,36 @@ async function edCargarPisosDelCliente(idCliente) {
     }
     try {
         const todos = await window.api.pisos.listar();
+
+        // Pisos que pertenecen al cliente
         edPisosCliente = todos.filter(p =>
             (p.clientes || []).some(c => Number(c.IdCliente) === Number(idCliente))
         );
 
+        // FIX: si el equipo tiene un piso guardado que NO está en la lista del cliente,
+        // lo agregamos igual para no perder la referencia.
+        if (idPisoActual != null) {
+            const yaExiste = edPisosCliente.some(
+                p => Number(p.IdPiso) === Number(idPisoActual)
+            );
+            if (!yaExiste) {
+                const pisoGuardado = todos.find(
+                    p => Number(p.IdPiso) === Number(idPisoActual)
+                );
+                if (pisoGuardado) {
+                    edPisosCliente.push(pisoGuardado);
+                }
+            }
+        }
+
         edPiso.disabled = false;
-        edPiso.innerHTML = '<option value="">-- Selecciona --</option>';
+        edPiso.innerHTML = '<option value="">-- Selecciona un piso --</option>';
+
+        // Ordenar por nombre para consistencia visual
+        edPisosCliente.sort((a, b) =>
+            String(a.Nombre).localeCompare(String(b.Nombre))
+        );
+
         edPisosCliente.forEach(p => {
             const opt = document.createElement('option');
             opt.value = p.IdPiso;
@@ -964,30 +1002,90 @@ function edActualizarPreviewHostname() {
     edActualizarNumeroHost();
 }
 
+/**
+ * FIX: actualiza visibilidad, DISABLED y LIMPIEZA de campos
+ * según el tipo de IP seleccionado.
+ *
+ * Estática:
+ *   - Muestra: IP, Número host, Hostname (auto/manual), Red (máscara, puerta, DNS)
+ *   - Oculta: hostname DHCP libre
+ *
+ * DHCP:
+ *   - Muestra: hostname libre
+ *   - Oculta y DESHABILITA: IP, Número host, Hostname auto, Red completa
+ *   - Al guardar NO se envían esos campos (van como null)
+ */
 function edActualizarCamposSegunTipo() {
     if (!edTipoIP) return;
     const tipo = edTipoIP.value;
     const esEstatica = tipo === 'Estatica';
 
     if (esEstatica) {
+        // Mostrar bloques de Estática
         if (edCampoHostEst) edCampoHostEst.classList.remove('campo-oculto');
         if (edCampoHostDHCP) edCampoHostDHCP.classList.add('campo-oculto');
         if (edFilaCheckbox) edFilaCheckbox.style.display = 'flex';
         if (edSeccionRed) edSeccionRed.style.display = 'block';
+
+        // Habilitar campos de Estática
+        [edIP, edNumeroHost, edHostnamePreview, edMascara, edPuerta, edDns1, edDns2]
+            .forEach(el => { if (el) el.disabled = false; });
+
+        // Deshabilitar y limpiar hostname DHCP
+        if (edHostnameLibre) {
+            edHostnameLibre.disabled = true;
+            edHostnameLibre.value = '';
+        }
     } else {
+        // DHCP: ocultar bloques de Estática
         if (edCampoHostEst) edCampoHostEst.classList.add('campo-oculto');
         if (edCampoHostDHCP) edCampoHostDHCP.classList.remove('campo-oculto');
         if (edFilaCheckbox) edFilaCheckbox.style.display = 'none';
         if (edSeccionRed) edSeccionRed.style.display = 'none';
 
-        if (edMascara) edMascara.value = '';
-        if (edPuerta)  edPuerta.value  = '';
-        if (edDns1)    edDns1.value    = '';
-        if (edDns2)    edDns2.value    = '';
-        if (edIP)      edIP.value      = '';
+        // Deshabilitar campos de Estática
+        [edIP, edNumeroHost, edHostnamePreview, edMascara, edPuerta, edDns1, edDns2]
+            .forEach(el => { if (el) el.disabled = true; });
+
+        // Limpiar valores residuales (para que no se envíen al backend)
+        if (edIP) edIP.value = '';
         if (edNumeroHost) edNumeroHost.value = '';
         if (edHostnamePreview) edHostnamePreview.value = '';
+        if (edMascara) edMascara.value = '';
+        if (edPuerta) edPuerta.value = '';
+        if (edDns1) edDns1.value = '';
+        if (edDns2) edDns2.value = '';
+
+        // Habilitar hostname DHCP
+        if (edHostnameLibre) edHostnameLibre.disabled = false;
     }
+
+    // Actualizar indicador de campos obligatorios visibles
+    edActualizarIndicadoresObligatorios();
+}
+
+/**
+ * FIX UI/UX: resalta visualmente los campos obligatorios según
+ * el tipo de IP seleccionado.
+ */
+function edActualizarIndicadoresObligatorios() {
+    const esEstatica = edTipoIP && edTipoIP.value === 'Estatica';
+
+    // Marcar/desmarcar campos como "requerido" visualmente
+    const camposRequeridos = esEstatica
+        ? [edIP, edMascara, edPuerta, edDns1, edUsuario, edPassword]
+        : [edHostnameLibre, edUsuario, edPassword];
+
+    // Limpiar clases
+    document.querySelectorAll('#modal-editar-equipo .campo-obligatorio')
+        .forEach(el => el.classList.remove('campo-obligatorio'));
+
+    camposRequeridos.forEach(el => {
+        if (!el) return;
+        // Buscar el wrapper del campo (div padre)
+        const wrap = el.closest('div');
+        if (wrap) wrap.classList.add('campo-obligatorio');
+    });
 }
 
 function edConfigurarInputIP(input) {
@@ -1018,24 +1116,35 @@ function edConfigurarInputIP(input) {
 async function abrirModalEditarEquipo(equipo, panel) {
     equipoEditando = { equipo, panel };
 
+    // FIX: usar equipo.IdPiso o, si no viene, el piso del panel activo
+    const idPisoReal = equipo.IdPiso ?? panel.idPiso;
+
     if (editarTitulo) editarTitulo.textContent = `Editar equipo — ${equipo.Hostname}`;
     if (editarInfo) editarInfo.innerHTML = `
         <div><b>Posición:</b> Fila ${equipo._fila}, Columna ${equipo._col}</div>
         <div><b>Cliente actual:</b> ${equipo.ClienteCodigo || '—'}</div>
         <div><b>Rol actual:</b> ${equipo.RolCodigo || '—'}</div>
-        <div><b>Piso:</b> ${pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso))?.Nombre || ''}</div>
+        <div><b>Piso:</b> ${pisos.find(p => Number(p.IdPiso) === Number(idPisoReal))?.Nombre || ''}</div>
     `;
 
-    if (editarMensaje) editarMensaje.style.display = 'none';
+    if (editarMensaje) { editarMensaje.style.display = 'none'; editarMensaje.textContent = ''; }
 
     edLlenarSelectClientes();
     edLlenarSelectRoles();
 
     if (edCliente) edCliente.value = equipo.IdCliente != null ? String(equipo.IdCliente) : '';
 
+    // FIX: al cargar pisos, incluir el piso actual del equipo
     if (equipo.IdCliente != null) {
-        await edCargarPisosDelCliente(equipo.IdCliente);
-        if (equipo.IdPiso && edPiso) edSetSelectValorConHuerfano(edPiso, String(equipo.IdPiso));
+        await edCargarPisosDelCliente(equipo.IdCliente, idPisoReal);
+        if (idPisoReal && edPiso) {
+            const pisoObj = pisos.find(p => Number(p.IdPiso) === Number(idPisoReal));
+            edSetSelectValorConHuerfano(
+                edPiso,
+                String(idPisoReal),
+                `${pisoObj?.Nombre || 'Piso ' + idPisoReal} (no vinculado al cliente)`
+            );
+        }
         await edCargarConfiguracionesDelCliente(equipo.IdCliente);
     } else {
         edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente --');
@@ -1052,8 +1161,10 @@ async function abrirModalEditarEquipo(equipo, panel) {
     }
     if (edHostnameLibre) edHostnameLibre.value = '';
 
+    // Primero actualizamos visibilidad/disabled según tipo
     edActualizarCamposSegunTipo();
 
+    // Luego rellenamos valores (solo los que aplican según tipo)
     if (equipo.TipoIP === 'Estatica') {
         if (edIP) edIP.value = equipo.IP || '';
         if (edNumeroHost) edNumeroHost.value = equipo.NumeroHost ?? '';
@@ -1063,6 +1174,36 @@ async function abrirModalEditarEquipo(equipo, panel) {
         edSetSelectValorConHuerfano(edPuerta,  equipo.PuertaEnlace || '');
         edSetSelectValorConHuerfano(edDns1,    equipo.DNS1 || '');
         edSetSelectValorConHuerfano(edDns2,    equipo.DNS2 || '');
+
+        // ============================================================
+        // FIX PRINCIPAL: recalcular NúmeroHost y HostnamePreview
+        // aunque el usuario no haya tocado el input de IP.
+        // ============================================================
+        edActualizarNumeroHost();
+        // Si el checkbox manual está desmarcado, reconstruir el hostname
+        // a partir de rol + cliente + IP (para que se vea consistente).
+        // Si el checkbox está marcado, respetar el hostname guardado.
+        if (!edChkManual.checked) {
+            const idRol = parseInt(edRol.value, 10);
+            const idCli = parseInt(edCliente.value, 10);
+            const ip = edIP.value.trim();
+            const autoHost = edConstruirHostname(idRol, idCli, ip);
+            // Si el auto-generado coincide con el guardado, usarlo;
+            // si no coincide (porque el hostname guardado era custom),
+            // respetar el guardado y marcar el checkbox manual.
+            if (autoHost && autoHost !== equipo.Hostname) {
+                // El hostname guardado NO coincide con el auto-generado
+                // → activar modo manual y dejar el guardado
+                if (edChkManual) edChkManual.checked = true;
+                if (edHostnamePreview) {
+                    edHostnamePreview.readOnly = false;
+                    edHostnamePreview.value = equipo.Hostname || '';
+                }
+            } else {
+                // Coincide o no se pudo construir → usar el guardado
+                if (edHostnamePreview) edHostnamePreview.value = equipo.Hostname || autoHost || '';
+            }
+        }
     } else {
         if (edHostnameLibre) edHostnameLibre.value = equipo.Hostname || '';
     }
@@ -1079,7 +1220,8 @@ if (edCliente) {
         const id = parseInt(edCliente.value, 10);
         edLimpiarSelectConMensaje(edPiso, '-- Cargando... --');
         if (id) {
-            await edCargarPisosDelCliente(id);
+            // En cambio manual de cliente, no hay piso "actual" que preservar
+            await edCargarPisosDelCliente(id, null);
             await edCargarConfiguracionesDelCliente(id);
         } else {
             edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente primero --');
@@ -1141,22 +1283,33 @@ if (editarConfirmar) {
         const esEstatica = tipo === 'Estatica';
         let hostnameFinal;
 
+        // === VALIDACIÓN DE HOSTNAME SEGÚN TIPO ===
         if (esEstatica) {
             if (edChkManual.checked) {
                 hostnameFinal = edHostnamePreview.value.trim();
-                if (!hostnameFinal) { edMostrarError('Escribe el hostname manualmente o desmarca la casilla.'); return; }
+                if (!hostnameFinal) {
+                    edMostrarError('Escribe el hostname manualmente o desmarca la casilla.');
+                    return;
+                }
             } else {
                 const idRol = parseInt(edRol.value, 10);
                 const idCli = parseInt(edCliente.value, 10);
                 const ip = edIP.value.trim();
                 hostnameFinal = edConstruirHostname(idRol, idCli, ip);
-                if (!hostnameFinal) { edMostrarError('No se pudo armar el hostname. Verifica cliente, rol e IP.'); return; }
+                if (!hostnameFinal) {
+                    edMostrarError('No se pudo armar el hostname. Verifica cliente, rol e IP.');
+                    return;
+                }
             }
         } else {
             hostnameFinal = edHostnameLibre.value.trim();
-            if (!hostnameFinal) { edMostrarError('El hostname es obligatorio.'); return; }
+            if (!hostnameFinal) {
+                edMostrarError('El hostname es obligatorio.');
+                return;
+            }
         }
 
+        // === CONSTRUCCIÓN DEL PAYLOAD ===
         const datos = {
             idCliente:      parseInt(edCliente.value, 10),
             idPiso:         edPiso.value ? parseInt(edPiso.value, 10) : null,
@@ -1164,7 +1317,7 @@ if (editarConfirmar) {
             tipoIP:         tipo,
             hostname:       hostnameFinal,
             numeroHost:     esEstatica ? parseInt(edNumeroHost.value, 10) : null,
-            ip:             esEstatica ? edIP.value.trim() : null,
+            ip:             esEstatica ? (edIP.value.trim() || null) : null,
             idRangoIP:      null,
             mascara:        esEstatica ? (edMascara.value || null) : null,
             puertaEnlace:   esEstatica ? (edPuerta.value  || null) : null,
@@ -1175,13 +1328,16 @@ if (editarConfirmar) {
             activo:         true
         };
 
-        if (!datos.idCliente || !datos.idRolEquipo) { edMostrarError('Cliente y rol son obligatorios.'); return; }
-        if (!datos.hostname) { edMostrarError('El hostname es obligatorio.'); return; }
+        // === VALIDACIONES GENERALES ===
+        if (!datos.idCliente)   { edMostrarError('El cliente es obligatorio.'); return; }
+        if (!datos.idRolEquipo) { edMostrarError('El rol es obligatorio.'); return; }
+        if (!datos.hostname)    { edMostrarError('El hostname es obligatorio.'); return; }
 
-        if (!datos.usuarioAdmin || !datos.passwordAdmin) {
-            edMostrarError('Usuario admin y password son obligatorios.'); return;
-        }
+        // Usuario/password: obligatorios siempre (según lógica original)
+        if (!datos.usuarioAdmin)  { edMostrarError('El usuario admin es obligatorio.'); return; }
+        if (!datos.passwordAdmin) { edMostrarError('El password admin es obligatorio.'); return; }
 
+        // === VALIDACIONES ESPECÍFICAS DE ESTÁTICA ===
         if (esEstatica) {
             if (!datos.idPiso)       { edMostrarError('El piso es obligatorio para equipos estáticos.'); return; }
             if (!datos.ip)           { edMostrarError('La IP es obligatoria para equipos estáticos.'); return; }
@@ -1189,6 +1345,7 @@ if (editarConfirmar) {
             if (!datos.puertaEnlace) { edMostrarError('La puerta de enlace es obligatoria.'); return; }
             if (!datos.dns1)         { edMostrarError('El DNS 1 es obligatorio.'); return; }
         }
+        // DHCP no valida idPiso, ip, mascara, puerta, dns1, dns2
 
         edGuardando = true;
         editarConfirmar.disabled = true;
@@ -1570,7 +1727,26 @@ async function cargarPanel(panel) {
     panel.clientesDelPiso.forEach(c => setFiltro.add(Number(c.IdCliente)));
     renderFiltroClientes(panel);
 
-    panel.dimensiones = await window.api.plano.dimensiones(panel.idPiso);
+    // ============================================================
+    // FIX DE RENDIMIENTO: ejecutar todas las queries en PARALELO
+    // en lugar de secuencialmente. Reduce el tiempo total de
+    // carga de ~5 round-trips a 1 (el más lento).
+    // ============================================================
+    const [
+        dimensiones,
+        ubicaciones,
+        equiposSinUbicar,
+        zonas,
+        zonasLibres
+    ] = await Promise.all([
+        window.api.plano.dimensiones(panel.idPiso),
+        window.api.plano.listarPorLugar(panel.idPiso),
+        window.api.plano.sinUbicacion(panel.idPiso),
+        window.api.plano.listarZonas(panel.idPiso),
+        window.api.plano.listarZonasLibres(panel.idPiso)
+    ]);
+
+    panel.dimensiones = dimensiones;
 
     const inputFilas = panel.sufijo === 'izq' ? inputFilasIzq : inputFilasDer;
     const inputColumnas = panel.sufijo === 'izq' ? inputColumnasIzq : inputColumnasDer;
@@ -1581,7 +1757,6 @@ async function cargarPanel(panel) {
         Array.from({ length: panel.dimensiones.Columnas }, () => null)
     );
 
-    const ubicaciones = await window.api.plano.listarPorLugar(panel.idPiso);
     ubicaciones.forEach(u => {
         const f = u.Fila - 1;
         const c = u.Columna - 1;
@@ -1589,6 +1764,7 @@ async function cargarPanel(panel) {
             panel.celdas[f][c] = {
                 IdEquipo:      u.IdEquipo,
                 IdCliente:     u.IdCliente,
+                IdPiso:        u.IdPiso,
                 IdRolEquipo:   u.IdRolEquipo,
                 ClienteCodigo: u.ClienteCodigo,
                 ClienteNombre: u.ClienteNombre,
@@ -1609,9 +1785,9 @@ async function cargarPanel(panel) {
         }
     });
 
-    panel.equiposSinUbicar = await window.api.plano.sinUbicacion(panel.idPiso);
-    panel.zonas = await window.api.plano.listarZonas(panel.idPiso);
-    panel.zonasLibres = await window.api.plano.listarZonasLibres(panel.idPiso);
+    panel.equiposSinUbicar = equiposSinUbicar;
+    panel.zonas = zonas;
+    panel.zonasLibres = zonasLibres;
 
     renderGridPanel(panel);
     if (panel === panelActivo) renderPanelLateral();
@@ -2668,8 +2844,8 @@ function llenarSelectRolesMover() {
 }
 
 async function cargarDatosEquipoEnModal(idEquipo) {
-    const todos = await window.api.equipos.listar();
-    const eq = todos.find(x => Number(x.IdEquipo) === Number(idEquipo));
+    // ✅ FIX: usar endpoint específico en lugar de listar TODOS los equipos
+    const eq = await window.api.equipos.obtenerPorId(idEquipo);
     if (!eq) return;
 
     mvCliente.value  = eq.IdCliente != null ? String(eq.IdCliente) : '';
@@ -2757,7 +2933,6 @@ btnExportarPDFDoc.addEventListener('click', async () => {
 
     try {
         const opciones = generarHTMLParaPDF(panelActivo);
-        // opciones = { html, nombreArchivo, orientacion }
         const res = await window.api.plano.exportarPDF(opciones);
 
         if (res.ok) {
@@ -2773,15 +2948,10 @@ btnExportarPDFDoc.addEventListener('click', async () => {
         btnExportarPDFDoc.innerHTML = original;
     }
 });
+
 /* =========================================================
    HELPERS COMPARTIDOS ENTRE VISTA PREVIA Y PDF
    ========================================================= */
-
-/**
- * Calcula los tamaños adaptativos de celda y devuelve
- * toda la metadata de layout (orientación, cellW/H, fuentes).
- * Se usa tanto por la vista previa como por el PDF.
- */
 function calcularLayoutPlano(panel) {
     const cols = panel.dimensiones.Columnas;
     const filas = panel.dimensiones.Filas;
@@ -2814,7 +2984,6 @@ function calcularLayoutPlano(panel) {
 
     const orientacionPagina = esHorizontal ? 'landscape' : 'portrait';
 
-    // Fuentes más grandes SIN tocar el tamaño de las celdas
     const FONT_HOST = Math.max(0.18, Math.min(0.70, CELL_H / 54)).toFixed(2);
     const FONT_IP = Math.max(0.10, Math.min(0.52, CELL_H / 70)).toFixed(2);
 
@@ -2831,11 +3000,6 @@ function calcularLayoutPlano(panel) {
     };
 }
 
-/**
- * Construye todos los bloques HTML del plano (celdas, bordes, chips,
- * zonas libres, llaves de zonas, tabla, identificadores).
- * Devuelve un objeto con cada fragmento listo para inyectar.
- */
 function construirBloquesPlano(panel, layout) {
     const { cols, filas, GAP, GRID_PADDING, CELL_W, CELL_H, FONT_HOST, FONT_IP } = layout;
 
@@ -2905,7 +3069,6 @@ function construirBloquesPlano(panel, layout) {
         } catch { return '#1e293b'; }
     }
 
-    /* CELDAS */
     let celdasHTML = '';
     for (let f = 0; f < filas; f++) {
         for (let c = 0; c < cols; c++) {
@@ -2932,7 +3095,6 @@ function construirBloquesPlano(panel, layout) {
         }
     }
 
-    /* BORDES + CHIPS DE CLIENTE */
     let bordesEquipoHTML = '';
     let etiquetasEquipoHTML = '';
     const BORDE_OFFSET = 2;
@@ -2952,7 +3114,6 @@ function construirBloquesPlano(panel, layout) {
             <div style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;height:${CHIP_ALTO}px;max-width:${CELL_W + BORDE_OFFSET * 2}px;padding:0 6px;background:${colorCli};color:#fff;font-size:${CHIP_FONT}rem;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;border-radius:3px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:visible;pointer-events:none;box-sizing:border-box;z-index:5;text-shadow:0 1px 1px rgba(0,0,0,0.25);">${codigoCli}</div>`;
     });
 
-    /* TEXTOS DE ZONAS LIBRES */
     let textosLibresHTML = '';
     Object.values(gruposLibres).forEach(g => {
         const filasArr = g.celdas.map(c => c.fila);
@@ -2978,7 +3139,6 @@ function construirBloquesPlano(panel, layout) {
             <div style="position:absolute;left:${x0}px;top:${y0}px;width:${w}px;height:${h}px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:${fontSizeRem}rem;color:${colorTexto};text-transform:uppercase;letter-spacing:0.05em;text-shadow:0 1px 2px rgba(255,255,255,0.35);pointer-events:none;padding:2px;line-height:1.05;word-break:break-word;box-sizing:border-box;z-index:5;">${g.nombre}</div>`;
     });
 
-    /* LLAVES DE ZONAS */
     let zonasLlavesHTML = '';
     const ZONA_ORDENADAS = [...(panel.zonas || [])].sort((a, b) => a.FilaInicio - b.FilaInicio);
     const GRID_TOTAL_W = cols * CELL_W + (cols - 1) * GAP;
@@ -3033,7 +3193,6 @@ function construirBloquesPlano(panel, layout) {
             </div>`;
     });
 
-    /* TABLA */
     const filasTabla = equiposList.map(e => `
         <tr>
             <td class="bold-host">${e.Hostname || '-'}</td>
@@ -3099,13 +3258,6 @@ function construirBloquesPlano(panel, layout) {
     };
 }
 
-/* =========================================================
-   GENERAR HTML — VISTA PREVIA
-   ---------------------------------------------------------
-   - Incluye zoom, scroll, layout fluido.
-   - Usa el CSS externo css/planorenderer.css
-   - NO respeta @page (es para ver en pantalla).
-   ========================================================= */
 function generarHTMLVistaPrevia(panel) {
     const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
     const nombrePiso = piso ? piso.Nombre : '';
@@ -3130,7 +3282,6 @@ function generarHTMLVistaPrevia(panel) {
             <title>Vista previa — ${nombrePiso || 'Plano'}</title>
             <link rel="stylesheet" href="../css/planorenderer.css">
             <style>
-                /* Overrides dinámicos de tamaño de celdas */
                 .grid-plano {
                     grid-template-columns: repeat(${cols}, ${CELL_W}px);
                     grid-template-rows: repeat(${filas}, ${CELL_H}px);
@@ -3294,16 +3445,6 @@ function generarHTMLVistaPrevia(panel) {
     return { html, nombreArchivo };
 }
 
-/* =========================================================
-   GENERAR HTML — PARA PDF
-   ---------------------------------------------------------
-   - SIN zoom, SIN scroll, SIN wrappers de vista.
-   - @page controla la orientación real (landscape o portrait).
-   - page-break-after para que SOLO se generen 2 hojas:
-     una con el plano y otra con la tabla.
-   - Usa el mismo CSS externo ../css/planorenderer.css
-     (el layout se sobreescribe localmente para impresión).
-   ========================================================= */
 function generarHTMLParaPDF(panel) {
     const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
     const nombrePiso = piso ? piso.Nombre : '';
@@ -3320,7 +3461,6 @@ function generarHTMLParaPDF(panel) {
         totalEquipos
     } = bloques;
 
-    // Sustituir la variable CSS de orientación por el valor real
     const cssFinal = CSS_PDF.replace('var(--pdf-orientation, landscape)', orientacionPagina);
 
     const html = `
@@ -3331,7 +3471,6 @@ function generarHTMLParaPDF(panel) {
             <title>PDF — ${nombrePiso || 'Plano'}</title>
             <style>${cssFinal}</style>
             <style>
-                /* Overrides dinámicos de tamaño de celdas (van DESPUÉS del CSS base) */
                 .grid-plano {
                     grid-template-columns: repeat(${cols}, ${CELL_W}px);
                     grid-template-rows: repeat(${filas}, ${CELL_H}px);

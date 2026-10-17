@@ -1286,3 +1286,131 @@ body.plano-body {
     from { opacity: 0; transform: translateX(40px); }
     to   { opacity: 1; transform: translateX(0); }
 }
+
+/* =========================================================
+   MODAL EDITAR EQUIPO — MEJORAS UI/UX
+   ========================================================= */
+
+#modal-editar-equipo .modal-caja {
+    padding: 22px 26px 18px;
+}
+
+#modal-editar-equipo h3 {
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 14px;
+}
+
+/* Separación entre secciones del formulario */
+#modal-editar-equipo .seccion-titulo {
+    margin-top: 18px;
+    margin-bottom: 8px;
+    font-size: 0.78rem;
+    color: #475569;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+#modal-editar-equipo .seccion-titulo:first-of-type {
+    margin-top: 4px;
+}
+
+/* Campos obligatorios: borde sutil + asterisco rojo */
+#modal-editar-equipo .campo-obligatorio label {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+#modal-editar-equipo .campo-obligatorio .req {
+    color: #dc2626;
+    font-weight: 700;
+    margin-left: 2px;
+}
+
+/* Input/select obligatorio con borde izquierdo de color */
+#modal-editar-equipo .campo-obligatorio input:not([readonly]),
+#modal-editar-equipo .campo-obligatorio select {
+    border-left: 3px solid #3b82f6;
+}
+
+/* Input/select opcional con borde gris */
+#modal-editar-equipo input:not(.campo-obligatorio input),
+#modal-editar-equipo select:not(.campo-obligatorio select) {
+    border-left: 3px solid #e2e8f0;
+}
+
+/* Inputs readonly (hostname auto, número host) */
+#modal-editar-equipo input[readonly] {
+    background: #f8fafc;
+    color: #475569;
+    cursor: not-allowed;
+}
+
+/* Inputs deshabilitados */
+#modal-editar-equipo input:disabled,
+#modal-editar-equipo select:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+    cursor: not-allowed;
+    opacity: 0.85;
+}
+
+/* Sección Red (solo visible en Estática) con fondo tenue */
+#modal-editar-equipo #ed-seccion-red {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 4px 12px 12px;
+    margin-top: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+#modal-editar-equipo #ed-seccion-red .seccion-titulo {
+    margin-top: 12px;
+    border-bottom: none;
+    padding-left: 4px;
+}
+
+/* Bloque hostname DHCP */
+#modal-editar-equipo #ed-campoHostnameDHCP {
+    background: #f0f9ff;
+    border-radius: 8px;
+    padding: 4px 12px 12px;
+    margin-top: 6px;
+    border: 1px solid #bae6fd;
+}
+
+#modal-editar-equipo #ed-campoHostnameDHCP .seccion-titulo {
+    margin-top: 12px;
+    border-bottom: none;
+    color: #0369a1;
+    padding-left: 4px;
+}
+
+/* Bloque hostname Estática */
+#modal-editar-equipo #ed-campoHostnameEstatico {
+    background: #f0fdf4;
+    border-radius: 8px;
+    padding: 4px 12px 12px;
+    margin-top: 6px;
+    border: 1px solid #bbf7d0;
+}
+
+#modal-editar-equipo #ed-campoHostnameEstatico .seccion-titulo {
+    margin-top: 12px;
+    border-bottom: none;
+    color: #15803d;
+    padding-left: 4px;
+}
+
+/* Clase para ocultar campos */
+.campo-oculto {
+    display: none !important;
+}
+
+/* Ayuda visual de obligatorio en el modal mover también */
+#modal-mover-piso .campo-obligatorio label {
+    font-weight: 600;
+}
+#modal-mover-piso .req {
+    color: #dc2626;
+    font-weight: 700;
+}

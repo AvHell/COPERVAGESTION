@@ -3,6 +3,7 @@ const { getPool, sql } = require('./conexion');
 /* =========================================================
    LISTAR
    ========================================================= */
+
 async function listar() {
     const pool = await getPool();
     const result = await pool.request().query(`
@@ -270,6 +271,30 @@ async function actualizar(id, datos) {
         }
         return { ok: false, mensaje: 'Error al actualizar equipo: ' + err.message };
     }
+}
+
+/*ENDPOINT */
+
+async function obtenerPorId(idEquipo) {
+    const pool = await getPool();
+    const r = await pool.request()
+        .input('IdEquipo', sql.Int, idEquipo)
+        .query(`
+            SELECT E.IdEquipo, E.Hostname, E.TipoIP, E.IP, E.IdCliente, E.IdPiso, E.IdRolEquipo,
+                   E.Mascara, E.PuertaEnlace, E.DNS1, E.DNS2,
+                   E.UsuarioAdmin, E.PasswordAdmin,
+                   C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
+                   R.Codigo AS RolCodigo,
+                   DA.Descripcion AS DescripcionAdmin
+            FROM Equipos E
+            INNER JOIN RolesEquipo R ON R.IdRolEquipo = E.IdRolEquipo
+            INNER JOIN Clientes C ON C.IdCliente = E.IdCliente
+            LEFT JOIN DominiosAdmin DA
+                   ON DA.IdCliente = E.IdCliente
+                  AND DA.Usuario   = E.UsuarioAdmin
+            WHERE E.IdEquipo = @IdEquipo
+        `);
+    return r.recordset[0] || null;
 }
 
 /* =========================================================

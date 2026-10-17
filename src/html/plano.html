@@ -357,136 +357,141 @@
         </div>
     </div>
 
-    <!-- ========================================================= -->
-    <!-- MODAL EDITAR EQUIPO (MODO EDICIÓN) — FLUJO TIPO equipos.js -->
-    <!-- ========================================================= -->
-    <div id="modal-editar-equipo" class="modal-overlay" style="display:none;">
-        <div class="modal-caja modal-grande">
-            <h3 id="editar-titulo">Editar equipo</h3>
+   <!-- ========================================================= -->
+<!-- MODAL EDITAR EQUIPO (MODO EDICIÓN) — FLUJO TIPO equipos.js -->
+<!-- ========================================================= -->
+<div id="modal-editar-equipo" class="modal-overlay" style="display:none;">
+    <div class="modal-caja modal-grande">
+        <h3 id="editar-titulo">Editar equipo</h3>
 
-            <div class="info-mover" id="editar-info"></div>
+        <div class="info-mover" id="editar-info"></div>
 
-            <!-- ===== BLOQUE 1: Cliente / Piso / Rol ===== -->
-            <div class="grid-form">
-                <div>
-                    <label for="ed-cliente">Cliente</label>
-                    <select id="ed-cliente"></select>
-                </div>
-                <div>
-                    <label for="ed-piso">Piso</label>
-                    <select id="ed-piso" disabled>
-                        <option value="">-- Selecciona un cliente primero --</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="ed-rol">Rol</label>
-                    <select id="ed-rol"></select>
-                </div>
+        <!-- ===== BLOQUE 1: Cliente / Piso / Rol ===== -->
+        <div class="seccion-titulo">Identificación</div>
+        <div class="grid-form">
+            <div class="campo-obligatorio">
+                <label for="ed-cliente">Cliente <span class="req">*</span></label>
+                <select id="ed-cliente"></select>
             </div>
-
-            <!-- ===== BLOQUE 2: Tipo IP ===== -->
-            <div class="grid-form">
-                <div>
-                    <label for="ed-tipoIP">Tipo IP</label>
-                    <select id="ed-tipoIP">
-                        <option value="Estatica">Estática</option>
-                        <option value="DHCP">DHCP</option>
-                    </select>
-                </div>
+            <div class="campo-obligatorio">
+                <label for="ed-piso">Piso <span class="req">*</span></label>
+                <select id="ed-piso" disabled>
+                    <option value="">-- Selecciona un cliente primero --</option>
+                </select>
             </div>
-
-            <!-- ===== BLOQUE 3: Hostname (Estática: auto/manual + IP) / (DHCP: libre) ===== -->
-            <div id="ed-campoHostnameEstatico">
-                <div class="grid-form">
-                    <div>
-                        <label for="ed-ip">IP</label>
-                        <input type="text" id="ed-ip" placeholder="192.168.1.10">
-                    </div>
-                    <div>
-                        <label for="ed-numeroHost">Número host</label>
-                        <input type="text" id="ed-numeroHost" readonly>
-                    </div>
-                    <div>
-                        <label for="ed-hostnamePreview">Hostname</label>
-                        <input type="text" id="ed-hostnamePreview" readonly placeholder="Se armará automáticamente...">
-                    </div>
-                </div>
-                <div id="ed-filaCheckboxHostname" class="check-mantener" style="display:flex;">
-                    <label>
-                        <input type="checkbox" id="ed-chk-hostname-manual">
-                        Escribir hostname manualmente
-                    </label>
-                </div>
-            </div>
-
-            <div id="ed-campoHostnameDHCP" class="campo-oculto">
-                <div class="grid-form">
-                    <div style="grid-column: 1 / -1;">
-                        <label for="ed-hostname-libre">Hostname (DHCP)</label>
-                        <input type="text" id="ed-hostname-libre" placeholder="Ej. EQUIPO-LIBRE">
-                    </div>
-                </div>
-            </div>
-
-            <!-- ===== BLOQUE 4: Sección RED (solo Estática) ===== -->
-            <div id="ed-seccion-red">
-                <div class="seccion-titulo">Red</div>
-
-                <div class="grid-form">
-                    <div>
-                        <label for="ed-mascara">Máscara</label>
-                        <select id="ed-mascara" disabled>
-                            <option value="">-- Selecciona un cliente primero --</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="ed-puerta">Puerta de enlace</label>
-                        <select id="ed-puerta" disabled>
-                            <option value="">-- Selecciona un cliente primero --</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid-form">
-                    <div>
-                        <label for="ed-dns1">DNS 1</label>
-                        <select id="ed-dns1" disabled>
-                            <option value="">-- Selecciona un cliente primero --</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="ed-dns2">DNS 2 (opcional)</label>
-                        <select id="ed-dns2" disabled>
-                            <option value="">-- Selecciona un cliente primero --</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ===== BLOQUE 5: Admin (siempre) ===== -->
-            <div class="seccion-titulo">Administrador</div>
-            <div class="grid-form">
-                <div>
-                    <label for="ed-usuario">Dominio admin</label>
-                    <select id="ed-usuario" disabled>
-                        <option value="">-- Selecciona un cliente primero --</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="ed-password">Password admin</label>
-                    <input type="text" id="ed-password" placeholder="Password">
-                </div>
-            </div>
-
-            <!-- ===== Mensaje de error/validación ===== -->
-            <div id="editar-mensaje" class="mensaje" style="display:none;"></div>
-
-            <div class="modal-acciones">
-                <button id="editar-cancelar" class="secundario">Cancelar</button>
-                <button id="editar-confirmar">Guardar cambios</button>
+            <div class="campo-obligatorio">
+                <label for="ed-rol">Rol <span class="req">*</span></label>
+                <select id="ed-rol"></select>
             </div>
         </div>
+
+        <!-- ===== BLOQUE 2: Tipo IP ===== -->
+        <div class="seccion-titulo">Tipo de IP</div>
+        <div class="grid-form">
+            <div>
+                <label for="ed-tipoIP">Tipo IP</label>
+                <select id="ed-tipoIP">
+                    <option value="Estatica">Estática</option>
+                    <option value="DHCP">DHCP</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- ===== BLOQUE 3: Hostname (Estática) ===== -->
+        <div id="ed-campoHostnameEstatico">
+            <div class="seccion-titulo">Hostname (Estática)</div>
+            <div class="grid-form">
+                <div class="campo-obligatorio">
+                    <label for="ed-ip">IP <span class="req">*</span></label>
+                    <input type="text" id="ed-ip" placeholder="192.168.1.10">
+                </div>
+                <div>
+                    <label for="ed-numeroHost">Número host</label>
+                    <input type="text" id="ed-numeroHost" readonly>
+                </div>
+                <div class="campo-obligatorio">
+                    <label for="ed-hostnamePreview">Hostname <span class="req">*</span></label>
+                    <input type="text" id="ed-hostnamePreview" readonly placeholder="Se armará automáticamente...">
+                </div>
+            </div>
+            <div id="ed-filaCheckboxHostname" class="check-mantener" style="display:flex;">
+                <label>
+                    <input type="checkbox" id="ed-chk-hostname-manual">
+                    Escribir hostname manualmente
+                </label>
+            </div>
+        </div>
+
+        <!-- ===== BLOQUE 3b: Hostname (DHCP) ===== -->
+        <div id="ed-campoHostnameDHCP" class="campo-oculto">
+            <div class="seccion-titulo">Hostname (DHCP)</div>
+            <div class="grid-form">
+                <div style="grid-column: 1 / -1;" class="campo-obligatorio">
+                    <label for="ed-hostname-libre">Hostname <span class="req">*</span></label>
+                    <input type="text" id="ed-hostname-libre" placeholder="Ej. EQUIPO-LIBRE">
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== BLOQUE 4: Sección RED (solo Estática) ===== -->
+        <div id="ed-seccion-red">
+            <div class="seccion-titulo">Red (solo Estática)</div>
+
+            <div class="grid-form">
+                <div class="campo-obligatorio">
+                    <label for="ed-mascara">Máscara <span class="req">*</span></label>
+                    <select id="ed-mascara" disabled>
+                        <option value="">-- Selecciona un cliente primero --</option>
+                    </select>
+                </div>
+                <div class="campo-obligatorio">
+                    <label for="ed-puerta">Puerta de enlace <span class="req">*</span></label>
+                    <select id="ed-puerta" disabled>
+                        <option value="">-- Selecciona un cliente primero --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid-form">
+                <div class="campo-obligatorio">
+                    <label for="ed-dns1">DNS 1 <span class="req">*</span></label>
+                    <select id="ed-dns1" disabled>
+                        <option value="">-- Selecciona un cliente primero --</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="ed-dns2">DNS 2 (opcional)</label>
+                    <select id="ed-dns2" disabled>
+                        <option value="">-- Selecciona un cliente primero --</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== BLOQUE 5: Admin (siempre) ===== -->
+        <div class="seccion-titulo">Administrador</div>
+        <div class="grid-form">
+            <div class="campo-obligatorio">
+                <label for="ed-usuario">Dominio admin <span class="req">*</span></label>
+                <select id="ed-usuario" disabled>
+                    <option value="">-- Selecciona un cliente primero --</option>
+                </select>
+            </div>
+            <div class="campo-obligatorio">
+                <label for="ed-password">Password admin <span class="req">*</span></label>
+                <input type="text" id="ed-password" placeholder="Password">
+            </div>
+        </div>
+
+        <!-- ===== Mensaje de error/validación ===== -->
+        <div id="editar-mensaje" class="mensaje" style="display:none;"></div>
+
+        <div class="modal-acciones">
+            <button id="editar-cancelar" class="secundario">Cancelar</button>
+            <button id="editar-confirmar">Guardar cambios</button>
+        </div>
     </div>
+</div>
 
     <script src="../js/plano-renderer.js"></script>
 </body>

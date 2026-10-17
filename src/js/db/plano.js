@@ -77,7 +77,7 @@ async function listarPorLugar(idPiso) {
         .input('IdPiso', sql.Int, idPiso)
         .query(`
             SELECT P.IdUbicacion, P.IdEquipo, P.Fila, P.Columna,
-                   E.Hostname, E.TipoIP, E.IP, E.IdCliente, E.IdRolEquipo,
+                   E.Hostname, E.TipoIP, E.IP, E.IdCliente,E.IdPiso, E.IdRolEquipo,
                    E.Mascara, E.PuertaEnlace, E.DNS1, E.DNS2,
                    E.UsuarioAdmin, E.PasswordAdmin,
                    R.Codigo AS RolCodigo,
@@ -114,8 +114,9 @@ async function equiposSinUbicacion(idPiso) {
                    ON DA.IdCliente = E.IdCliente
                   AND DA.Usuario   = E.UsuarioAdmin
             WHERE E.IdPiso = @IdPiso
-              AND E.IdEquipo NOT IN (
-                  SELECT IdEquipo FROM PlanoUbicaciones WHERE IdPiso = @IdPiso
+              AND NOT EXISTS (
+                  SELECT 1 FROM PlanoUbicaciones P
+                  WHERE P.IdEquipo = E.IdEquipo AND P.IdPiso = @IdPiso
               )
         `);
     return r.recordset;

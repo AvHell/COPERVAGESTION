@@ -208,7 +208,7 @@ const CSS_PDF = `
     }
 
     .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
-    .celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
+    .celda[data-rol="SPR"] { background: #fcdcdc; border-color: #ff0000; }
     .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
     .celda[data-rol="GRN"] { background: #f3e8ff; border-color: #a855f7; }
     .celda[data-rol="CRD"] { background: #ccfbf1; border-color: #14b8a6; }
@@ -264,7 +264,7 @@ const CSS_PDF = `
         background: #94a3b8;
     }
     .badge-rol[data-rol="AGT"] { background: #3b82f6; }
-    .badge-rol[data-rol="SPR"] { background: #22c55e; }
+    .badge-rol[data-rol="SPR"] { background: #f70000; }
     .badge-rol[data-rol="CLD"] { background: #f97316; }
     .badge-rol[data-rol="GRN"] { background: #a855f7; }
     .badge-rol[data-rol="CRD"] { background: #14b8a6; }

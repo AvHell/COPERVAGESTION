@@ -359,7 +359,7 @@ body.plano-body {
    ========================================================= */
 
 .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
-.celda[data-rol="SPR"] { background: #dcfce7; border-color: #22c55e; }
+.celda[data-rol="SPR"] { background: #fcdcdc; border-color: #ff0000; }
 .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
 .celda[data-rol="GRN"] { background: #f3e8ff; border-color: #a855f7; }
 .celda[data-rol="CRD"] { background: #ccfbf1; border-color: #14b8a6; }
@@ -367,7 +367,7 @@ body.plano-body {
 .celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
 
 .celda[data-rol="AGT"] .icono-pc { color: #1e40af; }
-.celda[data-rol="SPR"] .icono-pc { color: #166534; }
+.celda[data-rol="SPR"] .icono-pc { color: #931f1f; }
 .celda[data-rol="CLD"] .icono-pc { color: #9a3412; }
 .celda[data-rol="GRN"] .icono-pc { color: #6b21a8; }
 .celda[data-rol="CRD"] .icono-pc { color: #115e59; }
@@ -557,7 +557,7 @@ body.plano-body {
 }
 
 .tooltip-plano .tooltip-header .rol-badge[data-rol="AGT"] { background: #3b82f6; }
-.tooltip-plano .tooltip-header .rol-badge[data-rol="SPR"] { background: #22c55e; }
+.tooltip-plano .tooltip-header .rol-badge[data-rol="SPR"] { background: #ff0000; }
 .tooltip-plano .tooltip-header .rol-badge[data-rol="CLD"] { background: #f97316; }
 .tooltip-plano .tooltip-header .rol-badge[data-rol="GRN"] { background: #a855f7; }
 .tooltip-plano .tooltip-header .rol-badge[data-rol="CRD"] { background: #14b8a6; }
@@ -758,7 +758,7 @@ body.plano-body {
 .filtro-rol-chip:hover { transform: translateY(-1px); }
 
 .filtro-rol-chip.activo[data-rol="AGT"] { background: #3b82f6; color: #fff; border-color: #2563eb; }
-.filtro-rol-chip.activo[data-rol="SPR"] { background: #22c55e; color: #fff; border-color: #16a34a; }
+.filtro-rol-chip.activo[data-rol="SPR"] { background: #ff0000; color: #fff; border-color: #ff0000; }
 .filtro-rol-chip.activo[data-rol="CLD"] { background: #f97316; color: #fff; border-color: #ea580c; }
 .filtro-rol-chip.activo[data-rol="GRN"] { background: #a855f7; color: #fff; border-color: #9333ea; }
 .filtro-rol-chip.activo[data-rol="CRD"] { background: #14b8a6; color: #fff; border-color: #0d9488; }
@@ -809,7 +809,7 @@ body.plano-body {
 }
 
 .lista-sin-ubicar li[data-rol="AGT"] .rol-punto { background: #3b82f6; }
-.lista-sin-ubicar li[data-rol="SPR"] .rol-punto { background: #22c55e; }
+.lista-sin-ubicar li[data-rol="SPR"] .rol-punto { background: #f30000; }
 .lista-sin-ubicar li[data-rol="CLD"] .rol-punto { background: #f97316; }
 .lista-sin-ubicar li[data-rol="GRN"] .rol-punto { background: #a855f7; }
 .lista-sin-ubicar li[data-rol="CRD"] .rol-punto { background: #14b8a6; }

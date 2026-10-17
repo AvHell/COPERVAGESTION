@@ -54,6 +54,9 @@ const PALETAS_CLIENTE = {
     // AT&T → azul claro
     ATT:    { bg: 'linear-gradient(135deg, #e0f2fe, #bae6fd)', text: '#0369a1', border: '#0ea5e9' },
 
+      // PHIE Palacio de Hierror
+    PHIE:    { bg: 'linear-gradient(135deg, #eeee0d, #fdfbba)', text: '#080808c0', border: '#e9e90e' },
+
     // Calidad → rosa suave (no chillón)
     CLD:    { bg: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', text: '#be185d', border: '#f472b6' },
 
@@ -134,7 +137,7 @@ function renderBadgeCliente(codigo, nombre = null) {
 
 const PALETAS_ROL = {
     AGT: { bg: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', text: '#1e40af', border: '#60a5fa' },
-    SPR: { bg: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', text: '#166534', border: '#4ade80' },
+    SPR: { bg: 'linear-gradient(135deg, #fcdcdc, #f7bbbb)', text: '#651616', border: '#de4a4a' },
     CLD: { bg: 'linear-gradient(135deg, #ffedd5, #fed7aa)', text: '#9a3412', border: '#fb923c' },
     GRN: { bg: 'linear-gradient(135deg, #e9d5ff, #d8b4fe)', text: '#6b21a8', border: '#c084fc' },
     CRD: { bg: 'linear-gradient(135deg, #ccfbf1, #99f6e4)', text: '#115e59', border: '#5eead4' },

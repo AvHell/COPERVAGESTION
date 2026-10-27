@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld('api', {
     equipos: {
         listar:               ()                => ipcRenderer.invoke('equipos:listar'),
         crear:                (datos)           => ipcRenderer.invoke('equipos:crear', datos),
+        obtenerPorId:         (id)              => ipcRenderer.invoke('equipos:obtenerPorId', id),  
         actualizar:           (id, datos)       => ipcRenderer.invoke('equipos:actualizar', id, datos),
         eliminar:             (id)              => ipcRenderer.invoke('equipos:eliminar', id),
         verificarIPDuplicada: (ip, idExcluir)   => ipcRenderer.invoke('equipos:verificarIPDuplicada', ip, idExcluir)

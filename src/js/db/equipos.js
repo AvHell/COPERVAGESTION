@@ -329,4 +329,4 @@ async function eliminar(id) {
     }
 }
 
-module.exports = { listar, crear, actualizar, eliminar, verificarIPDuplicada };
+module.exports = { listar, obtenerPorId, crear, actualizar, eliminar, verificarIPDuplicada };

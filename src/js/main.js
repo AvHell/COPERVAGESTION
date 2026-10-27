@@ -64,10 +64,9 @@ console.log('===========================================');
    APP USER MODEL ID (Windows — barra de tareas)
    ========================================================= */
 if (process.platform === 'win32') {
-    const pkg = require('../../package.json'); // ajusta la ruta relativa
-    app.setAppUserModelId(app.isPackaged ? pkg.build.appId : pkg.build.appId);
+    const APP_ID = 'com.coperva.proyectoequipos'; // 
+    app.setAppUserModelId(APP_ID);
 }
-
 /* =========================================================
    ESTADO GLOBAL
    ========================================================= */
@@ -893,6 +892,7 @@ ipcMain.handle('rangos:eliminar',   async (_e, id) => { const err = requerirSesi
    IPC: EQUIPOS
    ========================================================= */
 ipcMain.handle('equipos:listar',               async () => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.listar(); });
+ipcMain.handle('equipos:obtenerPorId',         async (_e, id) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.obtenerPorId(id); }); 
 ipcMain.handle('equipos:crear',                async (_e, datos) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.crear(datos); });
 ipcMain.handle('equipos:actualizar',           async (_e, id, datos) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.actualizar(id, datos); });
 ipcMain.handle('equipos:eliminar',             async (_e, id) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.eliminar(id); });

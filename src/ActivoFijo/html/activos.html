@@ -28,7 +28,7 @@
                 <circle cx="11" cy="11" r="8"/>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
-            <input type="text" id="input-busqueda" placeholder="Buscar por serie, IMEI, teléfono, modelo...">
+            <input type="text" id="input-busqueda" placeholder="Buscar por serie, IMEI, teléfono, modelo, marca, usuario...">
             <button type="button" id="btn-limpiar-busqueda" class="btn-limpiar oculto" title="Limpiar búsqueda">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/>
@@ -121,14 +121,16 @@
                     <th>Cartera</th>
                     <th>Sitio</th>
                     <th>Precio</th>
-                    <th style="width:230px; text-align:right;">Acciones</th>
+                    <th style="width:290px; text-align:right;">Acciones</th>
                 </tr>
             </thead>
             <tbody id="tabla-body"></tbody>
         </table>
     </div>
 
-    <!-- MODAL -->
+    <!-- =========================================================
+         MODAL NUEVO / EDITAR
+         ========================================================= -->
     <div id="modal-activo" class="modal-overlay" style="display:none;">
         <div class="modal-base">
             <div class="modal-header">

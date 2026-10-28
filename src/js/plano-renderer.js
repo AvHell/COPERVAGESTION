@@ -1557,27 +1557,53 @@ function limpiarRenderPanel(panel) {
    CARGA DE DATOS
    ========================================================= */
 
+// plano-renderer.js
+
 async function cargarClientes() {
-    clientes = await window.api.clientes.listar();
+    try {
+        const res = await window.api.clientes.listar();
+        if (Array.isArray(res)) {
+            clientes = res;
+        } else {
+            console.warn('No se pudieron cargar los clientes:', res);
+            clientes = [];
+        }
+    } catch (err) {
+        console.error('Error al cargar clientes:', err);
+        clientes = [];
+    }
 }
 
 async function cargarPisosPanel(panel, seleccionarPrimero) {
-    const todos = await window.api.pisos.listar();
-    pisos = todos;
+    try {
+        const todos = await window.api.pisos.listar();
+        
+        // VALIDACIÓN CLAVE: Si no es un array, salimos.
+        if (!Array.isArray(todos)) {
+            console.error('El backend no devolvió una lista de pisos:', todos);
+            const select = panel.sufijo === 'izq' ? selectLugarIzq : selectLugarDer;
+            select.innerHTML = '<option value="">Error al cargar pisos</option>';
+            return;
+        }
 
-    const select = panel.sufijo === 'izq' ? selectLugarIzq : selectLugarDer;
-    select.innerHTML = '<option value="">-- Piso --</option>';
-    todos.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.IdPiso;
-        opt.textContent = p.Nombre;
-        select.appendChild(opt);
-    });
+        pisos = todos;
 
-    if (seleccionarPrimero && todos.length > 0) {
-        select.value = todos[0].IdPiso;
-        panel.idPiso = todos[0].IdPiso;
-        await cargarPanel(panel);
+        const select = panel.sufijo === 'izq' ? selectLugarIzq : selectLugarDer;
+        select.innerHTML = '<option value="">-- Piso --</option>';
+        todos.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.IdPiso;
+            opt.textContent = p.Nombre;
+            select.appendChild(opt);
+        });
+
+        if (seleccionarPrimero && todos.length > 0) {
+            select.value = todos[0].IdPiso;
+            panel.idPiso = todos[0].IdPiso;
+            await cargarPanel(panel);
+        }
+    } catch (err) {
+        console.error('Error en cargarPisosPanel:', err);
     }
 }
 
@@ -3581,6 +3607,12 @@ document.addEventListener('keydown', (ev) => {
    INICIO
    ========================================================= */
 (async () => {
+    // 1. INICIALIZAR PERMISOS PRIMERO (Oculta/deshabilita botones)
+    if (window.PermisosUI) {
+        await window.PermisosUI.init();
+    }
+
+    // 2. Cargar el resto de datos
     await cargarClientes();
     roles = await window.api.roles.listar();
     await cargarPisosPanel(panelIzq, false);

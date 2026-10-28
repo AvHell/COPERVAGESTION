@@ -925,6 +925,27 @@ select#idRol:focus {
 }
 
 /* =========================================================
+   BUSCADOR DE PERMISOS
+   ========================================================= */
+.permisos-buscador {
+    margin: 12px 0 8px;
+}
+.permisos-buscador input[type="search"] {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cfd8e3;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color .15s;
+}
+.permisos-buscador input[type="search"]:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, .15);
+}
+
+/* =========================================================
    MODAL ROL
    ========================================================= */
 .modal-rol {

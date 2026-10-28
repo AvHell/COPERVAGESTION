@@ -1,6 +1,6 @@
 {
   "name": "proyectoequipos",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Sistema de inventario de equipos por cliente, piso y rol",
   "main": "src/js/main.js",
   "author": "Coperva Servicios",
@@ -53,25 +53,25 @@
     "extraMetadata": {
       "main": "src/js/main.js"
     },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "src/img/logo.ico",
-      "requestedExecutionLevel": "asInvoker",
-      "signAndEditExecutable": false
+   "win": {
+  "target": [
+    {
+      "target": "nsis",
+      "arch": [
+        "x64"
+      ]
     },
+    {
+      "target": "portable",
+      "arch": [
+        "x64"
+      ]
+    }
+  ],
+  "icon": "src/img/logo.ico",
+  "requestedExecutionLevel": "asInvoker",
+  "signAndEditExecutable": true
+},
     "nsis": {
       "oneClick": false,
       "perMachine": false,

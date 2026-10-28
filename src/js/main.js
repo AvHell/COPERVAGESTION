@@ -41,47 +41,36 @@ const PRELOAD_AF = path.join(__dirname, '..', 'ActivoFijo', 'preload-activofijo.
 const PLANTILLA_PDF = path.join(__dirname, '..', '..', 'Formatos', 'ResponsivaCelulares.pdf');
 
 /* =========================================================
-   ICONO DE LA APLICACIÓN
-   ---------------------------------------------------------
-   En desarrollo: src/img/logo.ico (relativo a src/js/main.js)
-   En producción: process.resourcesPath/logo.ico (vía extraResources)
+   ICONO
    ========================================================= */
 const ICONO_APP = app.isPackaged
     ? path.join(process.resourcesPath, 'logo.ico')
     : path.join(__dirname, '..', 'img', 'logo.ico');
 
 console.log('===========================================');
-console.log('Ruta plantilla PDF:');
-console.log(PLANTILLA_PDF);
-console.log('¿Existe?', fs.existsSync(PLANTILLA_PDF));
-console.log('-------------------------------------------');
-console.log('Ruta ícono:');
-console.log(ICONO_APP);
-console.log('¿Existe?', fs.existsSync(ICONO_APP));
+console.log('Ruta plantilla PDF:', PLANTILLA_PDF, '¿Existe?', fs.existsSync(PLANTILLA_PDF));
+console.log('Ruta ícono:', ICONO_APP, '¿Existe?', fs.existsSync(ICONO_APP));
 console.log('===========================================');
 
-/* =========================================================
-   APP USER MODEL ID (Windows — barra de tareas)
-   ========================================================= */
 if (process.platform === 'win32') {
-    const APP_ID = 'com.coperva.proyectoequipos'; // 
-    app.setAppUserModelId(APP_ID);
+    app.setAppUserModelId('com.coperva.proyectoequipos');
 }
+
 /* =========================================================
    ESTADO GLOBAL
    ========================================================= */
-let usuarioActual       = null;
-let cerrandoPorLogout   = false;   // bandera para no matar la app durante transiciones
-let motivoLoginPendiente = null;   // 'logout' | 'expirada' | null
+let usuarioActual        = null;
+let cerrandoPorLogout    = false;
+let motivoLoginPendiente = null;
 
 /* =========================================================
-   OPCIONES DE ARRANQUE
+   ARRANQUE
    ========================================================= */
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 app.commandLine.appendSwitch('disable-http-cache');
 
 /* =========================================================
-   AUTO-UPDATER — CONFIGURACIÓN
+   AUTO-UPDATER
    ========================================================= */
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
@@ -93,9 +82,6 @@ try {
     autoUpdater.logger = console;
 }
 
-/* ---------------------------------------------------------
-   Funciones auxiliares para mostrar diálogos
-   --------------------------------------------------------- */
 async function preguntarDescargar(info) {
     const { response } = await dialog.showMessageBox({
         type: 'info',
@@ -122,9 +108,6 @@ async function preguntarInstalar(info) {
     return response === 0;
 }
 
-/* ---------------------------------------------------------
-   Eventos del autoUpdater
-   --------------------------------------------------------- */
 autoUpdater.on('checking-for-update', () => console.log('[Updater] Buscando actualizaciones...'));
 
 autoUpdater.on('update-available', async (info) => {
@@ -247,9 +230,6 @@ function haySesion() {
     return !!usuarioActual;
 }
 
-/**
- * Envía un mensaje a TODAS las ventanas para avisar que la sesión terminó.
- */
 function notificarSesionCerrada(motivo = 'sesion-cerrada') {
     for (const nombre in ventanas) {
         const w = ventanas[nombre];
@@ -259,15 +239,10 @@ function notificarSesionCerrada(motivo = 'sesion-cerrada') {
     }
 }
 
-/**
- * Cierra TODAS las ventanas y abre el login.
- * Primero asegura el login para no quedar sin ventanas (evita window-all-closed → app.quit()).
- */
 function volverAlLogin(motivo = null) {
     motivoLoginPendiente = motivo;
     cerrandoPorLogout = true;
 
-    // 1) Crear/asegurar el login PRIMERO (así nunca hay 0 ventanas)
     if (!ventanas['login'] || ventanas['login'].isDestroyed()) {
         crearLoginWindow();
     } else {
@@ -276,21 +251,18 @@ function volverAlLogin(motivo = null) {
         if (!w.isVisible()) w.show();
         w.focus();
 
-        // Si ya estaba abierto, avisarle del motivo
         if (motivoLoginPendiente) {
             w.webContents.send('login:motivo', motivoLoginPendiente);
             motivoLoginPendiente = null;
         }
     }
 
-    // 2) Cerrar el resto de ventanas (excepto login)
     for (const nombre in ventanas) {
         if (nombre === 'login') continue;
         const w = ventanas[nombre];
         if (w && !w.isDestroyed()) w.close();
     }
 
-    // 3) Liberar la bandera cuando ya hay login vivo
     setTimeout(() => {
         cerrandoPorLogout = false;
         console.log('[Sesión] Login restaurado. Ventanas activas:',
@@ -298,9 +270,6 @@ function volverAlLogin(motivo = null) {
     }, 300);
 }
 
-/**
- * Cierra la ventana actual y reabre el menú si hay sesión, o el login si no.
- */
 function volverAlMenu(winActual) {
     if (winActual && !winActual.isDestroyed()) winActual.close();
 
@@ -321,22 +290,47 @@ function volverAlMenu(winActual) {
     }, 100);
 }
 
+/* =========================================================
+   GATE DE PERMISOS
+   ---------------------------------------------------------
+   Una sola función soporta:
+     - Módulos simples:   'equipos', 'plano', 'catalogos'...
+     - Acciones finas:    'equipos:crear', 'ventas:eliminar'
+     - Campos/columnas:   'clientes:campo:credito'
+   ========================================================= */
+function tienePermiso(clave) {
+    if (!usuarioActual) return false;
+    if (usuarioActual.Rol === 'ADMIN') return true;
+    return !!usuarioActual.Permisos?.[clave];
+}
+
+function negarAcceso(clave) {
+    console.warn(`[Permisos] Acceso denegado a "${clave}" para usuario ${usuarioActual?.NombreUsuario || '?'}`);
+    return {
+        ok: false,
+        mensaje: `No tienes permiso para: "${clave}".`
+    };
+}
+
 /**
- * Gate maestro: valida que haya sesión y que el usuario tenga permiso.
- * Devuelve null si todo OK, o un objeto de error si no.
+ * Gate maestro: valida sesión y permiso.
+ * - requerirSesion()              → solo sesión
+ * - requerirSesion('equipos')     → módulo
+ * - requerirSesion('equipos:crear') → acción fina
+ * Devuelve null si OK, o { ok:false, ... } si no.
  */
-function requerirSesion(modulo = null) {
+function requerirSesion(clave = null) {
     if (!haySesion()) {
         return { ok: false, mensaje: 'Tu sesión ha expirado. Inicia sesión nuevamente.', sinSesion: true };
     }
-    if (modulo && !tienePermiso(modulo)) {
-        return negarAcceso(modulo);
+    if (clave && !tienePermiso(clave)) {
+        return negarAcceso(clave);
     }
     return null;
 }
 
 /* =========================================================
-   FÁBRICA DE VENTANAS (robusta)
+   FÁBRICA DE VENTANAS
    ========================================================= */
 function crearVentana(nombre, archivo, opciones = {}) {
     const existente = ventanas[nombre];
@@ -390,7 +384,7 @@ function crearVentana(nombre, archivo, opciones = {}) {
 }
 
 /* =========================================================
-   VENTANAS — SISTEMA EXISTENTE
+   VENTANAS — SISTEMA
    ========================================================= */
 const crearLoginWindow     = () => crearVentana('login',     'login.html',     { title: 'Iniciar Sesión', maximizar: false });
 const crearMenuWindow      = () => crearVentana('menu',      'menu.html',      { title: 'Menú Principal' });
@@ -401,7 +395,7 @@ const crearUsuariosWindow  = () => crearVentana('usuarios',  'usuarios.html',  {
 const crearHistoricoWindow = () => crearVentana('historico', 'historico.html', { title: 'Histórico del Plano' });
 
 /* =========================================================
-   VENTANAS — MÓDULO ACTIVO FIJO
+   VENTANAS — ACTIVO FIJO
    ========================================================= */
 const crearActivoFijoCatalogosWindow = () => crearVentana(
     'activofijo-catalogos', 'catalogos.html',
@@ -444,23 +438,6 @@ function asegurarMenuAbierto() {
 }
 
 /* =========================================================
-   GATE DE PERMISOS
-   ========================================================= */
-function tienePermiso(modulo) {
-    if (!usuarioActual) return false;
-    if (usuarioActual.Rol === 'ADMIN') return true;
-    return !!usuarioActual.Permisos?.[modulo];
-}
-
-function negarAcceso(modulo) {
-    console.warn(`[Permisos] Acceso denegado a "${modulo}" para usuario ${usuarioActual?.NombreUsuario || '?'}`);
-    return {
-        ok: false,
-        mensaje: `No tienes permisos para acceder al módulo "${modulo}".`
-    };
-}
-
-/* =========================================================
    IPC: SESIÓN
    ========================================================= */
 ipcMain.handle('login', async (_e, nombreUsuario, password) => {
@@ -473,9 +450,9 @@ ipcMain.handle('login', async (_e, nombreUsuario, password) => {
             const rol = await permisosDB.obtenerRolDeUsuario(usuarioActual.IdUsuario);
             const permisos = await permisosDB.obtenerPermisosDeUsuario(usuarioActual.IdUsuario);
 
-            usuarioActual.Rol        = rol ? rol.Codigo : 'SIN_ROL';
-            usuarioActual.RolNombre  = rol ? rol.Nombre : 'Sin rol asignado';
-            usuarioActual.Permisos   = permisos;
+            usuarioActual.Rol       = rol ? rol.Codigo : 'SIN_ROL';
+            usuarioActual.RolNombre = rol ? rol.Nombre : 'Sin rol asignado';
+            usuarioActual.Permisos  = permisos;
 
             console.log(`[Login] ${usuarioActual.NombreUsuario} → Rol: ${usuarioActual.Rol}, Permisos: ${Object.keys(permisos).length}`);
         } catch (err) {
@@ -491,31 +468,17 @@ ipcMain.handle('login', async (_e, nombreUsuario, password) => {
 
 ipcMain.handle('sesion:hay', () => haySesion());
 
-/**
- * Motivo con el que se llegó al login (para que el renderer muestre SweetAlert).
- * Se consume una vez y se resetea.
- */
 ipcMain.handle('login:motivo-consumir', () => {
     const m = motivoLoginPendiente;
     motivoLoginPendiente = null;
     return m;
 });
 
-/**
- * Logout: cierra todo y vuelve al login SIN diálogo nativo.
- * La confirmación la maneja el renderer con SweetAlert2.
- */
 ipcMain.handle('logout', async () => {
     console.log('[Sesión] Logout solicitado. Usuario previo:', usuarioActual?.NombreUsuario || '—');
-
     usuarioActual = null;
-
-    // Avisar a todas las ventanas (por si alguna quiere reaccionar)
     notificarSesionCerrada('logout-manual');
-
-    // Cerrar TODO y abrir login (sin matar la app)
     volverAlLogin('logout');
-
     return { ok: true };
 });
 
@@ -537,6 +500,28 @@ ipcMain.handle('permisos:mi-rol', () => {
     };
 });
 
+/**
+ * Permite al renderer preguntar por una clave concreta sin traer todo el mapa.
+ * Devuelve { ok: true, permitido: bool } o { ok:false, sinSesion:true }.
+ */
+ipcMain.handle('permisos:puedo', (_e, clave) => {
+    if (!haySesion()) return { ok: false, sinSesion: true, permitido: false };
+    return { ok: true, permitido: tienePermiso(clave) };
+});
+
+/**
+ * Catálogo agrupado (para pintar la matriz de roles).
+ * No requiere sesión: es información estática.
+ */
+ipcMain.handle('permisos:catalogo', () => {
+    try {
+        return permisosDB.catalogoPermisos();
+    } catch (err) {
+        console.error('[Permisos] Error cargando catálogo:', err);
+        return [];
+    }
+});
+
 ipcMain.handle('permisos:listar-roles', async () => {
     const err = requerirSesion('usuarios'); if (err) return err;
     return await permisosDB.listarRoles();
@@ -553,7 +538,7 @@ ipcMain.handle('permisos:actualizar', async (_e, idRol, modulo, permitido) => {
 });
 
 ipcMain.handle('permisos:asignar-rol', async (_e, idUsuario, idRol) => {
-    const err = requerirSesion('usuarios'); if (err) return err;
+    const err = requerirSesion('usuarios:asignar-rol'); if (err) return err;
     return await permisosDB.asignarRolAUsuario(idUsuario, idRol);
 });
 
@@ -578,7 +563,7 @@ ipcMain.handle('permisos:eliminar-rol', async (_e, idRol) => {
 });
 
 /* =========================================================
-   IPC: ABRIR VENTANAS DEL SISTEMA (con gate de sesión + permiso)
+   IPC: ABRIR VENTANAS (con gate)
    ========================================================= */
 ipcMain.handle('abrir-menu', async (e) => {
     if (!haySesion()) {
@@ -586,7 +571,6 @@ ipcMain.handle('abrir-menu', async (e) => {
         return { ok: true };
     }
 
-    // Crear menú ANTES de cerrar login (así nunca hay 0 ventanas)
     asegurarMenuAbierto();
 
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -604,35 +588,11 @@ ipcMain.handle('abrir-menu', async (e) => {
     return { ok: true };
 });
 
-ipcMain.handle('abrir-catalogos', () => {
-    const err = requerirSesion('catalogos'); if (err) return err;
-    crearCatalogosWindow();
-    return { ok: true };
-});
-
-ipcMain.handle('abrir-equipos', () => {
-    const err = requerirSesion('equipos'); if (err) return err;
-    crearEquiposWindow();
-    return { ok: true };
-});
-
-ipcMain.handle('abrir-plano', () => {
-    const err = requerirSesion('plano'); if (err) return err;
-    crearPlanoWindow();
-    return { ok: true };
-});
-
-ipcMain.handle('abrir-usuarios', () => {
-    const err = requerirSesion('usuarios'); if (err) return err;
-    crearUsuariosWindow();
-    return { ok: true };
-});
-
-ipcMain.handle('abrir-historico', () => {
-    const err = requerirSesion('historico'); if (err) return err;
-    crearHistoricoWindow();
-    return { ok: true };
-});
+ipcMain.handle('abrir-catalogos', () => { const err = requerirSesion('catalogos'); if (err) return err; crearCatalogosWindow(); return { ok: true }; });
+ipcMain.handle('abrir-equipos',   () => { const err = requerirSesion('equipos');   if (err) return err; crearEquiposWindow();   return { ok: true }; });
+ipcMain.handle('abrir-plano',     () => { const err = requerirSesion('plano');     if (err) return err; crearPlanoWindow();     return { ok: true }; });
+ipcMain.handle('abrir-usuarios',  () => { const err = requerirSesion('usuarios');  if (err) return err; crearUsuariosWindow();  return { ok: true }; });
+ipcMain.handle('abrir-historico', () => { const err = requerirSesion('historico'); if (err) return err; crearHistoricoWindow(); return { ok: true }; });
 
 ipcMain.handle('volver-menu', (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -647,64 +607,39 @@ ipcMain.handle('ventana:cerrar-actual', (e) => {
 });
 
 /* =========================================================
-   IPC: ABRIR VENTANAS DE ACTIVO FIJO (con gate)
+   IPC: ACTIVO FIJO — abrir ventanas
    ========================================================= */
-ipcMain.handle('abrir-activofijo-catalogos', () => {
-    const err = requerirSesion('activofijo_catalogos'); if (err) return err;
-    crearActivoFijoCatalogosWindow();
-    return { ok: true };
-});
-
-ipcMain.handle('abrir-activofijo-activos', () => {
-    const err = requerirSesion('activofijo_activos'); if (err) return err;
-    crearActivoFijoActivosWindow();
-    return { ok: true };
-});
-
-ipcMain.handle('abrir-activofijo-responsivas', () => {
-    const err = requerirSesion('activofijo_responsivas'); if (err) return err;
-    crearActivoFijoResponsivasWindow();
-    return { ok: true };
-});
-
-ipcMain.handle('abrir-activofijo-reportes', () => {
-    const err = requerirSesion('activofijo_reportes'); if (err) return err;
-    crearActivoFijoReportesWindow();
-    return { ok: true };
-});
-
-ipcMain.handle('abrir-activofijo-importar', () => {
-    const err = requerirSesion('activofijo_importar'); if (err) return err;
-    crearActivoFijoImportarWindow();
-    return { ok: true };
-});
+ipcMain.handle('abrir-activofijo-catalogos',   () => { const err = requerirSesion('activofijo_catalogos');   if (err) return err; crearActivoFijoCatalogosWindow();   return { ok: true }; });
+ipcMain.handle('abrir-activofijo-activos',     () => { const err = requerirSesion('activofijo_activos');     if (err) return err; crearActivoFijoActivosWindow();     return { ok: true }; });
+ipcMain.handle('abrir-activofijo-responsivas', () => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; crearActivoFijoResponsivasWindow(); return { ok: true }; });
+ipcMain.handle('abrir-activofijo-reportes',    () => { const err = requerirSesion('activofijo_reportes');    if (err) return err; crearActivoFijoReportesWindow();    return { ok: true }; });
+ipcMain.handle('abrir-activofijo-importar',    () => { const err = requerirSesion('activofijo_importar');    if (err) return err; crearActivoFijoImportarWindow();    return { ok: true }; });
 
 /* =========================================================
-   IPC: CATÁLOGOS DE ACTIVO FIJO
+   IPC: CATÁLOGOS AF
    ========================================================= */
-ipcMain.handle('af-catalogos-listar',     async (_e, clave, filtros)   => { const err = requerirSesion('activofijo_catalogos'); if (err) return err; return await activoFijoCatalogosDB.listar(clave, filtros || {}); });
-ipcMain.handle('af-catalogos-crear',      async (_e, clave, datos)     => { const err = requerirSesion('activofijo_catalogos'); if (err) return err; return await activoFijoCatalogosDB.crear(clave, datos); });
-ipcMain.handle('af-catalogos-actualizar', async (_e, clave, id, datos) => { const err = requerirSesion('activofijo_catalogos'); if (err) return err; return await activoFijoCatalogosDB.actualizar(clave, id, datos); });
-ipcMain.handle('af-catalogos-eliminar',   async (_e, clave, id)        => { const err = requerirSesion('activofijo_catalogos'); if (err) return err; return await activoFijoCatalogosDB.eliminar(clave, id); });
-ipcMain.handle('af-catalogos-restaurar',  async (_e, clave, id)        => { const err = requerirSesion('activofijo_catalogos'); if (err) return err; return await activoFijoCatalogosDB.restaurar(clave, id); });
+ipcMain.handle('af-catalogos-listar',     async (_e, clave, filtros)   => { const err = requerirSesion('af-cat:listado:ver'); if (err) return err; return await activoFijoCatalogosDB.listar(clave, filtros || {}); });
+ipcMain.handle('af-catalogos-crear',      async (_e, clave, datos)     => { const err = requerirSesion('af-cat:crear');       if (err) return err; return await activoFijoCatalogosDB.crear(clave, datos); });
+ipcMain.handle('af-catalogos-actualizar', async (_e, clave, id, datos) => { const err = requerirSesion('af-cat:editar');      if (err) return err; return await activoFijoCatalogosDB.actualizar(clave, id, datos); });
+ipcMain.handle('af-catalogos-eliminar',   async (_e, clave, id)        => { const err = requerirSesion('af-cat:eliminar');    if (err) return err; return await activoFijoCatalogosDB.eliminar(clave, id); });
+ipcMain.handle('af-catalogos-restaurar',  async (_e, clave, id)        => { const err = requerirSesion('af-cat:restaurar');   if (err) return err; return await activoFijoCatalogosDB.restaurar(clave, id); });
 
 /* =========================================================
-   IPC: ACTIVOS
+   IPC: ACTIVOS AF
    ========================================================= */
-ipcMain.handle('af-activos-listar',     async (_e, filtros)  => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listar(filtros || {}); });
-ipcMain.handle('af-activos-obtener',    async (_e, id)       => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.obtener(id); });
-ipcMain.handle('af-activos-crear',      async (_e, datos)    => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.crear(datos, usuarioActual?.IdUsuario); });
-ipcMain.handle('af-activos-actualizar', async (_e, id, datos)=> { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario); });
-ipcMain.handle('af-activos-eliminar',   async (_e, id, motivo) => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
-ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo) => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.restaurar(id, usuarioActual?.IdUsuario, motivo || null); });
-ipcMain.handle('af-activos-historico',  async (_e, id)         => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.historico(id); });
+ipcMain.handle('af-activos-listar',     async (_e, filtros)   => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.listar(filtros || {}); });
+ipcMain.handle('af-activos-obtener',    async (_e, id)        => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.obtener(id); });
+ipcMain.handle('af-activos-crear',      async (_e, datos)     => { const err = requerirSesion('af-act:crear');       if (err) return err; return await activoFijoActivosDB.crear(datos, usuarioActual?.IdUsuario); });
+ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => { const err = requerirSesion('af-act:editar');      if (err) return err; return await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario); });
+ipcMain.handle('af-activos-eliminar',   async (_e, id, motivo)=> { const err = requerirSesion('af-act:eliminar');    if (err) return err; return await activoFijoActivosDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
+ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo)=> { const err = requerirSesion('af-act:restaurar');   if (err) return err; return await activoFijoActivosDB.restaurar(id, usuarioActual?.IdUsuario, motivo || null); });
+ipcMain.handle('af-activos-historico',  async (_e, id)        => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.historico(id); });
 
 ipcMain.handle('af-activos-lista-tipos',    async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarTipos(); });
 ipcMain.handle('af-activos-lista-marcas',   async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarMarcas(); });
 ipcMain.handle('af-activos-lista-estados',  async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarEstados(); });
 ipcMain.handle('af-activos-lista-estatus',  async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarEstatus(); });
 ipcMain.handle('af-activos-lista-carteras', async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCarteras(); });
-
 ipcMain.handle('af-activos-lista-sitios',          async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarSitios(); });
 ipcMain.handle('af-activos-lista-subtipos',        async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarSubtipos(); });
 ipcMain.handle('af-activos-lista-voltajes',        async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarVoltajes(); });
@@ -713,50 +648,50 @@ ipcMain.handle('af-activos-lista-tamanios',        async () => { const err = req
 ipcMain.handle('af-activos-lista-capacidades',     async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCapacidades(); });
 
 /* =========================================================
-   IPC: RESPONSIVAS
+   IPC: RESPONSIVAS AF
    ========================================================= */
-ipcMain.handle('af-resp-listar',              async (_e, filtros)    => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listar(filtros || {}); });
-ipcMain.handle('af-resp-obtener',             async (_e, id)         => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.obtener(id); });
-ipcMain.handle('af-resp-activos-disponibles', async ()               => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.activosDisponibles(); });
-ipcMain.handle('af-resp-crear',               async (_e, datos)      => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.crear(datos, usuarioActual?.IdUsuario); });
-ipcMain.handle('af-resp-actualizar',          async (_e, id, datos)  => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.actualizar(id, datos, usuarioActual?.IdUsuario); });
-ipcMain.handle('af-resp-devolver',            async (_e, id, f, obs) => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.devolver(id, f, obs, usuarioActual?.IdUsuario); });
-ipcMain.handle('af-resp-eliminar',            async (_e, id, motivo) => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
+ipcMain.handle('af-resp-listar',              async (_e, filtros)    => { const err = requerirSesion('af-resp:listado:ver'); if (err) return err; return await activoFijoResponsivasDB.listar(filtros || {}); });
+ipcMain.handle('af-resp-obtener',             async (_e, id)         => { const err = requerirSesion('af-resp:listado:ver'); if (err) return err; return await activoFijoResponsivasDB.obtener(id); });
+ipcMain.handle('af-resp-activos-disponibles', async ()               => { const err = requerirSesion('af-resp:crear');       if (err) return err; return await activoFijoResponsivasDB.activosDisponibles(); });
+ipcMain.handle('af-resp-crear',               async (_e, datos)      => { const err = requerirSesion('af-resp:crear');       if (err) return err; return await activoFijoResponsivasDB.crear(datos, usuarioActual?.IdUsuario); });
+ipcMain.handle('af-resp-actualizar',          async (_e, id, datos)  => { const err = requerirSesion('af-resp:editar');      if (err) return err; return await activoFijoResponsivasDB.actualizar(id, datos, usuarioActual?.IdUsuario); });
+ipcMain.handle('af-resp-devolver',            async (_e, id, f, obs) => { const err = requerirSesion('af-resp:devolver');    if (err) return err; return await activoFijoResponsivasDB.devolver(id, f, obs, usuarioActual?.IdUsuario); });
+ipcMain.handle('af-resp-eliminar',            async (_e, id, motivo) => { const err = requerirSesion('af-resp:eliminar');    if (err) return err; return await activoFijoResponsivasDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
 ipcMain.handle('af-resp-lista-carteras',      async ()               => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarCarteras(); });
 ipcMain.handle('af-resp-lista-puestos',       async ()               => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarPuestos(); });
 
 /* =========================================================
-   IPC: REPORTES
+   IPC: REPORTES AF
    ========================================================= */
-ipcMain.handle('af-rep-resumen-general',       async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.resumenGeneral(); });
-ipcMain.handle('af-rep-resumen-tipo',          async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.resumenPorTipo(); });
-ipcMain.handle('af-rep-resumen-cartera',       async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.resumenPorCartera(); });
-ipcMain.handle('af-rep-inventario',            async (_e, filtros)    => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.inventario(filtros || {}); });
-ipcMain.handle('af-rep-responsivas-activas',   async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.responsivasActivas(); });
-ipcMain.handle('af-rep-asignaciones-persona',  async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.asignacionesPorPersona(); });
-ipcMain.handle('af-rep-por-ticket',            async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.porTicket(); });
-ipcMain.handle('af-rep-historial-asignaciones',async (_e, filtros)    => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.historialAsignaciones(filtros || {}); });
-ipcMain.handle('af-rep-historial-activo',      async (_e, id)         => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.historialActivo(id); });
-ipcMain.handle('af-rep-celulares',             async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.celulares(); });
-ipcMain.handle('af-rep-laptops',               async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.laptops(); });
+ipcMain.handle('af-rep-resumen-general',       async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.resumenGeneral(); });
+ipcMain.handle('af-rep-resumen-tipo',          async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.resumenPorTipo(); });
+ipcMain.handle('af-rep-resumen-cartera',       async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.resumenPorCartera(); });
+ipcMain.handle('af-rep-inventario',            async (_e, filtros) => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.inventario(filtros || {}); });
+ipcMain.handle('af-rep-responsivas-activas',   async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.responsivasActivas(); });
+ipcMain.handle('af-rep-asignaciones-persona',  async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.asignacionesPorPersona(); });
+ipcMain.handle('af-rep-por-ticket',            async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.porTicket(); });
+ipcMain.handle('af-rep-historial-asignaciones',async (_e, filtros) => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.historialAsignaciones(filtros || {}); });
+ipcMain.handle('af-rep-historial-activo',      async (_e, id)      => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.historialActivo(id); });
+ipcMain.handle('af-rep-celulares',             async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.celulares(); });
+ipcMain.handle('af-rep-laptops',               async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.laptops(); });
 
-ipcMain.handle('af-rep-tipos',                 async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.tiposParaFiltro(); });
-ipcMain.handle('af-rep-estados',               async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.estadosParaFiltro(); });
-ipcMain.handle('af-rep-estatus',               async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.estatusParaFiltro(); });
-ipcMain.handle('af-rep-carteras',              async ()               => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.carterasParaFiltro(); });
+ipcMain.handle('af-rep-tipos',                 async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.tiposParaFiltro(); });
+ipcMain.handle('af-rep-estados',               async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.estadosParaFiltro(); });
+ipcMain.handle('af-rep-estatus',               async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.estatusParaFiltro(); });
+ipcMain.handle('af-rep-carteras',              async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.carterasParaFiltro(); });
 
 /* =========================================================
-   IPC: IMPORTACIÓN MASIVA
+   IPC: IMPORTACIÓN AF
    ========================================================= */
-ipcMain.handle('af-import-layouts',  async () => { const err = requerirSesion('activofijo_importar'); if (err) return err; return activoFijoImportacionDB.listarLayouts(); });
-ipcMain.handle('af-import-layout',   async (_e, clave) => { const err = requerirSesion('activofijo_importar'); if (err) return err; return activoFijoImportacionDB.obtenerLayout(clave); });
-ipcMain.handle('af-import-procesar', async (_e, datos) => { const err = requerirSesion('activofijo_importar'); if (err) return err; return await activoFijoImportacionDB.importar(datos, usuarioActual?.IdUsuario); });
+ipcMain.handle('af-import-layouts',  async ()           => { const err = requerirSesion('af-imp:ejecutar'); if (err) return err; return activoFijoImportacionDB.listarLayouts(); });
+ipcMain.handle('af-import-layout',   async (_e, clave)  => { const err = requerirSesion('af-imp:ejecutar'); if (err) return err; return activoFijoImportacionDB.obtenerLayout(clave); });
+ipcMain.handle('af-import-procesar', async (_e, datos)  => { const err = requerirSesion('af-imp:ejecutar'); if (err) return err; return await activoFijoImportacionDB.importar(datos, usuarioActual?.IdUsuario); });
 
 /* =========================================================
-   IPC: GENERAR PDF DE RESPONSIVA (pdf-lib)
+   IPC: GENERAR PDF RESPONSIVA
    ========================================================= */
 ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
-    const err = requerirSesion('activofijo_responsivas'); if (err) return err;
+    const err = requerirSesion('af-resp:pdf'); if (err) return err;
 
     const d = await activoFijoResponsivasDB.obtenerParaPDF(idResponsiva);
     if (!d) return { ok: false, mensaje: 'Responsiva no encontrada.' };
@@ -859,138 +794,150 @@ ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
 /* =========================================================
    IPC: CLIENTES / ROLES / PISOS / RANGOS
    ========================================================= */
-ipcMain.handle('clientes:listar',     async () => { const err = requerirSesion('catalogos'); if (err) return err; return await clientesDB.listar(); });
-ipcMain.handle('clientes:crear',      async (_e, codigo, nombre) => { const err = requerirSesion('catalogos'); if (err) return err; return await clientesDB.crear(codigo, nombre); });
-ipcMain.handle('clientes:actualizar', async (_e, id, codigo, nombre) => { const err = requerirSesion('catalogos'); if (err) return err; return await clientesDB.actualizar(id, codigo, nombre); });
-ipcMain.handle('clientes:eliminar',   async (_e, id) => { const err = requerirSesion('catalogos'); if (err) return err; return await clientesDB.eliminar(id); });
+ipcMain.handle('clientes:listar', async () => { 
+    // Permitimos si tiene catalogos, plano o equipos
+    if (!tienePermiso('catalogos') && !tienePermiso('plano') && !tienePermiso('equipos')) {
+        return negarAcceso('catalogos, plano o equipos');
+    }
+    return await clientesDB.listar(); 
+});
+ipcMain.handle('clientes:crear',      async (_e, codigo, nombre)  => { const err = requerirSesion('catalogos:clientes:crear');  if (err) return err; return await clientesDB.crear(codigo, nombre); });
+ipcMain.handle('clientes:actualizar', async (_e, id, codigo, nombre) => { const err = requerirSesion('catalogos:clientes:editar'); if (err) return err; return await clientesDB.actualizar(id, codigo, nombre); });
+ipcMain.handle('clientes:eliminar',   async (_e, id)              => { const err = requerirSesion('catalogos:clientes:eliminar'); if (err) return err; return await clientesDB.eliminar(id); });
 
-ipcMain.handle('roles:listar',     async () => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.listar(); });
-ipcMain.handle('roles:crear',      async (_e, codigo, nombre, descripcion) => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.crear(codigo, nombre, descripcion); });
-ipcMain.handle('roles:actualizar', async (_e, id, codigo, nombre, descripcion) => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.actualizar(id, codigo, nombre, descripcion); });
-ipcMain.handle('roles:eliminar',   async (_e, id) => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.eliminar(id); });
+ipcMain.handle('roles:listar',     async ()                                       => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.listar(); });
+ipcMain.handle('roles:crear',      async (_e, codigo, nombre, descripcion)        => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.crear(codigo, nombre, descripcion); });
+ipcMain.handle('roles:actualizar', async (_e, id, codigo, nombre, descripcion)    => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.actualizar(id, codigo, nombre, descripcion); });
+ipcMain.handle('roles:eliminar',   async (_e, id)                                 => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.eliminar(id); });
 
 /* =========================================================
    IPC: PISOS
    ========================================================= */
-ipcMain.handle('pisos:listar',                async ()                              => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.listar(); });
+ipcMain.handle('pisos:listar', async () => { 
+    // Permitimos si tiene catalogos, plano o equipos
+    if (!tienePermiso('catalogos') && !tienePermiso('plano') && !tienePermiso('equipos')) {
+        return negarAcceso('catalogos, plano o equipos');
+    }
+    return await pisosDB.listar(); 
+});
 ipcMain.handle('pisos:obtener',               async (_e, id)                        => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.obtener(id); });
 ipcMain.handle('pisos:listarPorCliente',      async (_e, idCliente)                 => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.listarPorCliente(idCliente); });
 ipcMain.handle('pisos:clientesDePiso',        async (_e, idPiso)                    => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.clientesDePiso(idPiso); });
-ipcMain.handle('pisos:crear',                 async (_e, nombre, filas, cols, ids)  => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.crear(nombre, filas, cols, ids); });
-ipcMain.handle('pisos:actualizarConClientes', async (_e, id, nombre, filas, cols, ids) => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.actualizarConClientes(id, nombre, filas, cols, ids); });
-ipcMain.handle('pisos:eliminar',              async (_e, id)                        => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.eliminar(id); });
+ipcMain.handle('pisos:crear',                 async (_e, nombre, filas, cols, ids)  => { const err = requerirSesion('catalogos:pisos:crear'); if (err) return err; return await pisosDB.crear(nombre, filas, cols, ids); });
+ipcMain.handle('pisos:actualizarConClientes', async (_e, id, nombre, filas, cols, ids) => { const err = requerirSesion('catalogos:pisos:editar'); if (err) return err; return await pisosDB.actualizarConClientes(id, nombre, filas, cols, ids); });
+ipcMain.handle('pisos:eliminar',              async (_e, id)                        => { const err = requerirSesion('catalogos:pisos:eliminar'); if (err) return err; return await pisosDB.eliminar(id); });
 
 /* =========================================================
    IPC: RANGOS
    ========================================================= */
-ipcMain.handle('rangos:listar',     async () => { const err = requerirSesion('catalogos'); if (err) return err; return await rangosDB.listar(); });
-ipcMain.handle('rangos:crear',      async (_e, idCliente, idPiso, nombre, ipInicio, ipFin, desc) => { const err = requerirSesion('catalogos'); if (err) return err; return await rangosDB.crear(idCliente, idPiso, nombre, ipInicio, ipFin, desc); });
-ipcMain.handle('rangos:actualizar', async (_e, id, idCliente, idPiso, nombre, ipInicio, ipFin, desc) => { const err = requerirSesion('catalogos'); if (err) return err; return await rangosDB.actualizar(id, idCliente, idPiso, nombre, ipInicio, ipFin, desc); });
-ipcMain.handle('rangos:eliminar',   async (_e, id) => { const err = requerirSesion('catalogos'); if (err) return err; return await rangosDB.eliminar(id); });
+ipcMain.handle('rangos:listar',     async ()  => { const err = requerirSesion('catalogos'); if (err) return err; return await rangosDB.listar(); });
+ipcMain.handle('rangos:crear',      async (_e, idCliente, idPiso, nombre, ipInicio, ipFin, desc) => { const err = requerirSesion('catalogos:rangos:crear');    if (err) return err; return await rangosDB.crear(idCliente, idPiso, nombre, ipInicio, ipFin, desc); });
+ipcMain.handle('rangos:actualizar', async (_e, id, idCliente, idPiso, nombre, ipInicio, ipFin, desc) => { const err = requerirSesion('catalogos:rangos:editar');   if (err) return err; return await rangosDB.actualizar(id, idCliente, idPiso, nombre, ipInicio, ipFin, desc); });
+ipcMain.handle('rangos:eliminar',   async (_e, id) => { const err = requerirSesion('catalogos:rangos:eliminar'); if (err) return err; return await rangosDB.eliminar(id); });
 
 /* =========================================================
    IPC: EQUIPOS
    ========================================================= */
-ipcMain.handle('equipos:listar',               async () => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.listar(); });
-ipcMain.handle('equipos:obtenerPorId',         async (_e, id) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.obtenerPorId(id); }); 
-ipcMain.handle('equipos:crear',                async (_e, datos) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.crear(datos); });
-ipcMain.handle('equipos:actualizar',           async (_e, id, datos) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.actualizar(id, datos); });
-ipcMain.handle('equipos:eliminar',             async (_e, id) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.eliminar(id); });
-ipcMain.handle('equipos:verificarIPDuplicada', async (_e, ip, idExcluir) => { const err = requerirSesion('equipos'); if (err) return err; return await equiposDB.verificarIPDuplicada(ip, idExcluir); });
+ipcMain.handle('equipos:listar',               async ()          => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.listar(); });
+ipcMain.handle('equipos:obtenerPorId',         async (_e, id)    => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.obtenerPorId(id); });
+ipcMain.handle('equipos:crear',                async (_e, datos) => { const err = requerirSesion('equipos:crear');       if (err) return err; return await equiposDB.crear(datos); });
+ipcMain.handle('equipos:actualizar',           async (_e, id, datos) => { const err = requerirSesion('equipos:editar');    if (err) return err; return await equiposDB.actualizar(id, datos); });
+ipcMain.handle('equipos:eliminar',             async (_e, id)    => { const err = requerirSesion('equipos:eliminar');    if (err) return err; return await equiposDB.eliminar(id); });
+ipcMain.handle('equipos:verificarIPDuplicada', async (_e, ip, idExcluir) => { const err = requerirSesion('equipos');      if (err) return err; return await equiposDB.verificarIPDuplicada(ip, idExcluir); });
 
 /* =========================================================
    IPC: DOMINIOS
    ========================================================= */
-ipcMain.handle('dominios:listarPorCliente', async (_e, idCliente) => { const err = requerirSesion('catalogos'); if (err) return err; return await dominiosDB.listarPorCliente(idCliente); });
-ipcMain.handle('dominios:listarTodas',      async (_e, filtros) => { const err = requerirSesion('catalogos'); if (err) return err; return await dominiosDB.listarTodas(filtros); });
-ipcMain.handle('dominios:crear',            async (_e, idCliente, u, p, d) => { const err = requerirSesion('catalogos'); if (err) return err; return await dominiosDB.crear(idCliente, u, p, d); });
-ipcMain.handle('dominios:actualizar',       async (_e, id, u, p, d) => { const err = requerirSesion('catalogos'); if (err) return err; return await dominiosDB.actualizar(id, u, p, d); });
-ipcMain.handle('dominios:eliminar',         async (_e, id) => { const err = requerirSesion('catalogos'); if (err) return err; return await dominiosDB.eliminar(id); });
+ipcMain.handle('dominios:listarPorCliente', async (_e, idCliente)       => { const err = requerirSesion('catalogos'); if (err) return err; return await dominiosDB.listarPorCliente(idCliente); });
+ipcMain.handle('dominios:listarTodas',      async (_e, filtros)         => { const err = requerirSesion('catalogos'); if (err) return err; return await dominiosDB.listarTodas(filtros); });
+ipcMain.handle('dominios:crear',            async (_e, idCliente, u, p, d) => { const err = requerirSesion('catalogos:dominios:gestionar'); if (err) return err; return await dominiosDB.crear(idCliente, u, p, d); });
+ipcMain.handle('dominios:actualizar',       async (_e, id, u, p, d)    => { const err = requerirSesion('catalogos:dominios:gestionar'); if (err) return err; return await dominiosDB.actualizar(id, u, p, d); });
+ipcMain.handle('dominios:eliminar',         async (_e, id)             => { const err = requerirSesion('catalogos:dominios:gestionar'); if (err) return err; return await dominiosDB.eliminar(id); });
 
 /* =========================================================
    IPC: CONFIGURACIONES DE RED
    ========================================================= */
-ipcMain.handle('config:listarPorClienteTipo', async (_e, idCliente, tipo) => { const err = requerirSesion('catalogos'); if (err) return err; return await configDB.listarPorClienteTipo(idCliente, tipo); });
-ipcMain.handle('config:listarTodas',          async (_e, filtros) => { const err = requerirSesion('catalogos'); if (err) return err; return await configDB.listarTodas(filtros); });
-ipcMain.handle('config:crear',                async (_e, idCliente, tipo, valor, desc) => { const err = requerirSesion('catalogos'); if (err) return err; return await configDB.crear(idCliente, tipo, valor, desc); });
-ipcMain.handle('config:actualizar',           async (_e, id, valor, desc) => { const err = requerirSesion('catalogos'); if (err) return err; return await configDB.actualizar(id, valor, desc); });
-ipcMain.handle('config:eliminar',             async (_e, id) => { const err = requerirSesion('catalogos'); if (err) return err; return await configDB.eliminar(id); });
+ipcMain.handle('config:listarPorClienteTipo', async (_e, idCliente, tipo)     => { const err = requerirSesion('catalogos'); if (err) return err; return await configDB.listarPorClienteTipo(idCliente, tipo); });
+ipcMain.handle('config:listarTodas',          async (_e, filtros)             => { const err = requerirSesion('catalogos'); if (err) return err; return await configDB.listarTodas(filtros); });
+ipcMain.handle('config:crear',                async (_e, idCliente, tipo, valor, desc) => { const err = requerirSesion('catalogos:config:gestionar'); if (err) return err; return await configDB.crear(idCliente, tipo, valor, desc); });
+ipcMain.handle('config:actualizar',           async (_e, id, valor, desc)     => { const err = requerirSesion('catalogos:config:gestionar'); if (err) return err; return await configDB.actualizar(id, valor, desc); });
+ipcMain.handle('config:eliminar',             async (_e, id)                  => { const err = requerirSesion('catalogos:config:gestionar'); if (err) return err; return await configDB.eliminar(id); });
 
 /* =========================================================
    IPC: USUARIOS / HISTÓRICOS
    ========================================================= */
-ipcMain.handle('usuarios:listar',     async () => { const err = requerirSesion('usuarios'); if (err) return err; return await usuariosDB.listar(); });
-ipcMain.handle('usuarios:crear',      async (_e, datos) => { const err = requerirSesion('usuarios'); if (err) return err; return await usuariosDB.crear(datos); });
-ipcMain.handle('usuarios:actualizar', async (_e, id, datos) => { const err = requerirSesion('usuarios'); if (err) return err; return await usuariosDB.actualizar(id, datos); });
-ipcMain.handle('usuarios:eliminar',   async (_e, id) => { const err = requerirSesion('usuarios'); if (err) return err; return await usuariosDB.eliminar(id); });
+ipcMain.handle('usuarios:listar',     async ()          => { const err = requerirSesion('usuarios:listado:ver'); if (err) return err; return await usuariosDB.listar(); });
+ipcMain.handle('usuarios:crear',      async (_e, datos) => { const err = requerirSesion('usuarios:crear');       if (err) return err; return await usuariosDB.crear(datos); });
+ipcMain.handle('usuarios:actualizar', async (_e, id, datos) => { const err = requerirSesion('usuarios:editar');  if (err) return err; return await usuariosDB.actualizar(id, datos); });
+ipcMain.handle('usuarios:eliminar',   async (_e, id)    => { const err = requerirSesion('usuarios:eliminar');    if (err) return err; return await usuariosDB.eliminar(id); });
 
-ipcMain.handle('historicos:listarPorPiso', async (_e, idPiso) => { const err = requerirSesion('historico'); if (err) return err; return await historicosDB.listarPorPiso(idPiso); });
-ipcMain.handle('historicos:listar',        async (_e, idCliente, idPiso) => { const err = requerirSesion('historico'); if (err) return err; return await historicosDB.listar(idCliente, idPiso); });
+ipcMain.handle('historicos:listarPorPiso', async (_e, idPiso)              => { const err = requerirSesion('historico'); if (err) return err; return await historicosDB.listarPorPiso(idPiso); });
+ipcMain.handle('historicos:listar',        async (_e, idCliente, idPiso)   => { const err = requerirSesion('historico'); if (err) return err; return await historicosDB.listar(idCliente, idPiso); });
 
 /* =========================================================
    IPC: PLANO
    ========================================================= */
-ipcMain.handle('plano:dimensiones', async (_e, idPiso) => { const err = requerirSesion('plano'); if (err) return err; return await planoDB.obtenerDimensiones(idPiso); });
+ipcMain.handle('plano:dimensiones', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.obtenerDimensiones(idPiso); });
 
 ipcMain.handle('plano:actualizarDim', async (_e, idPiso, filas, columnas) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:editar-dim'); if (err) return err;
     return await planoDB.actualizarDimensiones(usuarioActual.IdUsuario, idPiso, filas, columnas);
 });
 
-ipcMain.handle('plano:listarPorLugar', async (_e, idPiso) => { const err = requerirSesion('plano'); if (err) return err; return await planoDB.listarPorLugar(idPiso); });
-ipcMain.handle('plano:sinUbicacion',   async (_e, idPiso) => { const err = requerirSesion('plano'); if (err) return err; return await planoDB.equiposSinUbicacion(idPiso); });
+ipcMain.handle('plano:listarPorLugar', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.listarPorLugar(idPiso); });
+ipcMain.handle('plano:sinUbicacion',   async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.equiposSinUbicacion(idPiso); });
 
 ipcMain.handle('plano:asignar', async (_e, idPiso, idEquipo, fila, col) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:asignar'); if (err) return err;
     return await planoDB.asignar(usuarioActual.IdUsuario, idPiso, idEquipo, fila, col);
 });
 
 ipcMain.handle('plano:mover', async (_e, idEquipo, fila, col, filaAnt, colAnt, idPiso) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:mover'); if (err) return err;
     return await planoDB.mover(usuarioActual.IdUsuario, idEquipo, fila, col, filaAnt, colAnt, idPiso);
 });
 
 ipcMain.handle('plano:quitar', async (_e, idEquipo, idPiso, hostname) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:quitar'); if (err) return err;
     return await planoDB.quitar(usuarioActual.IdUsuario, idEquipo, idPiso, hostname);
 });
 
 ipcMain.handle('plano:intercambiar', async (_e, idA, idB, idPiso, hostA, hostB, filaA, colA, filaB, colB) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:intercambiar'); if (err) return err;
     return await planoDB.intercambiar(usuarioActual.IdUsuario, idA, idB, idPiso, hostA, hostB, filaA, colA, filaB, colB);
 });
 
-ipcMain.handle('plano:listarZonas', async (_e, idPiso) => { const err = requerirSesion('plano'); if (err) return err; return await planoDB.listarZonas(idPiso); });
+ipcMain.handle('plano:listarZonas', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.listarZonas(idPiso); });
 
 ipcMain.handle('plano:crearZona', async (_e, idPiso, nombre, color, fi, ff, ci, cf) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
     return await planoDB.crearZona(usuarioActual.IdUsuario, idPiso, nombre, color, fi, ff, ci, cf);
 });
 
 ipcMain.handle('plano:actualizarZona', async (_e, idZona, nombre, color, fi, ff, ci, cf, idPiso) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
     return await planoDB.actualizarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre, color, fi, ff, ci, cf);
 });
 
 ipcMain.handle('plano:eliminarZona', async (_e, idZona, idPiso, nombre) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:zonas:eliminar'); if (err) return err;
     return await planoDB.eliminarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre);
 });
 
 ipcMain.handle('plano:eliminarZonasPorNombre', async (_e, idPiso, nombre, color) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:zonas:eliminar'); if (err) return err;
     return await planoDB.eliminarZonasPorNombre(usuarioActual.IdUsuario, idPiso, nombre, color);
 });
 
 ipcMain.handle('plano:moverEntrePisos', async (_e, idEquipo, idPisoOrigen, idPisoDestino, fila, columna, nuevosDatos) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:mover'); if (err) return err;
     return await planoDB.moverEntrePisos(
         usuarioActual.IdUsuario, idEquipo, idPisoOrigen, idPisoDestino, fila, columna, nuevosDatos
     );
 });
 
 ipcMain.handle('plano:swapEntrePisos', async (_e, datos) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:intercambiar'); if (err) return err;
     return await planoDB.swapEntrePisos(
         usuarioActual.IdUsuario,
         datos.idEquipoA, datos.idEquipoB,
@@ -1000,46 +947,34 @@ ipcMain.handle('plano:swapEntrePisos', async (_e, datos) => {
     );
 });
 
-ipcMain.handle('plano:listarZonasLibres', async (_e, idPiso) => { const err = requerirSesion('plano'); if (err) return err; return await planoDB.listarZonasLibres(idPiso); });
+ipcMain.handle('plano:listarZonasLibres', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.listarZonasLibres(idPiso); });
 
 ipcMain.handle('plano:guardarZonaLibre', async (_e, idPiso, nombre, color, celdas) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
     return await planoDB.guardarZonaLibre(usuarioActual.IdUsuario, idPiso, nombre, color, celdas);
 });
 
 ipcMain.handle('plano:eliminarZonaLibre', async (_e, idPiso, nombre, color) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:zonas:eliminar'); if (err) return err;
     return await planoDB.eliminarZonaLibre(usuarioActual.IdUsuario, idPiso, nombre, color);
 });
 
 /* =========================================================
    IPC: EXPORTAR PDF DEL PLANO
-   ---------------------------------------------------------
-   El renderer nos envía { html, nombreArchivo, orientacion }.
-   - `orientacion` es 'landscape' | 'portrait' y define cómo
-     Chromium debe imprimir la hoja A3.
-   - El HTML ya trae su propio @page y sus propias reglas de
-     impresión, así que aquí solo decidimos la ventana y el
-     tamaño de papel.
    ========================================================= */
 ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
-    const err = requerirSesion('plano'); if (err) return err;
+    const err = requerirSesion('plano:exportar'); if (err) return err;
 
-    // 1) Preguntar la ruta ANTES de crear cualquier ventana.
     const { canceled, filePath } = await dialog.showSaveDialog({
         title: 'Guardar PDF',
         defaultPath: opciones.nombreArchivo || `Plano-${Date.now()}.pdf`,
         filters: [{ name: 'PDF', extensions: ['pdf'] }]
     });
 
-    if (canceled || !filePath) {
-        return { ok: false, mensaje: 'Cancelado' };
-    }
+    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
 
-    // 2) Orientación recibida desde el renderer (por defecto landscape).
     const esLandscape = (opciones.orientacion || 'landscape') === 'landscape';
 
-    // 3) Crear la ventana oculta del tamaño correcto para que Chromium no "adivine".
     const winPDF = new BrowserWindow({
         width:  esLandscape ? 1600 : 1120,
         height: esLandscape ? 1120 : 1600,
@@ -1058,14 +993,12 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
         tmpPath = path.join(os.tmpdir(), `plano-${Date.now()}.html`);
         fs.writeFileSync(tmpPath, opciones.html, 'utf-8');
 
-        // Cargar y esperar a que el DOM esté listo
         await new Promise((resolve, reject) => {
             winPDF.webContents.once('did-finish-load', resolve);
             winPDF.webContents.once('did-fail-load', (_e, code, desc) => reject(new Error(`did-fail-load ${code}: ${desc}`)));
             winPDF.loadFile(tmpPath);
         });
 
-        // Dar tiempo a que apliquen estilos, fuentes y layout
         await new Promise(r => setTimeout(r, 900));
 
         const datosPDF = await winPDF.webContents.printToPDF({
@@ -1106,12 +1039,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-    // Nunca cerrar la app en medio de una transición de sesión
     if (cerrandoPorLogout) {
         console.log('[App] window-all-closed ignorado (transición de sesión).');
         return;
     }
-
     if (process.platform !== 'darwin') app.quit();
 });
 

@@ -1,6 +1,8 @@
 /* =========================================================
    ACTIVO FIJO — RENDERER DE CATÁLOGOS (12 catálogos)
    Soft delete + pestaña Eliminados + Restaurar
+   + Panel de ayuda contextual + Reglas de negocio
+   + Blindaje: ningún addEventListener sobre null
    ========================================================= */
 const Swal = window.Swal;
 
@@ -25,7 +27,8 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'marca',
         pk: 'IdMarca',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+              tip: 'Fabricante del equipo. Ej. HP, Dell, Lenovo, Apple.' }
         ]
     },
     tipos: {
@@ -33,22 +36,37 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'tipo',
         pk: 'IdTipo',
         campos: [
-            { nombre: 'Nombre',       etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100 },
+            { nombre: 'Nombre',       etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+              tip: 'Nombre del tipo de activo. Ej. LAPTOP, MOUSE, SSD NVME.' },
             { nombre: 'GrupoSubtipo', etiqueta: 'Grupo de subtipo', tipo: 'select',
-              opciones: [{ valor: '', etiqueta: '— Sin grupo —' }, ...GRUPOS_SUBTIPO] },
-            { nombre: 'RequiereResponsiva',      etiqueta: 'Requiere responsiva',       tipo: 'bool' },
-            { nombre: 'RequiereIMEI',            etiqueta: 'Requiere IMEI',             tipo: 'bool' },
-            { nombre: 'RequiereTelefono',        etiqueta: 'Requiere teléfono',         tipo: 'bool' },
-            { nombre: 'RequiereSitio',           etiqueta: 'Requiere sitio',            tipo: 'bool' },
-            { nombre: 'RequiereSubtipo',         etiqueta: 'Requiere subtipo',          tipo: 'bool' },
-            { nombre: 'RequiereClasificacion',   etiqueta: 'Requiere clasificación',    tipo: 'bool' },
-            { nombre: 'RequiereTamanio',         etiqueta: 'Requiere tamaño',           tipo: 'bool' },
-            { nombre: 'RequiereCapacidad',       etiqueta: 'Requiere capacidad',        tipo: 'bool' },
-            { nombre: 'RequiereVoltaje',         etiqueta: 'Requiere voltaje',          tipo: 'bool' },
-            { nombre: 'RequiereUsuarioAsignado', etiqueta: 'Requiere usuario asignado', tipo: 'bool' },
-            { nombre: 'RequierePrecio',          etiqueta: 'Requiere precio',           tipo: 'bool' },
-            { nombre: 'RequiereEspecificaciones',etiqueta: 'Requiere especificaciones', tipo: 'bool' },
-            { nombre: 'RequiereAccesorios',      etiqueta: 'Requiere accesorios',       tipo: 'bool' }
+              opciones: [{ valor: '', etiqueta: '— Sin grupo —' }, ...GRUPOS_SUBTIPO],
+              tip: 'Los subtipos que se ofrecerán al capturar un activo de este tipo. Si no aplica, deja "Sin grupo".' },
+            { nombre: 'RequiereResponsiva',      etiqueta: 'Requiere responsiva',       tipo: 'bool',
+              tip: 'Si está activo, se pedirá firmar responsiva al asignar el activo.' },
+            { nombre: 'RequiereIMEI',            etiqueta: 'Requiere IMEI',             tipo: 'bool',
+              tip: 'Muestra los campos IMEI 1 e IMEI 2. Aplica a celulares/tablets con línea.' },
+            { nombre: 'RequiereTelefono',        etiqueta: 'Requiere teléfono',         tipo: 'bool',
+              tip: 'Muestra el campo No. Teléfono.' },
+            { nombre: 'RequiereSitio',           etiqueta: 'Requiere sitio',            tipo: 'bool',
+              tip: 'Muestra el selector de Sitio (dónde está físicamente el activo).' },
+            { nombre: 'RequiereSubtipo',         etiqueta: 'Requiere subtipo',          tipo: 'bool',
+              tip: 'Muestra el selector de Subtipo. Requiere que el tipo tenga "Grupo de subtipo" definido.' },
+            { nombre: 'RequiereClasificacion',   etiqueta: 'Requiere clasificación',    tipo: 'bool',
+              tip: 'Muestra el selector de Clasificación (Interno, Externo, etc.).' },
+            { nombre: 'RequiereTamanio',         etiqueta: 'Requiere tamaño',           tipo: 'bool',
+              tip: 'Muestra el selector de Tamaño (ej. pulgadas, tallas).' },
+            { nombre: 'RequiereCapacidad',       etiqueta: 'Requiere capacidad',        tipo: 'bool',
+              tip: 'Muestra el selector de Capacidad (ej. 240 GB, 8 GB).' },
+            { nombre: 'RequiereVoltaje',         etiqueta: 'Requiere voltaje',          tipo: 'bool',
+              tip: 'Muestra el selector de Voltaje (ej. 110V, 220V).' },
+            { nombre: 'RequiereUsuarioAsignado', etiqueta: 'Requiere usuario asignado', tipo: 'bool',
+              tip: 'Muestra el campo de usuario asignado. En tipos de almacenamiento (SSD/DISCO) solo se pide si la clasificación es EXTERNO.' },
+            { nombre: 'RequierePrecio',          etiqueta: 'Requiere precio',           tipo: 'bool',
+              tip: 'Muestra el campo Precio. Si lo apagas, los precios ya capturados NO se borran.' },
+            { nombre: 'RequiereEspecificaciones',etiqueta: 'Requiere especificaciones', tipo: 'bool',
+              tip: 'Muestra los campos Procesador, RAM, Almacenamiento y Sistema Operativo.' },
+            { nombre: 'RequiereAccesorios',      etiqueta: 'Requiere accesorios',       tipo: 'bool',
+              tip: 'Muestra el campo de Accesorios (cargador, cable, funda...).' }
         ]
     },
     estados: {
@@ -56,7 +74,8 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'estado',
         pk: 'IdEstado',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+              tip: 'Condición física del activo. Ej. USO, NUEVO, VALIDAR, DAÑADO.' }
         ]
     },
     estatus: {
@@ -64,7 +83,8 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'estatus',
         pk: 'IdEstatus',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+              tip: 'Situación operativa del activo. Ej. STOCK, DISPONIBLE, ASIGNADO, BAJA.' }
         ]
     },
     carteras: {
@@ -72,7 +92,8 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'cartera',
         pk: 'IdCartera',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+              tip: 'Área o responsable del activo. Ej. SOPORTE TI, RECURSOS HUMANOS.' }
         ]
     },
     puestos: {
@@ -80,7 +101,8 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'puesto',
         pk: 'IdPuesto',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+              tip: 'Puesto del usuario asignado. Ej. GERENTE, ANALISTA.' }
         ]
     },
     sitios: {
@@ -88,8 +110,10 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'sitio',
         pk: 'IdSitio',
         campos: [
-            { nombre: 'Nombre',      etiqueta: 'Nombre',      tipo: 'text', requerido: true, max: 100 },
-            { nombre: 'Descripcion', etiqueta: 'Descripción', tipo: 'text', max: 200 }
+            { nombre: 'Nombre',      etiqueta: 'Nombre',      tipo: 'text', requerido: true, max: 100,
+              tip: 'Ubicación física. Ej. CORPORATIVO, SUCURSAL NORTE.' },
+            { nombre: 'Descripcion', etiqueta: 'Descripción', tipo: 'text', max: 200,
+              tip: 'Detalle opcional (dirección, piso, referencia).' }
         ]
     },
     subtipos: {
@@ -98,9 +122,13 @@ const CATALOGOS_FRONT = {
         pk: 'IdSubtipo',
         campos: [
             { nombre: 'Grupo',       etiqueta: 'Grupo',       tipo: 'select', requerido: true,
-              opciones: [{ valor: '', etiqueta: '— Seleccionar —' }, ...GRUPOS_SUBTIPO] },
-            { nombre: 'Nombre',      etiqueta: 'Nombre',      tipo: 'text',   requerido: true, max: 100 },
-            { nombre: 'Descripcion', etiqueta: 'Descripción', tipo: 'text',   max: 200 }
+              opciones: [{ valor: '', etiqueta: '— Seleccionar —' }, ...GRUPOS_SUBTIPO],
+              tip: 'A qué grupo de subtipos pertenece. Solo aparecerán al capturar activos cuyo Tipo tenga este grupo.',
+              esGrupoInmutable: true },
+            { nombre: 'Nombre',      etiqueta: 'Nombre',      tipo: 'text',   requerido: true, max: 100,
+              tip: 'Nombre del subtipo. Ej. INALÁMBRICO, 8GB DDR4, 240W.' },
+            { nombre: 'Descripcion', etiqueta: 'Descripción', tipo: 'text',   max: 200,
+              tip: 'Detalle opcional.' }
         ]
     },
     voltajes: {
@@ -108,7 +136,8 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'voltaje',
         pk: 'IdVoltaje',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+              tip: 'Ej. 110V, 220V, 5V.' }
         ]
     },
     clasificaciones: {
@@ -116,7 +145,8 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'clasificación',
         pk: 'IdClasificacion',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+              tip: 'Ej. INTERNO, EXTERNO. La regla de "Usuario asignado" para SSD/DISCO depende de EXTERNO.' }
         ]
     },
     tamanios: {
@@ -124,7 +154,8 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'tamaño',
         pk: 'IdTamanio',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+              tip: 'Ej. CHICO, MEDIANO, 15", 24".' }
         ]
     },
     capacidades: {
@@ -132,8 +163,80 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'capacidad',
         pk: 'IdCapacidad',
         campos: [
-            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50 }
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+              tip: 'Ej. 240 GB, 480 GB, 8 GB, 16 GB.' }
         ]
+    }
+};
+
+/* =========================================================
+   AYUDA CONTEXTUAL POR CATÁLOGO
+   ========================================================= */
+const AYUDA_CATALOGO = {
+    marcas: {
+        resumen: 'Catálogo simple de fabricantes. Cada activo puede tener una marca (opcional).',
+        tips: [
+            'No se puede repetir el mismo nombre entre marcas activas.',
+            'Dar de baja una marca NO afecta a los activos que ya la usan.'
+        ]
+    },
+    tipos: {
+        resumen: 'Define la "plantilla" de cada tipo de activo. Los switches de abajo controlan qué campos aparecerán al capturar un activo de ese tipo.',
+        tips: [
+            '<b>Grupo de subtipo:</b> si lo defines, al capturar un activo se ofrecerán los Subtipos que pertenezcan a ese grupo. Si lo cambias después, los subtipos actuales dejan de mostrarse (no se borran).',
+            '<b>Requiere Precio / Requiere Especificaciones / Requiere Accesorios:</b> apagarlos no borra los datos ya guardados en activos existentes.',
+            '<b>Requiere Usuario Asignado:</b> en tipos SSD NVME y DISCO MECÁNICO solo se pide si la clasificación del activo es EXTERNO.',
+            'Dar de baja un Tipo NO afecta a los activos que ya lo usan, pero impide crear nuevos con ese tipo.'
+        ]
+    },
+    estados: {
+        resumen: 'Condición física del activo (USO, NUEVO, VALIDAR, DAÑADO).',
+        tips: ['Se usa como filtro en el inventario.', 'No confundir con Estatus (que es la situación operativa).']
+    },
+    estatus: {
+        resumen: 'Situación operativa del activo (STOCK, DISPONIBLE, ASIGNADO, BAJA, etc.).',
+        tips: [
+            'El estatus <b>BAJA</b> es el que dispara el "soft delete" y mueve el activo a la pestaña Eliminados.',
+            'El estatus <b>STOCK / DISPONIBLE</b> es al que vuelve un activo al restaurarse.'
+        ]
+    },
+    carteras: {
+        resumen: 'Área o responsable del activo. Ej. SOPORTE TI, RECURSOS HUMANOS.',
+        tips: ['Es un filtro transversal del inventario.', 'Un activo puede no tener cartera.']
+    },
+    puestos: {
+        resumen: 'Puesto del usuario al que se asigna un activo.',
+        tips: ['Informativo. No bloquea nada del inventario.']
+    },
+    sitios: {
+        resumen: 'Ubicaciones físicas donde puede estar un activo.',
+        tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Sitio" activo.']
+    },
+    subtipos: {
+        resumen: 'Sub-clasificación dentro de un grupo (MOUSE, TECLADO, ALMACENAMIENTO, etc.). Se muestran al capturar un activo cuyo Tipo tenga ese Grupo de subtipo.',
+        tips: [
+            '<b>El campo Grupo NO se puede cambiar una vez creado</b> (los activos lo referencian). Si necesitas mover un subtipo a otro grupo, créalo de nuevo y da de baja el anterior.',
+            'Para que un subtipo aparezca en el inventario, el Tipo del activo debe tener el mismo "Grupo de subtipo" que el subtipo.'
+        ]
+    },
+    voltajes: {
+        resumen: 'Voltajes eléctricos posibles. Ej. 110V, 220V, 5V.',
+        tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Voltaje" activo.']
+    },
+    clasificaciones: {
+        resumen: 'Clasificación del activo. Ej. INTERNO, EXTERNO.',
+        tips: [
+            'La clasificación <b>EXTERNO</b> activa la petición de "Usuario asignado" en tipos de almacenamiento (SSD NVME, DISCO MECÁNICO).',
+            'Si renombras "EXTERNO" a otra cosa, esa regla dejará de aplicar.'
+        ]
+    },
+    tamanios: {
+        resumen: 'Tamaños posibles. Ej. CHICO, MEDIANO, 15", 24".',
+        tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Tamaño" activo.']
+    },
+    capacidades: {
+        resumen: 'Capacidades posibles. Ej. 240 GB, 480 GB, 8 GB, 16 GB.',
+        tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Capacidad" activo.']
     }
 };
 
@@ -141,34 +244,47 @@ const CATALOGOS_FRONT = {
    ESTADO
    ========================================================= */
 let catalogoActual = 'marcas';
-let vistaActual    = 'activos';   // 'activos' | 'eliminados'
+let vistaActual    = 'activos';
 let registros      = [];
 let modoEdicion    = false;
 let idEditando     = null;
 let guardando      = false;
 let filtroBusqueda = '';
+let ayudaAbierta   = true;
 
 /* =========================================================
-   REFERENCIAS DOM
+   REFERENCIAS DOM (defensivas: null si no existen)
    ========================================================= */
-const tabs             = document.getElementById('tabs-catalogos');
-const tabsVista        = document.getElementById('tabs-vista');
-const tablaHead        = document.getElementById('tabla-head');
-const tablaBody        = document.getElementById('tabla-body');
-const formulario       = document.getElementById('formulario');
-const camposForm       = document.getElementById('campos-form');
-const mensaje          = document.getElementById('mensaje');
-const btnGuardar       = document.getElementById('btn-guardar');
-const btnNuevo         = document.getElementById('btn-nuevo');
-const btnNuevoTexto    = document.getElementById('btn-nuevo-texto');
-const tituloCatalogo   = document.getElementById('titulo-catalogo');
-const sinResultados    = document.getElementById('sin-resultados');
-const sinResultadosTxt = document.getElementById('sin-resultados-texto');
-const inputBusqueda    = document.getElementById('input-busqueda');
-const btnLimpiarBusq   = document.getElementById('btn-limpiar-busqueda');
-const btnLimpiarFiltro = document.getElementById('btn-limpiar-filtro');
-const modal            = document.getElementById('modal-catalogo');
-const modalTitulo      = document.getElementById('modal-titulo');
+const $ = (id) => document.getElementById(id);
+
+const tabs             = $('tabs-catalogos');
+const tabsVista        = $('tabs-vista');
+const tablaHead        = $('tabla-head');
+const tablaBody        = $('tabla-body');
+const formulario       = $('formulario');
+const camposForm       = $('campos-form');
+const mensaje          = $('mensaje');
+const btnGuardar       = $('btn-guardar');
+const btnNuevo         = $('btn-nuevo');
+const btnNuevoTexto    = $('btn-nuevo-texto');
+const tituloCatalogo   = $('titulo-catalogo');
+const sinResultados    = $('sin-resultados');
+const sinResultadosTxt = $('sin-resultados-texto');
+const inputBusqueda    = $('input-busqueda');
+const btnLimpiarBusq   = $('btn-limpiar-busqueda');
+const btnLimpiarFiltro = $('btn-limpiar-filtro');
+const modal            = $('modal-catalogo');
+const modalTitulo      = $('modal-titulo');
+const avisoModal       = $('aviso-modal');
+const btnVolver        = $('btn-volver');
+const btnModalCerrar   = $('modal-cerrar');
+const btnModalCancelar = $('btn-cancelar');
+
+/* Panel de ayuda */
+const panelAyuda       = $('panel-ayuda');
+const panelAyudaTitulo = $('panel-ayuda-titulo');
+const panelAyudaBody   = $('panel-ayuda-body');
+const btnToggleAyuda   = $('btn-toggle-ayuda');
 
 /* =========================================================
    UTILIDADES
@@ -180,13 +296,29 @@ function escaparHTML(str) {
 }
 
 function mostrarMensaje(texto, tipo) {
+    if (!mensaje) return;
     mensaje.textContent = texto;
     mensaje.className = 'mensaje ' + tipo;
 }
-function ocultarMensaje() { mensaje.className = 'mensaje oculto'; }
+function ocultarMensaje() {
+    if (!mensaje) return;
+    mensaje.className = 'mensaje oculto';
+}
+
+function mostrarAvisoModal(html) {
+    if (!avisoModal) return;
+    if (!html) {
+        avisoModal.classList.add('oculto');
+        avisoModal.innerHTML = '';
+        return;
+    }
+    avisoModal.innerHTML = html;
+    avisoModal.classList.remove('oculto');
+}
 
 function setGuardando(v) {
     guardando = v;
+    if (!btnGuardar) return;
     btnGuardar.disabled = v;
     btnGuardar.style.opacity = v ? '0.6' : '';
 }
@@ -225,10 +357,36 @@ function toastError(titulo, texto = '') {
 }
 
 /* =========================================================
+   PANEL DE AYUDA CONTEXTUAL
+   ========================================================= */
+function renderAyuda() {
+    const ayuda = AYUDA_CATALOGO[catalogoActual];
+    const cfg   = CATALOGOS_FRONT[catalogoActual];
+    if (!ayuda || !panelAyudaBody || !panelAyudaTitulo) return;
+
+    panelAyudaTitulo.textContent = `Cómo funciona "${cfg.titulo}"`;
+
+    const tips = (ayuda.tips || []).map(t => `<li>${t}</li>`).join('');
+    panelAyudaBody.innerHTML = `
+        <p class="ayuda-resumen">${ayuda.resumen}</p>
+        ${tips ? `<ul class="ayuda-tips">${tips}</ul>` : ''}
+    `;
+
+    if (panelAyuda) panelAyuda.classList.toggle('oculto', false);
+}
+
+function aplicarEstadoAyuda() {
+    if (!panelAyudaBody || !panelAyuda) return;
+    panelAyudaBody.style.display = ayudaAbierta ? '' : 'none';
+    panelAyuda.classList.toggle('colapsado', !ayudaAbierta);
+}
+
+/* =========================================================
    ACTUALIZAR UI SEGÚN CATÁLOGO / VISTA ACTIVA
    ========================================================= */
 function actualizarUIDeCatalogo() {
     const cfg = CATALOGOS_FRONT[catalogoActual];
+    if (!cfg) return;
 
     if (tituloCatalogo) {
         const sufijo = (vistaActual === 'eliminados') ? ' · Eliminados' : '';
@@ -239,50 +397,58 @@ function actualizarUIDeCatalogo() {
         btnNuevoTexto.textContent = `Nuevo ${cfg.tituloSingular}`;
     }
 
-    // En vista eliminados, "Nuevo" se deshabilita
     const enEliminados = (vistaActual === 'eliminados');
-    btnNuevo.disabled = enEliminados;
-    btnNuevo.style.opacity = enEliminados ? '0.5' : '';
+    if (btnNuevo) {
+        btnNuevo.disabled = enEliminados;
+        btnNuevo.style.opacity = enEliminados ? '0.5' : '';
+    }
+
+    renderAyuda();
+    aplicarEstadoAyuda();
 }
 
 /* =========================================================
    TABS DE CATÁLOGO
    ========================================================= */
-tabs.addEventListener('click', (e) => {
-    const btn = e.target.closest('.tab');
-    if (!btn || btn.classList.contains('activo')) return;
+if (tabs) {
+    tabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab');
+        if (!btn || btn.classList.contains('activo')) return;
 
-    tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('activo'));
-    btn.classList.add('activo');
+        tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('activo'));
+        btn.classList.add('activo');
 
-    catalogoActual = btn.dataset.catalogo;
-    inputBusqueda.value = '';
-    filtroBusqueda = '';
-    btnLimpiarBusq.classList.add('oculto');
+        catalogoActual = btn.dataset.catalogo;
+        if (inputBusqueda) inputBusqueda.value = '';
+        filtroBusqueda = '';
+        if (btnLimpiarBusq) btnLimpiarBusq.classList.add('oculto');
 
-    actualizarUIDeCatalogo();
-    cargarCatalogo();
-});
+        actualizarUIDeCatalogo();
+        cargarCatalogo();
+    });
+}
 
 /* =========================================================
    TABS DE VISTA (Activos / Eliminados)
    ========================================================= */
-tabsVista.addEventListener('click', (e) => {
-    const btn = e.target.closest('.tab-vista');
-    if (!btn || btn.classList.contains('activo')) return;
+if (tabsVista) {
+    tabsVista.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab-vista');
+        if (!btn || btn.classList.contains('activo')) return;
 
-    tabsVista.querySelectorAll('.tab-vista').forEach(t => t.classList.remove('activo'));
-    btn.classList.add('activo');
+        tabsVista.querySelectorAll('.tab-vista').forEach(t => t.classList.remove('activo'));
+        btn.classList.add('activo');
 
-    vistaActual = btn.dataset.vista;
+        vistaActual = btn.dataset.vista;
 
-    inputBusqueda.value = '';
-    filtroBusqueda = '';
-    btnLimpiarBusq.classList.add('oculto');
+        if (inputBusqueda) inputBusqueda.value = '';
+        filtroBusqueda = '';
+        if (btnLimpiarBusq) btnLimpiarBusq.classList.add('oculto');
 
-    actualizarUIDeCatalogo();
-    cargarCatalogo();
-});
+        actualizarUIDeCatalogo();
+        cargarCatalogo();
+    });
+}
 
 /* =========================================================
    CARGAR CATÁLOGO
@@ -302,13 +468,12 @@ async function cargarCatalogo() {
    ========================================================= */
 function renderTabla() {
     const cfg = CATALOGOS_FRONT[catalogoActual];
+    if (!cfg || !tablaHead || !tablaBody) return;
 
-    // Encabezados dinámicos
     const headers = cfg.campos.map(c => `<th>${escaparHTML(c.etiqueta)}</th>`);
     headers.push('<th style="width:230px; text-align:right;">Acciones</th>');
     tablaHead.innerHTML = `<tr>${headers.join('')}</tr>`;
 
-    // Filtro
     const listaFiltrada = registros.filter(r => {
         if (!filtroBusqueda) return true;
         const texto = cfg.campos
@@ -323,18 +488,20 @@ function renderTabla() {
     tablaBody.innerHTML = '';
 
     if (listaFiltrada.length === 0) {
-        sinResultados.classList.remove('oculto');
+        if (sinResultados) sinResultados.classList.remove('oculto');
         if (sinResultadosTxt) {
             sinResultadosTxt.textContent = vistaActual === 'eliminados'
                 ? `No hay ${cfg.titulo.toLowerCase()} dados de baja.`
                 : `No se encontraron ${cfg.titulo.toLowerCase()} con ese criterio.`;
         }
-        document.querySelector('.card-tabla').style.display = 'none';
+        const cardTabla = document.querySelector('.card-tabla');
+        if (cardTabla) cardTabla.style.display = 'none';
         return;
     }
 
-    sinResultados.classList.add('oculto');
-    document.querySelector('.card-tabla').style.display = '';
+    if (sinResultados) sinResultados.classList.add('oculto');
+    const cardTabla = document.querySelector('.card-tabla');
+    if (cardTabla) cardTabla.style.display = '';
 
     const esVistaEliminados = (vistaActual === 'eliminados');
 
@@ -354,7 +521,6 @@ function renderTabla() {
 
         const celda = tr.querySelector('.acciones-tabla');
 
-        /* ---- Vista ELIMINADOS → Restaurar ---- */
         if (esVistaEliminados) {
             const btnRestaurar = document.createElement('button');
             btnRestaurar.type = 'button';
@@ -371,7 +537,6 @@ function renderTabla() {
             return;
         }
 
-        /* ---- Vista ACTIVOS → Editar + Dar de baja ---- */
         const btnEditar = document.createElement('button');
         btnEditar.type = 'button';
         btnEditar.className = 'secundario';
@@ -404,46 +569,68 @@ function renderTabla() {
 /* =========================================================
    BUSCADOR
    ========================================================= */
-inputBusqueda.addEventListener('input', () => {
-    filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
-    btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
-    renderTabla();
-});
+if (inputBusqueda) {
+    inputBusqueda.addEventListener('input', () => {
+        filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
+        if (btnLimpiarBusq) btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+        renderTabla();
+    });
+}
 
-btnLimpiarBusq.addEventListener('click', () => {
-    inputBusqueda.value = '';
-    filtroBusqueda = '';
-    btnLimpiarBusq.classList.add('oculto');
-    renderTabla();
-    inputBusqueda.focus();
-});
+if (btnLimpiarBusq) {
+    btnLimpiarBusq.addEventListener('click', () => {
+        if (inputBusqueda) inputBusqueda.value = '';
+        filtroBusqueda = '';
+        btnLimpiarBusq.classList.add('oculto');
+        renderTabla();
+        if (inputBusqueda) inputBusqueda.focus();
+    });
+}
 
-btnLimpiarFiltro.addEventListener('click', () => {
-    inputBusqueda.value = '';
-    filtroBusqueda = '';
-    btnLimpiarBusq.classList.add('oculto');
-    renderTabla();
-});
+if (btnLimpiarFiltro) {
+    btnLimpiarFiltro.addEventListener('click', () => {
+        if (inputBusqueda) inputBusqueda.value = '';
+        filtroBusqueda = '';
+        if (btnLimpiarBusq) btnLimpiarBusq.classList.add('oculto');
+        renderTabla();
+    });
+}
+
+/* =========================================================
+   PANEL AYUDA TOGGLE
+   ========================================================= */
+if (btnToggleAyuda) {
+    btnToggleAyuda.addEventListener('click', () => {
+        ayudaAbierta = !ayudaAbierta;
+        aplicarEstadoAyuda();
+    });
+}
 
 /* =========================================================
    MODAL — ABRIR / CERRAR
    ========================================================= */
 function abrirModal() {
+    if (!modal) return;
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
 }
 function cerrarModal() {
+    if (!modal) return;
     modal.style.display = 'none';
     document.body.style.overflow = '';
     ocultarMensaje();
+    mostrarAvisoModal(null);
     modoEdicion = false;
     idEditando = null;
 }
-document.getElementById('modal-cerrar').addEventListener('click', cerrarModal);
-document.getElementById('btn-cancelar').addEventListener('click', cerrarModal);
-modal.addEventListener('click', (e) => { if (e.target === modal) cerrarModal(); });
+
+if (btnModalCerrar) btnModalCerrar.addEventListener('click', cerrarModal);
+if (btnModalCancelar) btnModalCancelar.addEventListener('click', cerrarModal);
+if (modal) {
+    modal.addEventListener('click', (e) => { if (e.target === modal) cerrarModal(); });
+}
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal.style.display === 'flex') cerrarModal();
+    if (e.key === 'Escape' && modal && modal.style.display === 'flex') cerrarModal();
 });
 
 /* =========================================================
@@ -451,6 +638,8 @@ document.addEventListener('keydown', (e) => {
    ========================================================= */
 function construirFormulario(datos = {}) {
     const cfg = CATALOGOS_FRONT[catalogoActual];
+    if (!cfg || !camposForm) return;
+
     camposForm.innerHTML = '';
 
     const camposNormales = [];
@@ -461,25 +650,34 @@ function construirFormulario(datos = {}) {
         else camposNormales.push(c);
     });
 
+    const labelConTip = (c) => {
+        const tip = c.tip
+            ? `<span class="tip" title="${escaparHTML(c.tip)}">ⓘ</span>`
+            : '';
+        return `<label for="campo-${c.nombre}">${escaparHTML(c.etiqueta)}${c.requerido ? ' *' : ''} ${tip}</label>`;
+    };
+
     camposNormales.forEach(c => {
         const wrapper = document.createElement('div');
         const esFull = (c.tipo === 'select' || c.nombre === 'Descripcion');
         if (esFull) wrapper.classList.add('campo-full');
 
         if (c.tipo === 'select') {
+            const bloqueado = (modoEdicion && c.esGrupoInmutable);
             const opcionesHtml = (c.opciones || []).map(op => {
                 const sel = String(datos[c.nombre] ?? '') === String(op.valor) ? 'selected' : '';
                 return `<option value="${escaparHTML(op.valor)}" ${sel}>${escaparHTML(op.etiqueta)}</option>`;
             }).join('');
 
             wrapper.innerHTML = `
-                <label for="campo-${c.nombre}">${escaparHTML(c.etiqueta)}${c.requerido ? ' *' : ''}</label>
-                <select id="campo-${c.nombre}" ${c.requerido ? 'required' : ''}>
+                ${labelConTip(c)}
+                <select id="campo-${c.nombre}" ${c.requerido ? 'required' : ''} ${bloqueado ? 'disabled' : ''}>
                     ${opcionesHtml}
-                </select>`;
+                </select>
+                ${bloqueado ? `<small class="campo-nota">El grupo no se puede cambiar una vez creado.</small>` : ''}`;
         } else {
             wrapper.innerHTML = `
-                <label for="campo-${c.nombre}">${escaparHTML(c.etiqueta)}${c.requerido ? ' *' : ''}</label>
+                ${labelConTip(c)}
                 <input type="text" id="campo-${c.nombre}" maxlength="${c.max || ''}"
                        value="${escaparHTML(datos[c.nombre] ?? '')}"
                        ${c.requerido ? 'required' : ''}>`;
@@ -493,8 +691,13 @@ function construirFormulario(datos = {}) {
 
         const titulo = document.createElement('div');
         titulo.className = 'grupo-titulo';
-        titulo.textContent = 'Opciones del tipo';
+        titulo.textContent = '¿Qué campos pedirá este tipo al capturar un activo?';
         grupo.appendChild(titulo);
+
+        const subtitulo = document.createElement('div');
+        subtitulo.className = 'grupo-subtitulo';
+        subtitulo.textContent = 'Cada switch activa un campo del formulario. Apagarlo NO borra datos ya capturados en activos existentes.';
+        grupo.appendChild(subtitulo);
 
         const fila = document.createElement('div');
         fila.className = 'fila-switches';
@@ -502,6 +705,7 @@ function construirFormulario(datos = {}) {
         camposBool.forEach(c => {
             const item = document.createElement('label');
             item.className = 'switch';
+            item.title = c.tip || '';
             item.innerHTML = `
                 <input type="checkbox" id="campo-${c.nombre}" ${datos[c.nombre] ? 'checked' : ''}>
                 <span class="slider"></span>
@@ -517,18 +721,21 @@ function construirFormulario(datos = {}) {
 /* =========================================================
    NUEVO
    ========================================================= */
-btnNuevo.addEventListener('click', () => {
-    if (vistaActual === 'eliminados') return;
-    const cfg = CATALOGOS_FRONT[catalogoActual];
-    modoEdicion = false;
-    idEditando = null;
-    modalTitulo.textContent = `Nuevo ${cfg.tituloSingular}`;
-    construirFormulario();
-    ocultarMensaje();
-    abrirModal();
-    const primerInput = camposForm.querySelector('input[type="text"], select');
-    if (primerInput) primerInput.focus();
-});
+if (btnNuevo) {
+    btnNuevo.addEventListener('click', () => {
+        if (vistaActual === 'eliminados') return;
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        modoEdicion = false;
+        idEditando = null;
+        if (modalTitulo) modalTitulo.textContent = `Nuevo ${cfg.tituloSingular}`;
+        construirFormulario();
+        ocultarMensaje();
+        mostrarAvisoModal(null);
+        abrirModal();
+        const primerInput = camposForm ? camposForm.querySelector('input[type="text"], select') : null;
+        if (primerInput) primerInput.focus();
+    });
+}
 
 /* =========================================================
    EDITAR
@@ -540,75 +747,117 @@ function abrirEdicion(id) {
 
     modoEdicion = true;
     idEditando = id;
-    modalTitulo.textContent = `Editar ${cfg.tituloSingular}`;
+    if (modalTitulo) modalTitulo.textContent = `Editar ${cfg.tituloSingular}`;
     construirFormulario(r);
     ocultarMensaje();
+    mostrarAvisoModal(null);
+
+    if (catalogoActual === 'tipos') {
+        mostrarAvisoModal(`
+            <b>Ojo:</b> si cambias el <b>Grupo de subtipo</b>, los activos actuales seguirán apuntando a sus subtipos,
+            pero al crear/editar activos de este tipo ya no aparecerán esos subtipos si no coinciden con el nuevo grupo.
+        `);
+    } else if (catalogoActual === 'subtipos') {
+        mostrarAvisoModal(`
+            <b>Ojo:</b> el campo <b>Grupo</b> no se puede cambiar una vez creado (los activos lo referencian).
+            Si necesitas moverlo, crea un subtipo nuevo y da de baja el anterior.
+        `);
+    }
+
     abrirModal();
-    const primerInput = camposForm.querySelector('input[type="text"], select');
+    const primerInput = camposForm ? camposForm.querySelector('input[type="text"], select:not([disabled])') : null;
     if (primerInput) { primerInput.focus(); primerInput.select?.(); }
 }
 
 /* =========================================================
    GUARDAR
    ========================================================= */
-formulario.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (guardando) return;
+if (formulario) {
+    formulario.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (guardando) return;
 
-    const cfg = CATALOGOS_FRONT[catalogoActual];
-    const datos = {};
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        if (!cfg) return;
 
-    for (const c of cfg.campos) {
-        const el = document.getElementById(`campo-${c.nombre}`);
+        const datos = {};
 
-        if (c.tipo === 'bool') {
-            datos[c.nombre] = el.checked;
-        } else {
-            const val = el.value.trim();
-            if (c.requerido && !val) {
-                mostrarMensaje(`${c.etiqueta} es obligatorio.`, 'error');
+        for (const c of cfg.campos) {
+            const el = document.getElementById(`campo-${c.nombre}`);
+            if (!el) continue;
+
+            if (c.tipo === 'bool') {
+                datos[c.nombre] = el.checked;
+            } else {
+                if (modoEdicion && c.esGrupoInmutable) continue;
+
+                const val = el.value.trim();
+                if (c.requerido && !val) {
+                    mostrarMensaje(`${c.etiqueta} es obligatorio.`, 'error');
+                    return;
+                }
+                datos[c.nombre] = val || null;
+            }
+        }
+
+        // Validación de negocio: RequiereSubtipo exige GrupoSubtipo
+        if (catalogoActual === 'tipos') {
+            const elReqSubtipo = document.getElementById('campo-RequiereSubtipo');
+            const elGrupo      = document.getElementById('campo-GrupoSubtipo');
+            const reqSubtipo   = elReqSubtipo ? elReqSubtipo.checked : false;
+            const grupo        = elGrupo ? elGrupo.value : '';
+            if (reqSubtipo && !grupo) {
+                mostrarMensaje('Si el tipo requiere subtipo, debes indicar un Grupo de subtipo.', 'error');
                 return;
             }
-            datos[c.nombre] = val || null;
-        }
-    }
-
-    setGuardando(true);
-    try {
-        let res;
-        if (modoEdicion && idEditando !== null) {
-            res = await window.api.activoFijo.catalogos.actualizar(catalogoActual, idEditando, datos);
-        } else {
-            res = await window.api.activoFijo.catalogos.crear(catalogoActual, datos);
         }
 
-        if (res && res.ok) {
-            cerrarModal();
-            await cargarCatalogo();
-            toastExito(res.mensaje || 'Operación exitosa');
-        } else {
-            mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');
+        setGuardando(true);
+        try {
+            let res;
+            if (modoEdicion && idEditando !== null) {
+                res = await window.api.activoFijo.catalogos.actualizar(catalogoActual, idEditando, datos);
+            } else {
+                res = await window.api.activoFijo.catalogos.crear(catalogoActual, datos);
+            }
+
+            if (res && res.ok) {
+                cerrarModal();
+                await cargarCatalogo();
+                toastExito(res.mensaje || 'Operación exitosa');
+            } else {
+                mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');
+            }
+        } catch (err) {
+            mostrarMensaje('Error: ' + err.message, 'error');
+        } finally {
+            setGuardando(false);
         }
-    } catch (err) {
-        mostrarMensaje('Error: ' + err.message, 'error');
-    } finally {
-        setGuardando(false);
-    }
-});
+    });
+}
 
 /* =========================================================
-   ELIMINAR (Soft delete)
+   ELIMINAR (Soft delete) — con advertencias de impacto
    ========================================================= */
 async function eliminarRegistro(id) {
     const cfg = CATALOGOS_FRONT[catalogoActual];
     const r = registros.find(x => x[cfg.pk] === id);
     const nombre = r ? (r.Nombre || `#${id}`) : `#${id}`;
 
+    let extra = '';
+    if (catalogoActual === 'tipos') {
+        extra = '<br><br><b>Nota:</b> los activos que ya usan este tipo seguirán funcionando, pero no podrás crear nuevos con él.';
+    } else if (catalogoActual === 'estatus') {
+        extra = '<br><br><b>Nota:</b> dar de baja un estatus NO mueve a los activos que lo tienen asignado.';
+    } else if (catalogoActual === 'subtipos') {
+        extra = '<br><br><b>Nota:</b> los activos con este subtipo lo conservan, pero ya no podrás elegirlo al capturar nuevos.';
+    }
+
     const confirmacion = await Swal.fire({
         icon: 'warning',
         title: `¿Dar de baja ${cfg.tituloSingular}?`,
         html: `Se dará de baja <strong>${escaparHTML(nombre)}</strong>.<br>
-               Podrás verlo y restaurarlo desde la pestaña <strong>Eliminados</strong>.`,
+               Podrás verlo y restaurarlo desde la pestaña <strong>Eliminados</strong>.${extra}`,
         showCancelButton: true,
         confirmButtonText: 'Sí, dar de baja',
         cancelButtonText: 'Cancelar',
@@ -679,9 +928,11 @@ async function restaurarRegistro(id) {
 /* =========================================================
    NAVEGACIÓN
    ========================================================= */
-document.getElementById('btn-volver').addEventListener('click', () => {
-    window.api.volverMenu();
-});
+if (btnVolver) {
+    btnVolver.addEventListener('click', () => {
+        window.api.volverMenu();
+    });
+}
 
 /* =========================================================
    INICIO

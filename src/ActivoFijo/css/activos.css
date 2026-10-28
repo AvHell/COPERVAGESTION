@@ -306,10 +306,7 @@ h2 {
 .oculto { display: none !important; }
 
 /* =========================================================
-   MODAL — SOLUCIÓN ROBUSTA
-   El overlay hace scroll y el modal tiene header/footer
-   con position: sticky (siempre visibles al scrollear).
-   Funciona en cualquier versión de Electron.
+   MODAL
    ========================================================= */
 .modal-overlay {
     position: fixed;
@@ -320,8 +317,6 @@ h2 {
     overflow-x: hidden;
     z-index: 1000;
     padding: 24px 20px;
-
-    /* Centrar el modal cuando es más chico que el viewport */
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -333,13 +328,12 @@ h2 {
     width: 100%;
     max-width: 820px;
     box-shadow: var(--af-sombra-fuerte);
-    margin: auto;                /* centra vertical cuando es chico */
+    margin: auto;
     position: relative;
-    display: block;              /* ⚠️ Ya no flex: dejamos que todo scrollee */
+    display: block;
     overflow: hidden;
 }
 
-/* HEADER — siempre pegado arriba al scrollear */
 .modal-header {
     position: sticky;
     top: 0;
@@ -371,12 +365,8 @@ h2 {
     color: var(--af-error);
 }
 
-/* BODY — contenido normal (el scroll lo hace el overlay) */
-.modal-body {
-    padding: 22px 26px 8px;
-}
+.modal-body { padding: 22px 26px 8px; }
 
-/* FOOTER — siempre pegado abajo al scrollear */
 .modal-footer {
     position: sticky;
     bottom: 0;
@@ -526,7 +516,7 @@ h2 {
 }
 
 /* =========================================================
-   TABS DE VISTA (Activos / Eliminados)
+   TABS DE VISTA
    ========================================================= */
 .tabs-vista {
     display: flex;
@@ -566,7 +556,6 @@ button.exito {
 button.exito:hover:not(:disabled) {
     background-color: #276749;
 }
-
 
 /* =========================================================
    MODAL DE HISTÓRICO
@@ -650,6 +639,105 @@ button.exito:hover:not(:disabled) {
 }
 .his-cambios b { color: #1f2937; }
 
+/* =========================================================
+   MODAL VER (solo lectura)
+   ========================================================= */
+.swal2-popup.cl-ver {
+    font-family: var(--af-fuente);
+    padding: 22px 24px;
+    border-radius: 14px;
+}
+.swal2-popup.cl-ver .swal2-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--af-azul);
+    padding: 0 0 10px;
+}
+.ver-wrap {
+    max-height: 65vh;
+    overflow-y: auto;
+    text-align: left;
+    margin-top: 8px;
+    padding-right: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+/* Scroll fino para el modal Ver */
+.ver-wrap::-webkit-scrollbar {
+    width: 8px;
+}
+.ver-wrap::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 8px;
+}
+.ver-wrap::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+.ver-wrap::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ver-seccion {
+    margin-bottom: 14px;
+    border: 1px solid var(--af-gris-borde);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: #fafbfc;
+}
+.ver-seccion-titulo {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--af-azul);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--af-gris-borde);
+}
+.ver-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 18px;
+}
+.ver-grid-full { grid-template-columns: 1fr; }
+.ver-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 0;
+}
+.ver-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--af-gris-texto-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.ver-valor {
+    font-size: 13.5px;
+    color: #1a202c;
+    word-break: break-word;
+}
+.ver-observaciones {
+    font-size: 13px;
+    color: #374151;
+    white-space: pre-wrap;
+    line-height: 1.55;
+}
+.ver-meta {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--af-gris-borde);
+    font-size: 11.5px;
+    color: var(--af-gris-texto-2);
+    text-align: center;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+@media (max-width: 900px) {
+    .ver-grid { grid-template-columns: 1fr; }
+}
+
 /* RESPONSIVE */
 @media (max-width: 900px) {
     body { padding: 20px; }
@@ -658,4 +746,5 @@ button.exito:hover:not(:disabled) {
     .modal-base { max-width: 100%; }
     .filtros { gap: 8px; }
     .filtro { min-width: 130px; flex: 1; }
+    .ver-grid { grid-template-columns: 1fr; }
 }

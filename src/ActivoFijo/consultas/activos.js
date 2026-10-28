@@ -281,7 +281,10 @@ async function crear(datos, idUsuario) {
 }
 
 /* =========================================================
-   ACTUALIZAR
+   ACTUALIZAR — UPDATE dinámico: solo toca lo que viene en `datos`
+   Regla: "si no viene (undefined), no lo toques".
+   Evita borrar campos por accidente (ej. PrecioActivo en tipos
+   que no lo requieren, IdLugarCliente que el front nunca envía).
    ========================================================= */
 async function actualizar(id, datos, idUsuario) {
     try {
@@ -289,11 +292,7 @@ async function actualizar(id, datos, idUsuario) {
 
         const actual = await pool.request()
             .input('Id', sql.Int, id)
-            .query(`
-                SELECT IdTipo, IdEstado, IdEstatus
-                FROM ActivoFijoEquipos
-                WHERE IdActivoFijoEQ = @Id
-            `);
+            .query(`SELECT IdTipo, IdEstado, IdEstatus FROM ActivoFijoEquipos WHERE IdActivoFijoEQ = @Id`);
 
         if (actual.recordset.length === 0) {
             return { ok: false, mensaje: 'El activo ya no existe.' };
@@ -301,7 +300,8 @@ async function actualizar(id, datos, idUsuario) {
 
         const current = actual.recordset[0];
 
-        if (datos.NoSerie) {
+        // --- Validaciones de duplicados (solo si viene el campo) ---
+        if (datos.NoSerie !== undefined && datos.NoSerie) {
             const dup = await pool.request()
                 .input('NoSerie', sql.NVarChar(150), datos.NoSerie)
                 .input('Id', sql.Int, id)
@@ -310,7 +310,7 @@ async function actualizar(id, datos, idUsuario) {
                 return { ok: false, mensaje: `Ya existe otro activo con NoSerie "${datos.NoSerie}".` };
             }
         }
-        if (datos.IMEI1) {
+        if (datos.IMEI1 !== undefined && datos.IMEI1) {
             const dup = await pool.request()
                 .input('IMEI1', sql.NVarChar(50), datos.IMEI1)
                 .input('Id', sql.Int, id)
@@ -319,7 +319,7 @@ async function actualizar(id, datos, idUsuario) {
                 return { ok: false, mensaje: `Ya existe otro activo con IMEI1 "${datos.IMEI1}".` };
             }
         }
-        if (datos.IMEI2) {
+        if (datos.IMEI2 !== undefined && datos.IMEI2) {
             const dup = await pool.request()
                 .input('IMEI2', sql.NVarChar(50), datos.IMEI2)
                 .input('Id', sql.Int, id)
@@ -328,7 +328,7 @@ async function actualizar(id, datos, idUsuario) {
                 return { ok: false, mensaje: `Ya existe otro activo con IMEI2 "${datos.IMEI2}".` };
             }
         }
-        if (datos.NoTelefono) {
+        if (datos.NoTelefono !== undefined && datos.NoTelefono) {
             const dup = await pool.request()
                 .input('NoTelefono', sql.NVarChar(50), datos.NoTelefono)
                 .input('Id', sql.Int, id)
@@ -338,92 +338,83 @@ async function actualizar(id, datos, idUsuario) {
             }
         }
 
+        // --- Resolver IdTipo / IdEstado / IdEstatus con fallback ---
         let IdTipo = null;
-        if (datos.IdTipo) {
-            IdTipo = datos.IdTipo;
-        } else if (datos.Tipo) {
-            IdTipo = await getIdPorNombre(pool, 'ActivoFijoTipos', 'IdTipo', datos.Tipo);
-        }
+        if (datos.IdTipo) IdTipo = datos.IdTipo;
+        else if (datos.Tipo) IdTipo = await getIdPorNombre(pool, 'ActivoFijoTipos', 'IdTipo', datos.Tipo);
         if (!IdTipo) IdTipo = current.IdTipo;
         if (!IdTipo) return { ok: false, mensaje: 'El tipo es obligatorio.' };
 
         let IdEstado = null;
-        if (datos.IdEstado) {
-            IdEstado = datos.IdEstado;
-        } else if (datos.Estado) {
-            IdEstado = await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', datos.Estado);
-        }
+        if (datos.IdEstado) IdEstado = datos.IdEstado;
+        else if (datos.Estado) IdEstado = await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', datos.Estado);
         if (!IdEstado) IdEstado = current.IdEstado;
         if (!IdEstado) IdEstado = await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', 'VALIDAR');
 
         let IdEstatus = null;
-        if (datos.IdEstatus) {
-            IdEstatus = datos.IdEstatus;
-        } else if (datos.Estatus) {
-            IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', datos.Estatus);
-        }
+        if (datos.IdEstatus) IdEstatus = datos.IdEstatus;
+        else if (datos.Estatus) IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', datos.Estatus);
         if (!IdEstatus) IdEstatus = current.IdEstatus;
         if (!IdEstatus) IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', 'STOCK');
 
-        const result = await pool.request()
-            .input('Id',               sql.Int,           id)
-            .input('IdCartera',        sql.Int,           datos.IdCartera || null)
-            .input('IdMarca',          sql.Int,           datos.IdMarca || null)
-            .input('Modelo',           sql.NVarChar(150), datos.Modelo || null)
-            .input('IdTipo',           sql.Int,           IdTipo)
-            .input('NoSerie',          sql.NVarChar(150), datos.NoSerie || null)
-            .input('IMEI1',            sql.NVarChar(50),  datos.IMEI1 || null)
-            .input('IMEI2',            sql.NVarChar(50),  datos.IMEI2 || null)
-            .input('NoTelefono',       sql.NVarChar(50),  datos.NoTelefono || null)
-            .input('Procesador',       sql.NVarChar(150), datos.Procesador || null)
-            .input('MemoriaRAM',       sql.NVarChar(50),  datos.MemoriaRAM || null)
-            .input('Almacenamiento',   sql.NVarChar(50),  datos.Almacenamiento || null)
-            .input('SistemaOperativo', sql.NVarChar(100), datos.SistemaOperativo || null)
-            .input('Accesorios',       sql.NVarChar(300), datos.Accesorios || null)
-            .input('PrecioActivo',     sql.Decimal(18,2), datos.PrecioActivo ?? null)
-            .input('IdEstado',         sql.Int,           IdEstado)
-            .input('IdEstatus',        sql.Int,           IdEstatus)
-            .input('IdLugarCliente',   sql.Int,           datos.IdLugarCliente || null)
-            .input('IdSitio',          sql.Int,           datos.IdSitio || null)
-            .input('IdSubtipo',        sql.Int,           datos.IdSubtipo || null)
-            .input('IdClasificacion',  sql.Int,           datos.IdClasificacion || null)
-            .input('IdTamanio',        sql.Int,           datos.IdTamanio || null)
-            .input('IdCapacidad',      sql.Int,           datos.IdCapacidad || null)
-            .input('IdVoltaje',        sql.Int,           datos.IdVoltaje || null)
-            .input('UsuarioAsignado',  sql.NVarChar(200), datos.UsuarioAsignado || null)
-            .input('Observaciones',    sql.NVarChar(500), datos.Observaciones || null)
-            .input('IdUsuario',        sql.Int,           idUsuario || null)
-            .query(`
-                UPDATE ActivoFijoEquipos SET
-                    IdCartera = @IdCartera,
-                    IdMarca = @IdMarca,
-                    Modelo = @Modelo,
-                    IdTipo = @IdTipo,
-                    NoSerie = @NoSerie,
-                    IMEI1 = @IMEI1,
-                    IMEI2 = @IMEI2,
-                    NoTelefono = @NoTelefono,
-                    Procesador = @Procesador,
-                    MemoriaRAM = @MemoriaRAM,
-                    Almacenamiento = @Almacenamiento,
-                    SistemaOperativo = @SistemaOperativo,
-                    Accesorios = @Accesorios,
-                    PrecioActivo = @PrecioActivo,
-                    IdEstado = @IdEstado,
-                    IdEstatus = @IdEstatus,
-                    IdLugarCliente = @IdLugarCliente,
-                    IdSitio = @IdSitio,
-                    IdSubtipo = @IdSubtipo,
-                    IdClasificacion = @IdClasificacion,
-                    IdTamanio = @IdTamanio,
-                    IdCapacidad = @IdCapacidad,
-                    IdVoltaje = @IdVoltaje,
-                    UsuarioAsignado = @UsuarioAsignado,
-                    Observaciones = @Observaciones,
-                    IdUsuarioModificacion = @IdUsuario,
-                    FechaModificacion = GETDATE()
-                WHERE IdActivoFijoEQ = @Id
-            `);
+        // --- Construcción dinámica del UPDATE ---
+        const request = pool.request();
+        request.input('Id',         sql.Int, id);
+        request.input('IdTipo',     sql.Int, IdTipo);
+        request.input('IdEstado',   sql.Int, IdEstado);
+        request.input('IdEstatus',  sql.Int, IdEstatus);
+        request.input('IdUsuario',  sql.Int, idUsuario || null);
+
+        const sets = [
+            'IdTipo = @IdTipo',
+            'IdEstado = @IdEstado',
+            'IdEstatus = @IdEstatus',
+            'IdUsuarioModificacion = @IdUsuario',
+            'FechaModificacion = GETDATE()'
+        ];
+
+        // Campos opcionales: [jsKey, colName, tipoSQL, longitud]
+        const camposOpcionales = [
+            ['IdCartera',       'IdCartera',        sql.Int,       null],
+            ['IdMarca',         'IdMarca',          sql.Int,       null],
+            ['Modelo',          'Modelo',           sql.NVarChar,  150],
+            ['NoSerie',         'NoSerie',          sql.NVarChar,  150],
+            ['IMEI1',           'IMEI1',            sql.NVarChar,  50],
+            ['IMEI2',           'IMEI2',            sql.NVarChar,  50],
+            ['NoTelefono',      'NoTelefono',       sql.NVarChar,  50],
+            ['Procesador',      'Procesador',       sql.NVarChar,  150],
+            ['MemoriaRAM',      'MemoriaRAM',       sql.NVarChar,  50],
+            ['Almacenamiento',  'Almacenamiento',   sql.NVarChar,  50],
+            ['SistemaOperativo','SistemaOperativo', sql.NVarChar,  100],
+            ['Accesorios',      'Accesorios',       sql.NVarChar,  300],
+            ['PrecioActivo',    'PrecioActivo',     'Decimal',     null],
+            ['IdLugarCliente',  'IdLugarCliente',   sql.Int,       null],
+            ['IdSitio',         'IdSitio',          sql.Int,       null],
+            ['IdSubtipo',       'IdSubtipo',        sql.Int,       null],
+            ['IdClasificacion', 'IdClasificacion',  sql.Int,       null],
+            ['IdTamanio',       'IdTamanio',        sql.Int,       null],
+            ['IdCapacidad',     'IdCapacidad',      sql.Int,       null],
+            ['IdVoltaje',       'IdVoltaje',        sql.Int,       null],
+            ['UsuarioAsignado', 'UsuarioAsignado',  sql.NVarChar,  200],
+            ['Observaciones',   'Observaciones',    sql.NVarChar,  500]
+        ];
+
+        for (const [jsKey, colName, tipoSqlFn, longitud] of camposOpcionales) {
+            if (datos[jsKey] === undefined) continue;
+
+            const paramName = 'p_' + colName;
+            let sqlType;
+            if (tipoSqlFn === 'Decimal')   sqlType = sql.Decimal(18, 2);
+            else if (longitud !== null)    sqlType = tipoSqlFn(longitud);
+            else                           sqlType = tipoSqlFn;
+
+            request.input(paramName, sqlType, datos[jsKey]);
+            sets.push(`${colName} = @${paramName}`);
+        }
+
+        const result = await request.query(
+            `UPDATE ActivoFijoEquipos SET ${sets.join(', ')} WHERE IdActivoFijoEQ = @Id`
+        );
 
         if (result.rowsAffected[0] === 0) {
             return { ok: false, mensaje: 'El activo ya no existe.' };
@@ -439,16 +430,11 @@ async function actualizar(id, datos, idUsuario) {
 
 /* =========================================================
    ELIMINAR (Soft delete) — Marca como BAJA
-   - Valida responsivas activas (doble check: antes y en el UPDATE)
-   - NO borra nada, solo cambia IdEstatus
-   - El trigger trg_AFE_AfterUpdate registra el movimiento
-   - Si viene motivo, lo pega al histórico del BAJA recién creado
    ========================================================= */
 async function eliminar(id, idUsuario, motivo = null) {
     try {
         const pool = await getPool();
 
-        // 1. Validar responsivas activas (mensaje amigable)
         const respActivas = await pool.request()
             .input('Id', sql.Int, id)
             .query(`
@@ -465,7 +451,6 @@ async function eliminar(id, idUsuario, motivo = null) {
             };
         }
 
-        // 2. UPDATE atómico con doble validación
         const result = await pool.request()
             .input('Id',     sql.Int, id)
             .input('IdUser', sql.Int, idUsuario || null)
@@ -487,7 +472,6 @@ async function eliminar(id, idUsuario, motivo = null) {
             return { ok: false, mensaje: 'El activo ya estaba dado de baja o no existe.' };
         }
 
-        // 3. Guardar motivo en el histórico más reciente del BAJA
         if (motivo) {
             await pool.request()
                 .input('Id',     sql.Int,           id)
@@ -512,7 +496,7 @@ async function eliminar(id, idUsuario, motivo = null) {
 }
 
 /* =========================================================
-   RESTAURAR — Saca un activo de BAJA y lo vuelve a STOCK
+   RESTAURAR — Saca un activo de BAJA y lo vuelve a STOCK/DISPONIBLE
    ========================================================= */
 async function restaurar(id, idUsuario, motivo = null) {
     try {
@@ -523,7 +507,10 @@ async function restaurar(id, idUsuario, motivo = null) {
             .input('IdUser', sql.Int, idUsuario || null)
             .query(`
                 UPDATE ActivoFijoEquipos SET
-                    IdEstatus             = (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'DISPONIBLE'),
+                    IdEstatus = ISNULL(
+                        (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'DISPONIBLE'),
+                        (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'STOCK')
+                    ),
                     IdUsuarioModificacion = @IdUser,
                     FechaModificacion     = GETDATE()
                 WHERE IdActivoFijoEQ = @Id

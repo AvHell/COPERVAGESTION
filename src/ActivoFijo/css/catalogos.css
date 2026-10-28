@@ -604,6 +604,129 @@ button.exito:hover:not(:disabled) {
     background-color: #276749;
 }
 
+
+/* =========================================================
+   PANEL DE AYUDA CONTEXTUAL
+   ========================================================= */
+.panel-ayuda {
+    background-color: #f0f7ff;
+    border: 1px solid #bfdbfe;
+    border-left: 4px solid var(--af-azul);
+    border-radius: var(--af-radio-sm);
+    margin: 0 0 20px;
+    overflow: hidden;
+}
+.panel-ayuda.colapsado .panel-ayuda-header {
+    border-bottom: none;
+}
+.panel-ayuda-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #bfdbfe;
+    background: linear-gradient(180deg, #f0f7ff 0%, #e6f0fb 100%);
+}
+.panel-ayuda-titulo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--af-azul);
+}
+.panel-ayuda-titulo .icono-info {
+    width: 16px; height: 16px;
+    flex-shrink: 0;
+}
+.btn-toggle-ayuda {
+    background: transparent;
+    border: none;
+    color: var(--af-azul);
+    padding: 4px 8px;
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+    transition: transform 0.2s, background-color 0.15s;
+}
+.btn-toggle-ayuda:hover {
+    background-color: rgba(30, 58, 95, 0.08);
+}
+.panel-ayuda.colapsado .btn-toggle-ayuda svg {
+    transform: rotate(-90deg);
+}
+.panel-ayuda-body {
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #1e3a5f;
+    line-height: 1.6;
+}
+.panel-ayuda-body .ayuda-resumen {
+    margin-bottom: 8px;
+}
+.panel-ayuda-body .ayuda-tips {
+    margin: 0;
+    padding-left: 20px;
+}
+.panel-ayuda-body .ayuda-tips li {
+    margin-bottom: 6px;
+}
+.panel-ayuda-body .ayuda-tips b {
+    color: var(--af-azul);
+}
+
+/* =========================================================
+   TIPS (iconito ⓘ)
+   ========================================================= */
+.grid-form label .tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px; height: 15px;
+    font-size: 11px;
+    color: var(--af-gris-texto-2);
+    cursor: help;
+    margin-left: 4px;
+    font-weight: 400;
+    text-transform: none;
+}
+.grid-form label .tip:hover {
+    color: var(--af-azul);
+}
+
+/* Nota bajo un campo */
+.campo-nota {
+    display: block;
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--af-gris-texto-2);
+    font-style: italic;
+}
+
+/* Subtítulo del grupo de switches */
+.grupo-subtitulo {
+    font-size: 11.5px;
+    color: var(--af-gris-texto-2);
+    margin: -4px 0 10px;
+    line-height: 1.4;
+}
+
+/* Aviso dentro del modal */
+.aviso-modal {
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    background-color: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #d97706;
+    border-radius: var(--af-radio-sm);
+    font-size: 12.5px;
+    color: #78350f;
+    line-height: 1.5;
+}
+.aviso-modal b { color: #92400e; }
+.aviso-modal.oculto { display: none; }
+
 /* RESPONSIVE */
 @media (max-width: 720px) {
     body { padding: 20px; }

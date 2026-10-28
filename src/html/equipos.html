@@ -44,6 +44,7 @@
                 <p>Administra el inventario técnico por cliente y piso</p>
             </div>
             <div class="panel-actions">
+                <!-- Buscador: SIEMPRE visible (es lectura) -->
                 <div class="buscador">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"/>
@@ -57,7 +58,9 @@
                         </svg>
                     </button>
                 </div>
-                <button id="btn-nuevo" class="btn-primary">
+
+                <!-- NUEVO EQUIPO: Requiere permiso -->
+                <button id="btn-nuevo" class="btn-primary" data-permiso="equipos:crear">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M12 5v14M5 12h14"/>
                     </svg>
@@ -231,7 +234,8 @@
 
             <div class="modal-footer">
                 <button id="btn-cancelar" class="btn-ghost">Cancelar</button>
-                <button id="btn-guardar" class="btn-primary">
+                <!-- Guardar: Requiere permiso de crear o editar (se controla lógicamente en el JS, aquí solo lo visualizamos) -->
+                <button id="btn-guardar" class="btn-primary" data-permiso="equipos:crear">
                     <span class="btn-text">Guardar</span>
                     <span class="btn-spinner oculto"></span>
                 </button>
@@ -239,6 +243,9 @@
         </div>
     </div>
 
+    <!-- 1. Incluir helper de permisos -->
+    <script src="../js/permisos-ui.js"></script>
+    <!-- 2. Lógica del renderer -->
     <script src="../js/equipos-renderer.js"></script>
 </body>
 </html>

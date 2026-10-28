@@ -9,7 +9,6 @@ contextBridge.exposeInMainWorld('api', {
     usuarioActual: ()     => ipcRenderer.invoke('usuario-actual'),
     haySesion:     ()     => ipcRenderer.invoke('sesion:hay'),
 
-    /* Motivo de llegada al login (logout, expirada, etc.) */
     consumirMotivoLogin: () => ipcRenderer.invoke('login:motivo-consumir'),
     onLoginMotivo:       (cb) => ipcRenderer.on('login:motivo', (_e, m) => cb(m)),
     onSesionCerrada:     (cb) => ipcRenderer.on('sesion:cerrada', (_e, data) => cb(data)),
@@ -20,6 +19,8 @@ contextBridge.exposeInMainWorld('api', {
     permisos: {
         mios:            ()                    => ipcRenderer.invoke('permisos:mios'),
         miRol:           ()                    => ipcRenderer.invoke('permisos:mi-rol'),
+        puedo:           (clave)               => ipcRenderer.invoke('permisos:puedo', clave),
+        catalogo:        ()                    => ipcRenderer.invoke('permisos:catalogo'),
         listarRoles:     ()                    => ipcRenderer.invoke('permisos:listar-roles'),
         listarTodos:     ()                    => ipcRenderer.invoke('permisos:listar-todos'),
         actualizar:      (idRol, modulo, perm) => ipcRenderer.invoke('permisos:actualizar', idRol, modulo, perm),
@@ -100,7 +101,7 @@ contextBridge.exposeInMainWorld('api', {
     equipos: {
         listar:               ()                => ipcRenderer.invoke('equipos:listar'),
         crear:                (datos)           => ipcRenderer.invoke('equipos:crear', datos),
-        obtenerPorId:         (id)              => ipcRenderer.invoke('equipos:obtenerPorId', id),  
+        obtenerPorId:         (id)              => ipcRenderer.invoke('equipos:obtenerPorId', id),
         actualizar:           (id, datos)       => ipcRenderer.invoke('equipos:actualizar', id, datos),
         eliminar:             (id)              => ipcRenderer.invoke('equipos:eliminar', id),
         verificarIPDuplicada: (ip, idExcluir)   => ipcRenderer.invoke('equipos:verificarIPDuplicada', ip, idExcluir)
@@ -121,11 +122,11 @@ contextBridge.exposeInMainWorld('api', {
        CONFIGURACIONES DE RED
        ========================================================= */
     config: {
-        listarPorClienteTipo: (idCliente, tipo)             => ipcRenderer.invoke('config:listarPorClienteTipo', idCliente, tipo),
-        listarTodas:          (filtros)                     => ipcRenderer.invoke('config:listarTodas', filtros),
-        crear:                (idCliente, tipo, valor, desc)=> ipcRenderer.invoke('config:crear', idCliente, tipo, valor, desc),
-        actualizar:           (id, valor, desc)             => ipcRenderer.invoke('config:actualizar', id, valor, desc),
-        eliminar:             (id)                          => ipcRenderer.invoke('config:eliminar', id)
+        listarPorClienteTipo: (idCliente, tipo)              => ipcRenderer.invoke('config:listarPorClienteTipo', idCliente, tipo),
+        listarTodas:          (filtros)                      => ipcRenderer.invoke('config:listarTodas', filtros),
+        crear:                (idCliente, tipo, valor, desc) => ipcRenderer.invoke('config:crear', idCliente, tipo, valor, desc),
+        actualizar:           (id, valor, desc)              => ipcRenderer.invoke('config:actualizar', id, valor, desc),
+        eliminar:             (id)                           => ipcRenderer.invoke('config:eliminar', id)
     },
 
     /* =========================================================

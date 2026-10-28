@@ -1,7 +1,7 @@
 /* =========================================================
    ACTIVO FIJO — RENDERER DE INVENTARIO
    Formulario inteligente + tabs (Activos / Eliminados)
-   + Motivo de baja/restauración + Modal de Histórico
+   + Motivo de baja/restauración + Modal de Histórico + Ver
    ========================================================= */
 const Swal = window.Swal;
 
@@ -235,7 +235,9 @@ function renderTabla() {
         if (!filtroBusqueda) return true;
         const texto = [
             a.NoSerie, a.IMEI1, a.IMEI2, a.NoTelefono,
-            a.Marca, a.Modelo, a.Tipo, a.Cartera, a.Sitio, a.UsuarioAsignado
+            a.Marca, a.Modelo, a.Tipo, a.Cartera, a.Sitio,
+            a.UsuarioAsignado, a.Observaciones,
+            a.Procesador, a.MemoriaRAM, a.Almacenamiento, a.SistemaOperativo
         ].filter(Boolean).join(' ').toLowerCase();
         return texto.includes(filtroBusqueda);
     });
@@ -290,6 +292,19 @@ function renderTabla() {
         `;
 
         const celda = tr.querySelector('.acciones-tabla');
+
+        /* ---- BOTÓN VER (siempre visible) ---- */
+        const btnVer = document.createElement('button');
+        btnVer.type = 'button';
+        btnVer.className = 'secundario';
+        btnVer.title = 'Ver detalle';
+        btnVer.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg> Ver`;
+        btnVer.addEventListener('click', () => verActivo(a.IdActivoFijoEQ));
+        celda.appendChild(btnVer);
 
         /* ---- Vista ELIMINADOS → Historial + Restaurar ---- */
         if (esVistaEliminados) {
@@ -360,6 +375,143 @@ function renderTabla() {
         celda.appendChild(btnEliminar);
 
         tablaBody.appendChild(tr);
+    });
+}
+
+/* =========================================================
+   VER ACTIVO (SOLO LECTURA)
+   Filtra las secciones según las banderas Requiere... del tipo
+   ========================================================= */
+function verActivo(id) {
+    const a = activos.find(x => x.IdActivoFijoEQ === id);
+    if (!a) { toastError('Activo no encontrado'); return; }
+
+    const tipo = tipos.find(t => t.IdTipo === a.IdTipo) || {};
+
+    const row = (etiqueta, valor) => {
+        const val = (valor === null || valor === undefined || valor === '') ? '—' : valor;
+        return `<div class="ver-item"><span class="ver-label">${escaparHTML(etiqueta)}</span><span class="ver-valor">${escaparHTML(val)}</span></div>`;
+    };
+    const rowBadge = (etiqueta, valor, claseBadge) => {
+        if (!valor) return row(etiqueta, '—');
+        return `<div class="ver-item"><span class="ver-label">${escaparHTML(etiqueta)}</span><span class="ver-valor"><span class="badge ${claseBadge}">${escaparHTML(valor)}</span></span></div>`;
+    };
+
+    /* ---------- SECCIÓN: Identificación (siempre visible) ---------- */
+    const itemsIdent = [];
+    itemsIdent.push(row('Tipo', a.Tipo));
+    itemsIdent.push(row('Marca', a.Marca));
+    itemsIdent.push(row('Modelo', a.Modelo));
+    itemsIdent.push(row('No. Serie', a.NoSerie));
+
+    if (tipo.RequiereIMEI) {
+        if (a.IMEI1) itemsIdent.push(row('IMEI 1', a.IMEI1));
+        if (a.IMEI2) itemsIdent.push(row('IMEI 2', a.IMEI2));
+    }
+    if (tipo.RequiereTelefono && a.NoTelefono) {
+        itemsIdent.push(row('No. Teléfono', a.NoTelefono));
+    }
+
+    const seccionIdent = itemsIdent.length ? `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Identificación</div>
+            <div class="ver-grid">${itemsIdent.join('')}</div>
+        </div>
+    ` : '';
+
+    /* ---------- SECCIÓN: Ubicación y clasificación ---------- */
+    const itemsUbi = [];
+    if (tipo.RequiereSitio)           itemsUbi.push(row('Sitio', a.Sitio));
+    if (tipo.RequiereSubtipo)         itemsUbi.push(row('Subtipo', a.Subtipo));
+    if (tipo.RequiereClasificacion)   itemsUbi.push(row('Clasificación', a.Clasificacion));
+    if (tipo.RequiereTamanio)         itemsUbi.push(row('Tamaño', a.Tamanio));
+    if (tipo.RequiereCapacidad)       itemsUbi.push(row('Capacidad', a.Capacidad));
+    if (tipo.RequiereVoltaje)         itemsUbi.push(row('Voltaje', a.Voltaje));
+    if (tipo.RequiereUsuarioAsignado) itemsUbi.push(row('Usuario asignado', a.UsuarioAsignado));
+
+    const seccionUbi = itemsUbi.length ? `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Ubicación y clasificación</div>
+            <div class="ver-grid">${itemsUbi.join('')}</div>
+        </div>
+    ` : '';
+
+    /* ---------- SECCIÓN: Situación ---------- */
+    const itemsSit = [];
+    itemsSit.push(rowBadge('Estado', a.Estado, 'badge-estado-' + a.Estado));
+    itemsSit.push(rowBadge('Estatus', a.Estatus, 'badge-estatus-' + a.Estatus));
+    itemsSit.push(row('Cartera', a.Cartera));
+    if (tipo.RequierePrecio) {
+        itemsSit.push(row('Precio', formatearPrecio(a.PrecioActivo) || '—'));
+    }
+
+    const seccionSit = `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Situación</div>
+            <div class="ver-grid">${itemsSit.join('')}</div>
+        </div>
+    `;
+
+    /* ---------- SECCIÓN: Especificaciones técnicas ---------- */
+    const itemsSpec = [];
+    if (tipo.RequiereEspecificaciones) {
+        if (a.Procesador)       itemsSpec.push(row('Procesador', a.Procesador));
+        if (a.MemoriaRAM)       itemsSpec.push(row('Memoria RAM', a.MemoriaRAM));
+        if (a.Almacenamiento)   itemsSpec.push(row('Almacenamiento', a.Almacenamiento));
+        if (a.SistemaOperativo) itemsSpec.push(row('Sistema Operativo', a.SistemaOperativo));
+    }
+
+    const seccionSpec = itemsSpec.length ? `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Especificaciones técnicas</div>
+            <div class="ver-grid">${itemsSpec.join('')}</div>
+        </div>
+    ` : '';
+
+    /* ---------- SECCIÓN: Accesorios ---------- */
+    const seccionAcc = (tipo.RequiereAccesorios && a.Accesorios) ? `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Accesorios</div>
+            <div class="ver-grid ver-grid-full">${row('Accesorios', a.Accesorios)}</div>
+        </div>
+    ` : '';
+
+    /* ---------- SECCIÓN: Observaciones (siempre si hay) ---------- */
+    const seccionObs = a.Observaciones ? `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Observaciones</div>
+            <div class="ver-observaciones">${escaparHTML(a.Observaciones)}</div>
+        </div>
+    ` : '';
+
+    /* ---------- Meta ---------- */
+    const meta = `
+        <div class="ver-meta">
+            Creado: ${escaparHTML(formatearFecha(a.FechaCreacion))} ·
+            Última modificación: ${escaparHTML(formatearFecha(a.FechaModificacion))}
+        </div>
+    `;
+
+    const html = `
+        <div class="ver-wrap">
+            ${seccionIdent}
+            ${seccionUbi}
+            ${seccionSit}
+            ${seccionSpec}
+            ${seccionAcc}
+            ${seccionObs}
+            ${meta}
+        </div>
+    `;
+
+    Swal.fire({
+        title: `Activo #${a.IdActivoFijoEQ} — ${escaparHTML(a.NoSerie || a.IMEI1 || a.NoTelefono || '')}`,
+        width: '780px',
+        html,
+        showCloseButton: true,
+        showConfirmButton: true,
+        confirmButtonText: 'Cerrar',
+        customClass: { popup: 'cl-ver' }
     });
 }
 
@@ -662,17 +814,27 @@ function abrirEdicion(id) {
 }
 
 /* =========================================================
-   GUARDAR
+   GUARDAR — con validaciones por tipo y sin borrar campos
+   que el tipo no requiere (ej. PrecioActivo).
    ========================================================= */
 formulario.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (guardando) return;
 
+    // --- Validación base ---
     if (!selTipo.value) {
         mostrarMensaje('El tipo es obligatorio.', 'error');
         return;
     }
 
+    const idTipo = parseInt(selTipo.value, 10);
+    const tipo = tipos.find(t => t.IdTipo === idTipo);
+    if (!tipo) {
+        mostrarMensaje('Tipo inválido.', 'error');
+        return;
+    }
+
+    // --- Validación de identificadores ---
     const tieneSerie = inpNoSerie.value.trim();
     const tieneIMEI  = inpIMEI1.value.trim();
     const tieneTel   = inpNoTelefono.value.trim();
@@ -682,8 +844,37 @@ formulario.addEventListener('submit', async (e) => {
         return;
     }
 
+    // --- Validación de campos requeridos por el tipo ---
+    if (tipo.RequiereSubtipo && !selSubtipo.value) {
+        mostrarMensaje('El subtipo es obligatorio para este tipo.', 'error');
+        return;
+    }
+    if (tipo.RequiereClasificacion && !selClasificacion.value) {
+        mostrarMensaje('La clasificación es obligatoria para este tipo.', 'error');
+        return;
+    }
+    if (tipo.RequiereTamanio && !selTamanio.value) {
+        mostrarMensaje('El tamaño es obligatorio para este tipo.', 'error');
+        return;
+    }
+    if (tipo.RequiereCapacidad && !selCapacidad.value) {
+        mostrarMensaje('La capacidad es obligatoria para este tipo.', 'error');
+        return;
+    }
+    if (tipo.RequiereVoltaje && !selVoltaje.value) {
+        mostrarMensaje('El voltaje es obligatorio para este tipo.', 'error');
+        return;
+    }
+    if (tipo.RequierePrecio && !inpPrecio.value.trim()) {
+        mostrarMensaje('El precio es obligatorio para este tipo.', 'error');
+        return;
+    }
+
+    // --- Construcción de datos ---
+    const precioNum = inpPrecio.value.trim() ? parseFloat(inpPrecio.value) : null;
+
     const datos = {
-        IdTipo:          parseInt(selTipo.value, 10),
+        IdTipo:          idTipo,
         IdMarca:         selMarca.value ? parseInt(selMarca.value, 10) : null,
         IdCartera:       selCartera.value ? parseInt(selCartera.value, 10) : null,
         IdEstado:        selEstado.value ? parseInt(selEstado.value, 10) : null,
@@ -707,9 +898,14 @@ formulario.addEventListener('submit', async (e) => {
         Almacenamiento:  inpAlmacenamiento.value.trim() || null,
         SistemaOperativo: inpSO.value.trim() || null,
         Accesorios:      inpAccesorios.value.trim() || null,
-        PrecioActivo:    inpPrecio.value ? parseFloat(inpPrecio.value) : null,
         Observaciones:   inpObservaciones.value.trim() || null
     };
+
+    // Precio: solo si el tipo lo requiere. Si no, NO se envía (undefined)
+    // para que el backend no borre el valor existente en BD.
+    if (tipo.RequierePrecio) {
+        datos.PrecioActivo = Number.isFinite(precioNum) ? precioNum : null;
+    }
 
     setGuardando(true);
     try {
@@ -789,7 +985,7 @@ async function restaurarActivo(id, noSerie) {
     const { value: motivo, isConfirmed } = await Swal.fire({
         icon: 'question',
         title: '¿Restaurar activo?',
-        html: `El activo <strong>${escaparHTML(noSerie || ('#' + id))}</strong> volverá al inventario activo con estatus <strong>STOCK</strong>.`,
+        html: `El activo <strong>${escaparHTML(noSerie || ('#' + id))}</strong> volverá al inventario activo con estatus <strong>STOCK/DISPONIBLE</strong>.`,
         input: 'textarea',
         inputLabel: 'Motivo de la restauración',
         inputPlaceholder: 'Ej. Devolución, corrección de baja, error administrativo...',

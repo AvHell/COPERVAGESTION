@@ -56,20 +56,26 @@ function limpiarResiduosSwal() {
 }
 
 /* =========================================================
-   CATÁLOGO DE MÓDULOS
+   CATÁLOGO DE PERMISOS (dinámico desde el main)
+   ---------------------------------------------------------
+   Ya NO está hardcodeado. Se carga con:
+     await window.api.permisos.catalogo()
+   Formato devuelto por permisos.catalogoPermisos():
+     [ { grupo: 'Equipos', items: [ { clave, etiqueta }, ... ] }, ... ]
    ========================================================= */
-const MODULOS_DISPONIBLES = [
-    { key: 'catalogos',              label: 'Catálogos del Sistema', grupo: 'Mapeo Red y Plano' },
-    { key: 'equipos',                label: 'Equipos',               grupo: 'Mapeo Red y Plano' },
-    { key: 'plano',                  label: 'Plano Visual',          grupo: 'Mapeo Red y Plano' },
-    { key: 'historico',              label: 'Histórico del Plano',   grupo: 'Mapeo Red y Plano' },
-    { key: 'usuarios',               label: 'Usuarios',              grupo: 'Administración' },
-    { key: 'activofijo_catalogos',   label: 'Catálogos AF',          grupo: 'Activo Fijo' },
-    { key: 'activofijo_activos',     label: 'Activos Fijos',         grupo: 'Activo Fijo' },
-    { key: 'activofijo_responsivas', label: 'Responsivas',           grupo: 'Activo Fijo' },
-    { key: 'activofijo_reportes',    label: 'Reportes AF',           grupo: 'Activo Fijo' },
-    { key: 'activofijo_importar',    label: 'Importar Masivo',       grupo: 'Activo Fijo' }
-];
+let CATALOGO_PERMISOS = null;   // null = aún no cargado
+let filtroPermiso     = '';     // texto del buscador
+
+async function cargarCatalogoPermisos() {
+    if (CATALOGO_PERMISOS) return CATALOGO_PERMISOS;
+    try {
+        CATALOGO_PERMISOS = await window.api.permisos.catalogo() || [];
+    } catch (err) {
+        console.warn('[Permisos] No se pudo cargar el catálogo:', err);
+        CATALOGO_PERMISOS = [];
+    }
+    return CATALOGO_PERMISOS;
+}
 
 /* =========================================================
    ESTADO
@@ -81,7 +87,7 @@ let modoEdicion     = false;
 let idEditando      = null;
 let guardando       = false;
 let rolActivo       = null;
-let rolEditandoId   = null;   // para editar rol
+let rolEditandoId   = null;
 let rolModoEdicion  = false;
 
 /* =========================================================
@@ -106,6 +112,7 @@ const modalTitulo     = document.getElementById('modal-usuario-titulo');
 const modalPermisos   = document.getElementById('modal-permisos');
 const permisosTabs    = document.getElementById('permisos-tabs');
 const permisosTbody   = document.getElementById('permisos-tbody');
+const permisosTablaWrap = document.querySelector('.permisos-tabla-wrap');
 
 const permisosRolAcciones = document.getElementById('permisos-rol-acciones');
 const btnEditarRol        = document.getElementById('btn-editar-rol');
@@ -190,9 +197,11 @@ modalUsuario.addEventListener('click', (e) => {
 /* =========================================================
    MODAL PERMISOS
    ========================================================= */
-function abrirModalPermisos() {
+async function abrirModalPermisos() {
     modalPermisos.style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    await cargarCatalogoPermisos();   // 1) traer catálogo del backend
+    inyectarBuscadorPermisos();       // 2) UI buscador (solo una vez)
     renderPermisosTabs();
 }
 function cerrarModalPermisos() {
@@ -500,6 +509,29 @@ async function desactivar(id) {
 }
 
 /* =========================================================
+   PERMISOS — Buscador (se inyecta una sola vez)
+   ========================================================= */
+let buscadorInyectado = false;
+
+function inyectarBuscadorPermisos() {
+    if (buscadorInyectado || !permisosTablaWrap) return;
+    buscadorInyectado = true;
+
+    const cont = document.createElement('div');
+    cont.className = 'permisos-buscador';
+    cont.innerHTML = `
+        <input type="search" id="permisos-filtro" placeholder="🔎 Filtrar permisos (ej. crear, equipos, plano...)" />
+    `;
+    permisosTablaWrap.parentNode.insertBefore(cont, permisosTablaWrap);
+
+    const input = cont.querySelector('#permisos-filtro');
+    input.addEventListener('input', () => {
+        filtroPermiso = input.value.trim().toLowerCase();
+        renderPermisosTabla();
+    });
+}
+
+/* =========================================================
    PERMISOS — Tabs + Tabla
    ========================================================= */
 function renderPermisosTabs() {
@@ -536,9 +568,16 @@ function renderPermisosTabs() {
     actualizarAccionesRol();
 }
 
+/* Compara con Number() por seguridad (SQL a veces devuelve string) */
 function permisoActual(idRol, modulo) {
-    const p = permisos.find(x => x.IdRol === idRol && x.Modulo === modulo);
+    const p = permisos.find(x => Number(x.IdRol) === Number(idRol) && x.Modulo === modulo);
     return p ? !!p.Permitido : false;
+}
+
+function coincideFiltro(clave, etiqueta) {
+    if (!filtroPermiso) return true;
+    const t = `${clave} ${etiqueta}`.toLowerCase();
+    return t.includes(filtroPermiso);
 }
 
 function renderPermisosTabla() {
@@ -549,51 +588,60 @@ function renderPermisosTabla() {
         return;
     }
 
+    if (!CATALOGO_PERMISOS || CATALOGO_PERMISOS.length === 0) {
+        permisosTbody.innerHTML = '<tr><td colspan="2" class="permisos-vacio">Cargando catálogo de permisos…</td></tr>';
+        return;
+    }
+
     const rol = roles.find(r => r.IdRol === rolActivo);
     const deshabilitado = rol && !rol.Activo;
 
-    const grupos = {};
-    MODULOS_DISPONIBLES.forEach(m => {
-        if (!grupos[m.grupo]) grupos[m.grupo] = [];
-        grupos[m.grupo].push(m);
-    });
+    let totalVisibles = 0;
 
-    Object.entries(grupos).forEach(([nombreGrupo, mods]) => {
+    CATALOGO_PERMISOS.forEach(({ grupo, items }) => {
+        const visibles = items.filter(it => coincideFiltro(it.clave, it.etiqueta));
+        if (visibles.length === 0) return;
+        totalVisibles += visibles.length;
+
         const trGrupo = document.createElement('tr');
         trGrupo.className = 'permisos-grupo';
-        trGrupo.innerHTML = `<td colspan="2">${escaparHTML(nombreGrupo)}</td>`;
+        trGrupo.innerHTML = `<td colspan="2">${escaparHTML(grupo)}</td>`;
         permisosTbody.appendChild(trGrupo);
 
-        mods.forEach(m => {
-            const activo = permisoActual(rolActivo, m.key);
+        visibles.forEach(({ clave, etiqueta }) => {
+            const activo = permisoActual(rolActivo, clave);
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>
                     <label class="permisos-label">
-                        <span>${escaparHTML(m.label)}</span>
-                        <code>${escaparHTML(m.key)}</code>
+                        <span>${escaparHTML(etiqueta)}</span>
+                        <code>${escaparHTML(clave)}</code>
                     </label>
                 </td>
                 <td style="text-align:center;">
                     <label class="switch">
-                        <input type="checkbox" data-modulo="${escaparHTML(m.key)}"
+                        <input type="checkbox" data-modulo="${escaparHTML(clave)}"
                                ${activo ? 'checked' : ''} ${deshabilitado ? 'disabled' : ''}>
                         <span class="slider"></span>
                     </label>
                 </td>
             `;
             const cb = tr.querySelector('input[type="checkbox"]');
-            cb.addEventListener('change', () => togglePermiso(rolActivo, m.key, cb.checked, cb));
+            cb.addEventListener('change', () => togglePermiso(rolActivo, clave, cb.checked, cb));
             permisosTbody.appendChild(tr);
         });
     });
+
+    if (totalVisibles === 0) {
+        permisosTbody.innerHTML = '<tr><td colspan="2" class="permisos-vacio">Ningún permiso coincide con el filtro.</td></tr>';
+    }
 }
 
 async function togglePermiso(idRol, modulo, permitido, checkbox) {
     try {
         const res = await window.api.permisos.actualizar(idRol, modulo, permitido);
         if (res && res.ok) {
-            const ex = permisos.find(x => x.IdRol === idRol && x.Modulo === modulo);
+            const ex = permisos.find(x => Number(x.IdRol) === Number(idRol) && x.Modulo === modulo);
             if (ex) ex.Permitido = permitido;
             else permisos.push({ IdRol: idRol, Modulo: modulo, Permitido: permitido });
             toastExito('Permiso actualizado');
@@ -620,7 +668,6 @@ function actualizarAccionesRol() {
     permisosRolAcciones.style.display = 'flex';
     txtToggleRol.textContent = rol.Activo ? 'Desactivar' : 'Activar';
 
-    // No se puede desactivar el rol ADMIN
     const esAdmin = rol.Codigo === 'ADMIN';
     btnToggleRol.disabled = esAdmin;
     btnEliminarRol.disabled = esAdmin;
@@ -731,7 +778,6 @@ formRol.addEventListener('submit', async (e) => {
     rolMensaje.classList.add('oculto');
     btnGuardarRol.disabled = true;
 
-    // Validaciones
     if (!codigo || !nombre) {
         rolMensaje.textContent = 'Código y nombre son obligatorios.';
         rolMensaje.className = 'mensaje error';
@@ -760,7 +806,6 @@ formRol.addEventListener('submit', async (e) => {
             await cargar();
             await cargarPermisos();
 
-            // Si es nuevo, activarlo automáticamente
             if (!rolModoEdicion && res.idRol) rolActivo = res.idRol;
 
             renderPermisosTabs();
@@ -783,10 +828,10 @@ formRol.addEventListener('submit', async (e) => {
    ABRIR MODAL DE PERMISOS
    ========================================================= */
 document.getElementById('btn-permisos').addEventListener('click', async () => {
-    await cargar();           // recarga roles (para ver cambios si los hubiera)
+    await cargar();
     await cargarPermisos();
     rolActivo = roles[0]?.IdRol || null;
-    abrirModalPermisos();
+    await abrirModalPermisos();
 });
 
 /* =========================================================

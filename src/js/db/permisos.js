@@ -2,6 +2,9 @@
    PERMISOS — roles, permisos y CRUD de roles
    ========================================================= */
 const { getPool, sql } = require('./conexion');
+const { esPermisoValido, catalogoAgrupado } = require('./permisos.catalogo');
+
+const LEN = 100; // Permisos.Modulo
 
 /* =========================================================
    Obtener rol de un usuario
@@ -20,7 +23,7 @@ async function obtenerRolDeUsuario(idUsuario) {
 }
 
 /* =========================================================
-   Permisos de un usuario
+   Permisos de un usuario → { 'ventas:crear': true, ... }
    ========================================================= */
 async function obtenerPermisosDeUsuario(idUsuario) {
     const pool = await getPool();
@@ -38,6 +41,25 @@ async function obtenerPermisosDeUsuario(idUsuario) {
         permisos[row.Modulo] = !!row.Permitido;
     }
     return permisos;
+}
+
+/* =========================================================
+   ¿Un usuario tiene un permiso concreto?
+   ========================================================= */
+async function tienePermiso(idUsuario, clave) {
+    const pool = await getPool();
+    const r = await pool.request()
+        .input('IdUsuario', sql.Int, idUsuario)
+        .input('Modulo',    sql.NVarChar(LEN), clave)
+        .query(`
+            SELECT 1 AS Ok
+            FROM Usuarios u
+            INNER JOIN Permisos p ON p.IdRol = u.IdRol
+            WHERE u.IdUsuario = @IdUsuario
+              AND p.Modulo = @Modulo
+              AND p.Permitido = 1
+        `);
+    return r.recordset.length > 0;
 }
 
 /* =========================================================
@@ -69,28 +91,39 @@ async function listarPermisos() {
 }
 
 /* =========================================================
-   Actualizar permiso (rol + módulo)
+   Catálogo agrupado (para pintar la matriz en la UI)
+   ========================================================= */
+function catalogoPermisos() {
+    return catalogoAgrupado();
+}
+
+/* =========================================================
+   Actualizar permiso (rol + clave)
    ========================================================= */
 async function actualizarPermiso(idRol, modulo, permitido) {
+    if (!esPermisoValido(modulo)) {
+        return { ok: false, mensaje: `Permiso desconocido: ${modulo}` };
+    }
+
     const pool = await getPool();
 
     const existe = await pool.request()
-        .input('IdRol',  sql.Int,          idRol)
-        .input('Modulo', sql.NVarChar(50), modulo)
+        .input('IdRol',  sql.Int,           idRol)
+        .input('Modulo', sql.NVarChar(LEN), modulo)
         .query(`SELECT IdPermiso FROM Permisos WHERE IdRol = @IdRol AND Modulo = @Modulo`);
 
     if (existe.recordset.length > 0) {
         await pool.request()
-            .input('IdRol',     sql.Int,          idRol)
-            .input('Modulo',    sql.NVarChar(50), modulo)
-            .input('Permitido', sql.Bit,          permitido ? 1 : 0)
+            .input('IdRol',     sql.Int,           idRol)
+            .input('Modulo',    sql.NVarChar(LEN), modulo)
+            .input('Permitido', sql.Bit,           permitido ? 1 : 0)
             .query(`UPDATE Permisos SET Permitido = @Permitido
                     WHERE IdRol = @IdRol AND Modulo = @Modulo`);
     } else {
         await pool.request()
-            .input('IdRol',     sql.Int,          idRol)
-            .input('Modulo',    sql.NVarChar(50), modulo)
-            .input('Permitido', sql.Bit,          permitido ? 1 : 0)
+            .input('IdRol',     sql.Int,           idRol)
+            .input('Modulo',    sql.NVarChar(LEN), modulo)
+            .input('Permitido', sql.Bit,           permitido ? 1 : 0)
             .query(`INSERT INTO Permisos (IdRol, Modulo, Permitido)
                     VALUES (@IdRol, @Modulo, @Permitido)`);
     }
@@ -115,7 +148,6 @@ async function asignarRolAUsuario(idUsuario, idRol) {
 async function crearRol({ codigo, nombre, descripcion }) {
     const pool = await getPool();
 
-    // Validar duplicado de código
     const dup = await pool.request()
         .input('Codigo', sql.NVarChar(30), codigo)
         .query(`SELECT IdRol FROM RolesSistema WHERE Codigo = @Codigo`);
@@ -134,9 +166,7 @@ async function crearRol({ codigo, nombre, descripcion }) {
             VALUES (@Codigo, @Nombre, @Descripcion)
         `);
 
-    const nuevoId = result.recordset[0].IdRol;
-
-    return { ok: true, mensaje: 'Rol creado', idRol: nuevoId };
+    return { ok: true, mensaje: 'Rol creado', idRol: result.recordset[0].IdRol };
 }
 
 /* =========================================================
@@ -145,7 +175,6 @@ async function crearRol({ codigo, nombre, descripcion }) {
 async function actualizarRol(idRol, { codigo, nombre, descripcion }) {
     const pool = await getPool();
 
-    // Validar que el código no esté en uso por OTRO rol
     const dup = await pool.request()
         .input('IdRol',  sql.Int,          idRol)
         .input('Codigo', sql.NVarChar(30), codigo)
@@ -182,15 +211,11 @@ async function cambiarEstadoRol(idRol, activo) {
 }
 
 /* =========================================================
-   ELIMINAR ROL
-   ---------------------------------------------------------
-   - No se permite si tiene usuarios asignados
-   - Borra primero los permisos asociados (FK)
+   ELIMINAR ROL (con transacción)
    ========================================================= */
 async function eliminarRol(idRol) {
     const pool = await getPool();
 
-    // ¿Tiene usuarios asignados?
     const uso = await pool.request()
         .input('IdRol', sql.Int, idRol)
         .query(`SELECT COUNT(*) AS Total FROM Usuarios WHERE IdRol = @IdRol`);
@@ -203,15 +228,22 @@ async function eliminarRol(idRol) {
         };
     }
 
-    // Borrar permisos asociados
-    await pool.request()
-        .input('IdRol', sql.Int, idRol)
-        .query(`DELETE FROM Permisos WHERE IdRol = @IdRol`);
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    try {
+        const req1 = new sql.Request(tx);
+        req1.input('IdRol', sql.Int, idRol);
+        await req1.query(`DELETE FROM Permisos WHERE IdRol = @IdRol`);
 
-    // Borrar el rol
-    await pool.request()
-        .input('IdRol', sql.Int, idRol)
-        .query(`DELETE FROM RolesSistema WHERE IdRol = @IdRol`);
+        const req2 = new sql.Request(tx);
+        req2.input('IdRol', sql.Int, idRol);
+        await req2.query(`DELETE FROM RolesSistema WHERE IdRol = @IdRol`);
+
+        await tx.commit();
+    } catch (e) {
+        await tx.rollback();
+        throw e;
+    }
 
     return { ok: true, mensaje: 'Rol eliminado' };
 }
@@ -219,8 +251,10 @@ async function eliminarRol(idRol) {
 module.exports = {
     obtenerRolDeUsuario,
     obtenerPermisosDeUsuario,
+    tienePermiso,
     listarRoles,
     listarPermisos,
+    catalogoPermisos,
     actualizarPermiso,
     asignarRolAUsuario,
     crearRol,

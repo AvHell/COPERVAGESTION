@@ -531,8 +531,47 @@ async function listarPuestos() {
     return r.recordset;
 }
 
+/* =========================================================
+   VERIFICAR SI EXISTE PDF EN DISCO
+   ========================================================= */
+async function existePDF(ruta) {
+    if (!ruta) return { ok: false, existe: false, mensaje: 'La responsiva no tiene ruta de PDF registrada.' };
+    try {
+        const fs = require('fs');
+        const existe = fs.existsSync(ruta);
+        return {
+            ok: true,
+            existe,
+            ruta,
+            mensaje: existe ? 'PDF encontrado.' : 'El archivo PDF ya no existe en disco.'
+        };
+    } catch (err) {
+        return { ok: false, existe: false, mensaje: 'Error al verificar PDF: ' + err.message };
+    }
+}
+
+/* =========================================================
+   ABRIR PDF EN EL VISOR DEL SISTEMA
+   ========================================================= */
+async function abrirPDF(ruta) {
+    if (!ruta) return { ok: false, mensaje: 'La responsiva no tiene ruta de PDF registrada.' };
+    try {
+        const fs = require('fs');
+        const { shell } = require('electron');
+        if (!fs.existsSync(ruta)) {
+            return { ok: false, mensaje: 'El archivo PDF ya no existe en disco. Debes regenerarlo.' };
+        }
+        const res = await shell.openPath(ruta);
+        if (res) return { ok: false, mensaje: 'No se pudo abrir el PDF: ' + res };
+        return { ok: true, mensaje: 'PDF abierto.' };
+    } catch (err) {
+        return { ok: false, mensaje: 'Error al abrir PDF: ' + err.message };
+    }
+}
+
 module.exports = {
     listar, obtener, obtenerParaPDF, actualizarRutaPDF,
     activosDisponibles, crear, actualizar, devolver, eliminar,
-    listarCarteras, listarPuestos
+    listarCarteras, listarPuestos,
+    existePDF, abrirPDF
 };

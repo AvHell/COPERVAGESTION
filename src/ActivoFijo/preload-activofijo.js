@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('api', {
         /* =================================================
            CATÁLOGOS
            ================================================= */
-              catalogos: {
+        catalogos: {
             listar:     (clave, filtros)   => ipcRenderer.invoke('af-catalogos-listar',     clave, filtros),
             crear:      (clave, datos)     => ipcRenderer.invoke('af-catalogos-crear',      clave, datos),
             actualizar: (clave, id, datos) => ipcRenderer.invoke('af-catalogos-actualizar', clave, id, datos),
@@ -74,8 +74,13 @@ contextBridge.exposeInMainWorld('api', {
             crear:              (datos)            => ipcRenderer.invoke('af-resp-crear',               datos),
             actualizar:         (id, datos)        => ipcRenderer.invoke('af-resp-actualizar',          id, datos),
             devolver:           (id, fecha, obs)   => ipcRenderer.invoke('af-resp-devolver',            id, fecha, obs),
-           eliminar:           (id, motivo)       => ipcRenderer.invoke('af-resp-eliminar',            id, motivo),
-            generarPDF:         (id)               => ipcRenderer.invoke('af-resp-generar-pdf',         id),
+            eliminar:           (id, motivo)       => ipcRenderer.invoke('af-resp-eliminar',            id, motivo),
+
+            /* PDF */
+            verPDF:             (id)               => ipcRenderer.invoke('af-resp-ver-pdf',             id),
+            guardarPDF:         (id)               => ipcRenderer.invoke('af-resp-guardar-pdf',         id),
+            existePDF:          (ruta)             => ipcRenderer.invoke('af-resp-existe-pdf',          ruta),
+            abrirPDF:           (ruta)             => ipcRenderer.invoke('af-resp-abrir-pdf',           ruta),
 
             listarCarteras:     ()                 => ipcRenderer.invoke('af-resp-lista-carteras'),
             listarPuestos:      ()                 => ipcRenderer.invoke('af-resp-lista-puestos')

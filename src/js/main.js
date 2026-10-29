@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -38,7 +38,9 @@ const HTML_AF    = path.join(__dirname, '..', 'ActivoFijo', 'html');
 const PRELOAD    = path.join(__dirname, 'preload.js');
 const PRELOAD_AF = path.join(__dirname, '..', 'ActivoFijo', 'preload-activofijo.js');
 
-const PLANTILLA_PDF = path.join(__dirname, '..', '..', 'Formatos', 'ResponsivaCelulares.pdf');
+const PLANTILLA_PDF = app.isPackaged
+  ? path.join(process.resourcesPath, 'Formatos', 'ResponsivaCelulares.pdf')
+  : path.join(__dirname, '..', '..', 'Formatos', 'ResponsivaCelulares.pdf');
 
 /* =========================================================
    ICONO
@@ -292,11 +294,6 @@ function volverAlMenu(winActual) {
 
 /* =========================================================
    GATE DE PERMISOS
-   ---------------------------------------------------------
-   Una sola función soporta:
-     - Módulos simples:   'equipos', 'plano', 'catalogos'...
-     - Acciones finas:    'equipos:crear', 'ventas:eliminar'
-     - Campos/columnas:   'clientes:campo:credito'
    ========================================================= */
 function tienePermiso(clave) {
     if (!usuarioActual) return false;
@@ -312,13 +309,6 @@ function negarAcceso(clave) {
     };
 }
 
-/**
- * Gate maestro: valida sesión y permiso.
- * - requerirSesion()              → solo sesión
- * - requerirSesion('equipos')     → módulo
- * - requerirSesion('equipos:crear') → acción fina
- * Devuelve null si OK, o { ok:false, ... } si no.
- */
 function requerirSesion(clave = null) {
     if (!haySesion()) {
         return { ok: false, mensaje: 'Tu sesión ha expirado. Inicia sesión nuevamente.', sinSesion: true };
@@ -500,19 +490,11 @@ ipcMain.handle('permisos:mi-rol', () => {
     };
 });
 
-/**
- * Permite al renderer preguntar por una clave concreta sin traer todo el mapa.
- * Devuelve { ok: true, permitido: bool } o { ok:false, sinSesion:true }.
- */
 ipcMain.handle('permisos:puedo', (_e, clave) => {
     if (!haySesion()) return { ok: false, sinSesion: true, permitido: false };
     return { ok: true, permitido: tienePermiso(clave) };
 });
 
-/**
- * Catálogo agrupado (para pintar la matriz de roles).
- * No requiere sesión: es información estática.
- */
 ipcMain.handle('permisos:catalogo', () => {
     try {
         return permisosDB.catalogoPermisos();
@@ -688,118 +670,219 @@ ipcMain.handle('af-import-layout',   async (_e, clave)  => { const err = requeri
 ipcMain.handle('af-import-procesar', async (_e, datos)  => { const err = requerirSesion('af-imp:ejecutar'); if (err) return err; return await activoFijoImportacionDB.importar(datos, usuarioActual?.IdUsuario); });
 
 /* =========================================================
-   IPC: GENERAR PDF RESPONSIVA
+   HELPER: CONSTRUIR PDF DE RESPONSIVA EN MEMORIA
+   Devuelve { ok, bytes, nombreArchivo } o { ok:false, mensaje }
    ========================================================= */
-ipcMain.handle('af-resp-generar-pdf', async (_e, idResponsiva) => {
-    const err = requerirSesion('af-resp:pdf'); if (err) return err;
-
+async function construirPDFResponsiva(idResponsiva) {
     const d = await activoFijoResponsivasDB.obtenerParaPDF(idResponsiva);
     if (!d) return { ok: false, mensaje: 'Responsiva no encontrada.' };
 
     if (!fs.existsSync(PLANTILLA_PDF)) {
         return {
             ok: false,
-            mensaje: `No se encontró la plantilla en:\n${PLANTILLA_PDF}\n\nVerifica que exista la carpeta "Formatos" en la raíz del proyecto con el archivo "ResponsivaCelulares.pdf".`
+            mensaje: `No se encontró la plantilla en:\n${PLANTILLA_PDF}\n\nVerifica que exista la carpeta "Formatos" con el archivo "ResponsivaCelulares.pdf".`
         };
     }
 
-    const nombreArchivo = `Responsiva-${(d.FolioTicket || 'sin-folio').replace(/[\/\\:*?"<>|]/g, '_')}.pdf`;
-    const { canceled, filePath } = await dialog.showSaveDialog({
-        title: 'Guardar PDF de responsiva',
-        defaultPath: nombreArchivo,
-        filters: [{ name: 'PDF', extensions: ['pdf'] }]
-    });
+    const fmtFecha = (f) => {
+        if (!f) return 'N/A';
+        const fecha = new Date(f);
+        if (isNaN(fecha.getTime())) return 'N/A';
+        const dia = String(fecha.getDate()).padStart(2, '0');
+        const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+        return `${dia}/${mes}/${fecha.getFullYear()}`;
+    };
+    const fmtPrecio = (v) => {
+        if (v == null || v === '') return '';
+        return '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 2 });
+    };
 
-    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+    const plantillaBytes = fs.readFileSync(PLANTILLA_PDF);
+    const pdf  = await PDFDocument.load(plantillaBytes);
+    const form = pdf.getForm();
+
+    const FUENTE = 6;
+
+    const setCampo = (nombre, valor, tamaño = null) => {
+        try {
+            const campo = form.getTextField(nombre);
+            if (!campo) { console.warn(`[PDF] ✗ Campo no encontrado: ${nombre}`); return; }
+            const sizeFinal = tamaño ?? FUENTE;
+            campo.setText(String(valor ?? ''));
+            campo.setFontSize(sizeFinal);
+        } catch (err) {
+            console.warn(`[PDF] ✗ Error en campo ${nombre}: ${err.message}`);
+        }
+    };
+
+    setCampo('ticket',                d.FolioTicket);
+    setCampo('nombreproyecto',        d.NombreProyecto);
+    setCampo('descripcion_solicitud', d.DescripcionSolicitud);
+    setCampo('observaciones',         d.Observaciones);
+    setCampo('fecha_asignacion',      fmtFecha(d.FechaAsignacion));
+    setCampo('fecha_devolucion',      fmtFecha(d.FechaDevolucionProgramada));
+    setCampo('estatus',               d.EstatusResponsiva);
+    setCampo('motivo_salida',         d.MotivoSalida);
+    setCampo('tipo_equipo',           d.Tipo);
+    setCampo('marca',                 d.Marca);
+    setCampo('modelo',                d.Modelo);
+    setCampo('no_serie',              d.NoSerie);
+    setCampo('precio_activo',         fmtPrecio(d.PrecioActivo));
+    setCampo('procesador',            d.Procesador);
+    setCampo('memoria_ram',           d.MemoriaRAM);
+    setCampo('almacenamiento',        d.Almacenamiento);
+    setCampo('accesorios',            d.Accesorios);
+    setCampo('imei_uno',              d.IMEI1);
+    setCampo('imei_dos',              d.IMEI2);
+    setCampo('nombre_recibe',         d.NombreRecibe);
+    setCampo('area_recibe',           d.AreaRecibe);
+    setCampo('puesto_recibe',         d.PuestoRecibe, 5);
+    setCampo('nombre_entrega',        d.NombreEntrega);
+    setCampo('puesto_entrega',        d.PuestoEntrega);
+    setCampo('area_entrega',          d.AreaEntrega);
 
     try {
-        const fmtFecha = (f) => {
-            if (!f) return 'N/A';
-            const fecha = new Date(f);
-            if (isNaN(fecha.getTime())) return 'N/A';
-            const dia = String(fecha.getDate()).padStart(2, '0');
-            const mes = String(fecha.getMonth() + 1).padStart(2, '0');
-            return `${dia}/${mes}/${fecha.getFullYear()}`;
-        };
-        const fmtPrecio = (v) => {
-            if (v == null || v === '') return '';
-            return '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 2 });
-        };
+        form.getFields().forEach(campo => {
+            try { campo.enableReadOnly(); } catch (_) {}
+        });
+    } catch (err) { console.warn('[PDF] Error marcando read-only:', err.message); }
 
-        const plantillaBytes = fs.readFileSync(PLANTILLA_PDF);
-        const pdf  = await PDFDocument.load(plantillaBytes);
-        const form = pdf.getForm();
+    try { form.flatten(); } catch (err) { console.warn('[PDF] Error aplanando formulario:', err.message); }
 
-        const FUENTE = 6;
+    const bytesFinales = await pdf.save();
+    const nombreArchivo = `Responsiva-${(d.FolioTicket || 'sin-folio').replace(/[\/\\:*?"<>|]/g, '_')}.pdf`;
 
-        const setCampo = (nombre, valor, tamaño = null) => {
-            try {
-                const campo = form.getTextField(nombre);
-                if (!campo) { console.warn(`[PDF] ✗ Campo no encontrado: ${nombre}`); return; }
-                const sizeFinal = tamaño ?? FUENTE;
-                campo.setText(String(valor ?? ''));
-                campo.setFontSize(sizeFinal);
-                console.log(`[PDF] ✓ ${nombre} = "${valor}" (${sizeFinal}pt)`);
-            } catch (err) {
-                console.warn(`[PDF] ✗ Error en campo ${nombre}: ${err.message}`);
-            }
-        };
+    return { ok: true, bytes: Buffer.from(bytesFinales), nombreArchivo };
+}
 
-        setCampo('ticket',                d.FolioTicket);
-        setCampo('nombreproyecto',        d.NombreProyecto);
-        setCampo('descripcion_solicitud', d.DescripcionSolicitud);
-        setCampo('observaciones',         d.Observaciones);
-        setCampo('fecha_asignacion',      fmtFecha(d.FechaAsignacion));
-        setCampo('fecha_devolucion',      fmtFecha(d.FechaDevolucionProgramada));
-        setCampo('estatus',               d.EstatusResponsiva);
-        setCampo('motivo_salida',         d.MotivoSalida);
-        setCampo('tipo_equipo',           d.Tipo);
-        setCampo('marca',                 d.Marca);
-        setCampo('modelo',                d.Modelo);
-        setCampo('no_serie',              d.NoSerie);
-        setCampo('precio_activo',         fmtPrecio(d.PrecioActivo));
-        setCampo('procesador',            d.Procesador);
-        setCampo('memoria_ram',           d.MemoriaRAM);
-        setCampo('almacenamiento',        d.Almacenamiento);
-        setCampo('accesorios',            d.Accesorios);
-        setCampo('imei_uno',              d.IMEI1);
-        setCampo('imei_dos',              d.IMEI2);
-        setCampo('nombre_recibe',         d.NombreRecibe);
-        setCampo('area_recibe',           d.AreaRecibe);
-        setCampo('puesto_recibe',         d.PuestoRecibe, 5);
-        setCampo('nombre_entrega',        d.NombreEntrega);
-        setCampo('puesto_entrega',        d.PuestoEntrega);
-        setCampo('area_entrega',          d.AreaEntrega);
+/* =========================================================
+   IPC: VER PDF (genera en memoria + abre temporal, NO guarda)
+   ========================================================= */
+ipcMain.handle('af-resp-ver-pdf', async (_e, idResponsiva) => {
+    const err = requerirSesion('af-resp:pdf'); if (err) return err;
 
+    try {
+        const res = await construirPDFResponsiva(idResponsiva);
+        if (!res.ok) return res;
+
+        const tmpPath = path.join(
+            os.tmpdir(),
+            `af-resp-preview-${Date.now()}-${res.nombreArchivo}`
+        );
+
+        fs.writeFileSync(tmpPath, res.bytes);
+
+        // Borrar el temporal al cerrar la app (best-effort)
         try {
-            form.getFields().forEach(campo => {
-                try { campo.enableReadOnly(); } catch (_) {}
-            });
-        } catch (err) { console.warn('[PDF] Error marcando read-only:', err.message); }
+            app.once('will-quit', () => { try { fs.unlinkSync(tmpPath); } catch (_) {} });
+        } catch (_) {}
 
-        try { form.flatten(); } catch (err) { console.warn('[PDF] Error aplanando formulario:', err.message); }
+        const openErr = await shell.openPath(tmpPath);
+        if (openErr) {
+            return { ok: false, mensaje: 'No se pudo abrir el PDF: ' + openErr };
+        }
 
-        const bytesFinales = await pdf.save();
-        fs.writeFileSync(filePath, bytesFinales);
-
-        await activoFijoResponsivasDB.actualizarRutaPDF(idResponsiva, filePath, usuarioActual.IdUsuario);
-
-        return { ok: true, mensaje: 'PDF generado correctamente.', ruta: filePath };
+        return {
+            ok: true,
+            mensaje: 'PDF abierto en el visor del sistema.',
+            ruta: tmpPath,
+            temporal: true
+        };
     } catch (err) {
-        console.error('Error generando PDF:', err);
+        console.error('Error generando PDF (ver):', err);
         return { ok: false, mensaje: 'Error al generar PDF: ' + err.message };
+    }
+});
+
+/* =========================================================
+   IPC: GUARDAR PDF (genera + diálogo + guarda + actualiza BD)
+   Solo se usa cuando el usuario decide guardarlo.
+   ========================================================= */
+ipcMain.handle('af-resp-guardar-pdf', async (_e, idResponsiva) => {
+    const err = requerirSesion('af-resp:pdf'); if (err) return err;
+
+    try {
+        const res = await construirPDFResponsiva(idResponsiva);
+        if (!res.ok) return res;
+
+        const { canceled, filePath } = await dialog.showSaveDialog({
+            title: 'Guardar PDF de responsiva',
+            defaultPath: res.nombreArchivo,
+            filters: [{ name: 'PDF', extensions: ['pdf'] }]
+        });
+
+        if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+
+        fs.writeFileSync(filePath, res.bytes);
+
+        await activoFijoResponsivasDB.actualizarRutaPDF(
+            idResponsiva, filePath, usuarioActual?.IdUsuario
+        );
+
+        return { ok: true, mensaje: 'PDF guardado correctamente.', ruta: filePath };
+    } catch (err) {
+        console.error('Error guardando PDF:', err);
+        return { ok: false, mensaje: 'Error al guardar PDF: ' + err.message };
+    }
+});
+
+/* =========================================================
+   IPC: VERIFICAR SI EL PDF GUARDADO EXISTE EN DISCO
+   ========================================================= */
+ipcMain.handle('af-resp-existe-pdf', async (_e, ruta) => {
+    const err = requerirSesion('af-resp:pdf'); if (err) return err;
+
+    if (!ruta) {
+        return { ok: true, existe: false, mensaje: 'La responsiva no tiene ruta de PDF registrada.' };
+    }
+
+    try {
+        const existe = fs.existsSync(ruta);
+        return {
+            ok: true,
+            existe,
+            ruta,
+            mensaje: existe ? 'PDF encontrado.' : 'El archivo PDF ya no existe en disco.'
+        };
+    } catch (err) {
+        return { ok: false, existe: false, mensaje: 'Error al verificar PDF: ' + err.message };
+    }
+});
+
+/* =========================================================
+   IPC: ABRIR PDF GUARDADO (abre el persistente)
+   ========================================================= */
+ipcMain.handle('af-resp-abrir-pdf', async (_e, ruta) => {
+    const err = requerirSesion('af-resp:pdf'); if (err) return err;
+
+    if (!ruta) {
+        return { ok: false, mensaje: 'La responsiva no tiene ruta de PDF registrada.' };
+    }
+
+    try {
+        if (!fs.existsSync(ruta)) {
+            return { ok: false, mensaje: 'El archivo PDF ya no existe en disco.' };
+        }
+
+        const resultado = await shell.openPath(ruta);
+        if (resultado) {
+            return { ok: false, mensaje: 'No se pudo abrir el PDF: ' + resultado };
+        }
+
+        return { ok: true, mensaje: 'PDF abierto.' };
+    } catch (err) {
+        return { ok: false, mensaje: 'Error al abrir PDF: ' + err.message };
     }
 });
 
 /* =========================================================
    IPC: CLIENTES / ROLES / PISOS / RANGOS
    ========================================================= */
-ipcMain.handle('clientes:listar', async () => { 
-    // Permitimos si tiene catalogos, plano o equipos
+ipcMain.handle('clientes:listar', async () => {
     if (!tienePermiso('catalogos') && !tienePermiso('plano') && !tienePermiso('equipos')) {
         return negarAcceso('catalogos, plano o equipos');
     }
-    return await clientesDB.listar(); 
+    return await clientesDB.listar();
 });
 ipcMain.handle('clientes:crear',      async (_e, codigo, nombre)  => { const err = requerirSesion('catalogos:clientes:crear');  if (err) return err; return await clientesDB.crear(codigo, nombre); });
 ipcMain.handle('clientes:actualizar', async (_e, id, codigo, nombre) => { const err = requerirSesion('catalogos:clientes:editar'); if (err) return err; return await clientesDB.actualizar(id, codigo, nombre); });
@@ -813,12 +896,11 @@ ipcMain.handle('roles:eliminar',   async (_e, id)                               
 /* =========================================================
    IPC: PISOS
    ========================================================= */
-ipcMain.handle('pisos:listar', async () => { 
-    // Permitimos si tiene catalogos, plano o equipos
+ipcMain.handle('pisos:listar', async () => {
     if (!tienePermiso('catalogos') && !tienePermiso('plano') && !tienePermiso('equipos')) {
         return negarAcceso('catalogos, plano o equipos');
     }
-    return await pisosDB.listar(); 
+    return await pisosDB.listar();
 });
 ipcMain.handle('pisos:obtener',               async (_e, id)                        => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.obtener(id); });
 ipcMain.handle('pisos:listarPorCliente',      async (_e, idCliente)                 => { const err = requerirSesion('catalogos'); if (err) return err; return await pisosDB.listarPorCliente(idCliente); });

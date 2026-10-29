@@ -670,3 +670,84 @@ h2 {
     .grid-form { grid-template-columns: 1fr; }
     .modal-base { max-width: 100%; }
 }
+
+/* =========================================================
+   INFO ACTIVO (modal inteligente)
+   ========================================================= */
+.info-activo-tipo {
+    font-size: 14px;
+    color: var(--af-azul);
+    margin-bottom: 8px;
+}
+.info-activo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 4px 16px;
+    font-size: 12.5px;
+}
+.info-activo-grid b { color: var(--af-azul); }
+
+/* =========================================================
+   RESPONSIVE TABLA
+   ========================================================= */
+@media (max-width: 1100px) {
+    .tabla-responsivas thead { display: none; }
+    .tabla-responsivas, .tabla-responsivas tbody, .tabla-responsivas tr, .tabla-responsivas td {
+        display: block;
+        width: 100%;
+    }
+    .tabla-responsivas tr {
+        border: 1px solid var(--af-gris-borde);
+        border-radius: var(--af-radio-sm);
+        margin-bottom: 12px;
+        padding: 8px 12px;
+        background: var(--af-blanco);
+    }
+    .tabla-responsivas td {
+        border: none;
+        padding: 6px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .tabla-responsivas td::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--af-gris-texto);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        flex-shrink: 0;
+        min-width: 110px;
+    }
+    .tabla-responsivas td.acciones-tabla {
+        justify-content: flex-end;
+        padding-top: 10px;
+        border-top: 1px dashed var(--af-gris-borde);
+        margin-top: 6px;
+    }
+    .tabla-responsivas td.acciones-tabla::before { content: none; }
+}
+
+@media (max-width: 700px) {
+    body { padding: 16px; }
+    .barra-acciones { flex-wrap: wrap; gap: 10px; }
+    .barra-acciones .buscador { order: 3; flex-basis: 100%; }
+    .filtros { flex-direction: column; align-items: stretch; }
+    .filtro { min-width: 0; }
+    .tabs-vista { overflow-x: auto; }
+    .tab-vista { white-space: nowrap; }
+    .grid-form { grid-template-columns: 1fr; }
+    .info-activo-grid { grid-template-columns: 1fr; }
+    .modal-base { max-width: 100%; }
+    .modal-body { padding: 16px 18px 8px; }
+    .modal-footer { padding: 14px 18px; flex-wrap: wrap; }
+    .modal-footer button { flex: 1; justify-content: center; }
+}
+
+@media (max-width: 480px) {
+    h2 { font-size: 18px; }
+    .acciones-tabla { width: 100%; }
+    .acciones-tabla button { flex: 1; justify-content: center; }
+}

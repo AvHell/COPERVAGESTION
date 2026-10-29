@@ -44,12 +44,16 @@
       "node_modules/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "src/img/logo.ico",
-        "to": "logo.ico"
-      }
-    ],
+   "extraResources": [
+  {
+    "from": "src/img/logo.ico",
+    "to": "logo.ico"
+  },
+  {
+    "from": "Formatos",
+    "to": "Formatos"
+  }
+],
     "extraMetadata": {
       "main": "src/js/main.js"
     },

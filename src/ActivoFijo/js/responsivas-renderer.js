@@ -1,9 +1,5 @@
 /* =========================================================
    ACTIVO FIJO — RENDERER DE RESPONSIVAS
-   Tabs: Activas / Canceladas
-   Cancelar = soft delete (histórico, no se restaura)
-   Modal inteligente: detecta tipo de activo (celular, laptop, otro)
-   PDF: ver en memoria (no guarda) + guardar opcional + abrir guardado
    ========================================================= */
 const Swal = window.Swal;
 
@@ -18,7 +14,7 @@ let modoEdicion      = false;
 let idEditando       = null;
 let guardando        = false;
 let filtroBusqueda   = '';
-let vistaActual      = 'activas';      // 'activas' | 'canceladas'
+let vistaActual      = 'activas';
 let filtros          = { idEstatus: '' };
 let activoActual     = null;
 
@@ -41,6 +37,7 @@ const modal            = document.getElementById('modal-responsiva');
 const modalTitulo      = document.getElementById('modal-titulo');
 const filtroEstatus    = document.getElementById('filtro-estatus');
 const filtroEstatusWrap= document.getElementById('filtro-estatus-wrap');
+const cardTabla        = document.getElementById('card-tabla');
 
 const selActivo        = document.getElementById('activo');
 const inpFolio         = document.getElementById('folio');
@@ -109,73 +106,62 @@ function hoyISO() {
 
 function mostrarMensaje(texto, tipo) {
     mensaje.textContent = texto;
-    mensaje.className = 'mensaje ' + tipo;
+    mensaje.className = 'alert ' + tipo;
+    mensaje.classList.remove('oculto');
 }
-function ocultarMensaje() { mensaje.className = 'mensaje oculto'; }
+function ocultarMensaje() { mensaje.classList.add('oculto'); }
 
 function setGuardando(v) {
     guardando = v;
     btnGuardar.disabled = v;
-    btnGuardar.style.opacity = v ? '0.6' : '';
+    const txt = btnGuardar.querySelector('.btn-text');
+    const spin = btnGuardar.querySelector('.btn-spinner');
+    if (txt) txt.textContent = v ? 'Guardando...' : 'Guardar';
+    if (spin) spin.classList.toggle('oculto', !v);
 }
 
-function toastExito(titulo) {
-    Swal.fire({
-        toast: true, position: 'bottom-end', icon: 'success', title: titulo,
-        showConfirmButton: false, timer: 2600, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-success' },
-        didOpen: (t) => {
-            t.style.boxShadow = 'none';
-            t.addEventListener('mouseenter', Swal.stopTimer);
-            t.addEventListener('mouseleave', Swal.resumeTimer);
-        }
+/* =========================================================
+   ALERTAS MODALES
+   ========================================================= */
+function alertaExito(titulo, mensaje = '') {
+    return Swal.fire({
+        icon: 'success',
+        title: titulo,
+        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
+        timer: 2100,
+        timerProgressBar: true,
+        showConfirmButton: false,
+        showCloseButton: true,
+        customClass: { popup: 'cl-alert' }
     });
 }
 
-function toastError(titulo, texto = '') {
-    Swal.fire({
-        toast: true, position: 'bottom-end', icon: 'error',
-        title: texto ? `${titulo} — ${texto}` : titulo,
-        showConfirmButton: false, timer: 3400, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-error' },
-        didOpen: (t) => {
-            t.style.boxShadow = 'none';
-            t.addEventListener('mouseenter', Swal.stopTimer);
-            t.addEventListener('mouseleave', Swal.resumeTimer);
+function alertaError(titulo, mensaje = '') {
+    return Swal.fire({
+        icon: 'error',
+        title: titulo,
+        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
+        confirmButtonText: 'Entendido',
+        showCloseButton: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-alert',
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 }
 
 /* =========================================================
-   DETECCIÓN INTELIGENTE DEL TIPO DE ACTIVO
+   REGLAS DE ACTIVO
    ========================================================= */
 const REGLAS_TIPO = {
-    celular: {
-        etiqueta: 'Celular / Smartphone',
-        requiereIMEI: true,
-        requiereTelefono: true,
-        esLaptop: false,
-        icono: '📱'
-    },
-    laptop: {
-        etiqueta: 'Laptop / Equipo de cómputo',
-        requiereIMEI: false,
-        requiereTelefono: false,
-        esLaptop: true,
-        icono: '💻'
-    },
-    otro: {
-        etiqueta: 'Otro activo',
-        requiereIMEI: false,
-        requiereTelefono: false,
-        esLaptop: false,
-        icono: '📦'
-    }
+    celular: { etiqueta: 'Celular / Smartphone', requiereIMEI: true, requiereTelefono: true, esLaptop: false, icono: '📱' },
+    laptop: { etiqueta: 'Laptop / Equipo de cómputo', requiereIMEI: false, requiereTelefono: false, esLaptop: true, icono: '💻' },
+    otro: { etiqueta: 'Otro activo', requiereIMEI: false, requiereTelefono: false, esLaptop: false, icono: '📦' }
 };
 
 function detectarTipoActivo(activo) {
     if (!activo) return 'otro';
-
     const tipoTxt = String(activo.Tipo ?? '').toLowerCase();
     const tieneIMEI = !!activo.IMEI1;
     const tieneTelefono = !!activo.NoTelefono;
@@ -203,19 +189,11 @@ function aplicarReglasActivo(activo) {
     activoActual = activo;
     const reglas = obtenerReglas(activo);
 
-    document.querySelectorAll('[data-campo="imei"]').forEach(el => {
-        el.classList.toggle('oculto', !reglas.requiereIMEI);
-    });
-    document.querySelectorAll('[data-campo="telefono"]').forEach(el => {
-        el.classList.toggle('oculto', !reglas.requiereTelefono);
-    });
-    document.querySelectorAll('[data-campo="especificaciones"]').forEach(el => {
-        el.classList.toggle('oculto', !reglas.esLaptop);
-    });
+    document.querySelectorAll('[data-campo="imei"]').forEach(el => el.classList.toggle('oculto', !reglas.requiereIMEI));
+    document.querySelectorAll('[data-campo="telefono"]').forEach(el => el.classList.toggle('oculto', !reglas.requiereTelefono));
+    document.querySelectorAll('[data-campo="especificaciones"]').forEach(el => el.classList.toggle('oculto', !reglas.esLaptop));
 
-    if (activo) {
-        inpTipoResp.value = activo.Tipo || '';
-    }
+    if (activo) inpTipoResp.value = activo.Tipo || '';
 
     if (!reglas.requiereIMEI) {
         const inpIMEI = document.getElementById('imei-1');
@@ -228,11 +206,7 @@ function aplicarReglasActivo(activo) {
         if (inpTel) inpTel.value = '';
     }
 
-    inpFolio.placeholder = reglas.tipo === 'celular'
-        ? 'INC-20260914-3500'
-        : reglas.tipo === 'laptop'
-            ? 'INC-20260914-3501'
-            : 'INC-20260914-3502';
+    inpFolio.placeholder = reglas.tipo === 'celular' ? 'INC-20260914-3500' : reglas.tipo === 'laptop' ? 'INC-20260914-3501' : 'INC-20260914-3502';
 }
 
 /* =========================================================
@@ -247,13 +221,10 @@ async function cargarCatalogos() {
         carteras = c;
         puestos  = p;
 
-        selCartera.innerHTML = '<option value="">— Sin cartera —</option>' +
-            carteras.map(x => `<option value="${x.IdCartera}">${escaparHTML(x.Nombre)}</option>`).join('');
-
-        selPuestoCat.innerHTML = '<option value="">— Sin puesto —</option>' +
-            puestos.map(x => `<option value="${x.IdPuesto}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selCartera.innerHTML = '<option value="">— Sin cartera —</option>' + carteras.map(x => `<option value="${x.IdCartera}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selPuestoCat.innerHTML = '<option value="">— Sin puesto —</option>' + puestos.map(x => `<option value="${x.IdPuesto}">${escaparHTML(x.Nombre)}</option>`).join('');
     } catch (err) {
-        toastError('No se pudieron cargar los catálogos', err.message);
+        alertaError('No se pudieron cargar los catálogos', err.message);
     }
 }
 
@@ -271,7 +242,7 @@ async function cargarActivosDisponibles() {
                 return `<option value="${a.IdActivoFijoEQ}">${reglas.icono} [${escaparHTML(a.Tipo)}] ${escaparHTML(id)} — ${escaparHTML(serie)}</option>`;
             }).join('');
     } catch (err) {
-        toastError('No se pudieron cargar los activos', err.message);
+        alertaError('No se pudieron cargar los activos', err.message);
     }
 }
 
@@ -292,7 +263,7 @@ async function cargarResponsivas() {
         responsivas = await window.api.activoFijo.responsivas.listar(filtrosEnvio);
         renderTabla();
     } catch (err) {
-        toastError('No se pudieron cargar las responsivas', err.message);
+        alertaError('No se pudieron cargar las responsivas', err.message);
     }
 }
 
@@ -300,70 +271,31 @@ async function cargarResponsivas() {
    ICONOS SVG
    ========================================================= */
 function iconoOjo() {
-    return `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-        </svg>`;
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
 }
-
 function iconoGuardar() {
-    return `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <polyline points="7 3 7 8 15 8"></polyline>
-        </svg>`;
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>`;
 }
-
 function iconoEditar() {
-    return `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-        </svg>`;
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
 }
-
 function iconoDevolver() {
-    return `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-        </svg> Devolver`;
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 }
-
 function iconoCancelar() {
-    return `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
-        </svg> Cancelar`;
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>`;
 }
 
 /* =========================================================
-   BOTONES DE PDF
+   BOTONES DE ACCIÓN
    ========================================================= */
-
-/* Ver PDF: genera en memoria y abre al instante. NO guarda. */
-function crearBotonVerPDF(r) {
+function crearBotonAccion(icono, tooltip, clase, accion) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'secundario';
-    btn.title = 'Ver PDF (sin guardarlo)';
-    btn.innerHTML = `${iconoOjo()} Ver PDF`;
-    btn.addEventListener('click', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket));
-    return btn;
-}
-
-/* Guardar PDF: genera en memoria y abre diálogo para elegir ruta. */
-function crearBotonGuardarPDF(r) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'secundario';
-    btn.title = r.RutaPDF
-        ? 'Guardar PDF (sobrescribe el existente)'
-        : 'Guardar PDF en disco';
-    btn.innerHTML = `${iconoGuardar()} Guardar PDF`;
-    btn.addEventListener('click', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket, r.RutaPDF));
+    btn.className = `btn-accion ${clase}`;
+    btn.setAttribute('data-tooltip', tooltip);
+    btn.innerHTML = icono;
+    btn.addEventListener('click', accion);
     return btn;
 }
 
@@ -373,10 +305,7 @@ function crearBotonGuardarPDF(r) {
 function renderTabla() {
     const listaFiltrada = responsivas.filter(r => {
         if (!filtroBusqueda) return true;
-        const texto = [
-            r.FolioTicket, r.NoSerie, r.IMEI1, r.IMEI2, r.NoTelefono,
-            r.NombreRecibe, r.Cartera, r.Tipo, r.Marca, r.Modelo
-        ].filter(Boolean).join(' ').toLowerCase();
+        const texto = [r.FolioTicket, r.NoSerie, r.IMEI1, r.IMEI2, r.NoTelefono, r.NombreRecibe, r.Cartera, r.Tipo, r.Marca, r.Modelo].filter(Boolean).join(' ').toLowerCase();
         return texto.includes(filtroBusqueda);
     });
 
@@ -389,18 +318,17 @@ function renderTabla() {
                 ? 'No hay responsivas canceladas con ese criterio.'
                 : 'No se encontraron responsivas con ese criterio.';
         }
-        document.querySelector('.card-tabla').style.display = 'none';
+        cardTabla.style.display = 'none';
         return;
     }
 
     sinResultados.classList.add('oculto');
-    document.querySelector('.card-tabla').style.display = '';
+    cardTabla.style.display = '';
 
     const esVistaCanceladas = (vistaActual === 'canceladas');
 
     listaFiltrada.forEach(r => {
         const tr = document.createElement('tr');
-
         const reglas = obtenerReglas({ Tipo: r.Tipo, IMEI1: r.IMEI1, NoTelefono: r.NoTelefono });
 
         const tipoMarca = [r.Tipo, r.Marca, r.Modelo].filter(Boolean).join(' ');
@@ -435,51 +363,22 @@ function renderTabla() {
 
         const celda = tr.querySelector('.acciones-tabla');
 
-        /* ---- Vista CANCELADAS ---- */
         if (esVistaCanceladas) {
-            const btnVer = document.createElement('button');
-            btnVer.type = 'button';
-            btnVer.className = 'secundario';
-            btnVer.title = 'Ver detalle de la responsiva';
-            btnVer.innerHTML = `${iconoOjo()} Ver`;
-            btnVer.addEventListener('click', () => verDetalle(r.IdResponsiva));
-            celda.appendChild(btnVer);
-
-            celda.appendChild(crearBotonVerPDF(r));
-            celda.appendChild(crearBotonGuardarPDF(r));
-
+            celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver detalle', 'ver', () => verDetalle(r.IdResponsiva)));
+            celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
+            celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket, r.RutaPDF)));
             tablaBody.appendChild(tr);
             return;
         }
 
         /* ---- Vista ACTIVAS ---- */
-        const btnEditar = document.createElement('button');
-        btnEditar.type = 'button';
-        btnEditar.className = 'secundario';
-        btnEditar.title = 'Editar';
-        btnEditar.innerHTML = iconoEditar();
-        btnEditar.addEventListener('click', () => abrirEdicion(r.IdResponsiva));
-        celda.appendChild(btnEditar);
-
-        celda.appendChild(crearBotonVerPDF(r));
-        celda.appendChild(crearBotonGuardarPDF(r));
+        celda.appendChild(crearBotonAccion(iconoEditar(), 'Editar', 'editar', () => abrirEdicion(r.IdResponsiva)));
+        celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
+        celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket, r.RutaPDF)));
 
         if (r.EstatusResponsiva === 'ASIGNADO' || r.EstatusResponsiva === 'PENDIENTE') {
-            const btnDevolver = document.createElement('button');
-            btnDevolver.type = 'button';
-            btnDevolver.className = 'exito';
-            btnDevolver.title = 'Registrar devolución';
-            btnDevolver.innerHTML = iconoDevolver();
-            btnDevolver.addEventListener('click', () => devolverResponsiva(r.IdResponsiva, r.NombreRecibe));
-            celda.appendChild(btnDevolver);
-
-            const btnCancelar = document.createElement('button');
-            btnCancelar.type = 'button';
-            btnCancelar.className = 'peligro';
-            btnCancelar.title = 'Cancelar responsiva';
-            btnCancelar.innerHTML = iconoCancelar();
-            btnCancelar.addEventListener('click', () => cancelarResponsiva(r.IdResponsiva, r.FolioTicket));
-            celda.appendChild(btnCancelar);
+            celda.appendChild(crearBotonAccion(iconoDevolver(), 'Registrar devolución', 'exito', () => devolverResponsiva(r.IdResponsiva, r.NombreRecibe)));
+            celda.appendChild(crearBotonAccion(iconoCancelar(), 'Cancelar responsiva', 'eliminar', () => cancelarResponsiva(r.IdResponsiva, r.FolioTicket)));
         }
 
         tablaBody.appendChild(tr);
@@ -557,15 +456,15 @@ function cerrarModal() {
     activoActual = null;
     selActivo.disabled = false;
 }
+
 document.getElementById('modal-cerrar').addEventListener('click', cerrarModal);
-document.getElementById('btn-cancelar').addEventListener('click', cerrarModal);
 modal.addEventListener('click', (e) => { if (e.target === modal) cerrarModal(); });
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && modal.style.display === 'flex') cerrarModal();
 });
 
 /* =========================================================
-   INFO DEL ACTIVO SELECCIONADO + REGLAS
+   INFO DEL ACTIVO
    ========================================================= */
 selActivo.addEventListener('change', () => {
     const id = parseInt(selActivo.value, 10);
@@ -580,12 +479,10 @@ selActivo.addEventListener('change', () => {
     }
 
     aplicarReglasActivo(a);
-
     const reglas = obtenerReglas(a);
     const marcaModelo = [a.Marca, a.Modelo].filter(Boolean).join(' ') || '—';
 
-    let html = `<div class="info-activo-tipo">${reglas.icono} <strong>${escaparHTML(a.Tipo)}</strong> — ${escaparHTML(marcaModelo)}</div>`;
-    html += '<div class="info-activo-grid">';
+    let html = `<div class="info-activo-tipo">${reglas.icono} <strong>${escaparHTML(a.Tipo)}</strong> — ${escaparHTML(marcaModelo)}</div><div class="info-activo-grid">`;
     if (a.NoSerie)    html += `<div><b>Serie:</b> ${escaparHTML(a.NoSerie)}</div>`;
     if (reglas.requiereIMEI && a.IMEI1) html += `<div><b>IMEI 1:</b> ${escaparHTML(a.IMEI1)}</div>`;
     if (reglas.requiereIMEI && a.IMEI2) html += `<div><b>IMEI 2:</b> ${escaparHTML(a.IMEI2)}</div>`;
@@ -628,12 +525,14 @@ function limpiarFormulario() {
     inpRutaPDF.value = '';
     inpRutaINE.value = '';
     inpRutaComprob.value = '';
+    
     const inpIMEI = document.getElementById('imei-1');
     if (inpIMEI) inpIMEI.value = '';
     const inpIMEI2 = document.getElementById('imei-2');
     if (inpIMEI2) inpIMEI2.value = '';
     const inpTel = document.getElementById('telefono-receptor');
     if (inpTel) inpTel.value = '';
+
     infoActivo.classList.add('oculto');
     infoActivo.innerHTML = '';
     selActivo.disabled = false;
@@ -660,7 +559,7 @@ btnNuevo.addEventListener('click', async () => {
    ========================================================= */
 async function abrirEdicion(id) {
     const r = responsivas.find(x => x.IdResponsiva === id);
-    if (!r) { toastError('Responsiva no encontrada'); return; }
+    if (!r) { alertaError('Responsiva no encontrada'); return; }
 
     modoEdicion = true;
     idEditando = id;
@@ -679,10 +578,8 @@ async function abrirEdicion(id) {
     selActivo.disabled = true;
 
     const activoParaReglas = existe || {
-        Tipo: r.Tipo, Marca: r.Marca, Modelo: r.Modelo,
-        NoSerie: r.NoSerie, IMEI1: r.IMEI1, IMEI2: r.IMEI2,
-        NoTelefono: r.NoTelefono, PrecioActivo: r.PrecioActivo,
-        RequiereIMEI: r.RequiereIMEI, RequiereTelefono: r.RequiereTelefono
+        Tipo: r.Tipo, Marca: r.Marca, Modelo: r.Modelo, NoSerie: r.NoSerie, IMEI1: r.IMEI1, IMEI2: r.IMEI2,
+        NoTelefono: r.NoTelefono, PrecioActivo: r.PrecioActivo, RequiereIMEI: r.RequiereIMEI, RequiereTelefono: r.RequiereTelefono
     };
     aplicarReglasActivo(activoParaReglas);
 
@@ -734,7 +631,7 @@ async function abrirEdicion(id) {
    ========================================================= */
 async function verDetalle(id) {
     const r = responsivas.find(x => x.IdResponsiva === id);
-    if (!r) { toastError('Responsiva no encontrada'); return; }
+    if (!r) { alertaError('Responsiva no encontrada'); return; }
 
     const reglas = obtenerReglas({ Tipo: r.Tipo, IMEI1: r.IMEI1, NoTelefono: r.NoTelefono });
 
@@ -868,7 +765,7 @@ formulario.addEventListener('submit', async (e) => {
             cerrarModal();
             await cargarResponsivas();
             await cargarActivosDisponibles();
-            toastExito(res.mensaje || 'Operación exitosa');
+            await alertaExito('Guardado correctamente', res.mensaje || (modoEdicion ? 'Responsiva actualizada.' : 'Responsiva creada.'));
         } else {
             mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');
         }
@@ -880,7 +777,7 @@ formulario.addEventListener('submit', async (e) => {
 });
 
 /* =========================================================
-   VER PDF (genera en memoria, NO guarda, NO pide ruta)
+   VER PDF
    ========================================================= */
 async function verPDFResponsiva(id, folio) {
     Swal.fire({
@@ -895,21 +792,19 @@ async function verPDFResponsiva(id, folio) {
         Swal.close();
 
         if (!res || !res.ok) {
-            toastError('No se pudo generar el PDF', res?.mensaje || 'Error desconocido');
+            alertaError('No se pudo generar el PDF', res?.mensaje || 'Error desconocido');
             return;
         }
 
-        // El archivo temporal se abre automáticamente con el visor del sistema.
-        // Solo mostramos un toast si quieres confirmar; no es necesario modal.
-        toastExito('PDF abierto en el visor del sistema');
+        await alertaExito('PDF abierto en el visor del sistema');
     } catch (err) {
         Swal.close();
-        toastError('Error al generar PDF', err.message);
+        alertaError('Error al generar PDF', err.message);
     }
 }
 
 /* =========================================================
-   GUARDAR PDF (genera en memoria + diálogo para elegir ruta)
+   GUARDAR PDF
    ========================================================= */
 async function guardarPDFResponsiva(id, folio, rutaExistente) {
     const yaExiste = !!rutaExistente;
@@ -920,17 +815,14 @@ async function guardarPDFResponsiva(id, folio, rutaExistente) {
         html: yaExiste
             ? `Ya existe un PDF guardado para el folio <strong>${escaparHTML(folio)}</strong>.<br><br>
                Se te pedirá elegir una nueva ubicación. Si eliges la misma ruta, se <b>sobrescribirá</b>.<br>
-               <small style="color:#6b7280;">Ruta actual: ${escaparHTML(rutaExistente)}</small>`
+               <small style="color:#64748b;">Ruta actual: ${escaparHTML(rutaExistente)}</small>`
             : `Se generará el PDF del folio <strong>${escaparHTML(folio)}</strong> y podrás elegir dónde guardarlo.`,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, guardar',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled' + (yaExiste ? ' cl-peligro' : ''),
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled' + (yaExiste ? ' cl-peligro' : '')
         }
     });
 
@@ -951,7 +843,8 @@ async function guardarPDFResponsiva(id, folio, rutaExistente) {
             await Swal.fire({
                 icon: 'success',
                 title: 'PDF guardado',
-                html: `Se guardó en:<br><code style="font-size:11px;word-break:break-all;">${escaparHTML(res.ruta)}</code>`,
+                html: `Se guardó en:<br><code style="font-size:12px;word-break:break-all;color:#0f766e;">${escaparHTML(res.ruta)}</code>`,
+                showCloseButton: true,
                 confirmButtonText: 'Aceptar',
                 buttonsStyling: false,
                 customClass: {
@@ -961,13 +854,13 @@ async function guardarPDFResponsiva(id, folio, rutaExistente) {
             });
             await cargarResponsivas();
         } else if (res && res.mensaje === 'Cancelado') {
-            // El usuario canceló el diálogo: no hacemos nada.
+            // Cancelado por el usuario
         } else {
-            toastError('No se pudo guardar el PDF', res?.mensaje || 'Error desconocido');
+            alertaError('No se pudo guardar el PDF', res?.mensaje || 'Error desconocido');
         }
     } catch (err) {
         Swal.close();
-        toastError('Error al guardar PDF', err.message);
+        alertaError('Error al guardar PDF', err.message);
     }
 }
 
@@ -983,15 +876,12 @@ async function devolverResponsiva(id, nombrePersona) {
         inputLabel: 'Fecha de devolución',
         inputValue: hoyISO(),
         inputAttributes: { required: true },
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, devolver',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         },
         inputValidator: (value) => {
             if (!value) return 'La fecha es obligatoria';
@@ -1001,20 +891,16 @@ async function devolverResponsiva(id, nombrePersona) {
     if (!confirmacion.isConfirmed) return;
 
     try {
-        const res = await window.api.activoFijo.responsivas.devolver(
-            id,
-            confirmacion.value,
-            null
-        );
+        const res = await window.api.activoFijo.responsivas.devolver(id, confirmacion.value, null);
         if (res && res.ok) {
             await cargarResponsivas();
             await cargarActivosDisponibles();
-            toastExito(res.mensaje || 'Devolución registrada');
+            await alertaExito('Devolución registrada', res.mensaje || 'El activo se liberó correctamente.');
         } else {
-            toastError('No se pudo devolver', res?.mensaje || 'Error desconocido');
+            alertaError('No se pudo devolver', res?.mensaje || 'Error desconocido');
         }
     } catch (err) {
-        toastError('Error al devolver', err.message);
+        alertaError('Error al devolver', err.message);
     }
 }
 
@@ -1033,16 +919,12 @@ async function cancelarResponsiva(id, folio) {
         inputLabel: 'Motivo de la cancelación',
         inputPlaceholder: 'Ej. Error de captura, asignación duplicada, cancelación de ticket...',
         inputAttributes: { maxlength: 500, rows: 3 },
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, cancelar',
-        cancelButtonText: 'Volver',
-        reverseButtons: true,
-        focusCancel: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         },
         inputValidator: (value) => {
             if (!value || !value.trim()) return 'El motivo es obligatorio';
@@ -1057,12 +939,12 @@ async function cancelarResponsiva(id, folio) {
         if (res && res.ok) {
             await cargarResponsivas();
             await cargarActivosDisponibles();
-            toastExito(res.mensaje || 'Responsiva cancelada');
+            await alertaExito('Responsiva cancelada', res.mensaje || 'Se movió al histórico correctamente.');
         } else {
-            toastError('No se pudo cancelar', res?.mensaje || 'Error desconocido');
+            alertaError('No se pudo cancelar', res?.mensaje || 'Error desconocido');
         }
     } catch (err) {
-        toastError('Error al cancelar', err.message);
+        alertaError('Error al cancelar', err.message);
     }
 }
 

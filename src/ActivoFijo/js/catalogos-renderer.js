@@ -1,13 +1,10 @@
 /* =========================================================
-   ACTIVO FIJO — RENDERER DE CATÁLOGOS (12 catálogos)
-   Soft delete + pestaña Eliminados + Restaurar
-   + Panel de ayuda contextual + Reglas de negocio
-   + Blindaje: ningún addEventListener sobre null
+   ACTIVO FIJO — RENDERER CORPORATIVO AQUA 2026
    ========================================================= */
 const Swal = window.Swal;
 
 /* =========================================================
-   OPCIONES PARA CAMPOS SELECT
+   GRUPOS DE SUBTIPO
    ========================================================= */
 const GRUPOS_SUBTIPO = [
     { valor: 'DIADEMA',         etiqueta: 'Diadema' },
@@ -18,8 +15,25 @@ const GRUPOS_SUBTIPO = [
     { valor: 'ALMACENAMIENTO',  etiqueta: 'Almacenamiento' }
 ];
 
+/* Requisitos mostrados como chips en la tabla de tipos */
+const REQUISITOS_TIPO = [
+    { key: 'RequiereResponsiva',        label: 'Responsiva' },
+    { key: 'RequiereIMEI',              label: 'IMEI' },
+    { key: 'RequiereTelefono',          label: 'Teléfono' },
+    { key: 'RequiereSitio',             label: 'Sitio' },
+    { key: 'RequiereSubtipo',           label: 'Subtipo' },
+    { key: 'RequiereClasificacion',     label: 'Clasificación' },
+    { key: 'RequiereTamanio',           label: 'Tamaño' },
+    { key: 'RequiereCapacidad',         label: 'Capacidad' },
+    { key: 'RequiereVoltaje',           label: 'Voltaje' },
+    { key: 'RequiereUsuarioAsignado',   label: 'Usuario' },
+    { key: 'RequierePrecio',            label: 'Precio' },
+    { key: 'RequiereEspecificaciones',  label: 'Specs' },
+    { key: 'RequiereAccesorios',        label: 'Accesorios' }
+];
+
 /* =========================================================
-   CONFIGURACIÓN EN FRONTEND
+   CONFIGURACIÓN FRONTEND DE LOS 12 CATÁLOGOS
    ========================================================= */
 const CATALOGOS_FRONT = {
     marcas: {
@@ -28,7 +42,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdMarca',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
-              tip: 'Fabricante del equipo. Ej. HP, Dell, Lenovo, Apple.' }
+              hint: 'Fabricante del equipo. Ej. HP, Dell, Lenovo, Apple.' }
         ]
     },
     tipos: {
@@ -36,37 +50,24 @@ const CATALOGOS_FRONT = {
         tituloSingular: 'tipo',
         pk: 'IdTipo',
         campos: [
-            { nombre: 'Nombre',       etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
-              tip: 'Nombre del tipo de activo. Ej. LAPTOP, MOUSE, SSD NVME.' },
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+              hint: 'Nombre del tipo de activo. Ej. LAPTOP, MOUSE, SSD NVME.' },
             { nombre: 'GrupoSubtipo', etiqueta: 'Grupo de subtipo', tipo: 'select',
               opciones: [{ valor: '', etiqueta: '— Sin grupo —' }, ...GRUPOS_SUBTIPO],
-              tip: 'Los subtipos que se ofrecerán al capturar un activo de este tipo. Si no aplica, deja "Sin grupo".' },
-            { nombre: 'RequiereResponsiva',      etiqueta: 'Requiere responsiva',       tipo: 'bool',
-              tip: 'Si está activo, se pedirá firmar responsiva al asignar el activo.' },
-            { nombre: 'RequiereIMEI',            etiqueta: 'Requiere IMEI',             tipo: 'bool',
-              tip: 'Muestra los campos IMEI 1 e IMEI 2. Aplica a celulares/tablets con línea.' },
-            { nombre: 'RequiereTelefono',        etiqueta: 'Requiere teléfono',         tipo: 'bool',
-              tip: 'Muestra el campo No. Teléfono.' },
-            { nombre: 'RequiereSitio',           etiqueta: 'Requiere sitio',            tipo: 'bool',
-              tip: 'Muestra el selector de Sitio (dónde está físicamente el activo).' },
-            { nombre: 'RequiereSubtipo',         etiqueta: 'Requiere subtipo',          tipo: 'bool',
-              tip: 'Muestra el selector de Subtipo. Requiere que el tipo tenga "Grupo de subtipo" definido.' },
-            { nombre: 'RequiereClasificacion',   etiqueta: 'Requiere clasificación',    tipo: 'bool',
-              tip: 'Muestra el selector de Clasificación (Interno, Externo, etc.).' },
-            { nombre: 'RequiereTamanio',         etiqueta: 'Requiere tamaño',           tipo: 'bool',
-              tip: 'Muestra el selector de Tamaño (ej. pulgadas, tallas).' },
-            { nombre: 'RequiereCapacidad',       etiqueta: 'Requiere capacidad',        tipo: 'bool',
-              tip: 'Muestra el selector de Capacidad (ej. 240 GB, 8 GB).' },
-            { nombre: 'RequiereVoltaje',         etiqueta: 'Requiere voltaje',          tipo: 'bool',
-              tip: 'Muestra el selector de Voltaje (ej. 110V, 220V).' },
-            { nombre: 'RequiereUsuarioAsignado', etiqueta: 'Requiere usuario asignado', tipo: 'bool',
-              tip: 'Muestra el campo de usuario asignado. En tipos de almacenamiento (SSD/DISCO) solo se pide si la clasificación es EXTERNO.' },
-            { nombre: 'RequierePrecio',          etiqueta: 'Requiere precio',           tipo: 'bool',
-              tip: 'Muestra el campo Precio. Si lo apagas, los precios ya capturados NO se borran.' },
-            { nombre: 'RequiereEspecificaciones',etiqueta: 'Requiere especificaciones', tipo: 'bool',
-              tip: 'Muestra los campos Procesador, RAM, Almacenamiento y Sistema Operativo.' },
-            { nombre: 'RequiereAccesorios',      etiqueta: 'Requiere accesorios',       tipo: 'bool',
-              tip: 'Muestra el campo de Accesorios (cargador, cable, funda...).' }
+              hint: 'Los subtipos que se ofrecerán al capturar un activo de este tipo.' },
+            { nombre: 'RequiereResponsiva',      etiqueta: 'Requiere responsiva',       tipo: 'bool' },
+            { nombre: 'RequiereIMEI',            etiqueta: 'Requiere IMEI',             tipo: 'bool' },
+            { nombre: 'RequiereTelefono',        etiqueta: 'Requiere teléfono',         tipo: 'bool' },
+            { nombre: 'RequiereSitio',           etiqueta: 'Requiere sitio',            tipo: 'bool' },
+            { nombre: 'RequiereSubtipo',         etiqueta: 'Requiere subtipo',          tipo: 'bool' },
+            { nombre: 'RequiereClasificacion',   etiqueta: 'Requiere clasificación',    tipo: 'bool' },
+            { nombre: 'RequiereTamanio',         etiqueta: 'Requiere tamaño',           tipo: 'bool' },
+            { nombre: 'RequiereCapacidad',       etiqueta: 'Requiere capacidad',        tipo: 'bool' },
+            { nombre: 'RequiereVoltaje',         etiqueta: 'Requiere voltaje',          tipo: 'bool' },
+            { nombre: 'RequiereUsuarioAsignado', etiqueta: 'Requiere usuario asignado', tipo: 'bool' },
+            { nombre: 'RequierePrecio',          etiqueta: 'Requiere precio',           tipo: 'bool' },
+            { nombre: 'RequiereEspecificaciones',etiqueta: 'Requiere especificaciones', tipo: 'bool' },
+            { nombre: 'RequiereAccesorios',      etiqueta: 'Requiere accesorios',       tipo: 'bool' }
         ]
     },
     estados: {
@@ -75,7 +76,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdEstado',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
-              tip: 'Condición física del activo. Ej. USO, NUEVO, VALIDAR, DAÑADO.' }
+              hint: 'Condición física del activo. Ej. USO, NUEVO, VALIDAR, DAÑADO.' }
         ]
     },
     estatus: {
@@ -84,7 +85,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdEstatus',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
-              tip: 'Situación operativa del activo. Ej. STOCK, DISPONIBLE, ASIGNADO, BAJA.' }
+              hint: 'Situación operativa. Ej. STOCK, DISPONIBLE, ASIGNADO, BAJA.' }
         ]
     },
     carteras: {
@@ -93,7 +94,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdCartera',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
-              tip: 'Área o responsable del activo. Ej. SOPORTE TI, RECURSOS HUMANOS.' }
+              hint: 'Área o responsable del activo. Ej. SOPORTE TI, RECURSOS HUMANOS.' }
         ]
     },
     puestos: {
@@ -102,7 +103,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdPuesto',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
-              tip: 'Puesto del usuario asignado. Ej. GERENTE, ANALISTA.' }
+              hint: 'Puesto del usuario asignado. Ej. GERENTE, ANALISTA.' }
         ]
     },
     sitios: {
@@ -111,9 +112,9 @@ const CATALOGOS_FRONT = {
         pk: 'IdSitio',
         campos: [
             { nombre: 'Nombre',      etiqueta: 'Nombre',      tipo: 'text', requerido: true, max: 100,
-              tip: 'Ubicación física. Ej. CORPORATIVO, SUCURSAL NORTE.' },
+              hint: 'Ubicación física. Ej. CORPORATIVO, SUCURSAL NORTE.' },
             { nombre: 'Descripcion', etiqueta: 'Descripción', tipo: 'text', max: 200,
-              tip: 'Detalle opcional (dirección, piso, referencia).' }
+              hint: 'Detalle opcional (dirección, piso, referencia).' }
         ]
     },
     subtipos: {
@@ -123,12 +124,12 @@ const CATALOGOS_FRONT = {
         campos: [
             { nombre: 'Grupo',       etiqueta: 'Grupo',       tipo: 'select', requerido: true,
               opciones: [{ valor: '', etiqueta: '— Seleccionar —' }, ...GRUPOS_SUBTIPO],
-              tip: 'A qué grupo de subtipos pertenece. Solo aparecerán al capturar activos cuyo Tipo tenga este grupo.',
+              hint: 'Grupo al que pertenece. No se puede cambiar una vez creado.',
               esGrupoInmutable: true },
             { nombre: 'Nombre',      etiqueta: 'Nombre',      tipo: 'text',   requerido: true, max: 100,
-              tip: 'Nombre del subtipo. Ej. INALÁMBRICO, 8GB DDR4, 240W.' },
+              hint: 'Nombre del subtipo. Ej. INALÁMBRICO, 8GB DDR4, 240W.' },
             { nombre: 'Descripcion', etiqueta: 'Descripción', tipo: 'text',   max: 200,
-              tip: 'Detalle opcional.' }
+              hint: 'Detalle opcional.' }
         ]
     },
     voltajes: {
@@ -137,7 +138,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdVoltaje',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
-              tip: 'Ej. 110V, 220V, 5V.' }
+              hint: 'Ej. 110V, 220V, 5V.' }
         ]
     },
     clasificaciones: {
@@ -146,7 +147,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdClasificacion',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
-              tip: 'Ej. INTERNO, EXTERNO. La regla de "Usuario asignado" para SSD/DISCO depende de EXTERNO.' }
+              hint: 'Ej. INTERNO, EXTERNO. La regla de "Usuario asignado" depende de EXTERNO.' }
         ]
     },
     tamanios: {
@@ -155,7 +156,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdTamanio',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
-              tip: 'Ej. CHICO, MEDIANO, 15", 24".' }
+              hint: 'Ej. CHICO, MEDIANO, 15", 24".' }
         ]
     },
     capacidades: {
@@ -164,13 +165,13 @@ const CATALOGOS_FRONT = {
         pk: 'IdCapacidad',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
-              tip: 'Ej. 240 GB, 480 GB, 8 GB, 16 GB.' }
+              hint: 'Ej. 240 GB, 480 GB, 8 GB, 16 GB.' }
         ]
     }
 };
 
 /* =========================================================
-   AYUDA CONTEXTUAL POR CATÁLOGO
+   AYUDA CONTEXTUAL
    ========================================================= */
 const AYUDA_CATALOGO = {
     marcas: {
@@ -181,22 +182,22 @@ const AYUDA_CATALOGO = {
         ]
     },
     tipos: {
-        resumen: 'Define la "plantilla" de cada tipo de activo. Los switches de abajo controlan qué campos aparecerán al capturar un activo de ese tipo.',
+        resumen: 'Define la "plantilla" de cada tipo de activo. Los switches controlan qué campos aparecerán al capturar un activo de ese tipo.',
         tips: [
-            '<b>Grupo de subtipo:</b> si lo defines, al capturar un activo se ofrecerán los Subtipos que pertenezcan a ese grupo. Si lo cambias después, los subtipos actuales dejan de mostrarse (no se borran).',
-            '<b>Requiere Precio / Requiere Especificaciones / Requiere Accesorios:</b> apagarlos no borra los datos ya guardados en activos existentes.',
-            '<b>Requiere Usuario Asignado:</b> en tipos SSD NVME y DISCO MECÁNICO solo se pide si la clasificación del activo es EXTERNO.',
-            'Dar de baja un Tipo NO afecta a los activos que ya lo usan, pero impide crear nuevos con ese tipo.'
+            '<b>Grupo de subtipo:</b> si lo defines, al capturar un activo se ofrecerán los Subtipos que pertenezcan a ese grupo.',
+            '<b>Precio / Especificaciones / Accesorios:</b> apagarlos no borra los datos ya guardados en activos existentes.',
+            '<b>Usuario Asignado:</b> en tipos SSD/DISCO solo se pide si la clasificación es EXTERNO.',
+            'Dar de baja un Tipo NO afecta a los activos existentes, pero impide crear nuevos con ese tipo.'
         ]
     },
     estados: {
         resumen: 'Condición física del activo (USO, NUEVO, VALIDAR, DAÑADO).',
-        tips: ['Se usa como filtro en el inventario.', 'No confundir con Estatus (que es la situación operativa).']
+        tips: ['Se usa como filtro en el inventario.', 'No confundir con Estatus (situación operativa).']
     },
     estatus: {
         resumen: 'Situación operativa del activo (STOCK, DISPONIBLE, ASIGNADO, BAJA, etc.).',
         tips: [
-            'El estatus <b>BAJA</b> es el que dispara el "soft delete" y mueve el activo a la pestaña Eliminados.',
+            'El estatus <b>BAJA</b> dispara el soft delete y mueve el activo a Eliminados.',
             'El estatus <b>STOCK / DISPONIBLE</b> es al que vuelve un activo al restaurarse.'
         ]
     },
@@ -213,10 +214,10 @@ const AYUDA_CATALOGO = {
         tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Sitio" activo.']
     },
     subtipos: {
-        resumen: 'Sub-clasificación dentro de un grupo (MOUSE, TECLADO, ALMACENAMIENTO, etc.). Se muestran al capturar un activo cuyo Tipo tenga ese Grupo de subtipo.',
+        resumen: 'Sub-clasificación dentro de un grupo (MOUSE, TECLADO, ALMACENAMIENTO, etc.).',
         tips: [
-            '<b>El campo Grupo NO se puede cambiar una vez creado</b> (los activos lo referencian). Si necesitas mover un subtipo a otro grupo, créalo de nuevo y da de baja el anterior.',
-            'Para que un subtipo aparezca en el inventario, el Tipo del activo debe tener el mismo "Grupo de subtipo" que el subtipo.'
+            '<b>El campo Grupo NO se puede cambiar una vez creado</b> (los activos lo referencian).',
+            'Para que un subtipo aparezca, el Tipo del activo debe tener el mismo "Grupo de subtipo" que el subtipo.'
         ]
     },
     voltajes: {
@@ -226,7 +227,7 @@ const AYUDA_CATALOGO = {
     clasificaciones: {
         resumen: 'Clasificación del activo. Ej. INTERNO, EXTERNO.',
         tips: [
-            'La clasificación <b>EXTERNO</b> activa la petición de "Usuario asignado" en tipos de almacenamiento (SSD NVME, DISCO MECÁNICO).',
+            'La clasificación <b>EXTERNO</b> activa la petición de "Usuario asignado" en tipos de almacenamiento.',
             'Si renombras "EXTERNO" a otra cosa, esa regla dejará de aplicar.'
         ]
     },
@@ -253,7 +254,7 @@ let filtroBusqueda = '';
 let ayudaAbierta   = true;
 
 /* =========================================================
-   REFERENCIAS DOM (defensivas: null si no existen)
+   REFERENCIAS DOM
    ========================================================= */
 const $ = (id) => document.getElementById(id);
 
@@ -261,6 +262,7 @@ const tabs             = $('tabs-catalogos');
 const tabsVista        = $('tabs-vista');
 const tablaHead        = $('tabla-head');
 const tablaBody        = $('tabla-body');
+const cardTabla        = $('card-tabla');
 const formulario       = $('formulario');
 const camposForm       = $('campos-form');
 const mensaje          = $('mensaje');
@@ -268,7 +270,10 @@ const btnGuardar       = $('btn-guardar');
 const btnNuevo         = $('btn-nuevo');
 const btnNuevoTexto    = $('btn-nuevo-texto');
 const tituloCatalogo   = $('titulo-catalogo');
+const panelTitulo      = $('panel-titulo');
+const panelDescripcion = $('panel-descripcion');
 const sinResultados    = $('sin-resultados');
+const sinResultadosTit = $('sin-resultados-titulo');
 const sinResultadosTxt = $('sin-resultados-texto');
 const inputBusqueda    = $('input-busqueda');
 const btnLimpiarBusq   = $('btn-limpiar-busqueda');
@@ -278,9 +283,7 @@ const modalTitulo      = $('modal-titulo');
 const avisoModal       = $('aviso-modal');
 const btnVolver        = $('btn-volver');
 const btnModalCerrar   = $('modal-cerrar');
-const btnModalCancelar = $('btn-cancelar');
 
-/* Panel de ayuda */
 const panelAyuda       = $('panel-ayuda');
 const panelAyudaTitulo = $('panel-ayuda-titulo');
 const panelAyudaBody   = $('panel-ayuda-body');
@@ -298,11 +301,14 @@ function escaparHTML(str) {
 function mostrarMensaje(texto, tipo) {
     if (!mensaje) return;
     mensaje.textContent = texto;
-    mensaje.className = 'mensaje ' + tipo;
+    mensaje.className = 'alert ' + tipo;
+    mensaje.classList.remove('oculto');
 }
+
 function ocultarMensaje() {
     if (!mensaje) return;
-    mensaje.className = 'mensaje oculto';
+    mensaje.className = 'alert oculto';
+    mensaje.textContent = '';
 }
 
 function mostrarAvisoModal(html) {
@@ -312,7 +318,7 @@ function mostrarAvisoModal(html) {
         avisoModal.innerHTML = '';
         return;
     }
-    avisoModal.innerHTML = html;
+    avisoModal.innerHTML = `<div class="aviso-texto">${html}</div>`;
     avisoModal.classList.remove('oculto');
 }
 
@@ -320,44 +326,51 @@ function setGuardando(v) {
     guardando = v;
     if (!btnGuardar) return;
     btnGuardar.disabled = v;
-    btnGuardar.style.opacity = v ? '0.6' : '';
+    const txt = btnGuardar.querySelector('.btn-text');
+    const spin = btnGuardar.querySelector('.btn-spinner');
+    if (txt) txt.textContent = v ? 'Guardando...' : 'Guardar';
+    if (spin) spin.classList.toggle('oculto', !v);
 }
 
 function etiquetaSelect(campo, valor) {
-    if (!campo.opciones) return valor ?? '';
+    if (!campo || !campo.opciones) return valor ?? '';
     const op = campo.opciones.find(o => o.valor === valor);
     return op ? op.etiqueta : (valor ?? '');
 }
 
-function toastExito(titulo) {
-    Swal.fire({
-        toast: true, position: 'bottom-end', icon: 'success', title: titulo,
-        showConfirmButton: false, timer: 2600, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-success' },
-        didOpen: (t) => {
-            t.style.boxShadow = 'none';
-            t.addEventListener('mouseenter', Swal.stopTimer);
-            t.addEventListener('mouseleave', Swal.resumeTimer);
-        }
+/* =========================================================
+   ALERTAS MODALES
+   ========================================================= */
+function alertaExito(titulo, mensaje = '') {
+    return Swal.fire({
+        icon: 'success',
+        title: titulo,
+        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
+        timer: 2100,
+        timerProgressBar: true,
+        showConfirmButton: false,
+        showCloseButton: true,
+        customClass: { popup: 'cl-alert' }
     });
 }
 
-function toastError(titulo, texto = '') {
-    Swal.fire({
-        toast: true, position: 'bottom-end', icon: 'error',
-        title: texto ? `${titulo} — ${texto}` : titulo,
-        showConfirmButton: false, timer: 3400, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-error' },
-        didOpen: (t) => {
-            t.style.boxShadow = 'none';
-            t.addEventListener('mouseenter', Swal.stopTimer);
-            t.addEventListener('mouseleave', Swal.resumeTimer);
+function alertaError(titulo, mensaje = '') {
+    return Swal.fire({
+        icon: 'error',
+        title: titulo,
+        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
+        confirmButtonText: 'Entendido',
+        showCloseButton: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-alert',
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 }
 
 /* =========================================================
-   PANEL DE AYUDA CONTEXTUAL
+   PANEL AYUDA
    ========================================================= */
 function renderAyuda() {
     const ayuda = AYUDA_CATALOGO[catalogoActual];
@@ -382,25 +395,29 @@ function aplicarEstadoAyuda() {
 }
 
 /* =========================================================
-   ACTUALIZAR UI SEGÚN CATÁLOGO / VISTA ACTIVA
+   ACTUALIZAR UI
    ========================================================= */
 function actualizarUIDeCatalogo() {
     const cfg = CATALOGOS_FRONT[catalogoActual];
     if (!cfg) return;
 
-    if (tituloCatalogo) {
-        const sufijo = (vistaActual === 'eliminados') ? ' · Eliminados' : '';
-        tituloCatalogo.textContent = `Catálogos · ${cfg.titulo}${sufijo}`;
-    }
-
-    if (btnNuevoTexto) {
-        btnNuevoTexto.textContent = `Nuevo ${cfg.tituloSingular}`;
-    }
-
     const enEliminados = (vistaActual === 'eliminados');
+    const sufijo = enEliminados ? ' · Eliminados' : '';
+
+    if (tituloCatalogo) tituloCatalogo.textContent = `Catálogos · ${cfg.titulo}${sufijo}`;
+    if (panelTitulo) panelTitulo.textContent = cfg.titulo;
+
+    if (panelDescripcion) {
+        panelDescripcion.textContent = enEliminados
+            ? 'Registros dados de baja · Puedes restaurarlos individualmente'
+            : `Gestiona los registros activos del catálogo`;
+    }
+
+    if (btnNuevoTexto) btnNuevoTexto.textContent = `Nuevo ${cfg.tituloSingular}`;
+
     if (btnNuevo) {
         btnNuevo.disabled = enEliminados;
-        btnNuevo.style.opacity = enEliminados ? '0.5' : '';
+        btnNuevo.title = enEliminados ? 'No disponible en la vista de Eliminados' : '';
     }
 
     renderAyuda();
@@ -408,7 +425,7 @@ function actualizarUIDeCatalogo() {
 }
 
 /* =========================================================
-   TABS DE CATÁLOGO
+   TABS CATÁLOGO / VISTA
    ========================================================= */
 if (tabs) {
     tabs.addEventListener('click', (e) => {
@@ -428,9 +445,6 @@ if (tabs) {
     });
 }
 
-/* =========================================================
-   TABS DE VISTA (Activos / Eliminados)
-   ========================================================= */
 if (tabsVista) {
     tabsVista.addEventListener('click', (e) => {
         const btn = e.target.closest('.tab-vista');
@@ -451,7 +465,7 @@ if (tabsVista) {
 }
 
 /* =========================================================
-   CARGAR CATÁLOGO
+   CARGAR
    ========================================================= */
 async function cargarCatalogo() {
     try {
@@ -459,7 +473,7 @@ async function cargarCatalogo() {
         registros = await window.api.activoFijo.catalogos.listar(catalogoActual, filtros);
         renderTabla();
     } catch (err) {
-        toastError('No se pudieron cargar los datos', err.message);
+        alertaError('No se pudieron cargar los datos', err.message);
     }
 }
 
@@ -470,15 +484,12 @@ function renderTabla() {
     const cfg = CATALOGOS_FRONT[catalogoActual];
     if (!cfg || !tablaHead || !tablaBody) return;
 
-    const headers = cfg.campos.map(c => `<th>${escaparHTML(c.etiqueta)}</th>`);
-    headers.push('<th style="width:230px; text-align:right;">Acciones</th>');
-    tablaHead.innerHTML = `<tr>${headers.join('')}</tr>`;
-
     const listaFiltrada = registros.filter(r => {
         if (!filtroBusqueda) return true;
         const texto = cfg.campos
             .map(c => {
                 if (c.tipo === 'select') return etiquetaSelect(c, r[c.nombre]);
+                if (c.tipo === 'bool') return r[c.nombre] ? 'si yes' : 'no';
                 return String(r[c.nombre] ?? '');
             })
             .join(' ').toLowerCase();
@@ -487,50 +498,151 @@ function renderTabla() {
 
     tablaBody.innerHTML = '';
 
+    /* ---------- ESTADO VACÍO ---------- */
     if (listaFiltrada.length === 0) {
+        const hayBusqueda = !!filtroBusqueda;
         if (sinResultados) sinResultados.classList.remove('oculto');
-        if (sinResultadosTxt) {
-            sinResultadosTxt.textContent = vistaActual === 'eliminados'
-                ? `No hay ${cfg.titulo.toLowerCase()} dados de baja.`
-                : `No se encontraron ${cfg.titulo.toLowerCase()} con ese criterio.`;
-        }
-        const cardTabla = document.querySelector('.card-tabla');
         if (cardTabla) cardTabla.style.display = 'none';
+
+        if (sinResultadosTit) {
+            sinResultadosTit.textContent = hayBusqueda ? 'Sin coincidencias' : 'Sin registros';
+        }
+        if (sinResultadosTxt) {
+            if (hayBusqueda) {
+                sinResultadosTxt.textContent = `Ningún registro coincide con "${inputBusqueda?.value || ''}".`;
+            } else if (vistaActual === 'eliminados') {
+                sinResultadosTxt.textContent = `Aún no hay ${cfg.titulo.toLowerCase()} dados de baja.`;
+            } else {
+                sinResultadosTxt.textContent = `Aún no hay ${cfg.titulo.toLowerCase()} registrados. Crea el primero con el botón de arriba.`;
+            }
+        }
+        if (btnLimpiarFiltro) {
+            btnLimpiarFiltro.style.display = hayBusqueda ? '' : 'none';
+        }
         return;
     }
 
     if (sinResultados) sinResultados.classList.add('oculto');
-    const cardTabla = document.querySelector('.card-tabla');
     if (cardTabla) cardTabla.style.display = '';
 
     const esVistaEliminados = (vistaActual === 'eliminados');
+
+    /* ---------- RENDER ESPECIAL: TIPOS ---------- */
+    if (catalogoActual === 'tipos') {
+        tablaHead.innerHTML = `
+            <tr>
+                <th style="width:22%;">Nombre</th>
+                <th style="width:15%;">Grupo</th>
+                <th>Requisitos</th>
+                <th style="width:100px; text-align:right;">Acciones</th>
+            </tr>
+        `;
+
+        const campoTipoGrupo = cfg.campos.find(c => c.nombre === 'GrupoSubtipo');
+
+        listaFiltrada.forEach(r => {
+            const tr = document.createElement('tr');
+
+            const grupoLabel = r.GrupoSubtipo
+                ? etiquetaSelect(campoTipoGrupo, r.GrupoSubtipo)
+                : null;
+            const grupoHTML = grupoLabel
+                ? `<span class="badge-grupo">${escaparHTML(grupoLabel)}</span>`
+                : `<span class="badge-grupo vacio">Sin grupo</span>`;
+
+            const reqsActivos = REQUISITOS_TIPO.filter(req => r[req.key]);
+            const reqsHTML = reqsActivos.length
+                ? reqsActivos.map(req => `<span class="chip-requisito">${escaparHTML(req.label)}</span>`).join('')
+                : `<span class="chip-requisito vacio">Sin requisitos</span>`;
+
+            tr.innerHTML = `
+                <td data-label="Nombre"><span class="badge-nombre">${escaparHTML(r.Nombre ?? '')}</span></td>
+                <td data-label="Grupo">${grupoHTML}</td>
+                <td data-label="Requisitos" class="celda-requisitos">
+                    <div class="chips-wrap">${reqsHTML}</div>
+                </td>
+                <td data-label="Acciones" class="acciones-tabla"></td>
+            `;
+
+            const celda = tr.querySelector('.acciones-tabla');
+
+            if (esVistaEliminados) {
+                const btnRestaurar = document.createElement('button');
+                btnRestaurar.type = 'button';
+                btnRestaurar.className = 'btn-accion restaurar';
+                btnRestaurar.setAttribute('data-tooltip', 'Restaurar');
+                btnRestaurar.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                        <polyline points="1 4 1 10 7 10"></polyline>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                    </svg>`;
+                btnRestaurar.addEventListener('click', () => restaurarRegistro(r[cfg.pk]));
+                celda.appendChild(btnRestaurar);
+            } else {
+                const btnEditar = document.createElement('button');
+                btnEditar.type = 'button';
+                btnEditar.className = 'btn-accion editar';
+                btnEditar.setAttribute('data-tooltip', 'Editar');
+                btnEditar.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>`;
+                btnEditar.addEventListener('click', () => abrirEdicion(r[cfg.pk]));
+                celda.appendChild(btnEditar);
+
+                const btnEliminar = document.createElement('button');
+                btnEliminar.type = 'button';
+                btnEliminar.className = 'btn-accion eliminar';
+                btnEliminar.setAttribute('data-tooltip', 'Dar de baja');
+                btnEliminar.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                        <path d="M10 11v6M14 11v6"></path>
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                    </svg>`;
+                btnEliminar.addEventListener('click', () => eliminarRegistro(r[cfg.pk]));
+                celda.appendChild(btnEliminar);
+            }
+
+            tablaBody.appendChild(tr);
+        });
+        return;
+    }
+
+    /* ---------- RENDER NORMAL ---------- */
+    const headers = cfg.campos.map(c => `<th>${escaparHTML(c.etiqueta)}</th>`);
+    headers.push('<th style="width:100px; text-align:right;">Acciones</th>');
+    tablaHead.innerHTML = `<tr>${headers.join('')}</tr>`;
 
     listaFiltrada.forEach(r => {
         const tr = document.createElement('tr');
         const celdas = cfg.campos.map(c => {
             const val = r[c.nombre];
+            const labelAttr = `data-label="${escaparHTML(c.etiqueta)}"`;
             if (c.tipo === 'bool') {
-                return `<td><span class="badge-boolean ${val ? 'si' : 'no'}">${val ? 'Sí' : 'No'}</span></td>`;
+                return `<td ${labelAttr}><span class="badge-boolean ${val ? 'si' : 'no'}">${val ? 'Sí' : 'No'}</span></td>`;
             }
             if (c.tipo === 'select') {
-                return `<td><span class="badge-nombre">${escaparHTML(etiquetaSelect(c, val))}</span></td>`;
+                return `<td ${labelAttr}><span class="badge-nombre">${escaparHTML(etiquetaSelect(c, val))}</span></td>`;
             }
-            return `<td><span class="badge-nombre">${escaparHTML(val ?? '')}</span></td>`;
+            return `<td ${labelAttr}><span class="badge-nombre">${escaparHTML(val ?? '')}</span></td>`;
         });
-        tr.innerHTML = celdas.join('') + `<td class="acciones-tabla"></td>`;
+        tr.innerHTML = celdas.join('') + `<td data-label="Acciones" class="acciones-tabla"></td>`;
 
         const celda = tr.querySelector('.acciones-tabla');
 
         if (esVistaEliminados) {
             const btnRestaurar = document.createElement('button');
             btnRestaurar.type = 'button';
-            btnRestaurar.className = 'exito';
-            btnRestaurar.title = 'Restaurar registro';
+            btnRestaurar.className = 'btn-accion restaurar';
+            btnRestaurar.setAttribute('data-tooltip', 'Restaurar');
             btnRestaurar.innerHTML = `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
                     <polyline points="1 4 1 10 7 10"></polyline>
                     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                </svg> Restaurar`;
+                </svg>`;
             btnRestaurar.addEventListener('click', () => restaurarRegistro(r[cfg.pk]));
             celda.appendChild(btnRestaurar);
             tablaBody.appendChild(tr);
@@ -539,26 +651,27 @@ function renderTabla() {
 
         const btnEditar = document.createElement('button');
         btnEditar.type = 'button';
-        btnEditar.className = 'secundario';
+        btnEditar.className = 'btn-accion editar';
+        btnEditar.setAttribute('data-tooltip', 'Editar');
         btnEditar.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg> Editar`;
+            </svg>`;
         btnEditar.addEventListener('click', () => abrirEdicion(r[cfg.pk]));
         celda.appendChild(btnEditar);
 
         const btnEliminar = document.createElement('button');
         btnEliminar.type = 'button';
-        btnEliminar.className = 'peligro';
-        btnEliminar.title = 'Dar de baja';
+        btnEliminar.className = 'btn-accion eliminar';
+        btnEliminar.setAttribute('data-tooltip', 'Dar de baja');
         btnEliminar.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
                 <path d="M10 11v6M14 11v6"></path>
                 <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-            </svg> Dar de baja`;
+            </svg>`;
         btnEliminar.addEventListener('click', () => eliminarRegistro(r[cfg.pk]));
         celda.appendChild(btnEliminar);
 
@@ -597,7 +710,7 @@ if (btnLimpiarFiltro) {
 }
 
 /* =========================================================
-   PANEL AYUDA TOGGLE
+   TOGGLE AYUDA
    ========================================================= */
 if (btnToggleAyuda) {
     btnToggleAyuda.addEventListener('click', () => {
@@ -607,7 +720,7 @@ if (btnToggleAyuda) {
 }
 
 /* =========================================================
-   MODAL — ABRIR / CERRAR
+   MODAL
    ========================================================= */
 function abrirModal() {
     if (!modal) return;
@@ -625,7 +738,6 @@ function cerrarModal() {
 }
 
 if (btnModalCerrar) btnModalCerrar.addEventListener('click', cerrarModal);
-if (btnModalCancelar) btnModalCancelar.addEventListener('click', cerrarModal);
 if (modal) {
     modal.addEventListener('click', (e) => { if (e.target === modal) cerrarModal(); });
 }
@@ -634,7 +746,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* =========================================================
-   CONSTRUIR CAMPOS DEL FORMULARIO
+   CONSTRUIR FORMULARIO
    ========================================================= */
 function construirFormulario(datos = {}) {
     const cfg = CATALOGOS_FRONT[catalogoActual];
@@ -650,17 +762,14 @@ function construirFormulario(datos = {}) {
         else camposNormales.push(c);
     });
 
-    const labelConTip = (c) => {
-        const tip = c.tip
-            ? `<span class="tip" title="${escaparHTML(c.tip)}">ⓘ</span>`
-            : '';
-        return `<label for="campo-${c.nombre}">${escaparHTML(c.etiqueta)}${c.requerido ? ' *' : ''} ${tip}</label>`;
-    };
-
     camposNormales.forEach(c => {
         const wrapper = document.createElement('div');
+        wrapper.className = 'campo-item';
         const esFull = (c.tipo === 'select' || c.nombre === 'Descripcion');
         if (esFull) wrapper.classList.add('campo-full');
+
+        const reqMark = c.requerido ? '<span class="req">*</span>' : '';
+        const hintHTML = c.hint ? `<small class="field-hint">${escaparHTML(c.hint)}</small>` : '';
 
         if (c.tipo === 'select') {
             const bloqueado = (modoEdicion && c.esGrupoInmutable);
@@ -670,17 +779,20 @@ function construirFormulario(datos = {}) {
             }).join('');
 
             wrapper.innerHTML = `
-                ${labelConTip(c)}
+                <label for="campo-${c.nombre}">${escaparHTML(c.etiqueta)}${reqMark}</label>
                 <select id="campo-${c.nombre}" ${c.requerido ? 'required' : ''} ${bloqueado ? 'disabled' : ''}>
                     ${opcionesHtml}
                 </select>
-                ${bloqueado ? `<small class="campo-nota">El grupo no se puede cambiar una vez creado.</small>` : ''}`;
+                ${bloqueado ? `<small class="campo-nota">El grupo no se puede cambiar una vez creado.</small>` : hintHTML}
+            `;
         } else {
             wrapper.innerHTML = `
-                ${labelConTip(c)}
+                <label for="campo-${c.nombre}">${escaparHTML(c.etiqueta)}${reqMark}</label>
                 <input type="text" id="campo-${c.nombre}" maxlength="${c.max || ''}"
                        value="${escaparHTML(datos[c.nombre] ?? '')}"
-                       ${c.requerido ? 'required' : ''}>`;
+                       ${c.requerido ? 'required' : ''}>
+                ${hintHTML}
+            `;
         }
         camposForm.appendChild(wrapper);
     });
@@ -696,7 +808,7 @@ function construirFormulario(datos = {}) {
 
         const subtitulo = document.createElement('div');
         subtitulo.className = 'grupo-subtitulo';
-        subtitulo.textContent = 'Cada switch activa un campo del formulario. Apagarlo NO borra datos ya capturados en activos existentes.';
+        subtitulo.textContent = 'Cada switch activa un campo del formulario. Apagarlo no borra datos ya capturados en activos existentes.';
         grupo.appendChild(subtitulo);
 
         const fila = document.createElement('div');
@@ -705,7 +817,6 @@ function construirFormulario(datos = {}) {
         camposBool.forEach(c => {
             const item = document.createElement('label');
             item.className = 'switch';
-            item.title = c.tip || '';
             item.innerHTML = `
                 <input type="checkbox" id="campo-${c.nombre}" ${datos[c.nombre] ? 'checked' : ''}>
                 <span class="slider"></span>
@@ -719,7 +830,7 @@ function construirFormulario(datos = {}) {
 }
 
 /* =========================================================
-   NUEVO
+   NUEVO / EDITAR
    ========================================================= */
 if (btnNuevo) {
     btnNuevo.addEventListener('click', () => {
@@ -737,13 +848,10 @@ if (btnNuevo) {
     });
 }
 
-/* =========================================================
-   EDITAR
-   ========================================================= */
 function abrirEdicion(id) {
     const cfg = CATALOGOS_FRONT[catalogoActual];
     const r = registros.find(x => x[cfg.pk] === id);
-    if (!r) { toastError('Registro no encontrado'); return; }
+    if (!r) { alertaError('Registro no encontrado'); return; }
 
     modoEdicion = true;
     idEditando = id;
@@ -754,12 +862,12 @@ function abrirEdicion(id) {
 
     if (catalogoActual === 'tipos') {
         mostrarAvisoModal(`
-            <b>Ojo:</b> si cambias el <b>Grupo de subtipo</b>, los activos actuales seguirán apuntando a sus subtipos,
+            Si cambias el <b>Grupo de subtipo</b>, los activos actuales seguirán apuntando a sus subtipos,
             pero al crear/editar activos de este tipo ya no aparecerán esos subtipos si no coinciden con el nuevo grupo.
         `);
     } else if (catalogoActual === 'subtipos') {
         mostrarAvisoModal(`
-            <b>Ojo:</b> el campo <b>Grupo</b> no se puede cambiar una vez creado (los activos lo referencian).
+            El campo <b>Grupo</b> no se puede cambiar una vez creado (los activos lo referencian).
             Si necesitas moverlo, crea un subtipo nuevo y da de baja el anterior.
         `);
     }
@@ -794,13 +902,14 @@ if (formulario) {
                 const val = el.value.trim();
                 if (c.requerido && !val) {
                     mostrarMensaje(`${c.etiqueta} es obligatorio.`, 'error');
+                    el.focus();
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     return;
                 }
                 datos[c.nombre] = val || null;
             }
         }
 
-        // Validación de negocio: RequiereSubtipo exige GrupoSubtipo
         if (catalogoActual === 'tipos') {
             const elReqSubtipo = document.getElementById('campo-RequiereSubtipo');
             const elGrupo      = document.getElementById('campo-GrupoSubtipo');
@@ -808,6 +917,10 @@ if (formulario) {
             const grupo        = elGrupo ? elGrupo.value : '';
             if (reqSubtipo && !grupo) {
                 mostrarMensaje('Si el tipo requiere subtipo, debes indicar un Grupo de subtipo.', 'error');
+                if (elGrupo) {
+                    elGrupo.focus();
+                    elGrupo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
                 return;
             }
         }
@@ -824,7 +937,7 @@ if (formulario) {
             if (res && res.ok) {
                 cerrarModal();
                 await cargarCatalogo();
-                toastExito(res.mensaje || 'Operación exitosa');
+                await alertaExito('Guardado correctamente', res.mensaje || (modoEdicion ? 'Registro actualizado.' : 'Registro creado.'));
             } else {
                 mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');
             }
@@ -837,7 +950,7 @@ if (formulario) {
 }
 
 /* =========================================================
-   ELIMINAR (Soft delete) — con advertencias de impacto
+   ELIMINAR / RESTAURAR
    ========================================================= */
 async function eliminarRegistro(id) {
     const cfg = CATALOGOS_FRONT[catalogoActual];
@@ -858,16 +971,12 @@ async function eliminarRegistro(id) {
         title: `¿Dar de baja ${cfg.tituloSingular}?`,
         html: `Se dará de baja <strong>${escaparHTML(nombre)}</strong>.<br>
                Podrás verlo y restaurarlo desde la pestaña <strong>Eliminados</strong>.${extra}`,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, dar de baja',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
-        focusCancel: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         }
     });
 
@@ -877,18 +986,15 @@ async function eliminarRegistro(id) {
         const res = await window.api.activoFijo.catalogos.eliminar(catalogoActual, id);
         if (res && res.ok) {
             await cargarCatalogo();
-            toastExito(res.mensaje || 'Registro dado de baja');
+            await alertaExito('Registro dado de baja', res.mensaje || 'El registro se movió a Eliminados.');
         } else {
-            toastError('No se pudo dar de baja', res?.mensaje || 'Error desconocido');
+            alertaError('No se pudo dar de baja', res?.mensaje || 'Ocurrió un error inesperado.');
         }
     } catch (err) {
-        toastError('Error al dar de baja', err.message);
+        alertaError('Error al dar de baja', err.message);
     }
 }
 
-/* =========================================================
-   RESTAURAR
-   ========================================================= */
 async function restaurarRegistro(id) {
     const cfg = CATALOGOS_FRONT[catalogoActual];
     const r = registros.find(x => x[cfg.pk] === id);
@@ -898,15 +1004,12 @@ async function restaurarRegistro(id) {
         icon: 'question',
         title: `¿Restaurar ${cfg.tituloSingular}?`,
         html: `El registro <strong>${escaparHTML(nombre)}</strong> volverá al listado activo.`,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, restaurar',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 
@@ -916,17 +1019,17 @@ async function restaurarRegistro(id) {
         const res = await window.api.activoFijo.catalogos.restaurar(catalogoActual, id);
         if (res && res.ok) {
             await cargarCatalogo();
-            toastExito(res.mensaje || 'Registro restaurado');
+            await alertaExito('Registro restaurado', res.mensaje || 'El registro volvió al listado activo.');
         } else {
-            toastError('No se pudo restaurar', res?.mensaje || 'Error desconocido');
+            alertaError('No se pudo restaurar', res?.mensaje || 'Ocurrió un error inesperado.');
         }
     } catch (err) {
-        toastError('Error al restaurar', err.message);
+        alertaError('Error al restaurar', err.message);
     }
 }
 
 /* =========================================================
-   NAVEGACIÓN
+   NAVEGACIÓN E INICIO
    ========================================================= */
 if (btnVolver) {
     btnVolver.addEventListener('click', () => {
@@ -934,9 +1037,6 @@ if (btnVolver) {
     });
 }
 
-/* =========================================================
-   INICIO
-   ========================================================= */
 (async () => {
     actualizarUIDeCatalogo();
     await cargarCatalogo();

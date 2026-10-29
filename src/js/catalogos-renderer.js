@@ -1,38 +1,67 @@
 /* =========================================================
-   CATÁLOGOS — Renderer Unificado Premium
-   Clientes · Pisos · Roles · Dominios · Configuración de Red
+   CATÁLOGOS — Renderer Corporativo Aqua 2026
+   Sin toasts · Solo modales explícitos · X en lugar de Cancelar
    ========================================================= */
 
-/* =========================================================
-   HELPERS COMUNES
-   ========================================================= */
 const Swal = window.Swal;
 
-function toastExito(titulo) {
-    Swal.fire({
-        toast: true, position: 'bottom-end', icon: 'success', title: titulo,
-        showConfirmButton: false, timer: 2600, timerProgressBar: true,
-        background: '#ffffff', color: '#1a202c',
-        customClass: { popup: 'cl-toast cl-toast-success' },
-        didOpen: (t) => {
-            t.style.boxShadow = 'none';
-            t.addEventListener('mouseenter', Swal.stopTimer);
-            t.addEventListener('mouseleave', Swal.resumeTimer);
+/* =========================================================
+   ALERTAS MODALES
+   ========================================================= */
+function alertaExito(titulo, mensaje = '') {
+    return Swal.fire({
+        icon: 'success',
+        title: titulo,
+        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
+        timer: 2100,
+        timerProgressBar: true,
+        showConfirmButton: false,
+        showCloseButton: true,
+        customClass: { popup: 'cl-alert cl-alert-success' }
+    });
+}
+
+function alertaError(titulo, mensaje = '') {
+    return Swal.fire({
+        icon: 'error',
+        title: titulo,
+        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
+        confirmButtonText: 'Entendido',
+        showCloseButton: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-alert cl-alert-error',
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 }
 
-function toastError(titulo, texto = '') {
-    Swal.fire({
-        toast: true, position: 'bottom-end', icon: 'error',
-        title: texto ? `${titulo} — ${texto}` : titulo,
-        showConfirmButton: false, timer: 3400, timerProgressBar: true,
-        background: '#ffffff', color: '#1a202c',
-        customClass: { popup: 'cl-toast cl-toast-error' },
-        didOpen: (t) => {
-            t.style.boxShadow = 'none';
-            t.addEventListener('mouseenter', Swal.stopTimer);
-            t.addEventListener('mouseleave', Swal.resumeTimer);
+function alertaWarning(titulo, mensaje = '') {
+    return Swal.fire({
+        icon: 'warning',
+        title: titulo,
+        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
+        confirmButtonText: 'Entendido',
+        showCloseButton: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-alert cl-alert-warning',
+            confirmButton: 'swal2-confirm swal2-styled'
+        }
+    });
+}
+
+function alertaInfo(titulo, mensaje = '') {
+    return Swal.fire({
+        icon: 'info',
+        title: titulo,
+        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
+        confirmButtonText: 'Entendido',
+        showCloseButton: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-alert cl-alert-info',
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 }
@@ -44,63 +73,33 @@ function escaparHTML(str) {
 }
 
 /* =========================================================
-   COLORES POR MARCA REAL DEL CLIENTE (empresas mexicanas)
+   PALETAS DE CLIENTE
    ========================================================= */
-
 const PALETAS_CLIENTE = {
-    // Adamantine → azul marino / rey (corporativo)
     ADAMA:  { bg: 'linear-gradient(135deg, #dbeafe, #93c5fd)', text: '#1e3a8a', border: '#1e40af' },
-
-    // AT&T → azul claro
     ATT:    { bg: 'linear-gradient(135deg, #e0f2fe, #bae6fd)', text: '#0369a1', border: '#0ea5e9' },
-
-      // PHIE Palacio de Hierror
-    PHIE:    { bg: 'linear-gradient(135deg, #eeee0d, #fdfbba)', text: '#080808c0', border: '#e9e90e' },
-
-    // Calidad → rosa suave (no chillón)
+    PHIE:   { bg: 'linear-gradient(135deg, #eeee0d, #fdfbba)', text: '#080808c0', border: '#e9e90e' },
     CLD:    { bg: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', text: '#be185d', border: '#f472b6' },
-
-    // DiDi → naranja
     DIDI:   { bg: 'linear-gradient(135deg, #ffedd5, #fdba74)', text: '#c2410c', border: '#f97316' },
-
-    // Dimex → verde manzana claro
     DMEX:   { bg: 'linear-gradient(135deg, #ecfccb, #bef264)', text: '#3f6212', border: '#84cc16' },
-
-    // Hey Banco → amarillo queso
     HBAN:   { bg: 'linear-gradient(135deg, #fef9c3, #fde047)', text: '#854d0e', border: '#eab308' },
-
-    // Kubo → verde bandera México (verde oscuro profundo)
     KUBO:   { bg: 'linear-gradient(135deg, #dcfce7, #4ade80)', text: '#14532d', border: '#16a34a' },
-
-    // Megacable → azul claro más fuerte que ATT
     MEGA:   { bg: 'linear-gradient(135deg, #cffafe, #22d3ee)', text: '#155e75', border: '#0891b2' },
-
-    // Nubank → morado
     NU:     { bg: 'linear-gradient(135deg, #f3e8ff, #c084fc)', text: '#6b21a8', border: '#a855f7' },
-
-    // Shopee → naranja gradiente (de claro a intenso)
     SHOP:   { bg: 'linear-gradient(135deg, #ffedd5, #fb923c, #ea580c)', text: '#7c2d12', border: '#ea580c' },
-
-    // Toyota → rojo
     TOY:    { bg: 'linear-gradient(135deg, #fecaca, #f87171)', text: '#7f1d1d', border: '#dc2626' },
-
-    // Totalplay → gradiente multicolor (azul, verde, amarillo, rojo, morado)
     TPLAY:  {
         bg: 'linear-gradient(135deg, #dbeafe 0%, #dcfce7 25%, #fef3c7 50%, #fee2e2 75%, #f3e8ff 100%)',
-        text: '#1e293b',
-        border: '#6366f1'
+        text: '#1e293b', border: '#6366f1'
     }
 };
 
-/* Paletas de reserva para clientes NO registrados arriba */
 const PALETAS_FALLBACK = [
-    { bg: 'linear-gradient(135deg, #f3e8ff, #e9d5ff)', text: '#6b21a8', border: '#c084fc' },
+    { bg: 'linear-gradient(135deg, #f0fdfa, #ccfbf1)', text: '#0f766e', border: '#5eead4' },
     { bg: 'linear-gradient(135deg, #e0f2fe, #bae6fd)', text: '#075985', border: '#7dd3fc' },
-    { bg: 'linear-gradient(135deg, #ffe4e6, #fecdd3)', text: '#be123c', border: '#fda4af' },
-    { bg: 'linear-gradient(135deg, #fef9c3, #fef08a)', text: '#854d0e', border: '#fde047' },
-    { bg: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', text: '#166534', border: '#86efac' },
     { bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', text: '#6d28d9', border: '#c4b5fd' },
     { bg: 'linear-gradient(135deg, #fff7ed, #ffedd5)', text: '#c2410c', border: '#fdba74' },
+    { bg: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', text: '#166534', border: '#86efac' },
     { bg: 'linear-gradient(135deg, #fef2f2, #fee2e2)', text: '#991b1b', border: '#fca5a5' }
 ];
 
@@ -122,9 +121,7 @@ function getPaletaCliente(codigo) {
 function renderBadgeCliente(codigo, nombre = null) {
     const p = getPaletaCliente(codigo);
     const style = `background:${p.bg};color:${p.text};border-color:${p.border};`;
-    const nombreHTML = nombre
-        ? `<span class="nombre">${escaparHTML(nombre)}</span>`
-        : '';
+    const nombreHTML = nombre ? `<span class="nombre">${escaparHTML(nombre)}</span>` : '';
     return `<span class="badge-cliente" style="${style}">
                 <span class="codigo">${escaparHTML(codigo)}</span>
                 ${nombreHTML}
@@ -132,16 +129,15 @@ function renderBadgeCliente(codigo, nombre = null) {
 }
 
 /* =========================================================
-   COLORES PARA ROLES (se mantienen igual)
+   PALETAS DE ROLES
    ========================================================= */
-
 const PALETAS_ROL = {
     AGT: { bg: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', text: '#1e40af', border: '#60a5fa' },
-    SPR: { bg: 'linear-gradient(135deg, #fcdcdc, #f7bbbb)', text: '#651616', border: '#de4a4a' },
+    SPR: { bg: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', text: '#9d174d', border: '#f9a8d4' },
     CLD: { bg: 'linear-gradient(135deg, #ffedd5, #fed7aa)', text: '#9a3412', border: '#fb923c' },
     GRN: { bg: 'linear-gradient(135deg, #e9d5ff, #d8b4fe)', text: '#6b21a8', border: '#c084fc' },
     CRD: { bg: 'linear-gradient(135deg, #ccfbf1, #99f6e4)', text: '#115e59', border: '#5eead4' },
-    MIS: { bg: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', text: '#9d174d', border: '#f9a8d4' },
+    MIS: { bg: 'linear-gradient(135deg, #fef9c3, #fef08a)', text: '#854d0e', border: '#fde047' },
     ADM: { bg: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)', text: '#3730a3', border: '#a5b4fc' }
 };
 
@@ -153,13 +149,12 @@ function renderBadgeRol(codigo) {
 }
 
 /* =========================================================
-   COLORES PARA TIPO DE CONFIGURACIÓN
+   PALETAS TIPO CONFIG
    ========================================================= */
-
 const PALETAS_TIPO_CONFIG = {
     Mascara:      { bg: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)', text: '#3730a3', border: '#a5b4fc' },
-    PuertaEnlace: { bg: 'linear-gradient(135deg, #fecaca, #fca5a5)', text: '#991b1b', border: '#f87171' },
-    DNS1:         { bg: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', text: '#166534', border: '#4ade80' },
+    PuertaEnlace: { bg: 'linear-gradient(135deg, #fef3c7, #fde68a)', text: '#854d0e', border: '#fbbf24' },
+    DNS1:         { bg: 'linear-gradient(135deg, #f0fdfa, #ccfbf1)', text: '#0f766e', border: '#5eead4' },
     DNS2:         { bg: 'linear-gradient(135deg, #ede9fe, #ddd6fe)', text: '#5b21b6', border: '#c4b5fd' }
 };
 
@@ -170,15 +165,12 @@ function renderBadgeTipoConfig(tipo) {
 }
 
 function nombreTipoConfig(tipo) {
-    const map = {
-        'Mascara': 'Máscara', 'PuertaEnlace': 'Puerta de enlace',
-        'DNS1': 'DNS 1', 'DNS2': 'DNS 2'
-    };
+    const map = { 'Mascara': 'Máscara', 'PuertaEnlace': 'Puerta de enlace', 'DNS1': 'DNS 1', 'DNS2': 'DNS 2' };
     return map[tipo] || tipo;
 }
 
 function renderBadgePiso(nombre) {
-    const style = 'background:linear-gradient(135deg, #f1f5f9, #e2e8f0);color:#334155;border-color:#cbd5e1;';
+    const style = 'background:linear-gradient(135deg, #f0fdfa, #ccfbf1);color:#0f766e;border-color:#5eead4;';
     return `<span class="badge-codigo" style="${style}">${escaparHTML(nombre)}</span>`;
 }
 
@@ -193,9 +185,7 @@ function esIPv4Valida(v) {
 
 function limpiarResiduosSwal() {
     document.querySelectorAll('body > .swal2-container').forEach(c => {
-        if (!c.querySelector('.swal2-popup') && !c.classList.contains('swal2-backdrop-show')) {
-            c.remove();
-        }
+        if (!c.querySelector('.swal2-popup') && !c.classList.contains('swal2-backdrop-show')) c.remove();
     });
     document.querySelectorAll('body > [id^="swal2-"]').forEach(el => {
         if (!el.closest('.swal2-popup')) el.remove();
@@ -208,7 +198,6 @@ function limpiarResiduosSwal() {
 const Cache = {
     clientes: [],
     cargado: false,
-
     async cargarClientes() {
         if (this.cargado) return this.clientes;
         try {
@@ -216,11 +205,10 @@ const Cache = {
             this.cargado = true;
             return this.clientes;
         } catch (err) {
-            toastError('No se pudieron cargar los clientes', err.message);
+            alertaError('No se pudieron cargar los clientes', err.message);
             return [];
         }
     },
-
     invalidarClientes() {
         this.cargado = false;
         this.clientes = [];
@@ -291,11 +279,10 @@ const TabClientes = (() => {
 
         lista.forEach(c => {
             const tr = document.createElement('tr');
-
             tr.innerHTML = `
-                <td>${renderBadgeCliente(c.Codigo)}</td>
-                <td><span class="badge-nombre">${escaparHTML(c.Nombre)}</span></td>
-                <td class="acciones-tabla"></td>
+                <td data-label="Código">${renderBadgeCliente(c.Codigo)}</td>
+                <td data-label="Nombre"><span class="badge-nombre">${escaparHTML(c.Nombre)}</span></td>
+                <td data-label="Acciones" class="acciones-tabla"></td>
             `;
             const celda = tr.querySelector('.acciones-tabla');
 
@@ -327,14 +314,13 @@ const TabClientes = (() => {
             TabDominios.refrescarClientes();
             TabConfig.refrescarClientes();
         } catch (err) {
-            toastError('No se pudieron cargar los clientes', err.message);
+            alertaError('No se pudieron cargar los clientes', err.message);
         }
     }
 
     function abrirEdicion(id) {
         const c = buscarPorId(id);
-        if (!c) { toastError('Cliente no encontrado'); cargar(); return; }
-
+        if (!c) { alertaError('Cliente no encontrado'); cargar(); return; }
         modoEdicion = true;
         idEditando = c.IdCliente;
         modalTitulo.textContent = 'Editar cliente';
@@ -354,14 +340,12 @@ const TabClientes = (() => {
             icon: 'warning',
             title: '¿Eliminar cliente?',
             html: `Se eliminará <strong>${escaparHTML(nombreMostrar)}</strong>.<br>Esta acción no se puede deshacer.`,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Sí, eliminar',
-            cancelButtonText: 'Cancelar',
-            reverseButtons: true, focusCancel: true, buttonsStyling: false,
+            buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled cl-peligro'
             }
         });
         if (!confirmacion.isConfirmed) return;
@@ -370,12 +354,12 @@ const TabClientes = (() => {
             const res = await window.api.clientes.eliminar(id);
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Cliente eliminado');
+                await alertaExito('Cliente eliminado', res.mensaje || 'El cliente se eliminó correctamente.');
             } else {
-                toastError('No se pudo eliminar', res?.mensaje || 'Error');
+                alertaError('No se pudo eliminar', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error al eliminar', err.message);
+            alertaError('Error al eliminar', err.message);
         }
     }
 
@@ -406,7 +390,6 @@ const TabClientes = (() => {
         });
 
         $('modal-cliente-cerrar').addEventListener('click', cerrarModal);
-        $('cli-cancelar').addEventListener('click', cerrarModal);
         modal.addEventListener('click', (e) => { if (e.target === modal) cerrarModal(); });
 
         formulario.addEventListener('submit', async (e) => {
@@ -427,7 +410,7 @@ const TabClientes = (() => {
                 if (res && res.ok) {
                     cerrarModal();
                     await cargar();
-                    toastExito(res.mensaje || 'Guardado');
+                    await alertaExito('Guardado correctamente', res.mensaje || (modoEdicion ? 'Cliente actualizado.' : 'Cliente creado.'));
                 } else {
                     mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');
                 }
@@ -550,10 +533,10 @@ const TabPisos = (() => {
             ).join('');
 
             tr.innerHTML = `
-                <td>${renderBadgePiso(p.Nombre)}</td>
-                <td>${chips || '<span style="color:#94a3b8;font-size:0.85rem;">Sin clientes</span>'}</td>
-                <td><span style="font-weight:600;color:#475569;">${p.Columnas} × ${p.Filas}</span></td>
-                <td class="acciones-tabla"></td>
+                <td data-label="Piso">${renderBadgePiso(p.Nombre)}</td>
+                <td data-label="Clientes">${chips || '<span style="color:#94a3b8;font-size:0.85rem;">Sin clientes</span>'}</td>
+                <td data-label="Dimensiones"><span style="font-weight:600;color:#475569;font-variant-numeric:tabular-nums;">${p.Columnas} × ${p.Filas}</span></td>
+                <td data-label="Acciones" class="acciones-tabla"></td>
             `;
             const celda = tr.querySelector('.acciones-tabla');
 
@@ -585,14 +568,13 @@ const TabPisos = (() => {
             pisos = await window.api.pisos.listar();
             render();
         } catch (err) {
-            toastError('No se pudieron cargar los pisos', err.message);
+            alertaError('No se pudieron cargar los pisos', err.message);
         }
     }
 
     function abrirEdicion(idPiso) {
         const p = pisos.find(x => Number(x.IdPiso) === Number(idPiso));
-        if (!p) { toastError('Piso no encontrado'); cargar(); return; }
-
+        if (!p) { alertaError('Piso no encontrado'); cargar(); return; }
         modoEdicion = true;
         idEditando = p.IdPiso;
         modalTitulo.textContent = 'Editar piso';
@@ -611,28 +593,25 @@ const TabPisos = (() => {
             icon: 'warning',
             title: '¿Eliminar piso?',
             html: `Se eliminará el piso <strong>${escaparHTML(nombre)}</strong>.<br>Esta acción no se puede deshacer.`,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Sí, eliminar',
-            cancelButtonText: 'Cancelar',
-            reverseButtons: true, focusCancel: true, buttonsStyling: false,
+            buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled cl-peligro'
             }
         });
         if (!confirmacion.isConfirmed) return;
-
         try {
             const res = await window.api.pisos.eliminar(id);
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Piso eliminado');
+                await alertaExito('Piso eliminado', res.mensaje || 'El piso se eliminó correctamente.');
             } else {
-                toastError('No se pudo eliminar', res?.mensaje || 'Error');
+                alertaError('No se pudo eliminar', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error al eliminar', err.message);
+            alertaError('Error al eliminar', err.message);
         }
     }
 
@@ -667,7 +646,6 @@ const TabPisos = (() => {
         });
 
         $('modal-piso-cerrar').addEventListener('click', cerrarModal);
-        $('pis-cancelar').addEventListener('click', cerrarModal);
         modal.addEventListener('click', (e) => { if (e.target === modal) cerrarModal(); });
 
         formulario.addEventListener('submit', async (e) => {
@@ -692,7 +670,7 @@ const TabPisos = (() => {
                 if (res && res.ok) {
                     cerrarModal();
                     await cargar();
-                    toastExito(res.mensaje || 'Guardado');
+                    await alertaExito('Guardado correctamente', res.mensaje || (modoEdicion ? 'Piso actualizado.' : 'Piso creado.'));
                 } else {
                     mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');
                 }
@@ -705,9 +683,7 @@ const TabPisos = (() => {
     }
 
     function refrescarClientes() {
-        if (modal.style.display === 'flex') {
-            renderCheckboxesClientes();
-        }
+        if (modal.style.display === 'flex') renderCheckboxesClientes();
     }
 
     return { init, cargar, render, refrescarClientes };
@@ -783,10 +759,10 @@ const TabRoles = (() => {
                 : `<span class="badge-desc vacia">— sin descripción —</span>`;
 
             tr.innerHTML = `
-                <td>${renderBadgeRol(r.Codigo)}</td>
-                <td><span class="badge-nombre">${escaparHTML(r.Nombre)}</span></td>
-                <td>${descHTML}</td>
-                <td class="acciones-tabla"></td>
+                <td data-label="Código">${renderBadgeRol(r.Codigo)}</td>
+                <td data-label="Nombre"><span class="badge-nombre">${escaparHTML(r.Nombre)}</span></td>
+                <td data-label="Descripción">${descHTML}</td>
+                <td data-label="Acciones" class="acciones-tabla"></td>
             `;
             const celda = tr.querySelector('.acciones-tabla');
 
@@ -813,14 +789,13 @@ const TabRoles = (() => {
             roles = await window.api.roles.listar();
             render();
         } catch (err) {
-            toastError('No se pudieron cargar los roles', err.message);
+            alertaError('No se pudieron cargar los roles', err.message);
         }
     }
 
     function abrirEdicion(id) {
         const r = buscarPorId(id);
-        if (!r) { toastError('Rol no encontrado'); cargar(); return; }
-
+        if (!r) { alertaError('Rol no encontrado'); cargar(); return; }
         modoEdicion = true;
         idEditando = r.IdRolEquipo;
         modalTitulo.textContent = 'Editar rol';
@@ -841,28 +816,25 @@ const TabRoles = (() => {
             icon: 'warning',
             title: '¿Eliminar rol?',
             html: `Se eliminará <strong>${escaparHTML(nombreMostrar)}</strong>.<br>Esta acción no se puede deshacer.`,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Sí, eliminar',
-            cancelButtonText: 'Cancelar',
-            reverseButtons: true, focusCancel: true, buttonsStyling: false,
+            buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled cl-peligro'
             }
         });
         if (!confirmacion.isConfirmed) return;
-
         try {
             const res = await window.api.roles.eliminar(id);
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Rol eliminado');
+                await alertaExito('Rol eliminado', res.mensaje || 'El rol se eliminó correctamente.');
             } else {
-                toastError('No se pudo eliminar', res?.mensaje || 'Error');
+                alertaError('No se pudo eliminar', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error al eliminar', err.message);
+            alertaError('Error al eliminar', err.message);
         }
     }
 
@@ -894,7 +866,6 @@ const TabRoles = (() => {
         });
 
         $('modal-rol-cerrar').addEventListener('click', cerrarModal);
-        $('rol-cancelar').addEventListener('click', cerrarModal);
         modal.addEventListener('click', (e) => { if (e.target === modal) cerrarModal(); });
 
         formulario.addEventListener('submit', async (e) => {
@@ -918,7 +889,7 @@ const TabRoles = (() => {
                 if (res && res.ok) {
                     cerrarModal();
                     await cargar();
-                    toastExito(res.mensaje || 'Guardado');
+                    await alertaExito('Guardado correctamente', res.mensaje || (modoEdicion ? 'Rol actualizado.' : 'Rol creado.'));
                 } else {
                     mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');
                 }
@@ -952,7 +923,7 @@ const TabDominios = (() => {
             dominios = await window.api.dominios.listarTodas(filtros);
             render();
         } catch (err) {
-            toastError('No se pudieron cargar los dominios', err.message);
+            alertaError('No se pudieron cargar los dominios', err.message);
         }
     }
 
@@ -960,25 +931,27 @@ const TabDominios = (() => {
         tbody.innerHTML = '';
         if (!dominios || dominios.length === 0) {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td colspan="5" style="text-align:center;color:#94a3b8;padding:40px;font-style:italic;">Sin dominios registrados</td>`;
+            tr.innerHTML = `<td colspan="5" class="empty-td" style="text-align:center;color:#94a3b8;padding:40px;font-style:italic;font-size:0.88rem;">Sin dominios registrados</td>`;
             tbody.appendChild(tr);
             return;
         }
 
         dominios.forEach(d => {
             const tr = document.createElement('tr');
-            const passMostrada = (d.Password && d.Password.length > 0)
-                ? '•'.repeat(Math.min(d.Password.length, 12)) : '—';
+            const tienePass = d.Password && d.Password.length > 0;
+            const passHTML = tienePass
+                ? `<span class="pass-mask">${'•'.repeat(Math.min(d.Password.length, 12))}</span>`
+                : `<span class="pass-mask sin-dato">sin contraseña</span>`;
             const descHTML = (d.Descripcion && d.Descripcion.trim())
                 ? `<span class="badge-desc">${escaparHTML(d.Descripcion)}</span>`
                 : `<span class="badge-desc vacia">— sin descripción —</span>`;
 
             tr.innerHTML = `
-                <td>${renderBadgeCliente(d.ClienteCodigo)}</td>
-                <td><span class="badge-nombre">${escaparHTML(d.Usuario)}</span></td>
-                <td><span style="font-family:monospace;color:#64748b;">${passMostrada}</span></td>
-                <td>${descHTML}</td>
-                <td class="acciones-tabla"></td>
+                <td data-label="Cliente">${renderBadgeCliente(d.ClienteCodigo)}</td>
+                <td data-label="Usuario"><span class="badge-nombre">${escaparHTML(d.Usuario)}</span></td>
+                <td data-label="Password">${passHTML}</td>
+                <td data-label="Descripción">${descHTML}</td>
+                <td data-label="Acciones" class="acciones-tabla"></td>
             `;
             const celda = tr.querySelector('.acciones-tabla');
 
@@ -1003,12 +976,7 @@ const TabDominios = (() => {
     async function abrirCrear() {
         const clientes = await Cache.cargarClientes();
         if (clientes.length === 0) {
-            Swal.fire({
-                icon: 'warning', title: 'Sin clientes',
-                text: 'Primero crea al menos un cliente.',
-                confirmButtonText: 'Entendido', buttonsStyling: false,
-                customClass: { popup: 'cl-confirm', confirmButton: 'swal2-confirm swal2-styled' }
-            });
+            await alertaWarning('Sin clientes', 'Primero crea al menos un cliente para poder registrar dominios.');
             return;
         }
 
@@ -1020,7 +988,7 @@ const TabDominios = (() => {
             title: 'Nuevo dominio',
             html: `
                 <select id="swal-cliente" class="swal2-select">
-                    <option value="">-- Cliente --</option>
+                    <option value="">-- Selecciona cliente --</option>
                     ${opciones}
                 </select>
                 <input id="swal-usuario" class="swal2-input" placeholder="Usuario">
@@ -1028,14 +996,12 @@ const TabDominios = (() => {
                 <input id="swal-desc" class="swal2-input" placeholder="Descripción (opcional)">
             `,
             focusConfirm: false,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Guardar',
-            cancelButtonText: 'Cancelar',
             buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled'
             },
             preConfirm: () => {
                 const idCliente = parseInt($('swal-cliente').value, 10);
@@ -1051,19 +1017,18 @@ const TabDominios = (() => {
         });
 
         if (!formValues) return;
-
         try {
             const res = await window.api.dominios.crear(
                 formValues.idCliente, formValues.usuario, formValues.password, formValues.desc
             );
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Dominio creado');
+                await alertaExito('Dominio creado', res.mensaje || 'El dominio se registró correctamente.');
             } else {
-                toastError('No se pudo crear', res?.mensaje || 'Error');
+                alertaError('No se pudo crear', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error', err.message);
+            alertaError('Error al crear dominio', err.message);
         }
     }
 
@@ -1076,14 +1041,12 @@ const TabDominios = (() => {
                 <input id="swal-desc" class="swal2-input" placeholder="Descripción" value="${escaparHTML(d.Descripcion ?? '')}">
             `,
             focusConfirm: false,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Guardar',
-            cancelButtonText: 'Cancelar',
             buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled'
             },
             preConfirm: () => {
                 const usuario = $('swal-usuario').value.trim();
@@ -1098,19 +1061,18 @@ const TabDominios = (() => {
         });
 
         if (!formValues) return;
-
         try {
             const res = await window.api.dominios.actualizar(
                 d.IdDominio, formValues.usuario, formValues.password, formValues.desc
             );
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Dominio actualizado');
+                await alertaExito('Dominio actualizado', res.mensaje || 'Los cambios se guardaron correctamente.');
             } else {
-                toastError('No se pudo actualizar', res?.mensaje || 'Error');
+                alertaError('No se pudo actualizar', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error', err.message);
+            alertaError('Error al actualizar', err.message);
         }
     }
 
@@ -1118,29 +1080,26 @@ const TabDominios = (() => {
         const confirmacion = await Swal.fire({
             icon: 'warning',
             title: '¿Eliminar dominio?',
-            html: `Se eliminará <strong>${escaparHTML(d.Usuario)}</strong> de <strong>${escaparHTML(d.ClienteCodigo)}</strong>.`,
-            showCancelButton: true,
+            html: `Se eliminará <strong>${escaparHTML(d.Usuario)}</strong> del cliente <strong>${escaparHTML(d.ClienteCodigo)}</strong>.<br>Esta acción no se puede deshacer.`,
+            showCloseButton: true,
             confirmButtonText: 'Sí, eliminar',
-            cancelButtonText: 'Cancelar',
-            reverseButtons: true, focusCancel: true, buttonsStyling: false,
+            buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled cl-peligro'
             }
         });
         if (!confirmacion.isConfirmed) return;
-
         try {
             const res = await window.api.dominios.eliminar(d.IdDominio);
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Dominio eliminado');
+                await alertaExito('Dominio eliminado', res.mensaje || 'El dominio se eliminó correctamente.');
             } else {
-                toastError('No se pudo eliminar', res?.mensaje || 'Error');
+                alertaError('No se pudo eliminar', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error al eliminar', err.message);
+            alertaError('Error al eliminar', err.message);
         }
     }
 
@@ -1195,7 +1154,7 @@ const TabConfig = (() => {
             configs = await window.api.config.listarTodas(filtros);
             render();
         } catch (err) {
-            toastError('No se pudieron cargar las configuraciones', err.message);
+            alertaError('No se pudieron cargar las configuraciones', err.message);
         }
     }
 
@@ -1262,10 +1221,10 @@ const TabConfig = (() => {
                     : `<span class="badge-desc vacia">— sin descripción —</span>`;
 
                 tr.innerHTML = `
-                    <td>${renderBadgeTipoConfig(c.Tipo)}</td>
-                    <td><span class="badge-nombre">${escaparHTML(c.Valor)}</span></td>
-                    <td>${descHTML}</td>
-                    <td class="acciones-tabla"></td>
+                    <td data-label="Tipo">${renderBadgeTipoConfig(c.Tipo)}</td>
+                    <td data-label="Valor"><span class="valor-tecnico">${escaparHTML(c.Valor)}</span></td>
+                    <td data-label="Descripción">${descHTML}</td>
+                    <td data-label="Acciones" class="acciones-tabla"></td>
                 `;
                 const celda = tr.querySelector('.acciones-tabla');
 
@@ -1295,12 +1254,7 @@ const TabConfig = (() => {
     async function abrirCrear() {
         const clientes = await Cache.cargarClientes();
         if (clientes.length === 0) {
-            Swal.fire({
-                icon: 'warning', title: 'Sin clientes',
-                text: 'Primero crea al menos un cliente.',
-                confirmButtonText: 'Entendido', buttonsStyling: false,
-                customClass: { popup: 'cl-confirm', confirmButton: 'swal2-confirm swal2-styled' }
-            });
+            await alertaWarning('Sin clientes', 'Primero crea al menos un cliente para poder registrar configuraciones.');
             return;
         }
 
@@ -1326,14 +1280,12 @@ const TabConfig = (() => {
                 <input id="swal-desc" class="swal2-input" placeholder="Descripción (opcional)">
             `,
             focusConfirm: false,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Guardar',
-            cancelButtonText: 'Cancelar',
             buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled'
             },
             preConfirm: () => {
                 const idCliente = parseInt($('swal-cliente').value, 10);
@@ -1354,19 +1306,18 @@ const TabConfig = (() => {
         });
 
         if (!formValues) return;
-
         try {
             const res = await window.api.config.crear(
                 formValues.idCliente, formValues.tipo, formValues.valor, formValues.desc
             );
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Configuración creada');
+                await alertaExito('Configuración creada', res.mensaje || 'La configuración se registró correctamente.');
             } else {
-                toastError('No se pudo crear', res?.mensaje || 'Error');
+                alertaError('No se pudo crear', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error', err.message);
+            alertaError('Error al crear configuración', err.message);
         }
     }
 
@@ -1374,21 +1325,19 @@ const TabConfig = (() => {
         const { value: formValues } = await Swal.fire({
             title: 'Editar configuración',
             html: `
-                <div style="text-align:left;font-size:12.5px;color:#4a5568;margin-bottom:10px;">
-                    <strong>${escaparHTML(c.ClienteCodigo)}</strong> — ${escaparHTML(nombreTipoConfig(c.Tipo))}
+                <div style="text-align:left;font-size:13px;color:#475569;margin:0 0 12px;padding:10px 14px;background:#f0fdfa;border-radius:10px;border:1px solid #ccfbf1;">
+                    <strong style="color:#0f766e;">${escaparHTML(c.ClienteCodigo)}</strong> · ${escaparHTML(nombreTipoConfig(c.Tipo))}
                 </div>
                 <input id="swal-valor" class="swal2-input" placeholder="Valor" value="${escaparHTML(c.Valor)}">
                 <input id="swal-desc" class="swal2-input" placeholder="Descripción" value="${escaparHTML(c.Descripcion ?? '')}">
             `,
             focusConfirm: false,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Guardar',
-            cancelButtonText: 'Cancelar',
             buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled'
             },
             preConfirm: () => {
                 const valor = $('swal-valor').value.trim();
@@ -1400,17 +1349,16 @@ const TabConfig = (() => {
         });
 
         if (!formValues) return;
-
         try {
             const res = await window.api.config.actualizar(c.IdConfig, formValues.valor, formValues.desc);
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Configuración actualizada');
+                await alertaExito('Configuración actualizada', res.mensaje || 'Los cambios se guardaron correctamente.');
             } else {
-                toastError('No se pudo actualizar', res?.mensaje || 'Error');
+                alertaError('No se pudo actualizar', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error', err.message);
+            alertaError('Error al actualizar', err.message);
         }
     }
 
@@ -1418,29 +1366,26 @@ const TabConfig = (() => {
         const confirmacion = await Swal.fire({
             icon: 'warning',
             title: '¿Eliminar configuración?',
-            html: `Se eliminará <strong>${escaparHTML(c.Valor)}</strong> del catálogo de <strong>${escaparHTML(c.ClienteCodigo)}</strong>.`,
-            showCancelButton: true,
+            html: `Se eliminará <strong>${escaparHTML(c.Valor)}</strong> del catálogo de <strong>${escaparHTML(c.ClienteCodigo)}</strong>.<br>Esta acción no se puede deshacer.`,
+            showCloseButton: true,
             confirmButtonText: 'Sí, eliminar',
-            cancelButtonText: 'Cancelar',
-            reverseButtons: true, focusCancel: true, buttonsStyling: false,
+            buttonsStyling: false,
             customClass: {
                 popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-                cancelButton: 'swal2-cancel swal2-styled'
+                confirmButton: 'swal2-confirm swal2-styled cl-peligro'
             }
         });
         if (!confirmacion.isConfirmed) return;
-
         try {
             const res = await window.api.config.eliminar(c.IdConfig);
             if (res && res.ok) {
                 await cargar();
-                toastExito(res.mensaje || 'Configuración eliminada');
+                await alertaExito('Configuración eliminada', res.mensaje || 'La configuración se eliminó correctamente.');
             } else {
-                toastError('No se pudo eliminar', res?.mensaje || 'Error');
+                alertaError('No se pudo eliminar', res?.mensaje || 'Ocurrió un error inesperado.');
             }
         } catch (err) {
-            toastError('Error al eliminar', err.message);
+            alertaError('Error al eliminar', err.message);
         }
     }
 
@@ -1490,14 +1435,12 @@ let tabActivo = 'clientes';
 function activarTab(nombre) {
     if (!TabsConfig[nombre]) return;
     tabActivo = nombre;
-
     document.querySelectorAll('.tab-btn').forEach(b => {
         b.classList.toggle('activo', b.dataset.tab === nombre);
     });
     document.querySelectorAll('.tab-panel').forEach(p => {
         p.classList.toggle('activo', p.dataset.tabPanel === nombre);
     });
-
     TabsConfig[nombre].cargar();
 }
 

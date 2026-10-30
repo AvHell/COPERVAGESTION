@@ -1,5 +1,6 @@
 /* =========================================================
    ACTIVO FIJO — RENDERER DE RESPONSIVAS
+   Paleta Tierra / Oliva · Tooltips · Modales sin inputs nativos
    ========================================================= */
 const Swal = window.Swal;
 
@@ -156,8 +157,8 @@ function alertaError(titulo, mensaje = '') {
    ========================================================= */
 const REGLAS_TIPO = {
     celular: { etiqueta: 'Celular / Smartphone', requiereIMEI: true, requiereTelefono: true, esLaptop: false, icono: '📱' },
-    laptop: { etiqueta: 'Laptop / Equipo de cómputo', requiereIMEI: false, requiereTelefono: false, esLaptop: true, icono: '💻' },
-    otro: { etiqueta: 'Otro activo', requiereIMEI: false, requiereTelefono: false, esLaptop: false, icono: '📦' }
+    laptop:  { etiqueta: 'Laptop / Equipo de cómputo', requiereIMEI: false, requiereTelefono: false, esLaptop: true, icono: '💻' },
+    otro:    { etiqueta: 'Otro activo', requiereIMEI: false, requiereTelefono: false, esLaptop: false, icono: '📦' }
 };
 
 function detectarTipoActivo(activo) {
@@ -287,13 +288,14 @@ function iconoCancelar() {
 }
 
 /* =========================================================
-   BOTONES DE ACCIÓN
+   BOTONES DE ACCIÓN (solo icono + tooltip)
    ========================================================= */
 function crearBotonAccion(icono, tooltip, clase, accion) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `btn-accion ${clase}`;
     btn.setAttribute('data-tooltip', tooltip);
+    btn.setAttribute('aria-label', tooltip);
     btn.innerHTML = icono;
     btn.addEventListener('click', accion);
     return btn;
@@ -525,7 +527,7 @@ function limpiarFormulario() {
     inpRutaPDF.value = '';
     inpRutaINE.value = '';
     inpRutaComprob.value = '';
-    
+
     const inpIMEI = document.getElementById('imei-1');
     if (inpIMEI) inpIMEI.value = '';
     const inpIMEI2 = document.getElementById('imei-2');
@@ -815,7 +817,7 @@ async function guardarPDFResponsiva(id, folio, rutaExistente) {
         html: yaExiste
             ? `Ya existe un PDF guardado para el folio <strong>${escaparHTML(folio)}</strong>.<br><br>
                Se te pedirá elegir una nueva ubicación. Si eliges la misma ruta, se <b>sobrescribirá</b>.<br>
-               <small style="color:#64748b;">Ruta actual: ${escaparHTML(rutaExistente)}</small>`
+               <small style="color:#7a7563;">Ruta actual: <code>${escaparHTML(rutaExistente)}</code></small>`
             : `Se generará el PDF del folio <strong>${escaparHTML(folio)}</strong> y podrás elegir dónde guardarlo.`,
         showCloseButton: true,
         confirmButtonText: 'Sí, guardar',
@@ -843,7 +845,7 @@ async function guardarPDFResponsiva(id, folio, rutaExistente) {
             await Swal.fire({
                 icon: 'success',
                 title: 'PDF guardado',
-                html: `Se guardó en:<br><code style="font-size:12px;word-break:break-all;color:#0f766e;">${escaparHTML(res.ruta)}</code>`,
+                html: `Se guardó en:<br><code>${escaparHTML(res.ruta)}</code>`,
                 showCloseButton: true,
                 confirmButtonText: 'Aceptar',
                 buttonsStyling: false,
@@ -865,17 +867,20 @@ async function guardarPDFResponsiva(id, folio, rutaExistente) {
 }
 
 /* =========================================================
-   DEVOLVER
+   DEVOLVER — fecha con input date custom (sin nativo)
    ========================================================= */
 async function devolverResponsiva(id, nombrePersona) {
-    const confirmacion = await Swal.fire({
+    const resultado = await Swal.fire({
         icon: 'question',
         title: '¿Registrar devolución?',
-        html: `El activo será liberado de <strong>${escaparHTML(nombrePersona)}</strong> y volverá a estar disponible para reasignar.`,
-        input: 'date',
-        inputLabel: 'Fecha de devolución',
-        inputValue: hoyISO(),
-        inputAttributes: { required: true },
+        html: `
+            <div>El activo será liberado de <strong>${escaparHTML(nombrePersona)}</strong> y volverá a estar disponible para reasignar.</div>
+            <div class="campo-motivo" id="fecha-dev-wrap">
+                <label for="fecha-dev">Fecha de devolución</label>
+                <input type="date" id="fecha-dev" value="${hoyISO()}" style="display:block;width:100%;box-sizing:border-box;height:46px;padding:0 14px;border:1.5px solid var(--gray-200);border-radius:11px;font-size:0.9rem;font-family:var(--font-sans);color:var(--gray-800);background:#fff;outline:none;transition:border-color 0.18s ease, box-shadow 0.18s ease;">
+                <div class="error-texto">La fecha es obligatoria.</div>
+            </div>
+        `,
         showCloseButton: true,
         confirmButtonText: 'Sí, devolver',
         buttonsStyling: false,
@@ -883,15 +888,32 @@ async function devolverResponsiva(id, nombrePersona) {
             popup: 'cl-confirm',
             confirmButton: 'swal2-confirm swal2-styled'
         },
-        inputValidator: (value) => {
-            if (!value) return 'La fecha es obligatoria';
+        didOpen: () => {
+            const inp = document.getElementById('fecha-dev');
+            if (inp) {
+                inp.focus();
+                inp.addEventListener('input', () => {
+                    document.getElementById('fecha-dev-wrap')?.classList.remove('error');
+                });
+            }
+        },
+        preConfirm: () => {
+            const inp = document.getElementById('fecha-dev');
+            const val = inp ? inp.value : '';
+            if (!val) {
+                document.getElementById('fecha-dev-wrap')?.classList.add('error');
+                if (inp) inp.focus();
+                return false;
+            }
+            return val;
         }
     });
 
-    if (!confirmacion.isConfirmed) return;
+    if (!resultado.isConfirmed) return;
+    const fechaDev = resultado.value;
 
     try {
-        const res = await window.api.activoFijo.responsivas.devolver(id, confirmacion.value, null);
+        const res = await window.api.activoFijo.responsivas.devolver(id, fechaDev, null);
         if (res && res.ok) {
             await cargarResponsivas();
             await cargarActivosDisponibles();
@@ -905,20 +927,24 @@ async function devolverResponsiva(id, nombrePersona) {
 }
 
 /* =========================================================
-   CANCELAR (Soft delete → histórico)
+   CANCELAR — textarea custom (sin input nativo)
    ========================================================= */
 async function cancelarResponsiva(id, folio) {
-    const confirmacion = await Swal.fire({
+    const resultado = await Swal.fire({
         icon: 'warning',
         title: '¿Cancelar responsiva?',
-        html: `Se cancelará la responsiva del folio <strong>${escaparHTML(folio)}</strong>.<br><br>
+        html: `
+            <div>Se cancelará la responsiva del folio <strong>${escaparHTML(folio)}</strong>.<br><br>
                La responsiva quedará como <b>histórico</b> en la pestaña <b>Canceladas</b>.<br>
                El activo volverá a estar <b>disponible</b>.<br><br>
-               <b>Nota:</b> si necesitas volver a asignar este activo, deberás crear una <b>nueva responsiva</b>.`,
-        input: 'textarea',
-        inputLabel: 'Motivo de la cancelación',
-        inputPlaceholder: 'Ej. Error de captura, asignación duplicada, cancelación de ticket...',
-        inputAttributes: { maxlength: 500, rows: 3 },
+               <b>Nota:</b> si necesitas volver a asignar este activo, deberás crear una <b>nueva responsiva</b>.</div>
+            <div class="campo-motivo" id="motivo-cancel-wrap">
+                <label for="motivo-cancel">Motivo de la cancelación</label>
+                <textarea id="motivo-cancel" maxlength="500" rows="3"
+                          placeholder="Ej. Error de captura, asignación duplicada, cancelación de ticket..."></textarea>
+                <div class="error-texto">El motivo es obligatorio.</div>
+            </div>
+        `,
         showCloseButton: true,
         confirmButtonText: 'Sí, cancelar',
         buttonsStyling: false,
@@ -926,16 +952,32 @@ async function cancelarResponsiva(id, folio) {
             popup: 'cl-confirm',
             confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         },
-        inputValidator: (value) => {
-            if (!value || !value.trim()) return 'El motivo es obligatorio';
-            return null;
+        didOpen: () => {
+            const ta = document.getElementById('motivo-cancel');
+            if (ta) {
+                ta.focus();
+                ta.addEventListener('input', () => {
+                    document.getElementById('motivo-cancel-wrap')?.classList.remove('error');
+                });
+            }
+        },
+        preConfirm: () => {
+            const ta = document.getElementById('motivo-cancel');
+            const val = ta ? ta.value.trim() : '';
+            if (!val) {
+                document.getElementById('motivo-cancel-wrap')?.classList.add('error');
+                if (ta) ta.focus();
+                return false;
+            }
+            return val;
         }
     });
 
-    if (!confirmacion.isConfirmed) return;
+    if (!resultado.isConfirmed) return;
+    const motivo = resultado.value;
 
     try {
-        const res = await window.api.activoFijo.responsivas.eliminar(id, confirmacion.value.trim());
+        const res = await window.api.activoFijo.responsivas.eliminar(id, motivo);
         if (res && res.ok) {
             await cargarResponsivas();
             await cargarActivosDisponibles();

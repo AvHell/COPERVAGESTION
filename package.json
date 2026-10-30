@@ -22,7 +22,8 @@
     "electron-updater": "^6.8.9",
     "mssql": "^12.7.2",
     "pdf-lib": "^1.17.1",
-    "sweetalert2": "^11.26.25"
+    "sweetalert2": "^11.26.25",
+    "xlsx": "^0.18.5"
   },
   "build": {
     "appId": "com.coperva.proyectoequipos",
@@ -44,38 +45,38 @@
       "node_modules/**/*",
       "package.json"
     ],
-   "extraResources": [
-  {
-    "from": "src/img/logo.ico",
-    "to": "logo.ico"
-  },
-  {
-    "from": "Formatos",
-    "to": "Formatos"
-  }
-],
+    "extraResources": [
+      {
+        "from": "src/img/logo.ico",
+        "to": "logo.ico"
+      },
+      {
+        "from": "Formatos",
+        "to": "Formatos"
+      }
+    ],
     "extraMetadata": {
       "main": "src/js/main.js"
     },
-   "win": {
-  "target": [
-    {
-      "target": "nsis",
-      "arch": [
-        "x64"
-      ]
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "src/img/logo.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": true
     },
-    {
-      "target": "portable",
-      "arch": [
-        "x64"
-      ]
-    }
-  ],
-  "icon": "src/img/logo.ico",
-  "requestedExecutionLevel": "asInvoker",
-  "signAndEditExecutable": true
-},
     "nsis": {
       "oneClick": false,
       "perMachine": false,

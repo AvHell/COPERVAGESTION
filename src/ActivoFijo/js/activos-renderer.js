@@ -2,6 +2,8 @@
    ACTIVO FIJO — RENDERER DE INVENTARIO
    Formulario inteligente + tabs (Activos / Eliminados)
    + Motivo de baja/restauración + Modal de Histórico + Ver
+   Filtro universal · Botones solo icono + tooltip
+   Modales de baja/restauración SIN inputs nativos de SweetAlert
    ========================================================= */
 const Swal = window.Swal;
 
@@ -24,8 +26,7 @@ let modoEdicion    = false;
 let idEditando     = null;
 let guardando      = false;
 let filtroBusqueda = '';
-let vistaActual    = 'activos';   // 'activos' | 'eliminados'
-let filtros        = { idTipo: '', idEstado: '', idEstatus: '', idCartera: '', idSitio: '' };
+let vistaActual    = 'activos';
 
 /* =========================================================
    REFERENCIAS DOM
@@ -37,14 +38,14 @@ const mensaje          = document.getElementById('mensaje');
 const btnGuardar       = document.getElementById('btn-guardar');
 const btnNuevo         = document.getElementById('btn-nuevo');
 const sinResultados    = document.getElementById('sin-resultados');
+const sinResultadosTit = document.getElementById('sin-resultados-titulo');
 const sinResultadosTxt = document.getElementById('sin-resultados-texto');
+const cardTabla        = document.getElementById('card-tabla');
 const inputBusqueda    = document.getElementById('input-busqueda');
 const btnLimpiarBusq   = document.getElementById('btn-limpiar-busqueda');
-const btnLimpiarFiltro = document.getElementById('btn-limpiar-filtros');
 const btnLimpiarVacio  = document.getElementById('btn-limpiar-busqueda-vacio');
 const modal            = document.getElementById('modal-activo');
 const modalTitulo      = document.getElementById('modal-titulo');
-const filtroEstatusWrap= document.getElementById('filtro-estatus-wrap');
 
 const selTipo          = document.getElementById('tipo');
 const selMarca         = document.getElementById('marca');
@@ -72,12 +73,6 @@ const inpAccesorios    = document.getElementById('accesorios');
 const inpPrecio        = document.getElementById('precio');
 const inpObservaciones = document.getElementById('observaciones');
 
-const filtroTipo       = document.getElementById('filtro-tipo');
-const filtroEstado     = document.getElementById('filtro-estado');
-const filtroEstatus    = document.getElementById('filtro-estatus');
-const filtroCartera    = document.getElementById('filtro-cartera');
-const filtroSitio      = document.getElementById('filtro-sitio');
-
 /* =========================================================
    UTILIDADES
    ========================================================= */
@@ -104,9 +99,13 @@ function formatearFecha(val) {
 
 function mostrarMensaje(texto, tipo) {
     mensaje.textContent = texto;
-    mensaje.className = 'mensaje ' + tipo;
+    mensaje.className = 'alert ' + tipo;
+    mensaje.classList.remove('oculto');
 }
-function ocultarMensaje() { mensaje.className = 'mensaje oculto'; }
+function ocultarMensaje() {
+    mensaje.className = 'alert oculto';
+    mensaje.textContent = '';
+}
 
 function setGuardando(v) {
     guardando = v;
@@ -190,36 +189,20 @@ async function cargarCatalogos() {
             capacidades.map(x => `<option value="${x.IdCapacidad}">${escaparHTML(x.Nombre)}</option>`).join('');
         selVoltaje.innerHTML = '<option value="">— Sin voltaje —</option>' +
             voltajes.map(x => `<option value="${x.IdVoltaje}">${escaparHTML(x.Nombre)}</option>`).join('');
-
-        filtroTipo.innerHTML    = '<option value="">Todos</option>' +
-            tipos.map(x => `<option value="${x.IdTipo}">${escaparHTML(x.Nombre)}</option>`).join('');
-        filtroEstado.innerHTML  = '<option value="">Todos</option>' +
-            estados.map(x => `<option value="${x.IdEstado}">${escaparHTML(x.Nombre)}</option>`).join('');
-        filtroEstatus.innerHTML = '<option value="">Todos</option>' +
-            estatus.map(x => `<option value="${x.IdEstatus}">${escaparHTML(x.Nombre)}</option>`).join('');
-        filtroCartera.innerHTML = '<option value="">Todas</option>' +
-            carteras.map(x => `<option value="${x.IdCartera}">${escaparHTML(x.Nombre)}</option>`).join('');
-        filtroSitio.innerHTML   = '<option value="">Todos</option>' +
-            sitios.map(x => `<option value="${x.IdSitio}">${escaparHTML(x.Nombre)}</option>`).join('');
     } catch (err) {
         toastError('No se pudieron cargar los catálogos', err.message);
     }
 }
 
 /* =========================================================
-   CARGAR ACTIVOS (según vista actual)
+   CARGAR ACTIVOS
    ========================================================= */
 async function cargarActivos() {
     try {
-        const filtrosEnvio = { ...filtros };
-
+        const filtrosEnvio = {};
         if (vistaActual === 'eliminados') {
             filtrosEnvio.soloEliminados = true;
-            filtrosEnvio.idEstatus = '';
-            filtros.idEstatus = '';
-            filtroEstatus.value = '';
         }
-
         activos = await window.api.activoFijo.activos.listar(filtrosEnvio);
         renderTabla();
     } catch (err) {
@@ -235,9 +218,12 @@ function renderTabla() {
         if (!filtroBusqueda) return true;
         const texto = [
             a.NoSerie, a.IMEI1, a.IMEI2, a.NoTelefono,
-            a.Marca, a.Modelo, a.Tipo, a.Cartera, a.Sitio,
+            a.Marca, a.Modelo, a.Tipo,
+            a.Estado, a.Estatus,
+            a.Cartera, a.Sitio,
             a.UsuarioAsignado, a.Observaciones,
-            a.Procesador, a.MemoriaRAM, a.Almacenamiento, a.SistemaOperativo
+            a.Procesador, a.MemoriaRAM, a.Almacenamiento, a.SistemaOperativo,
+            a.Accesorios, a.Subtipo, a.Clasificacion, a.Tamanio, a.Capacidad, a.Voltaje
         ].filter(Boolean).join(' ').toLowerCase();
         return texto.includes(filtroBusqueda);
     });
@@ -246,17 +232,22 @@ function renderTabla() {
 
     if (listaFiltrada.length === 0) {
         sinResultados.classList.remove('oculto');
+        if (cardTabla) cardTabla.style.display = 'none';
+        if (sinResultadosTit) sinResultadosTit.textContent = filtroBusqueda ? 'Sin coincidencias' : 'Sin registros';
         if (sinResultadosTxt) {
-            sinResultadosTxt.textContent = vistaActual === 'eliminados'
-                ? 'No hay activos dados de baja con ese criterio.'
-                : 'No se encontraron activos con ese criterio.';
+            if (filtroBusqueda) {
+                sinResultadosTxt.textContent = `Ningún activo coincide con "${inputBusqueda?.value || ''}".`;
+            } else if (vistaActual === 'eliminados') {
+                sinResultadosTxt.textContent = 'Aún no hay activos dados de baja.';
+            } else {
+                sinResultadosTxt.textContent = 'Aún no hay activos registrados. Crea el primero con el botón "Nuevo activo".';
+            }
         }
-        document.querySelector('.card-tabla').style.display = 'none';
         return;
     }
 
     sinResultados.classList.add('oculto');
-    document.querySelector('.card-tabla').style.display = '';
+    if (cardTabla) cardTabla.style.display = '';
 
     const esVistaEliminados = (vistaActual === 'eliminados');
 
@@ -264,71 +255,64 @@ function renderTabla() {
         const tr = document.createElement('tr');
 
         const identificadores = [];
-        if (a.NoSerie)     identificadores.push(`<span class="principal">${escaparHTML(a.NoSerie)}</span>`);
-        if (a.IMEI1)       identificadores.push(`<span class="secundario">IMEI1: ${escaparHTML(a.IMEI1)}</span>`);
-        if (a.IMEI2)       identificadores.push(`<span class="secundario">IMEI2: ${escaparHTML(a.IMEI2)}</span>`);
-        if (a.NoTelefono)  identificadores.push(`<span class="secundario">Tel: ${escaparHTML(a.NoTelefono)}</span>`);
+        if (a.NoSerie)    identificadores.push(`<span class="principal">${escaparHTML(a.NoSerie)}</span>`);
+        if (a.IMEI1)      identificadores.push(`<span class="secundario">IMEI1: ${escaparHTML(a.IMEI1)}</span>`);
+        if (a.IMEI2)      identificadores.push(`<span class="secundario">IMEI2: ${escaparHTML(a.IMEI2)}</span>`);
+        if (a.NoTelefono) identificadores.push(`<span class="secundario">Tel: ${escaparHTML(a.NoTelefono)}</span>`);
         const htmlIdent = identificadores.length > 0
             ? identificadores.join('')
             : '<span class="vacio">Sin identificadores</span>';
 
-        const precio = formatearPrecio(a.PrecioActivo);
-        const htmlPrecio = precio
-            ? `<span class="precio">${precio}</span>`
-            : `<span class="precio vacio">—</span>`;
-
         const marcaModelo = [a.Marca, a.Modelo].filter(Boolean).join(' — ') || '—';
 
         tr.innerHTML = `
-            <td><div class="identificadores">${htmlIdent}</div></td>
-            <td>${escaparHTML(marcaModelo)}</td>
-            <td><span class="badge badge-tipo">${escaparHTML(a.Tipo)}</span></td>
-            <td><span class="badge badge-estado-${escaparHTML(a.Estado)}">${escaparHTML(a.Estado)}</span></td>
-            <td><span class="badge badge-estatus-${escaparHTML(a.Estatus)}">${escaparHTML(a.Estatus)}</span></td>
-            <td>${escaparHTML(a.Cartera ?? '—')}</td>
-            <td>${escaparHTML(a.Sitio ?? '—')}</td>
-            <td>${htmlPrecio}</td>
-            <td class="acciones-tabla"></td>
+            <td data-label="Identificación"><div class="identificadores">${htmlIdent}</div></td>
+            <td data-label="Marca / Modelo">${escaparHTML(marcaModelo)}</td>
+            <td data-label="Tipo"><span class="badge badge-tipo">${escaparHTML(a.Tipo)}</span></td>
+            <td data-label="Estado"><span class="badge badge-estado-${escaparHTML(a.Estado)}">${escaparHTML(a.Estado)}</span></td>
+            <td data-label="Estatus"><span class="badge badge-estatus-${escaparHTML(a.Estatus)}">${escaparHTML(a.Estatus)}</span></td>
+            <td data-label="Acciones" class="acciones-tabla"></td>
         `;
 
         const celda = tr.querySelector('.acciones-tabla');
 
-        /* ---- BOTÓN VER (siempre visible) ---- */
         const btnVer = document.createElement('button');
         btnVer.type = 'button';
-        btnVer.className = 'secundario';
-        btnVer.title = 'Ver detalle';
+        btnVer.className = 'btn-accion ver';
+        btnVer.setAttribute('data-tooltip', 'Ver detalle');
+        btnVer.setAttribute('aria-label', 'Ver detalle');
         btnVer.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                 <circle cx="12" cy="12" r="3"></circle>
-            </svg> Ver`;
+            </svg>`;
         btnVer.addEventListener('click', () => verActivo(a.IdActivoFijoEQ));
         celda.appendChild(btnVer);
 
-        /* ---- Vista ELIMINADOS → Historial + Restaurar ---- */
         if (esVistaEliminados) {
             const btnHistorial = document.createElement('button');
             btnHistorial.type = 'button';
-            btnHistorial.className = 'secundario';
-            btnHistorial.title = 'Ver histórico';
+            btnHistorial.className = 'btn-accion historial';
+            btnHistorial.setAttribute('data-tooltip', 'Ver histórico');
+            btnHistorial.setAttribute('aria-label', 'Ver histórico');
             btnHistorial.innerHTML = `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
                     <polyline points="12 6 12 12 16 14"></polyline>
-                </svg> Historial`;
+                </svg>`;
             btnHistorial.addEventListener('click', () => verHistorico(a.IdActivoFijoEQ, a.NoSerie));
             celda.appendChild(btnHistorial);
 
             const btnRestaurar = document.createElement('button');
             btnRestaurar.type = 'button';
-            btnRestaurar.className = 'exito';
-            btnRestaurar.title = 'Restaurar activo';
+            btnRestaurar.className = 'btn-accion restaurar';
+            btnRestaurar.setAttribute('data-tooltip', 'Restaurar');
+            btnRestaurar.setAttribute('aria-label', 'Restaurar');
             btnRestaurar.innerHTML = `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="1 4 1 10 7 10"></polyline>
                     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                </svg> Restaurar`;
+                </svg>`;
             btnRestaurar.addEventListener('click', () => restaurarActivo(a.IdActivoFijoEQ, a.NoSerie));
             celda.appendChild(btnRestaurar);
 
@@ -336,41 +320,44 @@ function renderTabla() {
             return;
         }
 
-        /* ---- Vista ACTIVOS → Editar + Historial + Dar de baja ---- */
         const btnEditar = document.createElement('button');
         btnEditar.type = 'button';
-        btnEditar.className = 'secundario';
+        btnEditar.className = 'btn-accion editar';
+        btnEditar.setAttribute('data-tooltip', 'Editar');
+        btnEditar.setAttribute('aria-label', 'Editar');
         btnEditar.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg> Editar`;
+            </svg>`;
         btnEditar.addEventListener('click', () => abrirEdicion(a.IdActivoFijoEQ));
         celda.appendChild(btnEditar);
 
         const btnHistorial = document.createElement('button');
         btnHistorial.type = 'button';
-        btnHistorial.className = 'secundario';
-        btnHistorial.title = 'Ver histórico';
+        btnHistorial.className = 'btn-accion historial';
+        btnHistorial.setAttribute('data-tooltip', 'Ver histórico');
+        btnHistorial.setAttribute('aria-label', 'Ver histórico');
         btnHistorial.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12 6 12 12 16 14"></polyline>
-            </svg> Historial`;
+            </svg>`;
         btnHistorial.addEventListener('click', () => verHistorico(a.IdActivoFijoEQ, a.NoSerie));
         celda.appendChild(btnHistorial);
 
         const btnEliminar = document.createElement('button');
         btnEliminar.type = 'button';
-        btnEliminar.className = 'peligro';
-        btnEliminar.title = 'Dar de baja';
+        btnEliminar.className = 'btn-accion eliminar';
+        btnEliminar.setAttribute('data-tooltip', 'Dar de baja');
+        btnEliminar.setAttribute('aria-label', 'Dar de baja');
         btnEliminar.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
                 <path d="M10 11v6M14 11v6"></path>
                 <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-            </svg> Dar de baja`;
+            </svg>`;
         btnEliminar.addEventListener('click', () => eliminarActivo(a.IdActivoFijoEQ));
         celda.appendChild(btnEliminar);
 
@@ -379,8 +366,7 @@ function renderTabla() {
 }
 
 /* =========================================================
-   VER ACTIVO (SOLO LECTURA)
-   Filtra las secciones según las banderas Requiere... del tipo
+   VER ACTIVO (solo X)
    ========================================================= */
 function verActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
@@ -397,13 +383,11 @@ function verActivo(id) {
         return `<div class="ver-item"><span class="ver-label">${escaparHTML(etiqueta)}</span><span class="ver-valor"><span class="badge ${claseBadge}">${escaparHTML(valor)}</span></span></div>`;
     };
 
-    /* ---------- SECCIÓN: Identificación (siempre visible) ---------- */
     const itemsIdent = [];
     itemsIdent.push(row('Tipo', a.Tipo));
     itemsIdent.push(row('Marca', a.Marca));
     itemsIdent.push(row('Modelo', a.Modelo));
     itemsIdent.push(row('No. Serie', a.NoSerie));
-
     if (tipo.RequiereIMEI) {
         if (a.IMEI1) itemsIdent.push(row('IMEI 1', a.IMEI1));
         if (a.IMEI2) itemsIdent.push(row('IMEI 2', a.IMEI2));
@@ -411,15 +395,13 @@ function verActivo(id) {
     if (tipo.RequiereTelefono && a.NoTelefono) {
         itemsIdent.push(row('No. Teléfono', a.NoTelefono));
     }
-
-    const seccionIdent = itemsIdent.length ? `
+    const seccionIdent = `
         <div class="ver-seccion">
             <div class="ver-seccion-titulo">Identificación</div>
             <div class="ver-grid">${itemsIdent.join('')}</div>
         </div>
-    ` : '';
+    `;
 
-    /* ---------- SECCIÓN: Ubicación y clasificación ---------- */
     const itemsUbi = [];
     if (tipo.RequiereSitio)           itemsUbi.push(row('Sitio', a.Sitio));
     if (tipo.RequiereSubtipo)         itemsUbi.push(row('Subtipo', a.Subtipo));
@@ -428,7 +410,6 @@ function verActivo(id) {
     if (tipo.RequiereCapacidad)       itemsUbi.push(row('Capacidad', a.Capacidad));
     if (tipo.RequiereVoltaje)         itemsUbi.push(row('Voltaje', a.Voltaje));
     if (tipo.RequiereUsuarioAsignado) itemsUbi.push(row('Usuario asignado', a.UsuarioAsignado));
-
     const seccionUbi = itemsUbi.length ? `
         <div class="ver-seccion">
             <div class="ver-seccion-titulo">Ubicación y clasificación</div>
@@ -436,15 +417,11 @@ function verActivo(id) {
         </div>
     ` : '';
 
-    /* ---------- SECCIÓN: Situación ---------- */
     const itemsSit = [];
     itemsSit.push(rowBadge('Estado', a.Estado, 'badge-estado-' + a.Estado));
     itemsSit.push(rowBadge('Estatus', a.Estatus, 'badge-estatus-' + a.Estatus));
     itemsSit.push(row('Cartera', a.Cartera));
-    if (tipo.RequierePrecio) {
-        itemsSit.push(row('Precio', formatearPrecio(a.PrecioActivo) || '—'));
-    }
-
+    if (tipo.RequierePrecio) itemsSit.push(row('Precio', formatearPrecio(a.PrecioActivo) || '—'));
     const seccionSit = `
         <div class="ver-seccion">
             <div class="ver-seccion-titulo">Situación</div>
@@ -452,7 +429,6 @@ function verActivo(id) {
         </div>
     `;
 
-    /* ---------- SECCIÓN: Especificaciones técnicas ---------- */
     const itemsSpec = [];
     if (tipo.RequiereEspecificaciones) {
         if (a.Procesador)       itemsSpec.push(row('Procesador', a.Procesador));
@@ -460,7 +436,6 @@ function verActivo(id) {
         if (a.Almacenamiento)   itemsSpec.push(row('Almacenamiento', a.Almacenamiento));
         if (a.SistemaOperativo) itemsSpec.push(row('Sistema Operativo', a.SistemaOperativo));
     }
-
     const seccionSpec = itemsSpec.length ? `
         <div class="ver-seccion">
             <div class="ver-seccion-titulo">Especificaciones técnicas</div>
@@ -468,7 +443,6 @@ function verActivo(id) {
         </div>
     ` : '';
 
-    /* ---------- SECCIÓN: Accesorios ---------- */
     const seccionAcc = (tipo.RequiereAccesorios && a.Accesorios) ? `
         <div class="ver-seccion">
             <div class="ver-seccion-titulo">Accesorios</div>
@@ -476,7 +450,6 @@ function verActivo(id) {
         </div>
     ` : '';
 
-    /* ---------- SECCIÓN: Observaciones (siempre si hay) ---------- */
     const seccionObs = a.Observaciones ? `
         <div class="ver-seccion">
             <div class="ver-seccion-titulo">Observaciones</div>
@@ -484,7 +457,6 @@ function verActivo(id) {
         </div>
     ` : '';
 
-    /* ---------- Meta ---------- */
     const meta = `
         <div class="ver-meta">
             Creado: ${escaparHTML(formatearFecha(a.FechaCreacion))} ·
@@ -492,25 +464,22 @@ function verActivo(id) {
         </div>
     `;
 
-    const html = `
-        <div class="ver-wrap">
-            ${seccionIdent}
-            ${seccionUbi}
-            ${seccionSit}
-            ${seccionSpec}
-            ${seccionAcc}
-            ${seccionObs}
-            ${meta}
-        </div>
-    `;
-
     Swal.fire({
         title: `Activo #${a.IdActivoFijoEQ} — ${escaparHTML(a.NoSerie || a.IMEI1 || a.NoTelefono || '')}`,
-        width: '780px',
-        html,
+        width: '820px',
+        html: `
+            <div class="ver-wrap">
+                ${seccionIdent}
+                ${seccionUbi}
+                ${seccionSit}
+                ${seccionSpec}
+                ${seccionAcc}
+                ${seccionObs}
+                ${meta}
+            </div>
+        `,
         showCloseButton: true,
-        showConfirmButton: true,
-        confirmButtonText: 'Cerrar',
+        showConfirmButton: false,
         customClass: { popup: 'cl-ver' }
     });
 }
@@ -527,10 +496,6 @@ tabsVista.addEventListener('click', (e) => {
 
     vistaActual = btn.dataset.vista;
 
-    if (filtroEstatusWrap) {
-        filtroEstatusWrap.classList.toggle('oculto', vistaActual === 'eliminados');
-    }
-
     btnNuevo.disabled = (vistaActual === 'eliminados');
     btnNuevo.style.opacity = (vistaActual === 'eliminados') ? '0.5' : '';
 
@@ -542,7 +507,7 @@ tabsVista.addEventListener('click', (e) => {
 });
 
 /* =========================================================
-   BUSCADOR
+   BUSCADOR UNIVERSAL
    ========================================================= */
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
@@ -555,28 +520,10 @@ function limpiarBusqueda() {
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
     renderTabla();
+    inputBusqueda.focus();
 }
 btnLimpiarBusq.addEventListener('click', limpiarBusqueda);
 btnLimpiarVacio.addEventListener('click', limpiarBusqueda);
-
-/* =========================================================
-   FILTROS
-   ========================================================= */
-filtroTipo.addEventListener('change',    () => { filtros.idTipo    = filtroTipo.value;    cargarActivos(); });
-filtroEstado.addEventListener('change',  () => { filtros.idEstado  = filtroEstado.value;  cargarActivos(); });
-filtroEstatus.addEventListener('change', () => { filtros.idEstatus = filtroEstatus.value; cargarActivos(); });
-filtroCartera.addEventListener('change', () => { filtros.idCartera = filtroCartera.value; cargarActivos(); });
-filtroSitio.addEventListener('change',   () => { filtros.idSitio   = filtroSitio.value;   cargarActivos(); });
-
-btnLimpiarFiltro.addEventListener('click', () => {
-    filtros = { idTipo: '', idEstado: '', idEstatus: '', idCartera: '', idSitio: '' };
-    filtroTipo.value = '';
-    filtroEstado.value = '';
-    filtroEstatus.value = '';
-    filtroCartera.value = '';
-    filtroSitio.value = '';
-    cargarActivos();
-});
 
 /* =========================================================
    MODAL
@@ -593,14 +540,13 @@ function cerrarModal() {
     idEditando = null;
 }
 document.getElementById('modal-cerrar').addEventListener('click', cerrarModal);
-document.getElementById('btn-cancelar').addEventListener('click', cerrarModal);
 modal.addEventListener('click', (e) => { if (e.target === modal) cerrarModal(); });
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && modal.style.display === 'flex') cerrarModal();
 });
 
 /* =========================================================
-   POBLAR SUBTIPOS SEGÚN EL GRUPO DEL TIPO
+   POBLAR SUBTIPOS
    ========================================================= */
 function poblarSubtipos(grupo, valorSeleccionado = '') {
     if (!grupo) {
@@ -661,14 +607,12 @@ function actualizarCamposPorTipo() {
     toggle('.campo-imei1', !!tipo.RequiereIMEI);
     toggle('.campo-imei2', !!tipo.RequiereIMEI);
     toggle('.campo-telefono', !!tipo.RequiereTelefono);
-
     toggle('.campo-sitio',         !!tipo.RequiereSitio);
     toggle('.campo-subtipo',       !!tipo.RequiereSubtipo);
     toggle('.campo-clasificacion', !!tipo.RequiereClasificacion);
     toggle('.campo-tamanio',       !!tipo.RequiereTamanio);
     toggle('.campo-capacidad',     !!tipo.RequiereCapacidad);
     toggle('.campo-voltaje',       !!tipo.RequiereVoltaje);
-
     toggle('.campo-precio', !!tipo.RequierePrecio);
     toggle('.bloque-especificaciones', !!tipo.RequiereEspecificaciones);
     toggle('.campo-accesorios', !!tipo.RequiereAccesorios);
@@ -777,15 +721,15 @@ function abrirEdicion(id) {
     selTipo.value = a.IdTipo != null ? String(a.IdTipo) : '';
     actualizarCamposPorTipo();
 
-    selMarca.value        = a.IdMarca   != null ? String(a.IdMarca)   : '';
-    selEstado.value       = a.IdEstado  != null ? String(a.IdEstado)  : '';
-    selEstatus.value      = a.IdEstatus != null ? String(a.IdEstatus) : '';
-    selCartera.value      = a.IdCartera != null ? String(a.IdCartera) : '';
-    selSitio.value        = a.IdSitio    != null ? String(a.IdSitio)    : '';
-    selClasificacion.value= a.IdClasificacion != null ? String(a.IdClasificacion) : '';
-    selTamanio.value      = a.IdTamanio    != null ? String(a.IdTamanio)    : '';
-    selCapacidad.value    = a.IdCapacidad  != null ? String(a.IdCapacidad)  : '';
-    selVoltaje.value      = a.IdVoltaje    != null ? String(a.IdVoltaje)    : '';
+    selMarca.value         = a.IdMarca   != null ? String(a.IdMarca)   : '';
+    selEstado.value        = a.IdEstado  != null ? String(a.IdEstado)  : '';
+    selEstatus.value       = a.IdEstatus != null ? String(a.IdEstatus) : '';
+    selCartera.value       = a.IdCartera != null ? String(a.IdCartera) : '';
+    selSitio.value         = a.IdSitio   != null ? String(a.IdSitio)   : '';
+    selClasificacion.value = a.IdClasificacion != null ? String(a.IdClasificacion) : '';
+    selTamanio.value       = a.IdTamanio    != null ? String(a.IdTamanio)    : '';
+    selCapacidad.value     = a.IdCapacidad  != null ? String(a.IdCapacidad)  : '';
+    selVoltaje.value       = a.IdVoltaje    != null ? String(a.IdVoltaje)    : '';
 
     const tipo = tipos.find(t => t.IdTipo === a.IdTipo);
     if (tipo && tipo.RequiereSubtipo) {
@@ -814,14 +758,12 @@ function abrirEdicion(id) {
 }
 
 /* =========================================================
-   GUARDAR — con validaciones por tipo y sin borrar campos
-   que el tipo no requiere (ej. PrecioActivo).
+   GUARDAR
    ========================================================= */
 formulario.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (guardando) return;
 
-    // --- Validación base ---
     if (!selTipo.value) {
         mostrarMensaje('El tipo es obligatorio.', 'error');
         return;
@@ -834,7 +776,6 @@ formulario.addEventListener('submit', async (e) => {
         return;
     }
 
-    // --- Validación de identificadores ---
     const tieneSerie = inpNoSerie.value.trim();
     const tieneIMEI  = inpIMEI1.value.trim();
     const tieneTel   = inpNoTelefono.value.trim();
@@ -844,33 +785,25 @@ formulario.addEventListener('submit', async (e) => {
         return;
     }
 
-    // --- Validación de campos requeridos por el tipo ---
     if (tipo.RequiereSubtipo && !selSubtipo.value) {
-        mostrarMensaje('El subtipo es obligatorio para este tipo.', 'error');
-        return;
+        mostrarMensaje('El subtipo es obligatorio para este tipo.', 'error'); return;
     }
     if (tipo.RequiereClasificacion && !selClasificacion.value) {
-        mostrarMensaje('La clasificación es obligatoria para este tipo.', 'error');
-        return;
+        mostrarMensaje('La clasificación es obligatoria para este tipo.', 'error'); return;
     }
     if (tipo.RequiereTamanio && !selTamanio.value) {
-        mostrarMensaje('El tamaño es obligatorio para este tipo.', 'error');
-        return;
+        mostrarMensaje('El tamaño es obligatorio para este tipo.', 'error'); return;
     }
     if (tipo.RequiereCapacidad && !selCapacidad.value) {
-        mostrarMensaje('La capacidad es obligatoria para este tipo.', 'error');
-        return;
+        mostrarMensaje('La capacidad es obligatoria para este tipo.', 'error'); return;
     }
     if (tipo.RequiereVoltaje && !selVoltaje.value) {
-        mostrarMensaje('El voltaje es obligatorio para este tipo.', 'error');
-        return;
+        mostrarMensaje('El voltaje es obligatorio para este tipo.', 'error'); return;
     }
     if (tipo.RequierePrecio && !inpPrecio.value.trim()) {
-        mostrarMensaje('El precio es obligatorio para este tipo.', 'error');
-        return;
+        mostrarMensaje('El precio es obligatorio para este tipo.', 'error'); return;
     }
 
-    // --- Construcción de datos ---
     const precioNum = inpPrecio.value.trim() ? parseFloat(inpPrecio.value) : null;
 
     const datos = {
@@ -901,8 +834,6 @@ formulario.addEventListener('submit', async (e) => {
         Observaciones:   inpObservaciones.value.trim() || null
     };
 
-    // Precio: solo si el tipo lo requiere. Si no, NO se envía (undefined)
-    // para que el backend no borre el valor existente en BD.
     if (tipo.RequierePrecio) {
         datos.PrecioActivo = Number.isFinite(precioNum) ? precioNum : null;
     }
@@ -932,20 +863,25 @@ formulario.addEventListener('submit', async (e) => {
 
 /* =========================================================
    ELIMINAR (Soft delete → BAJA) — CON MOTIVO
+   Usa textarea custom dentro del html; sin input nativo.
    ========================================================= */
 async function eliminarActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     const nombre = a ? (a.NoSerie || a.IMEI1 || a.NoTelefono || `#${id}`) : `#${id}`;
 
-    const { value: motivo, isConfirmed } = await Swal.fire({
+    const resultado = await Swal.fire({
         icon: 'warning',
         title: '¿Dar de baja este activo?',
-        html: `Se dará de baja <strong>${escaparHTML(nombre)}</strong>.<br>
-               Podrás verlo y restaurarlo desde la pestaña <strong>Eliminados (BAJA)</strong>.`,
-        input: 'textarea',
-        inputLabel: 'Motivo de la baja',
-        inputPlaceholder: 'Ej. Robo, daño, obsolescencia, venta, fin de vida útil...',
-        inputAttributes: { maxlength: 500, rows: 3 },
+        html: `
+            <div>Se dará de baja <strong>${escaparHTML(nombre)}</strong>.<br>
+            Podrás verlo y restaurarlo desde la pestaña <strong>Eliminados (BAJA)</strong>.</div>
+            <div class="campo-motivo" id="motivo-baja-wrap">
+                <label for="motivo-baja">Motivo de la baja</label>
+                <textarea id="motivo-baja" maxlength="500" rows="3"
+                          placeholder="Ej. Robo, daño, obsolescencia, venta, fin de vida útil..."></textarea>
+                <div class="error-texto">El motivo es obligatorio.</div>
+            </div>
+        `,
         showCancelButton: true,
         confirmButtonText: 'Sí, dar de baja',
         cancelButtonText: 'Cancelar',
@@ -957,16 +893,32 @@ async function eliminarActivo(id) {
             confirmButton: 'swal2-confirm swal2-styled cl-peligro',
             cancelButton: 'swal2-cancel swal2-styled'
         },
-        inputValidator: (value) => {
-            if (!value || !value.trim()) return 'El motivo es obligatorio';
-            return null;
+        didOpen: () => {
+            const ta = document.getElementById('motivo-baja');
+            if (ta) {
+                ta.focus();
+                ta.addEventListener('input', () => {
+                    document.getElementById('motivo-baja-wrap')?.classList.remove('error');
+                });
+            }
+        },
+        preConfirm: () => {
+            const ta = document.getElementById('motivo-baja');
+            const val = ta ? ta.value.trim() : '';
+            if (!val) {
+                document.getElementById('motivo-baja-wrap')?.classList.add('error');
+                if (ta) ta.focus();
+                return false;
+            }
+            return val;
         }
     });
 
-    if (!isConfirmed) return;
+    if (!resultado.isConfirmed) return;
+    const motivo = resultado.value;
 
     try {
-        const res = await window.api.activoFijo.activos.eliminar(id, motivo.trim());
+        const res = await window.api.activoFijo.activos.eliminar(id, motivo);
         if (res && res.ok) {
             await cargarActivos();
             toastExito(res.mensaje || 'Activo dado de baja');
@@ -982,14 +934,19 @@ async function eliminarActivo(id) {
    RESTAURAR — CON MOTIVO
    ========================================================= */
 async function restaurarActivo(id, noSerie) {
-    const { value: motivo, isConfirmed } = await Swal.fire({
+    const resultado = await Swal.fire({
         icon: 'question',
         title: '¿Restaurar activo?',
-        html: `El activo <strong>${escaparHTML(noSerie || ('#' + id))}</strong> volverá al inventario activo con estatus <strong>STOCK/DISPONIBLE</strong>.`,
-        input: 'textarea',
-        inputLabel: 'Motivo de la restauración',
-        inputPlaceholder: 'Ej. Devolución, corrección de baja, error administrativo...',
-        inputAttributes: { maxlength: 500, rows: 3 },
+        html: `
+            <div>El activo <strong>${escaparHTML(noSerie || ('#' + id))}</strong>
+            volverá al inventario activo con estatus <strong>STOCK/DISPONIBLE</strong>.</div>
+            <div class="campo-motivo" id="motivo-restaurar-wrap">
+                <label for="motivo-restaurar">Motivo de la restauración</label>
+                <textarea id="motivo-restaurar" maxlength="500" rows="3"
+                          placeholder="Ej. Devolución, corrección de baja, error administrativo..."></textarea>
+                <div class="error-texto">El motivo es obligatorio.</div>
+            </div>
+        `,
         showCancelButton: true,
         confirmButtonText: 'Sí, restaurar',
         cancelButtonText: 'Cancelar',
@@ -1000,16 +957,32 @@ async function restaurarActivo(id, noSerie) {
             confirmButton: 'swal2-confirm swal2-styled',
             cancelButton: 'swal2-cancel swal2-styled'
         },
-        inputValidator: (value) => {
-            if (!value || !value.trim()) return 'El motivo es obligatorio';
-            return null;
+        didOpen: () => {
+            const ta = document.getElementById('motivo-restaurar');
+            if (ta) {
+                ta.focus();
+                ta.addEventListener('input', () => {
+                    document.getElementById('motivo-restaurar-wrap')?.classList.remove('error');
+                });
+            }
+        },
+        preConfirm: () => {
+            const ta = document.getElementById('motivo-restaurar');
+            const val = ta ? ta.value.trim() : '';
+            if (!val) {
+                document.getElementById('motivo-restaurar-wrap')?.classList.add('error');
+                if (ta) ta.focus();
+                return false;
+            }
+            return val;
         }
     });
 
-    if (!isConfirmed) return;
+    if (!resultado.isConfirmed) return;
+    const motivo = resultado.value;
 
     try {
-        const res = await window.api.activoFijo.activos.restaurar(id, motivo.trim());
+        const res = await window.api.activoFijo.activos.restaurar(id, motivo);
         if (res && res.ok) {
             await cargarActivos();
             toastExito(res.mensaje || 'Activo restaurado');

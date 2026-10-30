@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const { PDFDocument } = require('pdf-lib');
 const { autoUpdater } = require('electron-updater');
+const XLSX = require('xlsx');
 
 /* =========================================================
    BASE DE DATOS — MÓDULOS EXISTENTES
@@ -657,6 +658,84 @@ ipcMain.handle('af-rep-historial-activo',      async (_e, id)      => { const er
 ipcMain.handle('af-rep-celulares',             async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.celulares(); });
 ipcMain.handle('af-rep-laptops',               async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.laptops(); });
 
+/* --- NUEVOS: endpoint consolidado + exportar a Excel --- */
+ipcMain.handle('af-rep-obtener-reporte', async (_e, vista, filtros) => {
+    const err = requerirSesion('af-rep:ver');
+    if (err) return err;
+    try {
+        return await activoFijoReportesDB.obtenerReporte(vista, filtros || {});
+    } catch (e) {
+        console.error('[Reportes] Error obtenerReporte:', e);
+        return { ok: false, mensaje: e.message, datos: [] };
+    }
+});
+
+ipcMain.handle('af-rep-exportar-excel', async (_e, payload) => {
+    const err = requerirSesion('af-rep:ver');
+    if (err) return err;
+    try {
+        return await exportarReporteExcel(payload);
+    } catch (e) {
+        console.error('[Reportes] Error exportarExcel:', e);
+        return { ok: false, mensaje: e.message };
+    }
+});
+
+/* =========================================================
+   HELPER: EXPORTAR REPORTE A EXCEL
+   payload = { vista, titulo, columnas: [{ key, etiqueta, tipo }], filas: [{ etiqueta: valor }] }
+   ========================================================= */
+async function exportarReporteExcel(payload) {
+    const { titulo, columnas, filas } = payload || {};
+
+    if (!filas || filas.length === 0) {
+        return { ok: false, mensaje: 'Sin datos para exportar.' };
+    }
+    if (!Array.isArray(columnas) || columnas.length === 0) {
+        return { ok: false, mensaje: 'No se especificaron columnas.' };
+    }
+
+    const safeTitulo = (titulo || 'Reporte').replace(/[\\/:*?"<>|]/g, '_');
+    const fecha = new Date().toISOString().slice(0, 10);
+    const downloadsDir = path.join(os.homedir(), 'Downloads');
+    const defaultPath = path.join(
+        fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
+        `${safeTitulo}_${fecha}.xlsx`
+    );
+
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Guardar reporte en Excel',
+        defaultPath,
+        filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+    });
+
+    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+
+    const encabezados = columnas.map(c => c.etiqueta);
+    const datos = filas.map(f => columnas.map(c => {
+        const v = f[c.etiqueta];
+        return v === null || v === undefined ? '' : v;
+    }));
+
+    const ws = XLSX.utils.aoa_to_sheet([encabezados, ...datos]);
+
+    // Anchos automáticos
+    ws['!cols'] = encabezados.map((_, i) => {
+        const valores = [encabezados[i], ...datos.map(fila => fila[i])];
+        const max = Math.max(...valores.map(v => String(v ?? '').length));
+        return { wch: Math.min(Math.max(max + 2, 10), 45) };
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, safeTitulo.substring(0, 30) || 'Reporte');
+    XLSX.writeFile(wb, filePath);
+
+    return { ok: true, ruta: filePath };
+}
+
+/* =========================================================
+   IPC: CATÁLOGOS PARA FILTROS DE REPORTES
+   ========================================================= */
 ipcMain.handle('af-rep-tipos',                 async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.tiposParaFiltro(); });
 ipcMain.handle('af-rep-estados',               async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.estadosParaFiltro(); });
 ipcMain.handle('af-rep-estatus',               async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.estatusParaFiltro(); });
@@ -671,7 +750,6 @@ ipcMain.handle('af-import-procesar', async (_e, datos)  => { const err = requeri
 
 /* =========================================================
    HELPER: CONSTRUIR PDF DE RESPONSIVA EN MEMORIA
-   Devuelve { ok, bytes, nombreArchivo } o { ok:false, mensaje }
    ========================================================= */
 async function construirPDFResponsiva(idResponsiva) {
     const d = await activoFijoResponsivasDB.obtenerParaPDF(idResponsiva);
@@ -772,7 +850,6 @@ ipcMain.handle('af-resp-ver-pdf', async (_e, idResponsiva) => {
 
         fs.writeFileSync(tmpPath, res.bytes);
 
-        // Borrar el temporal al cerrar la app (best-effort)
         try {
             app.once('will-quit', () => { try { fs.unlinkSync(tmpPath); } catch (_) {} });
         } catch (_) {}
@@ -796,7 +873,6 @@ ipcMain.handle('af-resp-ver-pdf', async (_e, idResponsiva) => {
 
 /* =========================================================
    IPC: GUARDAR PDF (genera + diálogo + guarda + actualiza BD)
-   Solo se usa cuando el usuario decide guardarlo.
    ========================================================= */
 ipcMain.handle('af-resp-guardar-pdf', async (_e, idResponsiva) => {
     const err = requerirSesion('af-resp:pdf'); if (err) return err;

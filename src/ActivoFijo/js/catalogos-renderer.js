@@ -1,5 +1,5 @@
 /* =========================================================
-   ACTIVO FIJO — RENDERER CORPORATIVO AQUA 2026
+   ACTIVO FIJO — RENDERER CORPORATIVO · Paleta Tierra 2026
    ========================================================= */
 const Swal = window.Swal;
 

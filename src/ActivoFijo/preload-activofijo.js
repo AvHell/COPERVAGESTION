@@ -90,7 +90,14 @@ contextBridge.exposeInMainWorld('api', {
            REPORTES
            ================================================= */
         reportes: {
+            /* --- NUEVO: endpoint consolidado + exportar --- */
+            obtenerReporte:         (vista, filtros) => ipcRenderer.invoke('af-rep-obtener-reporte', vista, filtros),
+            exportarExcel:          (payload)        => ipcRenderer.invoke('af-rep-exportar-excel', payload),
+
+            /* --- KPIs + catálogos --- */
             resumenGeneral:         ()        => ipcRenderer.invoke('af-rep-resumen-general'),
+
+            /* --- Vistas individuales (retro-compatible) --- */
             resumenPorTipo:         ()        => ipcRenderer.invoke('af-rep-resumen-tipo'),
             resumenPorCartera:      ()        => ipcRenderer.invoke('af-rep-resumen-cartera'),
             inventario:             (filtros) => ipcRenderer.invoke('af-rep-inventario', filtros),
@@ -102,6 +109,7 @@ contextBridge.exposeInMainWorld('api', {
             celulares:              ()        => ipcRenderer.invoke('af-rep-celulares'),
             laptops:                ()        => ipcRenderer.invoke('af-rep-laptops'),
 
+            /* --- Catálogos para filtros --- */
             tiposParaFiltro:        ()        => ipcRenderer.invoke('af-rep-tipos'),
             estadosParaFiltro:      ()        => ipcRenderer.invoke('af-rep-estados'),
             estatusParaFiltro:      ()        => ipcRenderer.invoke('af-rep-estatus'),

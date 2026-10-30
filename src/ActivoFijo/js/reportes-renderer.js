@@ -1,20 +1,24 @@
 /* =========================================================
    ACTIVO FIJO — RENDERER DE REPORTES
+   Paleta Tierra / Oliva · Filtros por columna · Exportar Excel
+   SIN require — todo va por window.api
    ========================================================= */
 const Swal = window.Swal;
 
 /* =========================================================
    ESTADO
    ========================================================= */
-let vistaActual    = 'resumen-tipo';
-let datosActuales  = [];
-let tipos          = [];
-let estados        = [];
-let estatus        = [];
-let carteras       = [];
-let filtros        = { tipo: '', estado: '', estatus: '', cartera: '' };
-let filtroBusqueda = '';
-let cargando       = false;
+let vistaActual      = 'resumen-tipo';
+let datosActuales    = [];
+let datosFiltrados   = [];
+let tipos            = [];
+let estados          = [];
+let estatus          = [];
+let carteras         = [];
+let filtros          = { tipo: '', estado: '', estatus: '', cartera: '' };
+let filtrosColumna   = {};
+let filtroBusqueda   = '';
+let cargando         = false;
 
 /* =========================================================
    REFERENCIAS DOM
@@ -25,11 +29,17 @@ const tablaBody        = document.getElementById('tabla-body');
 const cardTabla        = document.getElementById('card-tabla');
 const cargandoEl       = document.getElementById('cargando');
 const sinResultados    = document.getElementById('sin-resultados');
+const sinResultadosTxt = document.getElementById('sin-resultados-texto');
 const inputBusqueda    = document.getElementById('input-busqueda');
 const btnLimpiarBusq   = document.getElementById('btn-limpiar-busqueda');
-const btnRecargar      = document.getElementById('btn-recargar');
+const btnLimpiarTodo   = document.getElementById('btn-limpiar-todo');
 const btnLimpiarFiltro = document.getElementById('btn-limpiar-filtros');
+const btnLimpiarFiltCol= document.getElementById('btn-limpiar-filtros-col');
+const btnRecargar      = document.getElementById('btn-recargar');
+const btnExportar      = document.getElementById('btn-exportar');
 const filtrosDinamicos = document.getElementById('filtros-dinamicos');
+const tablaTitulo      = document.getElementById('tabla-titulo');
+const tablaCount       = document.getElementById('tabla-count');
 
 const filtroTipo       = document.getElementById('filtro-tipo');
 const filtroEstado     = document.getElementById('filtro-estado');
@@ -66,12 +76,25 @@ function formatearFecha(f) {
     return `${dia}/${mes}/${d.getFullYear()}`;
 }
 
+function toastExito(titulo) {
+    Swal.fire({
+        toast: true, position: 'bottom-end', icon: 'success', title: titulo,
+        showConfirmButton: false, timer: 2400, timerProgressBar: true,
+        customClass: { popup: 'cl-toast' },
+        didOpen: (t) => {
+            t.style.boxShadow = 'none';
+            t.addEventListener('mouseenter', Swal.stopTimer);
+            t.addEventListener('mouseleave', Swal.resumeTimer);
+        }
+    });
+}
+
 function toastError(titulo, texto = '') {
     Swal.fire({
         toast: true, position: 'bottom-end', icon: 'error',
         title: texto ? `${titulo} — ${texto}` : titulo,
         showConfirmButton: false, timer: 3400, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-error' },
+        customClass: { popup: 'cl-toast' },
         didOpen: (t) => {
             t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);
@@ -81,7 +104,107 @@ function toastError(titulo, texto = '') {
 }
 
 /* =========================================================
-   MAPEAR TIPO DE COLUMNA → CLASE CSS
+   CONFIGURACIÓN DE VISTAS
+   ========================================================= */
+const VISTAS = {
+    'resumen-tipo':     { titulo: 'Resumen por Tipo',         filtros: [] },
+    'resumen-cartera':  { titulo: 'Resumen por Cartera',      filtros: [] },
+    'inventario':       { titulo: 'Inventario Completo',      filtros: ['tipo','estado','estatus','cartera'] },
+    'responsivas':      { titulo: 'Responsivas Activas',      filtros: [] },
+    'personas':         { titulo: 'Asignaciones por Persona', filtros: [] },
+    'tickets':          { titulo: 'Activos por Ticket',       filtros: [] },
+    'celulares':        { titulo: 'Celulares',                filtros: [] },
+    'laptops':          { titulo: 'Laptops',                  filtros: [] }
+};
+
+/* =========================================================
+   COLUMNAS POR VISTA
+   ========================================================= */
+const COLUMNAS = {
+    'resumen-tipo': [
+        { key: 'Tipo',                 etiqueta: 'Tipo',           tipo: 'badge-tipo', filtro: 'texto' },
+        { key: 'TotalEquipos',         etiqueta: 'Total',          tipo: 'numero' },
+        { key: 'EnStock',              etiqueta: 'Stock',          tipo: 'numero' },
+        { key: 'Disponibles',          etiqueta: 'Disponibles',    tipo: 'numero' },
+        { key: 'Asignados',            etiqueta: 'Asignados',      tipo: 'numero' },
+        { key: 'Pendientes',           etiqueta: 'Pendientes',     tipo: 'numero' },
+        { key: 'Bajas',                etiqueta: 'Bajas',          tipo: 'numero' },
+        { key: 'ValorTotalInventario', etiqueta: 'Valor total',    tipo: 'precio' }
+    ],
+    'resumen-cartera': [
+        { key: 'Cartera',        etiqueta: 'Cartera',        tipo: 'texto', filtro: 'texto' },
+        { key: 'TotalEquipos',   etiqueta: 'Total',          tipo: 'numero' },
+        { key: 'ValorStock',     etiqueta: 'Valor stock',    tipo: 'precio' },
+        { key: 'ValorAsignado',  etiqueta: 'Valor asignado', tipo: 'precio' },
+        { key: 'ValorBaja',      etiqueta: 'Valor baja',     tipo: 'precio' },
+        { key: 'ValorTotal',     etiqueta: 'Valor total',    tipo: 'precio' }
+    ],
+    'inventario': [
+        { key: 'NoSerie',      etiqueta: 'No. Serie',   tipo: 'mono',         filtro: 'texto' },
+        { key: 'IMEI1',        etiqueta: 'IMEI 1',      tipo: 'mono',         filtro: 'texto' },
+        { key: 'NoTelefono',   etiqueta: 'Teléfono',    tipo: 'mono',         filtro: 'texto' },
+        { key: 'Marca',        etiqueta: 'Marca',       tipo: 'texto',        filtro: 'texto' },
+        { key: 'Modelo',       etiqueta: 'Modelo',      tipo: 'texto',        filtro: 'texto' },
+        { key: 'Tipo',         etiqueta: 'Tipo',        tipo: 'badge-tipo',   filtro: 'texto' },
+        { key: 'Estado',       etiqueta: 'Estado',      tipo: 'badge-estado', filtro: 'texto' },
+        { key: 'Estatus',      etiqueta: 'Estatus',     tipo: 'badge-estatus',filtro: 'texto' },
+        { key: 'Cartera',      etiqueta: 'Cartera',     tipo: 'texto',        filtro: 'texto' },
+        { key: 'PrecioActivo', etiqueta: 'Precio',      tipo: 'precio' }
+    ],
+    'responsivas': [
+        { key: 'FolioTicket',       etiqueta: 'Folio',         tipo: 'folio',        filtro: 'texto' },
+        { key: 'Tipo',              etiqueta: 'Tipo',          tipo: 'badge-tipo',   filtro: 'texto' },
+        { key: 'NoSerie',           etiqueta: 'Serie',         tipo: 'mono',         filtro: 'texto' },
+        { key: 'Marca',             etiqueta: 'Marca',         tipo: 'texto',        filtro: 'texto' },
+        { key: 'Modelo',            etiqueta: 'Modelo',        tipo: 'texto',        filtro: 'texto' },
+        { key: 'NombreRecibe',      etiqueta: 'Recibe',        tipo: 'texto',        filtro: 'texto' },
+        { key: 'Cartera',           etiqueta: 'Cartera',       tipo: 'texto',        filtro: 'texto' },
+        { key: 'FechaAsignacion',   etiqueta: 'F. Asignación', tipo: 'fecha' },
+        { key: 'EstatusResponsiva', etiqueta: 'Estatus',       tipo: 'badge-estatus',filtro: 'texto' }
+    ],
+    'personas': [
+        { key: 'Persona',            etiqueta: 'Persona',        tipo: 'texto',  filtro: 'texto' },
+        { key: 'Puesto',             etiqueta: 'Puesto',         tipo: 'texto',  filtro: 'texto' },
+        { key: 'Area',               etiqueta: 'Área',           tipo: 'texto',  filtro: 'texto' },
+        { key: 'Correo',             etiqueta: 'Correo',         tipo: 'mono',   filtro: 'texto' },
+        { key: 'TotalAsignaciones',  etiqueta: 'Activos',        tipo: 'numero' },
+        { key: 'ValorTotalAsignado', etiqueta: 'Valor asignado', tipo: 'precio' }
+    ],
+    'tickets': [
+        { key: 'FolioTicket',      etiqueta: 'Ticket',        tipo: 'folio',  filtro: 'texto' },
+        { key: 'TotalActivos',     etiqueta: 'Total activos', tipo: 'numero' },
+        { key: 'Personas',         etiqueta: 'Personas',      tipo: 'texto',  filtro: 'texto' },
+        { key: 'ValorTotalTicket', etiqueta: 'Valor total',   tipo: 'precio' },
+        { key: 'FechaAsignacion',  etiqueta: 'Fecha',         tipo: 'fecha' }
+    ],
+    'celulares': [
+        { key: 'IMEI1',           etiqueta: 'IMEI 1',   tipo: 'mono',         filtro: 'texto' },
+        { key: 'IMEI2',           etiqueta: 'IMEI 2',   tipo: 'mono',         filtro: 'texto' },
+        { key: 'NoTelefono',      etiqueta: 'Teléfono', tipo: 'mono',         filtro: 'texto' },
+        { key: 'Marca',           etiqueta: 'Marca',    tipo: 'texto',        filtro: 'texto' },
+        { key: 'Modelo',          etiqueta: 'Modelo',   tipo: 'texto',        filtro: 'texto' },
+        { key: 'PrecioActivo',    etiqueta: 'Precio',   tipo: 'precio' },
+        { key: 'Estatus',         etiqueta: 'Estatus',  tipo: 'badge-estatus',filtro: 'texto' },
+        { key: 'NombreRecibe',    etiqueta: 'Recibe',   tipo: 'texto',        filtro: 'texto' },
+        { key: 'Cartera',         etiqueta: 'Cartera',  tipo: 'texto',        filtro: 'texto' },
+        { key: 'FechaAsignacion', etiqueta: 'Fecha',    tipo: 'fecha' }
+    ],
+    'laptops': [
+        { key: 'NoSerie',         etiqueta: 'Serie',      tipo: 'mono',         filtro: 'texto' },
+        { key: 'Marca',           etiqueta: 'Marca',      tipo: 'texto',        filtro: 'texto' },
+        { key: 'Modelo',          etiqueta: 'Modelo',     tipo: 'texto',        filtro: 'texto' },
+        { key: 'Procesador',      etiqueta: 'Procesador', tipo: 'texto',        filtro: 'texto' },
+        { key: 'MemoriaRAM',      etiqueta: 'RAM',        tipo: 'texto',        filtro: 'texto' },
+        { key: 'Almacenamiento',  etiqueta: 'Disco',      tipo: 'texto',        filtro: 'texto' },
+        { key: 'PrecioActivo',    etiqueta: 'Precio',     tipo: 'precio' },
+        { key: 'Estatus',         etiqueta: 'Estatus',    tipo: 'badge-estatus',filtro: 'texto' },
+        { key: 'NombreRecibe',    etiqueta: 'Recibe',     tipo: 'texto',        filtro: 'texto' },
+        { key: 'FechaAsignacion', etiqueta: 'Fecha',      tipo: 'fecha' }
+    ]
+};
+
+/* =========================================================
+   MAPEAR TIPO → CLASE CSS
    ========================================================= */
 function claseParaTipo(tipo) {
     switch (tipo) {
@@ -98,110 +221,7 @@ function claseParaTipo(tipo) {
 }
 
 /* =========================================================
-   CONFIGURACIÓN DE VISTAS
-   ========================================================= */
-const VISTAS = {
-    'resumen-tipo':     { titulo: 'Resumen por Tipo',         filtros: [],                                    endpoint: 'resumenPorTipo' },
-    'resumen-cartera':  { titulo: 'Resumen por Cartera',      filtros: [],                                    endpoint: 'resumenPorCartera' },
-    'inventario':       { titulo: 'Inventario Completo',      filtros: ['tipo','estado','estatus','cartera'], endpoint: 'inventario' },
-    'responsivas':      { titulo: 'Responsivas Activas',      filtros: [],                                    endpoint: 'responsivasActivas' },
-    'personas':         { titulo: 'Asignaciones por Persona', filtros: [],                                    endpoint: 'asignacionesPorPersona' },
-    'tickets':          { titulo: 'Activos por Ticket',       filtros: [],                                    endpoint: 'porTicket' },
-    'celulares':        { titulo: 'Celulares',                filtros: [],                                    endpoint: 'celulares' },
-    'laptops':          { titulo: 'Laptops',                  filtros: [],                                    endpoint: 'laptops' }
-};
-
-/* =========================================================
-   DEFINICIÓN DE COLUMNAS POR VISTA
-   Tipos: texto | numero | precio | fecha |
-          badge-estado | badge-estatus | badge-tipo |
-          folio | mono
-   ========================================================= */
-const COLUMNAS = {
-    'resumen-tipo': [
-        { key: 'Tipo',                 etiqueta: 'Tipo',           tipo: 'badge-tipo' },
-        { key: 'TotalEquipos',         etiqueta: 'Total',          tipo: 'numero' },
-        { key: 'EnStock',              etiqueta: 'Stock',          tipo: 'numero' },
-        { key: 'Disponibles',          etiqueta: 'Disponibles',    tipo: 'numero' },
-        { key: 'Asignados',            etiqueta: 'Asignados',      tipo: 'numero' },
-        { key: 'Pendientes',           etiqueta: 'Pendientes',     tipo: 'numero' },
-        { key: 'Bajas',                etiqueta: 'Bajas',          tipo: 'numero' },
-        { key: 'ValorTotalInventario', etiqueta: 'Valor total',    tipo: 'precio' }
-    ],
-    'resumen-cartera': [
-        { key: 'Cartera',        etiqueta: 'Cartera',        tipo: 'texto' },
-        { key: 'TotalEquipos',   etiqueta: 'Total',          tipo: 'numero' },
-        { key: 'ValorStock',     etiqueta: 'Valor stock',    tipo: 'precio' },
-        { key: 'ValorAsignado',  etiqueta: 'Valor asignado', tipo: 'precio' },
-        { key: 'ValorBaja',      etiqueta: 'Valor baja',     tipo: 'precio' },
-        { key: 'ValorTotal',     etiqueta: 'Valor total',    tipo: 'precio' }
-    ],
-    'inventario': [
-        { key: 'NoSerie',      etiqueta: 'No. Serie',   tipo: 'mono' },
-        { key: 'IMEI1',        etiqueta: 'IMEI 1',      tipo: 'mono' },
-        { key: 'NoTelefono',   etiqueta: 'Teléfono',    tipo: 'mono' },
-        { key: 'Marca',        etiqueta: 'Marca',       tipo: 'texto' },
-        { key: 'Modelo',       etiqueta: 'Modelo',      tipo: 'texto' },
-        { key: 'Tipo',         etiqueta: 'Tipo',        tipo: 'badge-tipo' },
-        { key: 'Estado',       etiqueta: 'Estado',      tipo: 'badge-estado' },
-        { key: 'Estatus',      etiqueta: 'Estatus',     tipo: 'badge-estatus' },
-        { key: 'Cartera',      etiqueta: 'Cartera',     tipo: 'texto' },
-        { key: 'PrecioActivo', etiqueta: 'Precio',      tipo: 'precio' }
-    ],
-    'responsivas': [
-        { key: 'FolioTicket',       etiqueta: 'Folio',         tipo: 'folio' },
-        { key: 'Tipo',              etiqueta: 'Tipo',          tipo: 'badge-tipo' },
-        { key: 'NoSerie',           etiqueta: 'Serie',         tipo: 'mono' },
-        { key: 'Marca',             etiqueta: 'Marca',         tipo: 'texto' },
-        { key: 'Modelo',            etiqueta: 'Modelo',        tipo: 'texto' },
-        { key: 'NombreRecibe',      etiqueta: 'Recibe',        tipo: 'texto' },
-        { key: 'Cartera',           etiqueta: 'Cartera',       tipo: 'texto' },
-        { key: 'FechaAsignacion',   etiqueta: 'F. Asignación', tipo: 'fecha' },
-        { key: 'EstatusResponsiva', etiqueta: 'Estatus',       tipo: 'badge-estatus' }
-    ],
-    'personas': [
-        { key: 'Persona',            etiqueta: 'Persona',        tipo: 'texto' },
-        { key: 'Puesto',             etiqueta: 'Puesto',         tipo: 'texto' },
-        { key: 'Area',               etiqueta: 'Área',           tipo: 'texto' },
-        { key: 'Correo',             etiqueta: 'Correo',         tipo: 'mono' },
-        { key: 'TotalAsignaciones',  etiqueta: 'Activos',        tipo: 'numero' },
-        { key: 'ValorTotalAsignado', etiqueta: 'Valor asignado', tipo: 'precio' }
-    ],
-    'tickets': [
-        { key: 'FolioTicket',      etiqueta: 'Ticket',        tipo: 'folio' },
-        { key: 'TotalActivos',     etiqueta: 'Total activos', tipo: 'numero' },
-        { key: 'Personas',         etiqueta: 'Personas',      tipo: 'texto' },
-        { key: 'ValorTotalTicket', etiqueta: 'Valor total',   tipo: 'precio' },
-        { key: 'FechaAsignacion',  etiqueta: 'Fecha',         tipo: 'fecha' }
-    ],
-    'celulares': [
-        { key: 'IMEI1',           etiqueta: 'IMEI 1',   tipo: 'mono' },
-        { key: 'IMEI2',           etiqueta: 'IMEI 2',   tipo: 'mono' },
-        { key: 'NoTelefono',      etiqueta: 'Teléfono', tipo: 'mono' },
-        { key: 'Marca',           etiqueta: 'Marca',    tipo: 'texto' },
-        { key: 'Modelo',          etiqueta: 'Modelo',   tipo: 'texto' },
-        { key: 'PrecioActivo',    etiqueta: 'Precio',   tipo: 'precio' },
-        { key: 'Estatus',         etiqueta: 'Estatus',  tipo: 'badge-estatus' },
-        { key: 'NombreRecibe',    etiqueta: 'Recibe',   tipo: 'texto' },
-        { key: 'Cartera',         etiqueta: 'Cartera',  tipo: 'texto' },
-        { key: 'FechaAsignacion', etiqueta: 'Fecha',    tipo: 'fecha' }
-    ],
-    'laptops': [
-        { key: 'NoSerie',         etiqueta: 'Serie',      tipo: 'mono' },
-        { key: 'Marca',           etiqueta: 'Marca',      tipo: 'texto' },
-        { key: 'Modelo',          etiqueta: 'Modelo',     tipo: 'texto' },
-        { key: 'Procesador',      etiqueta: 'Procesador', tipo: 'texto' },
-        { key: 'MemoriaRAM',      etiqueta: 'RAM',        tipo: 'texto' },
-        { key: 'Almacenamiento',  etiqueta: 'Disco',      tipo: 'texto' },
-        { key: 'PrecioActivo',    etiqueta: 'Precio',     tipo: 'precio' },
-        { key: 'Estatus',         etiqueta: 'Estatus',    tipo: 'badge-estatus' },
-        { key: 'NombreRecibe',    etiqueta: 'Recibe',     tipo: 'texto' },
-        { key: 'FechaAsignacion', etiqueta: 'Fecha',      tipo: 'fecha' }
-    ]
-};
-
-/* =========================================================
-   CARGAR CATÁLOGOS PARA FILTROS
+   CARGAR CATÁLOGOS
    ========================================================= */
 async function cargarCatalogos() {
     try {
@@ -211,7 +231,7 @@ async function cargarCatalogos() {
             window.api.activoFijo.reportes.estatusParaFiltro(),
             window.api.activoFijo.reportes.carterasParaFiltro()
         ]);
-        tipos    = t; estados = e; estatus = s; carteras = c;
+        tipos = t; estados = e; estatus = s; carteras = c;
 
         filtroTipo.innerHTML    = '<option value="">Todos</option>' +
             tipos.map(x => `<option value="${escaparHTML(x.Nombre)}">${escaparHTML(x.Nombre)}</option>`).join('');
@@ -227,7 +247,7 @@ async function cargarCatalogos() {
 }
 
 /* =========================================================
-   CARGAR KPIs
+   KPIs
    ========================================================= */
 async function cargarKPIs() {
     try {
@@ -248,7 +268,7 @@ async function cargarKPIs() {
 }
 
 /* =========================================================
-   MOSTRAR/OCULTAR CARGA
+   ESTADO DE CARGA
    ========================================================= */
 function setCargando(v) {
     cargando = v;
@@ -260,7 +280,7 @@ function setCargando(v) {
 }
 
 /* =========================================================
-   CARGAR DATOS DE LA VISTA ACTUAL
+   CARGAR VISTA ACTUAL
    ========================================================= */
 async function cargarVista() {
     if (cargando) return;
@@ -270,108 +290,157 @@ async function cargarVista() {
     if (!cfg) { setCargando(false); return; }
 
     try {
-        const endpoint = window.api.activoFijo.reportes[cfg.endpoint];
         let data;
-
-        if (cfg.endpoint === 'inventario') {
-            data = await endpoint(filtros);
+        if (vistaActual === 'inventario') {
+            data = await window.api.activoFijo.reportes.obtenerReporte(vistaActual, filtros);
         } else {
-            data = await endpoint();
+            data = await window.api.activoFijo.reportes.obtenerReporte(vistaActual, {});
         }
 
         datosActuales = data || [];
-        renderTabla();
+        filtrosColumna = {};
+        filtroBusqueda = '';
+        inputBusqueda.value = '';
+        btnLimpiarBusq.classList.add('oculto');
+        btnLimpiarFiltCol.classList.add('oculto');
+
+        tablaTitulo.textContent = cfg.titulo;
+        aplicarFiltrosYRender();
     } catch (err) {
         toastError('No se pudo cargar el reporte', err.message);
         datosActuales = [];
-        renderTabla();
+        aplicarFiltrosYRender();
     } finally {
         setCargando(false);
     }
 }
 
 /* =========================================================
-   RENDER TABLA
-   Encabezados y celdas comparten la clase según tipo de columna
+   FILTRADO COMBINADO
    ========================================================= */
-function renderTabla() {
+function aplicarFiltrosYRender() {
     const cols = COLUMNAS[vistaActual] || [];
 
-    // Encabezados con clase según tipo de columna
-    tablaHead.innerHTML = '<tr>' + cols.map(c => {
-        const clase = claseParaTipo(c.tipo);
-        return `<th class="${clase}">${escaparHTML(c.etiqueta)}</th>`;
-    }).join('') + '</tr>';
-
-    // Filtrar por búsqueda de texto
-    const filtrados = datosActuales.filter(r => {
-        if (!filtroBusqueda) return true;
-        const texto = cols.map(c => String(r[c.key] ?? '')).join(' ').toLowerCase();
-        return texto.includes(filtroBusqueda);
+    datosFiltrados = datosActuales.filter(r => {
+        if (filtroBusqueda) {
+            const texto = cols.map(c => String(r[c.key] ?? '')).join(' ').toLowerCase();
+            if (!texto.includes(filtroBusqueda)) return false;
+        }
+        for (const [colKey, valorFiltro] of Object.entries(filtrosColumna)) {
+            if (!valorFiltro) continue;
+            const valorCelda = String(r[colKey] ?? '').toLowerCase();
+            if (!valorCelda.includes(String(valorFiltro).toLowerCase())) return false;
+        }
+        return true;
     });
 
-    if (filtrados.length === 0) {
+    renderTabla(cols);
+}
+
+/* =========================================================
+   RENDER TABLA
+   ========================================================= */
+function renderTabla(cols) {
+    const hayFiltrosCol = Object.values(filtrosColumna).some(v => v && String(v).trim() !== '');
+
+    tablaHead.innerHTML = '<tr>' + cols.map(c => {
+        const clase = claseParaTipo(c.tipo);
+        const filtroHTML = c.filtro === 'texto'
+            ? `<div class="th-filter"><input type="text" data-col="${c.key}" placeholder="Filtrar..." value="${escaparHTML(filtrosColumna[c.key] || '')}"></div>`
+            : '';
+        return `<th class="${clase}">
+            <div class="th-content">
+                <span class="th-label">${escaparHTML(c.etiqueta)}</span>
+            </div>
+            ${filtroHTML}
+        </th>`;
+    }).join('') + '</tr>';
+
+    tablaHead.querySelectorAll('.th-filter input').forEach(inp => {
+        inp.addEventListener('input', (ev) => {
+            const colKey = ev.target.getAttribute('data-col');
+            const val = ev.target.value;
+            if (val && val.trim()) {
+                filtrosColumna[colKey] = val;
+            } else {
+                delete filtrosColumna[colKey];
+            }
+            const hay = Object.values(filtrosColumna).some(v => v && String(v).trim() !== '');
+            btnLimpiarFiltCol.classList.toggle('oculto', !hay);
+            renderBody(cols);
+        });
+    });
+
+    btnLimpiarFiltCol.classList.toggle('oculto', !hayFiltrosCol);
+
+    renderBody(cols);
+}
+
+/* =========================================================
+   RENDER BODY
+   ========================================================= */
+function renderBody(cols) {
+    if (datosFiltrados.length === 0) {
         cardTabla.classList.add('oculto');
         sinResultados.classList.remove('oculto');
-        tablaBody.innerHTML = '';
+        sinResultadosTxt.textContent = datosActuales.length === 0
+            ? 'No hay datos para mostrar en este reporte.'
+            : 'Ningún registro coincide con los filtros aplicados.';
+        tablaCount.textContent = '0 registros';
         return;
     }
 
     sinResultados.classList.add('oculto');
     cardTabla.classList.remove('oculto');
 
-    // Filas
     tablaBody.innerHTML = '';
-    filtrados.forEach(r => {
+    datosFiltrados.forEach(r => {
         const tr = document.createElement('tr');
-        tr.innerHTML = cols.map(c => renderCelda(r[c.key], c.tipo)).join('');
+        tr.innerHTML = cols.map(c => {
+            const clase = claseParaTipo(c.tipo);
+            const dataLabel = `data-label="${escaparHTML(c.etiqueta)}"`;
+            return renderCelda(r[c.key], c.tipo, clase, dataLabel);
+        }).join('');
         tablaBody.appendChild(tr);
     });
+
+    tablaCount.textContent = datosFiltrados.length === datosActuales.length
+        ? `${datosActuales.length} registros`
+        : `${datosFiltrados.length} de ${datosActuales.length} registros`;
 }
 
 /* =========================================================
-   RENDER CELDA POR TIPO
-   Cada celda lleva la misma clase que su encabezado
+   RENDER CELDA
    ========================================================= */
-function renderCelda(val, tipo) {
-    const clase = claseParaTipo(tipo);
-
+function renderCelda(val, tipo, clase, dataLabel) {
     if (val === null || val === undefined || val === '') {
-        return `<td class="${clase}">—</td>`;
+        return `<td class="${clase}" ${dataLabel}>—</td>`;
     }
 
     switch (tipo) {
         case 'numero':
-            return `<td class="${clase} celda-numero">${formatearNumero(val)}</td>`;
-
+            return `<td class="${clase} celda-numero" ${dataLabel}>${formatearNumero(val)}</td>`;
         case 'precio':
-            return `<td class="${clase} celda-precio">${formatearPrecio(val)}</td>`;
-
+            return `<td class="${clase} celda-precio" ${dataLabel}>${formatearPrecio(val)}</td>`;
         case 'fecha':
-            return `<td class="${clase} celda-fecha">${formatearFecha(val)}</td>`;
-
+            return `<td class="${clase} celda-fecha" ${dataLabel}>${formatearFecha(val)}</td>`;
         case 'folio':
-            return `<td class="${clase}"><span class="celda-folio">${escaparHTML(val)}</span></td>`;
-
+            return `<td class="${clase} celda-folio" ${dataLabel}>${escaparHTML(val)}</td>`;
         case 'mono':
-            return `<td class="${clase} celda-mono">${escaparHTML(val)}</td>`;
-
+            return `<td class="${clase} celda-mono" ${dataLabel}>${escaparHTML(val)}</td>`;
         case 'badge-tipo':
-            return `<td class="${clase}"><span class="badge badge-tipo">${escaparHTML(val)}</span></td>`;
-
+            return `<td class="${clase}" ${dataLabel}><span class="badge badge-tipo">${escaparHTML(val)}</span></td>`;
         case 'badge-estado':
-            return `<td class="${clase}"><span class="badge badge-estado-${escaparHTML(val)}">${escaparHTML(val)}</span></td>`;
-
+            return `<td class="${clase}" ${dataLabel}><span class="badge badge-estado-${escaparHTML(val)}">${escaparHTML(val)}</span></td>`;
         case 'badge-estatus':
-            return `<td class="${clase}"><span class="badge badge-estatus-${escaparHTML(val)}">${escaparHTML(val)}</span></td>`;
-
+            return `<td class="${clase}" ${dataLabel}><span class="badge badge-estatus-${escaparHTML(val)}">${escaparHTML(val)}</span></td>`;
         default:
-            return `<td class="${clase}">${escaparHTML(val)}</td>`;
+            return `<td class="${clase}" ${dataLabel}>${escaparHTML(val)}</td>`;
     }
 }
 
 /* =========================================================
-   CAMBIAR DE VISTA (TABS)
+   CAMBIAR VISTA
    ========================================================= */
 tabs.addEventListener('click', (e) => {
     const btn = e.target.closest('.tab');
@@ -381,7 +450,6 @@ tabs.addEventListener('click', (e) => {
     btn.classList.add('activo');
 
     vistaActual = btn.dataset.vista;
-
     const cfg = VISTAS[vistaActual];
     actualizarFiltrosVisibles(cfg.filtros);
 
@@ -436,23 +504,142 @@ btnLimpiarFiltro.addEventListener('click', () => {
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
-    renderTabla();
+    aplicarFiltrosYRender();
 });
 
 btnLimpiarBusq.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
-    renderTabla();
+    aplicarFiltrosYRender();
     inputBusqueda.focus();
+});
+
+/* =========================================================
+   LIMPIAR FILTROS DE COLUMNA
+   ========================================================= */
+btnLimpiarFiltCol.addEventListener('click', () => {
+    filtrosColumna = {};
+    btnLimpiarFiltCol.classList.add('oculto');
+    aplicarFiltrosYRender();
+});
+
+/* =========================================================
+   LIMPIAR TODO
+   ========================================================= */
+btnLimpiarTodo.addEventListener('click', () => {
+    filtrosColumna = {};
+    filtroBusqueda = '';
+    inputBusqueda.value = '';
+    btnLimpiarBusq.classList.add('oculto');
+    btnLimpiarFiltCol.classList.add('oculto');
+    filtros = { tipo: '', estado: '', estatus: '', cartera: '' };
+    filtroTipo.value = '';
+    filtroEstado.value = '';
+    filtroEstatus.value = '';
+    filtroCartera.value = '';
+    cargarVista();
 });
 
 /* =========================================================
    RECARGAR
    ========================================================= */
 btnRecargar.addEventListener('click', async () => {
-    await cargarKPIs();
-    await cargarVista();
+    btnRecargar.disabled = true;
+    try {
+        await cargarKPIs();
+        await cargarVista();
+        toastExito('Datos actualizados');
+    } finally {
+        btnRecargar.disabled = false;
+    }
+});
+
+/* =========================================================
+   EXPORTAR A EXCEL
+   ========================================================= */
+btnExportar.addEventListener('click', async () => {
+    if (datosFiltrados.length === 0) {
+        toastError('No hay datos para exportar', 'Aplica menos filtros o cambia de vista');
+        return;
+    }
+
+    const cfg = VISTAS[vistaActual];
+    const cols = COLUMNAS[vistaActual] || [];
+
+    const filas = datosFiltrados.map(r => {
+        const fila = {};
+        cols.forEach(c => {
+            let val = r[c.key];
+            if (c.tipo === 'precio' && val != null) {
+                fila[c.etiqueta] = Number(val);
+            } else if (c.tipo === 'fecha' && val) {
+                fila[c.etiqueta] = formatearFecha(val);
+            } else {
+                fila[c.etiqueta] = val ?? '';
+            }
+        });
+        return fila;
+    });
+
+    const conf = await Swal.fire({
+        icon: 'question',
+        title: '¿Exportar a Excel?',
+        html: `Se exportarán <strong>${filas.length}</strong> registros de <strong>${escaparHTML(cfg.titulo)}</strong>.<br>
+               Los filtros aplicados en pantalla se respetarán.`,
+        showCancelButton: true,
+        showCloseButton: true,
+        confirmButtonText: 'Sí, exportar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    });
+
+    if (!conf.isConfirmed) return;
+
+    Swal.fire({
+        title: 'Generando Excel...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const res = await window.api.activoFijo.reportes.exportarExcel({
+            vista:   vistaActual,
+            titulo:  cfg.titulo,
+            columnas: cols.map(c => ({ key: c.key, etiqueta: c.etiqueta, tipo: c.tipo })),
+            filas
+        });
+        Swal.close();
+
+        if (res && res.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: 'Excel generado',
+                html: `Se guardó en:<br><code style="background:#FFF7E8;padding:4px 8px;border-radius:6px;color:#2E3228;word-break:break-all;font-size:0.82rem;">${escaparHTML(res.ruta)}</code>`,
+                showCloseButton: true,
+                confirmButtonText: 'Aceptar',
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'cl-confirm',
+                    confirmButton: 'swal2-confirm swal2-styled'
+                }
+            });
+        } else if (res && res.mensaje === 'Cancelado') {
+            // Cancelado por el usuario
+        } else {
+            toastError('No se pudo exportar', res?.mensaje || 'Error desconocido');
+        }
+    } catch (err) {
+        Swal.close();
+        toastError('Error al exportar', err.message);
+    }
 });
 
 /* =========================================================

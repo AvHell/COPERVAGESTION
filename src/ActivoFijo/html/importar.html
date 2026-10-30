@@ -2,102 +2,161 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#2E3228">
     <title>Activo Fijo - Importar Masivo</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <link rel="stylesheet" href="../css/importar.css">
 </head>
 <body>
 
-    <!-- BARRA SUPERIOR -->
-    <div class="barra-acciones">
-        <button id="btn-volver" class="secundario">
-            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-            Volver al menú
-        </button>
-
-        <h2 style="flex:1;margin:0;border:none;padding:0;">Importación Masiva</h2>
-
-        <button id="btn-descargar-plantilla" class="secundario">
-            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            Descargar plantilla
-        </button>
-    </div>
-
-    <!-- PASO 1: ELEGIR PERIFÉRICO -->
-    <section class="paso" id="paso-layout">
-        <h3>1. Selecciona el periférico a importar</h3>
-        <div class="grid-perifericos" id="grid-perifericos"></div>
-    </section>
-
-    <!-- PASO 2: CARGAR ARCHIVO -->
-    <section class="paso oculto" id="paso-archivo">
-        <h3>2. Carga el archivo (CSV o XLSX)</h3>
-        <div class="zona-drop" id="zona-drop">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <p>Arrastra el archivo aquí o haz clic para elegirlo</p>
-            <input type="file" id="input-archivo" accept=".csv,.xlsx,.xls" hidden>
-            <small>Formatos aceptados: CSV, XLSX, XLS</small>
-        </div>
-
-        <div class="info-archivo oculto" id="info-archivo">
-            <div class="archivo-nombre" id="archivo-nombre">—</div>
-            <div class="archivo-meta" id="archivo-meta">—</div>
-            <button type="button" id="btn-quitar-archivo" class="secundario">Cambiar archivo</button>
-        </div>
-    </section>
-
-    <!-- PASO 3: PREVISUALIZACIÓN -->
-    <section class="paso oculto" id="paso-preview">
-        <h3>3. Previsualiza y confirma</h3>
-        <div class="resumen" id="resumen"></div>
-
-        <div class="card-tabla-preview">
-            <table class="tabla-preview">
-                <thead id="preview-head"></thead>
-                <tbody id="preview-body"></tbody>
-            </table>
-        </div>
-
-        <div class="acciones-importar">
-            <button type="button" id="btn-cancelar-preview" class="secundario">Cancelar</button>
-            <button type="button" id="btn-importar" id="btn-importar">
-                <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
+    <!-- =========================================================
+         HEADER GLOBAL
+         ========================================================= -->
+    <header class="header-global">
+        <div class="header-inner">
+            <button id="btn-volver" class="btn-back" type="button" aria-label="Volver al menú">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
                 </svg>
-                Importar
+                <span>Volver</span>
             </button>
-        </div>
-    </section>
 
-    <!-- RESULTADO -->
-    <section class="paso oculto" id="paso-resultado">
-        <h3>Resultado de la importación</h3>
-        <div id="resultado-contenido"></div>
+            <div class="header-titles">
+                <h1>Importación Masiva</h1>
+                <p>Carga de activos por archivo CSV o Excel</p>
+            </div>
 
-        <div class="acciones-importar">
-            <button type="button" id="btn-nueva-importacion" class="secundario">Hacer otra importación</button>
-            <button type="button" id="btn-ir-activos">Ver inventario</button>
+            <div class="header-actions">
+                <button id="btn-descargar-plantilla" class="btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    <span>Descargar plantilla</span>
+                </button>
+            </div>
         </div>
-    </section>
+    </header>
+
+    <!-- =========================================================
+         MAIN
+         ========================================================= -->
+    <main class="main-content">
+
+        <!-- PASO 1: ELEGIR TIPO DE ACTIVO -->
+        <section class="paso" id="paso-layout">
+            <div class="paso-header">
+                <div class="paso-numero">1</div>
+                <div>
+                    <h2>Selecciona el tipo de activo</h2>
+                    <p>Elige qué tipo de equipo vas a importar para generar la plantilla correcta.</p>
+                </div>
+            </div>
+            
+            <div class="grid-tipos" id="grid-tipos"></div>
+        </section>
+
+        <!-- PASO 2: CARGAR ARCHIVO -->
+        <section class="paso oculto" id="paso-archivo">
+            <div class="paso-header">
+                <div class="paso-numero">2</div>
+                <div>
+                    <h2>Carga el archivo</h2>
+                    <p>Formatos aceptados: CSV, XLSX, XLS</p>
+                </div>
+            </div>
+
+            <div class="zona-drop" id="zona-drop">
+                <div class="drop-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                </div>
+                <p class="drop-title">Arrastra tu archivo aquí</p>
+                <p class="drop-sub">o haz clic para buscarlo en tu equipo</p>
+                <input type="file" id="input-archivo" accept=".csv,.xlsx,.xls" hidden>
+            </div>
+
+            <div class="info-archivo oculto" id="info-archivo">
+                <div class="archivo-icono">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                </div>
+                <div class="archivo-datos">
+                    <div class="archivo-nombre" id="archivo-nombre">—</div>
+                    <div class="archivo-meta" id="archivo-meta">—</div>
+                </div>
+                <button type="button" id="btn-quitar-archivo" class="btn-ghost">Cambiar archivo</button>
+            </div>
+        </section>
+
+        <!-- PASO 3: PREVISUALIZACIÓN -->
+        <section class="paso oculto" id="paso-preview">
+            <div class="paso-header">
+                <div class="paso-numero">3</div>
+                <div>
+                    <h2>Previsualiza y confirma</h2>
+                    <p id="resumen" class="resumen-text"></p>
+                </div>
+            </div>
+
+            <div class="card-tabla-preview">
+                <table class="tabla-preview">
+                    <thead id="preview-head"></thead>
+                    <tbody id="preview-body"></tbody>
+                </table>
+            </div>
+
+            <div class="acciones-paso">
+                <button type="button" id="btn-cancelar-preview" class="btn-ghost">Cancelar</button>
+                <button type="button" id="btn-importar" class="btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Importar datos
+                </button>
+            </div>
+        </section>
+
+        <!-- RESULTADO -->
+        <section class="paso oculto" id="paso-resultado">
+            <div class="paso-header">
+                <div class="paso-numero check">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <div>
+                    <h2>Resultado de la importación</h2>
+                    <p>Resumen de lo procesado</p>
+                </div>
+            </div>
+            
+            <div id="resultado-contenido"></div>
+
+            <div class="acciones-paso">
+                <button type="button" id="btn-nueva-importacion" class="btn-ghost">Hacer otra importación</button>
+                <button type="button" id="btn-ir-activos" class="btn-primary">Ver inventario</button>
+            </div>
+        </section>
+
+    </main>
 
     <script src="../js/importar-renderer.js"></script>
 </body>

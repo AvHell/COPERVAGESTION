@@ -1,8 +1,6 @@
 /* =========================================================
    ACTIVOS FIJOS — Paleta Tierra / Oliva
-   Colores sólidos · Sin degradados · Tooltips robustos
-   Modales rediseñados · SweetAlert con respiro interno
-   Fix: form flex column · footer siempre visible
+   Badges Sólidos · Tooltips robustos
    ========================================================= */
 
 :root {
@@ -19,6 +17,12 @@
     --rojo-soft:   #F3DED6;
     --rojo-text:   #7a2a1b;
 
+    --verde-excel: #15803d;
+    --verde-hover: #166534;
+
+    --azul-asignado: #2563eb;
+    --azul-soft:     #bfdbfe;
+
     --gray-50:  #faf8f2;
     --gray-100: #f4f0e6;
     --gray-200: #e6e0cf;
@@ -29,10 +33,6 @@
     --gray-700: #3f3c33;
     --gray-800: #2e3228;
     --gray-900: #1d201a;
-
-    --success: #6E7B5B;
-    --danger:  var(--rojo-base);
-    --warning: #A99A63;
 
     --shadow-xs: 0 1px 2px rgba(46,50,40,0.05);
     --shadow-sm: 0 1px 3px rgba(46,50,40,0.07), 0 1px 2px rgba(46,50,40,0.04);
@@ -165,6 +165,12 @@ body {
     text-overflow: ellipsis;
 }
 
+.header-actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
 .btn-primary {
     display: inline-flex;
     align-items: center;
@@ -193,6 +199,40 @@ body {
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 .btn-primary:focus-visible { outline: 2px solid var(--tierra-crema); outline-offset: 2px; }
 .btn-primary svg { width: 16px; height: 16px; }
+
+/* Botón de Excel */
+.btn-excel {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 22px;
+    background: var(--verde-excel);
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    font-family: var(--font-display);
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.15s ease, box-shadow 0.2s ease, opacity 0.15s ease;
+    box-shadow: 0 1px 2px rgba(21,128,61,0.3), 0 4px 14px -4px rgba(21,128,61,0.35);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.btn-excel:hover:not(:disabled) {
+    background: var(--verde-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(21,128,61,0.35), 0 8px 22px -6px rgba(21,128,61,0.45);
+}
+.btn-excel:active:not(:disabled) { transform: translateY(0); }
+.btn-excel:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.btn-excel svg { width: 16px; height: 16px; }
+
+/* Ocultar por permisos */
+[data-permiso].permiso-oculto {
+    display: none !important;
+}
 
 /* =========================================================
    TOOLBAR
@@ -354,6 +394,9 @@ body {
 .identificadores .secundario { font-size: 0.74rem; color: var(--gray-500); letter-spacing: 0.01em; }
 .identificadores .vacio { color: var(--gray-400); font-style: italic; font-size: 0.8rem; }
 
+/* =========================================================
+   BADGES SÓLIDOS
+   ========================================================= */
 .badge {
     display: inline-flex;
     align-items: center;
@@ -365,58 +408,51 @@ body {
     white-space: nowrap;
     border: 1px solid transparent;
 }
+
+/* Tipo */
 .badge-tipo {
-    background: var(--tierra-crema);
-    color: var(--tierra-oliva);
-    border-color: var(--tierra-oro);
+    background: var(--tierra-carbon) !important;
+    color: var(--tierra-crema) !important;
+    border-color: #1d201a !important;
 }
+
+/* Estado */
 .badge[class*="badge-estado-"] {
-    background: var(--gray-100);
-    color: var(--gray-600);
-    border-color: var(--gray-200);
+    background: var(--tierra-oro) !important;
+    color: var(--tierra-carbon) !important;
+    border-color: #8c7e4e !important;
 }
-.badge.badge-estado-NUEVO,
-.badge.badge-estado-BUENO,
-.badge.badge-estado-OPERATIVO {
-    background: var(--tierra-crema);
-    color: var(--tierra-oliva);
-    border-color: var(--tierra-oro);
-}
-.badge.badge-estado-USO,
-.badge.badge-estado-USADO,
-.badge.badge-estado-VALIDAR {
-    background: var(--tierra-crema);
-    color: var(--tierra-carbon);
-    border-color: var(--tierra-arena);
-}
-.badge.badge-estado-DANADO,
-.badge.badge-estado-DAÑADO,
-.badge.badge-estado-ROTO,
-.badge.badge-estado-MALO {
-    background: var(--rojo-soft);
-    color: var(--rojo-text);
-    border-color: var(--rojo-base);
-}
+
+/* Estatus */
 .badge[class*="badge-estatus-"] {
-    background: var(--gray-100);
-    color: var(--gray-600);
-    border-color: var(--gray-200);
+    background: var(--gray-600) !important;
+    color: #ffffff !important;
+    border-color: var(--gray-700) !important;
 }
-.badge.badge-estatus-STOCK,
 .badge.badge-estatus-DISPONIBLE {
-    background: var(--tierra-crema);
-    color: var(--tierra-oliva);
-    border-color: var(--tierra-oro);
+    background: #15803d !important;
+    color: #ffffff !important;
+    border-color: #14532d !important;
 }
 .badge.badge-estatus-ASIGNADO {
-    background: var(--tierra-carbon);
-    color: var(--tierra-crema);
-    border-color: var(--tierra-carbon);
+    background: var(--azul-asignado) !important;
+    color: #ffffff !important;
+    border-color: #1d4ed8 !important;
+}
+.badge.badge-estatus-STOCK {
+    background: #0f766e !important;
+    color: #ffffff !important;
+    border-color: #115e59 !important;
 }
 .badge.badge-estatus-BAJA {
-    background: var(--rojo-soft);
-    color: var(--rojo-text);
-    border-color: var(--rojo-base);
+    background: var(--rojo-base) !important;
+    color: #ffffff !important;
+    border-color: var(--rojo-hover) !important;
+}
+.badge.badge-estatus-PENDIENTE {
+    background: #ea580c !important;
+    color: #ffffff !important;
+    border-color: #c2410c !important;
 }
 
 /* =========================================================
@@ -570,8 +606,6 @@ body {
 
 /* =========================================================
    MODAL NUEVO / EDITAR
-   FIX: form en flex column con min-height:0 para que
-   .modal-body haga scroll y .modal-footer quede fijo abajo.
    ========================================================= */
 .modal-overlay {
     position: fixed;
@@ -673,7 +707,6 @@ body {
 .btn-cerrar-modal:hover { background: var(--rojo-soft); color: var(--rojo-text); }
 .btn-cerrar-modal:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
 
-/* Form en flex column: header arriba, body scrollea, footer fijo abajo */
 .modal-form {
     display: flex;
     flex-direction: column;
@@ -871,7 +904,7 @@ body {
 .btn-ghost:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
 
 /* =========================================================
-   SWEETALERT — Caja corporativa
+   SWEETALERT
    ========================================================= */
 .swal2-container.swal2-backdrop-show {
     background: rgba(46,50,40,0.6) !important;
@@ -1020,8 +1053,6 @@ body {
 
 /* =========================================================
    MODAL ELIMINAR / RESTAURAR — textarea custom
-   No usamos input/textarea nativo de SweetAlert.
-   El textarea vive dentro de .campo-motivo en el html.
    ========================================================= */
 .swal2-popup.cl-confirm .swal2-html-container {
     padding: 0 40px 12px !important;
@@ -1080,7 +1111,6 @@ body {
 }
 .swal2-popup .campo-motivo.error .error-texto { display: block; }
 
-/* Ocultar inputs nativos residuales de SweetAlert (por si acaso) */
 .swal2-popup .swal2-input,
 .swal2-popup .swal2-textarea,
 .swal2-popup .swal2-file,
@@ -1090,7 +1120,6 @@ body {
     display: none !important;
 }
 
-/* Footer de acciones SweetAlert */
 .swal2-popup .swal2-actions {
     padding: 18px 36px 22px !important;
     margin: 0 !important;
@@ -1327,8 +1356,8 @@ body {
     .header-inner { padding: 18px 20px; gap: 12px; flex-wrap: wrap; }
     .header-titles h1 { font-size: 1.2rem; }
     .header-titles p { display: none; }
-    .btn-primary span { display: none; }
-    .btn-primary { padding: 10px 12px; }
+    .btn-primary span, .btn-excel span { display: none; }
+    .btn-primary, .btn-excel { padding: 10px 12px; }
     .toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
     .buscador { max-width: none; flex: 1 1 auto; }
     .tabs-vista { width: 100%; }
@@ -1447,4 +1476,39 @@ body {
     .ver-seccion { padding: 12px 14px; }
     .swal2-popup.cl-ver .swal2-html-container { padding: 0 20px 22px !important; }
     .swal2-popup.cl-historico .swal2-html-container { padding: 0 16px 20px !important; }
+}
+
+/* =========================================================
+   SELECT PARA MODAL DE EXPORTACIÓN (SweetAlert)
+   ========================================================= */
+.swal2-popup .export-tipo-select {
+    display: block;
+    width: 100%;
+    padding: 12px 15px;
+    padding-right: 40px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: 11px;
+    font-size: 0.9rem;
+    font-family: var(--font-sans);
+    color: var(--gray-800);
+    background-color: #fff;
+    height: 46px;
+    box-sizing: border-box;
+    outline: none;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a7563' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 14px;
+}
+.swal2-popup .export-tipo-select:hover:not(:focus) {
+    border-color: var(--gray-300);
+}
+.swal2-popup .export-tipo-select:focus {
+    border-color: var(--tierra-oliva);
+    box-shadow: 0 0 0 4px rgba(110,123,91,0.15);
 }

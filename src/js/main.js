@@ -377,7 +377,7 @@ function crearVentana(nombre, archivo, opciones = {}) {
 /* =========================================================
    VENTANAS — SISTEMA
    ========================================================= */
-const crearLoginWindow     = () => crearVentana('login',     'login.html',     { title: 'Iniciar Sesión', maximizar: false });
+const crearLoginWindow     = () => crearVentana('login',     'login.html',     { title: 'Iniciar Sesión', maximizar: true });
 const crearMenuWindow      = () => crearVentana('menu',      'menu.html',      { title: 'Menú Principal' });
 const crearCatalogosWindow = () => crearVentana('catalogos', 'catalogos.html', { title: 'Catálogos del Sistema' });
 const crearEquiposWindow   = () => crearVentana('equipos',   'equipos.html',   { title: 'Equipos' });
@@ -617,6 +617,18 @@ ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => { const err = r
 ipcMain.handle('af-activos-eliminar',   async (_e, id, motivo)=> { const err = requerirSesion('af-act:eliminar');    if (err) return err; return await activoFijoActivosDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
 ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo)=> { const err = requerirSesion('af-act:restaurar');   if (err) return err; return await activoFijoActivosDB.restaurar(id, usuarioActual?.IdUsuario, motivo || null); });
 ipcMain.handle('af-activos-historico',  async (_e, id)        => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.historico(id); });
+
+/* --- NUEVO: Exportar Excel Activos --- */
+ipcMain.handle('af-activos-exportar-excel', async (_e, payload) => {
+    const err = requerirSesion('af-act:listado:ver');
+    if (err) return err;
+    try {
+        return await activoFijoActivosDB.exportarExcel(payload);
+    } catch (e) {
+        console.error('[Activos] Error exportarExcel:', e);
+        return { ok: false, mensaje: e.message };
+    }
+});
 
 ipcMain.handle('af-activos-lista-tipos',    async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarTipos(); });
 ipcMain.handle('af-activos-lista-marcas',   async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarMarcas(); });

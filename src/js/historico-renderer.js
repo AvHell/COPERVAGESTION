@@ -15,11 +15,8 @@ function toastExito(titulo) {
         showConfirmButton: false,
         timer: 2600,
         timerProgressBar: true,
-        background: '#ffffff',
-        color: '#1a202c',
-        customClass: { popup: 'cl-toast cl-toast-success' },
+        customClass: { popup: 'cl-toast' },
         didOpen: (toast) => {
-            toast.style.boxShadow = 'none';
             toast.addEventListener('mouseenter', Swal.stopTimer);
             toast.addEventListener('mouseleave', Swal.resumeTimer);
         }
@@ -35,11 +32,8 @@ function toastError(titulo, texto = '') {
         showConfirmButton: false,
         timer: 3400,
         timerProgressBar: true,
-        background: '#ffffff',
-        color: '#1a202c',
-        customClass: { popup: 'cl-toast cl-toast-error' },
+        customClass: { popup: 'cl-toast' },
         didOpen: (toast) => {
-            toast.style.boxShadow = 'none';
             toast.addEventListener('mouseenter', Swal.stopTimer);
             toast.addEventListener('mouseleave', Swal.resumeTimer);
         }
@@ -75,26 +69,31 @@ function limpiarResiduosSwal() {
 /* =========================================================
    REFERENCIAS DOM
    ========================================================= */
-const selectCliente    = document.getElementById('select-cliente');
-const selectLugar      = document.getElementById('select-lugar');
-const filtroDesde      = document.getElementById('filtro-desde');
-const filtroHasta      = document.getElementById('filtro-hasta');
-const btnLimpiarFechas = document.getElementById('btn-limpiar-fechas');
-const contadorMovs     = document.getElementById('contador-movimientos');
-const panelSubtitulo   = document.getElementById('panel-subtitulo');
+const selectCliente       = document.getElementById('select-cliente');
+const selectLugar         = document.getElementById('select-lugar');
+const inputBusqueda       = document.getElementById('input-busqueda');
+const btnLimpiarBusqueda  = document.getElementById('btn-limpiar-busqueda');
+const filtroDesde         = document.getElementById('filtro-desde');
+const filtroHasta         = document.getElementById('filtro-hasta');
+const btnLimpiarFiltros   = document.getElementById('btn-limpiar-filtros');
+const contadorMovs        = document.getElementById('contador-movimientos');
+const panelSubtitulo      = document.getElementById('panel-subtitulo');
 
-const tabla            = document.getElementById('tabla-historico');
-const contenedorTabla  = document.getElementById('contenedor-tabla');
-const estadoInicial    = document.getElementById('estado-inicial');
-const sinResultados    = document.getElementById('sin-resultados');
-const textoSinRes      = document.getElementById('texto-sin-resultados');
+const tabla               = document.getElementById('tabla-historico');
+const contenedorTabla     = document.getElementById('contenedor-tabla');
+const estadoInicial       = document.getElementById('estado-inicial');
+const sinResultados       = document.getElementById('sin-resultados');
+const textoSinRes         = document.getElementById('texto-sin-resultados');
+
+const chipsFecha          = document.querySelectorAll('.chip-fecha');
 
 /* =========================================================
    ESTADO
    ========================================================= */
-let clientes   = [];
-let pisos      = [];
-let historicos = [];
+let clientes     = [];
+let pisos        = [];
+let historicos   = [];
+let filtroTexto  = '';
 
 /* =========================================================
    UTILIDADES
@@ -136,12 +135,34 @@ function formatearFecha(fechaISO) {
     return { fecha: `${dia}/${mes}/${anio}`, hora: `${hh}:${mm}` };
 }
 
+/* Formatea Date → "YYYY-MM-DD" usando hora LOCAL (no UTC) */
+function fechaAInput(date) {
+    const anio = date.getFullYear();
+    const mes  = String(date.getMonth() + 1).padStart(2, '0');
+    const dia  = String(date.getDate()).padStart(2, '0');
+    return `${anio}-${mes}-${dia}`;
+}
+
+/* Extrae el prefijo del hostname para los códigos de color.
+   Ej: "AGT-NU228" → "AGT" ; "CLD-NU250" → "CLD" */
+function obtenerPrefijoHostname(hostname) {
+    if (!hostname) return '';
+    const partes = hostname.split('-');
+    return partes.length > 1 ? partes[0].toUpperCase() : '';
+}
+
+/* =========================================================
+   ETIQUETA / CLASE POR ACCIÓN
+   ⚠️ SWAPISO y SWAP se muestran como "Mover"
+   ========================================================= */
 function etiquetaAccion(accion) {
     const map = {
         'asignar':         'Asignar',
         'mover':           'Mover',
+        'intercambiar':    'Mover',
+        'swapiso':         'Mover',            // ← DB manda "SWAPISO"
+        'swap':            'Mover',            // ← por si acaso
         'quitar':          'Quitar',
-        'intercambiar':    'Intercambiar',
         'cambiopiso':      'Cambio de piso',
         'crear_zona':      'Crear zona',
         'actualizar_zona': 'Editar zona',
@@ -156,9 +177,10 @@ function claseAccion(accion) {
     if (!accion) return 'accion-def';
     const key = accion.toLowerCase();
     if (key.includes('asignar'))      return 'accion-asignar';
+    if (key.includes('swap'))         return 'accion-mover';
+    if (key.includes('intercambiar')) return 'accion-mover';
     if (key.includes('mover'))        return 'accion-mover';
     if (key.includes('quitar'))       return 'accion-quitar';
-    if (key.includes('intercambiar')) return 'accion-intercambiar';
     if (key.includes('cambiopiso') || key.includes('cambio_piso') || key.includes('cambio piso'))
                                       return 'accion-cambiopiso';
     if (key.includes('zona'))         return 'accion-zona';
@@ -166,8 +188,6 @@ function claseAccion(accion) {
     return 'accion-def';
 }
 
-/* Quita el prefijo redundante "Movido de piso X a piso Y" del Detalle
-   cuando ya mostramos la ruta desde las FK. Deja solo el resto: "(1, 9)". */
 function limpiarDetalleCambioPiso(detalle) {
     if (!detalle) return detalle;
     return detalle
@@ -178,8 +198,6 @@ function limpiarDetalleCambioPiso(detalle) {
 
 /* =========================================================
    DETALLE ENRIQUECIDO
-   - CambioPiso: ruta desde FK (PisoOrigen → PisoDestino). Detalle limpio.
-   - Otras acciones: pill del piso base + detalle tal cual.
    ========================================================= */
 function generarDetalle(h) {
     const accion      = (h.Accion || '').toLowerCase();
@@ -292,8 +310,6 @@ async function cargarClientes() {
 
 /* =========================================================
    CARGA DE PISOS DEL CLIENTE
-   Usa pisos:listarPorCliente — así solo ves los pisos
-   donde el cliente tiene acceso.
    ========================================================= */
 async function cargarPisosCliente(idCliente) {
     try {
@@ -320,7 +336,6 @@ async function cargarPisosCliente(idCliente) {
 
 /* =========================================================
    CARGA DE HISTÓRICO
-   Siempre filtra por cliente. Si hay piso seleccionado, filtra también por piso.
    ========================================================= */
 async function cargarHistorico() {
     const idCliente = parseInt(selectCliente.value, 10) || null;
@@ -361,7 +376,7 @@ function actualizarSubtitulo(idCliente, idPiso) {
 }
 
 /* =========================================================
-   RENDER
+   ESTADOS DE VISTA
    ========================================================= */
 function mostrarEstadoInicial() {
     contenedorTabla.classList.add('oculto');
@@ -389,29 +404,54 @@ function actualizarContador(n) {
     contadorMovs.classList.toggle('oculto', n === 0);
 }
 
-function aplicarFiltroFechas(lista) {
+/* =========================================================
+   FILTRADO (texto + rango de fechas)
+   ========================================================= */
+function aplicarFiltros(lista) {
+    let resultado = lista;
+
+    if (filtroTexto) {
+        resultado = resultado.filter(h => {
+            const texto = [
+                h.NombreUsuario, h.Nombres, h.Apellidos,
+                h.Hostname, h.Detalle, h.Accion,
+                h.PisoOrigen, h.PisoDestino, h.NombrePisoBase
+            ].filter(Boolean).join(' ').toLowerCase();
+            return texto.includes(filtroTexto);
+        });
+    }
+
     const desde = filtroDesde.value ? new Date(filtroDesde.value + 'T00:00:00') : null;
     const hasta = filtroHasta.value ? new Date(filtroHasta.value + 'T23:59:59') : null;
-    if (!desde && !hasta) return lista;
-    return lista.filter(h => {
-        const f = new Date(h.Fecha);
-        if (isNaN(f.getTime())) return false;
-        if (desde && f < desde) return false;
-        if (hasta && f > hasta) return false;
-        return true;
-    });
+    if (desde || hasta) {
+        resultado = resultado.filter(h => {
+            const f = new Date(h.Fecha);
+            if (isNaN(f.getTime())) return false;
+            if (desde && f < desde) return false;
+            if (hasta && f > hasta) return false;
+            return true;
+        });
+    }
+
+    return resultado;
 }
 
+/* =========================================================
+   RENDER
+   ========================================================= */
 function renderTabla() {
     tabla.innerHTML = '';
 
-    const filtrados = aplicarFiltroFechas(historicos);
+    const filtrados = aplicarFiltros(historicos);
 
     if (!filtrados || filtrados.length === 0) {
-        if (historicos.length > 0) {
-            mostrarSinResultados('No hay movimientos en el rango de fechas seleccionado.');
+        if (historicos.length === 0) {
+            mostrarSinResultados('No hay movimientos registrados para este cliente o piso.');
         } else {
-            mostrarSinResultados('No hay movimientos registrados para este filtro.');
+            const razones = [];
+            if (filtroTexto) razones.push(`"${filtroTexto}"`);
+            if (filtroDesde.value || filtroHasta.value) razones.push('el rango de fechas');
+            mostrarSinResultados(`No hay movimientos que coincidan con ${razones.join(' y ') || 'los filtros'}.`);
         }
         return;
     }
@@ -425,40 +465,43 @@ function renderTabla() {
         const claseAcc = claseAccion(h.Accion);
         const etiqueta = etiquetaAccion(h.Accion);
 
+        // ─── NUEVO: Extraemos el prefijo del hostname para data-color ───
+        const prefijo = obtenerPrefijoHostname(h.Hostname);
+        
         const equipoHTML = h.Hostname
-            ? `<span class="badge-equipo">${escaparHTML(h.Hostname)}</span>`
+            ? `<span class="badge-equipo" data-color="${escaparHTML(prefijo)}">${escaparHTML(h.Hostname)}</span>`
             : `<span class="badge-equipo vacia">— sin equipo —</span>`;
 
         const detalleHTML = generarDetalle(h);
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>
+            <td data-label="Fecha">
                 <span class="badge-fecha">
                     ${fecha}
                     <span class="hora">${hora}</span>
                 </span>
             </td>
-            <td>
+            <td data-label="Usuario">
                 <span class="badge-usuario" title="${escaparHTML(usuarioCompleto)}">
                     ${iconoUsuarioSVG()}
                     ${escaparHTML(h.NombreUsuario)}
                 </span>
             </td>
-            <td>
+            <td data-label="Acción">
                 <span class="badge-accion ${claseAcc}">
                     ${escaparHTML(etiqueta)}
                 </span>
             </td>
-            <td>${equipoHTML}</td>
-            <td>${detalleHTML}</td>
+            <td data-label="Equipo">${equipoHTML}</td>
+            <td data-label="Detalle" class="detalle-td">${detalleHTML}</td>
         `;
         tabla.appendChild(tr);
     });
 }
 
 /* =========================================================
-   EVENTOS
+   EVENTOS — CLIENTE / PISO
    ========================================================= */
 selectCliente.addEventListener('change', async () => {
     const idCliente = parseInt(selectCliente.value, 10);
@@ -480,19 +523,80 @@ selectLugar.addEventListener('change', () => {
     if (selectCliente.value) cargarHistorico();
 });
 
-filtroDesde.addEventListener('change', () => {
+/* =========================================================
+   EVENTOS — BÚSQUEDA
+   ========================================================= */
+inputBusqueda.addEventListener('input', () => {
+    filtroTexto = inputBusqueda.value.trim().toLowerCase();
+    btnLimpiarBusqueda.classList.toggle('oculto', !filtroTexto);
     if (historicos.length > 0) renderTabla();
 });
 
-filtroHasta.addEventListener('change', () => {
+btnLimpiarBusqueda.addEventListener('click', () => {
+    inputBusqueda.value = '';
+    filtroTexto = '';
+    btnLimpiarBusqueda.classList.add('oculto');
     if (historicos.length > 0) renderTabla();
+    inputBusqueda.focus();
 });
 
-btnLimpiarFechas.addEventListener('click', () => {
+/* =========================================================
+   EVENTOS — CHIPS RÁPIDOS DE FECHA
+   ========================================================= */
+chipsFecha.forEach(chip => {
+    chip.addEventListener('click', () => {
+        chipsFecha.forEach(c => c.classList.remove('activo'));
+        chip.classList.add('activo');
+
+        const dias = parseInt(chip.dataset.dias, 10);
+
+        if (dias > 0) {
+            const hoy = new Date();
+            const desde = new Date();
+            desde.setDate(hoy.getDate() - (dias - 1));
+            filtroDesde.value = fechaAInput(desde);
+            filtroHasta.value = fechaAInput(hoy);
+        } else {
+            filtroDesde.value = '';
+            filtroHasta.value = '';
+        }
+
+        if (historicos.length > 0) renderTabla();
+    });
+});
+
+/* =========================================================
+   EVENTOS — FECHAS MANUALES
+   ========================================================= */
+function alCambiarFecha() {
+    chipsFecha.forEach(c => c.classList.remove('activo'));
+    if (historicos.length > 0) renderTabla();
+}
+filtroDesde.addEventListener('change', alCambiarFecha);
+filtroHasta.addEventListener('change', alCambiarFecha);
+
+/* =========================================================
+   EVENTOS — LIMPIAR TODO
+   ========================================================= */
+btnLimpiarFiltros.addEventListener('click', () => {
+    filtroTexto = '';
+    inputBusqueda.value = '';
+    btnLimpiarBusqueda.classList.add('oculto');
+
     filtroDesde.value = '';
     filtroHasta.value = '';
-    selectLugar.value = '';   // volver a "Todos los pisos"
-    if (selectCliente.value) cargarHistorico();
+
+    selectLugar.value = '';
+
+    chipsFecha.forEach(c => c.classList.remove('activo'));
+    const chipTodo = document.querySelector('.chip-fecha[data-dias="0"]');
+    if (chipTodo) chipTodo.classList.add('activo');
+
+    if (selectCliente.value) {
+        cargarHistorico();
+    } else if (historicos.length > 0) {
+        renderTabla();
+    }
 });
 
 /* =========================================================

@@ -1,5 +1,6 @@
 /* =========================================================
    MENÚ PRINCIPAL — RENDERER
+   Filtro de permisos corregido para no romper la cuadrícula
    ========================================================= */
 
 /* =========================================================
@@ -91,17 +92,22 @@ async function aplicarPermisos() {
         const permitido = puedeAcceder(modulo);
 
         if (!permitido) {
-            card.style.display = 'none';
+            card.classList.add('is-hidden');
             card.setAttribute('aria-hidden', 'true');
         } else {
-            card.style.display = '';
+            card.classList.remove('is-hidden');
             card.removeAttribute('aria-hidden');
         }
     });
 
     document.querySelectorAll('.categoria').forEach(seccion => {
-        const visibles = seccion.querySelectorAll('.modulo-card:not([style*="display: none"])');
-        seccion.style.display = visibles.length ? '' : 'none';
+        // Verifica si hay tarjetas visibles (que no tengan la clase is-hidden)
+        const visibles = seccion.querySelectorAll('.modulo-card:not(.is-hidden)');
+        if (visibles.length === 0) {
+            seccion.style.display = 'none';
+        } else {
+            seccion.style.display = '';
+        }
     });
 }
 
@@ -135,10 +141,14 @@ document.getElementById('btn-salir')?.addEventListener('click', async () => {
         showCancelButton: true,
         confirmButtonText: 'Sí, cerrar sesión',
         cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#e11d48',
-        cancelButtonColor: '#6b7280',
         reverseButtons: true,
-        focusCancel: true
+        focusCancel: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
     });
 
     if (!result.isConfirmed) return;
@@ -153,7 +163,6 @@ document.getElementById('btn-salir')?.addEventListener('click', async () => {
 
     try {
         await window.api.logout();
-        // El main process se encarga de cerrar todo y abrir el login.
         Swal.close();
     } catch (err) {
         Swal.fire({
@@ -234,7 +243,6 @@ function obtenerSaludo() {
             if (saludoEl) saludoEl.textContent = `${obtenerSaludo()}, ${u.Nombres ?? nombreCompleto}`;
             if (bienvEl)  bienvEl.textContent  = 'Selecciona un módulo para comenzar a trabajar.';
         } else {
-            // No hay sesión: el main nos va a redirigir al login.
             if (avatarEl) avatarEl.textContent = '?';
             if (nameEl)   nameEl.textContent   = 'Invitado';
             if (roleEl)   roleEl.textContent   = 'Sin sesión';

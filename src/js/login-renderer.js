@@ -48,25 +48,36 @@ function ocultarMensaje() {
 }
 
 /* =========================================================
-   AVISO DE SESIÓN (SweetAlert2)
+   AVISO DE SESIÓN (SweetAlert2 con estilo Tierra/Oliva)
    ========================================================= */
 function avisoSesion(motivo) {
     if (motivo === 'logout') {
         Swal.fire({
-            title: 'Sesión cerrada',
-            text: 'Has cerrado sesión correctamente.',
+            toast: true,
+            position: 'bottom-end',
             icon: 'success',
-            timer: 2000,
+            title: 'Sesión cerrada correctamente',
             showConfirmButton: false,
-            timerProgressBar: true
+            timer: 2400,
+            timerProgressBar: true,
+            customClass: { popup: 'cl-toast' },
+            didOpen: (t) => {
+                t.style.boxShadow = 'none';
+                t.addEventListener('mouseenter', Swal.stopTimer);
+                t.addEventListener('mouseleave', Swal.resumeTimer);
+            }
         });
     } else if (motivo === 'expirada') {
         Swal.fire({
-            title: 'Sesión expirada',
-            text: 'Tu sesión ha expirado. Inicia sesión nuevamente.',
             icon: 'warning',
+            title: 'Sesión expirada',
+            html: 'Tu sesión ha expirado.<br>Inicia sesión nuevamente para continuar.',
             confirmButtonText: 'Entendido',
-            confirmButtonColor: '#2563eb'
+            buttonsStyling: false,
+            customClass: {
+                popup: 'cl-confirm',
+                confirmButton: 'swal2-confirm swal2-styled'
+            }
         });
     }
 }

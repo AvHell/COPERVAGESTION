@@ -1,5 +1,5 @@
 /* =========================================================
-   ACTIVO FIJO — RENDERER DE IMPORTACIÓN MASIVA
+   ACTIVO FIJO — RENDERER DE IMPORTACIÓN MASIVA (DINÁMICO)
    ========================================================= */
 const Swal = window.Swal;
 
@@ -10,12 +10,11 @@ let layoutSeleccionado = null;
 let layoutInfo         = null;
 let archivoSeleccionado= null;
 let filasPreview       = [];
-let validacionPreview  = [];
 
 /* =========================================================
    REFERENCIAS DOM
    ========================================================= */
-const gridPerifericos     = document.getElementById('grid-perifericos');
+const gridTipos           = document.getElementById('grid-tipos');
 const pasoLayout          = document.getElementById('paso-layout');
 const pasoArchivo         = document.getElementById('paso-archivo');
 const pasoPreview         = document.getElementById('paso-preview');
@@ -49,9 +48,8 @@ function toastExito(titulo) {
     Swal.fire({
         toast: true, position: 'bottom-end', icon: 'success', title: titulo,
         showConfirmButton: false, timer: 2600, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-success' },
+        customClass: { popup: 'cl-toast' },
         didOpen: (t) => {
-            t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);
             t.addEventListener('mouseleave', Swal.resumeTimer);
         }
@@ -63,9 +61,8 @@ function toastError(titulo, texto = '') {
         toast: true, position: 'bottom-end', icon: 'error',
         title: texto ? `${titulo} — ${texto}` : titulo,
         showConfirmButton: false, timer: 3400, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-error' },
+        customClass: { popup: 'cl-toast' },
         didOpen: (t) => {
-            t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);
             t.addEventListener('mouseleave', Swal.resumeTimer);
         }
@@ -73,32 +70,40 @@ function toastError(titulo, texto = '') {
 }
 
 /* =========================================================
-   PASO 1 — CARGAR LAYOUTS
+   PASO 1 — CARGAR TIPOS DINÁMICOS
    ========================================================= */
 async function cargarLayouts() {
     try {
+        console.log("Solicitando layouts al backend...");
         const layouts = await window.api.activoFijo.importacion.listarLayouts();
+        console.log("Layouts recibidos:", layouts);
 
-        gridPerifericos.innerHTML = layouts.map(l => `
-            <button type="button" class="periferico-card" data-clave="${escaparHTML(l.clave)}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"></path>
-                    <path d="M8 12h8"></path>
+        if (!layouts || layouts.length === 0) {
+            gridTipos.innerHTML = '<p class="resumen-text">No hay tipos de activos configurados en la base de datos.</p>';
+            return;
+        }
+
+        gridTipos.innerHTML = layouts.map(l => `
+            <button type="button" class="tipo-card" data-clave="${escaparHTML(l.clave)}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="7" width="20" height="14" rx="2"></rect>
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
                 </svg>
-                <span class="titulo">${escaparHTML(l.titulo)}</span>
+                <span>${escaparHTML(l.titulo)}</span>
             </button>
         `).join('');
 
-        gridPerifericos.querySelectorAll('.periferico-card').forEach(btn => {
+        gridTipos.querySelectorAll('.tipo-card').forEach(btn => {
             btn.addEventListener('click', () => seleccionarLayout(btn.dataset.clave));
         });
     } catch (err) {
-        toastError('No se pudieron cargar los layouts', err.message);
+        console.error("Error al cargar layouts:", err);
+        toastError('No se pudieron cargar los tipos', err.message);
     }
 }
 
 async function seleccionarLayout(clave) {
-    gridPerifericos.querySelectorAll('.periferico-card').forEach(b => {
+    gridTipos.querySelectorAll('.tipo-card').forEach(b => {
         b.classList.toggle('activo', b.dataset.clave === clave);
     });
 
@@ -112,12 +117,11 @@ async function seleccionarLayout(clave) {
 }
 
 /* =========================================================
-   DESCARGA DE PLANTILLA
-   El ejemplo viene indexado por ETIQUETA desde el backend
+   DESCARGA DE PLANTILLA DINÁMICA
    ========================================================= */
 btnDescargarPlant.addEventListener('click', async () => {
     if (!layoutSeleccionado) {
-        toastError('Selecciona un periférico primero');
+        toastError('Selecciona un tipo de activo primero');
         return;
     }
 
@@ -125,13 +129,13 @@ btnDescargarPlant.addEventListener('click', async () => {
         const layout = layoutInfo;
         if (!layout) { toastError('Layout no disponible'); return; }
 
-        // Encabezados: usar la ETIQUETA de cada columna
+        // Encabezados basados en la etiqueta
         const headers = layout.columnas.map(c => c.etiqueta);
 
-        // Fila ejemplo: buscar por ETIQUETA (así siempre coincide)
+        // Fila de ejemplo basada en la etiqueta
         const filaEjemplo = layout.columnas.map(c => layout.ejemplo[c.etiqueta] ?? '');
 
-        // Generar CSV con BOM UTF-8 para que Excel lo abra bien
+        // Generar CSV
         const csv = '\uFEFF' + [
             headers.join(','),
             filaEjemplo.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
@@ -147,7 +151,8 @@ btnDescargarPlant.addEventListener('click', async () => {
         a.click();
         URL.revokeObjectURL(url);
 
-        toastExito(`Plantilla descargada: ${nombre}`);
+        // Mensaje corto para evitar que el toast se haga gigante
+        toastExito('Plantilla generada con éxito');
     } catch (err) {
         toastError('Error al generar plantilla', err.message);
     }
@@ -180,7 +185,6 @@ btnQuitarArchivo.addEventListener('click', limpiarArchivo);
 function limpiarArchivo() {
     archivoSeleccionado = null;
     filasPreview = [];
-    validacionPreview = [];
     inputArchivo.value = '';
     infoArchivo.classList.add('oculto');
     pasoPreview.classList.add('oculto');
@@ -298,8 +302,6 @@ async function renderPreview() {
         '<th>Estado</th>' +
         '</tr>';
 
-    validacionPreview = filasPreview.map(fila => ({ data: fila, ok: true, mensaje: '' }));
-
     previewBody.innerHTML = filasPreview.map((fila, idx) => {
         const celdas = columnas.map(c => {
             // Buscar primero por etiqueta, luego por key
@@ -310,12 +312,12 @@ async function renderPreview() {
         return `<tr data-fila="${num}">
             <td><strong>${num}</strong></td>
             ${celdas}
-            <td><span class="celda-estado ok">OK</span></td>
+            <td><span class="celda-estado">Listo</span></td>
         </tr>`;
     }).join('');
 
     const total = filasPreview.length;
-    resumenEl.innerHTML = `<strong>${total}</strong> fila(s) listas para importar como <strong>${escaparHTML(layout.titulo)}</strong>. Revisa que los datos sean correctos antes de continuar.`;
+    resumenEl.innerHTML = `Se procesarán <strong>${total}</strong> fila(s) para el tipo <strong>${escaparHTML(layout.titulo)}</strong>.`;
 }
 
 btnCancelarPreview.addEventListener('click', limpiarArchivo);
@@ -347,7 +349,8 @@ btnImportar.addEventListener('click', async () => {
     if (!conf.isConfirmed) return;
 
     btnImportar.disabled = true;
-    btnImportar.textContent = 'Importando...';
+    const originalHTML = btnImportar.innerHTML;
+    btnImportar.innerHTML = 'Importando...';
 
     try {
         const res = await window.api.activoFijo.importacion.importar({
@@ -360,7 +363,7 @@ btnImportar.addEventListener('click', async () => {
         toastError('Error al importar', err.message);
     } finally {
         btnImportar.disabled = false;
-        btnImportar.textContent = 'Importar';
+        btnImportar.innerHTML = originalHTML;
     }
 });
 
@@ -370,6 +373,7 @@ btnImportar.addEventListener('click', async () => {
 function mostrarResultado(res) {
     pasoPreview.classList.add('oculto');
     pasoArchivo.classList.add('oculto');
+    pasoLayout.classList.add('oculto');
     pasoResultado.classList.remove('oculto');
 
     if (!res || !res.ok) {
@@ -408,7 +412,7 @@ function mostrarResultado(res) {
     }
 
     if (exitosos.length === 0 && errores.length === 0) {
-        html = `<div class="resultado-error"><p>No se procesó ninguna fila.</div>`;
+        html = `<div class="resultado-error"><p>No se procesó ninguna fila.</p></div>`;
     }
 
     resultadoContenido.innerHTML = html;
@@ -419,10 +423,10 @@ btnNuevaImportacion.addEventListener('click', () => {
     layoutInfo = null;
     archivoSeleccionado = null;
     filasPreview = [];
-    validacionPreview = [];
 
-    gridPerifericos.querySelectorAll('.periferico-card').forEach(b => b.classList.remove('activo'));
+    gridTipos.querySelectorAll('.tipo-card').forEach(b => b.classList.remove('activo'));
 
+    pasoLayout.classList.remove('oculto');
     pasoArchivo.classList.add('oculto');
     pasoPreview.classList.add('oculto');
     pasoResultado.classList.add('oculto');

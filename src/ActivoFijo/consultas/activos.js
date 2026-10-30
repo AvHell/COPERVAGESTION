@@ -1,11 +1,13 @@
 /* =========================================================
    ACTIVO FIJO — CRUD DE EQUIPOS (inventario físico)
-   Soft delete: los activos se marcan como BAJA, no se borran
-   El trigger trg_AFE_AfterUpdate registra el movimiento en
-   ActivoFijoHistoricos con Accion = BAJA / RESTAURACION /
-   TRASLADO / ASIGNACION / EDICION
+   Soft delete + Exportación a Excel con estilos Poppins
    ========================================================= */
 const { getPool, sql } = require('../../js/db/conexion');
+const ExcelJS = require('exceljs');
+const path = require('path');
+const os = require('os');
+const fs = require('fs');
+const { dialog } = require('electron');
 
 /* =========================================================
    HELPERS
@@ -19,9 +21,7 @@ async function getIdPorNombre(pool, tabla, pk, nombre) {
 }
 
 /* =========================================================
-   LISTAR (con filtros opcionales)
-   - Si soloEliminados = true → solo BAJA
-   - Si no hay filtro de estatus → excluye BAJA
+   LISTAR
    ========================================================= */
 async function listar(filtros = {}) {
     const pool = await getPool();
@@ -47,7 +47,6 @@ async function listar(filtros = {}) {
             af.IdActivoFijoEQ,
             af.IdCartera,
             c.Nombre        AS Cartera,
-
             af.IdMarca,
             m.Nombre        AS Marca,
             af.Modelo,
@@ -67,7 +66,6 @@ async function listar(filtros = {}) {
             t.RequiereEspecificaciones,
             t.RequiereAccesorios,
             t.GrupoSubtipo,
-
             af.NoSerie,
             af.IMEI1,
             af.IMEI2,
@@ -78,14 +76,11 @@ async function listar(filtros = {}) {
             af.SistemaOperativo,
             af.Accesorios,
             af.PrecioActivo,
-
             af.IdEstado,
             es.Nombre       AS Estado,
             af.IdEstatus,
             st.Nombre       AS Estatus,
-
             af.IdLugarCliente,
-
             af.IdSitio,
             si.Nombre       AS Sitio,
             af.IdSubtipo,
@@ -100,7 +95,6 @@ async function listar(filtros = {}) {
             af.IdVoltaje,
             vol.Nombre      AS Voltaje,
             af.UsuarioAsignado,
-
             af.Observaciones,
             af.FechaCreacion,
             af.FechaModificacion
@@ -281,10 +275,7 @@ async function crear(datos, idUsuario) {
 }
 
 /* =========================================================
-   ACTUALIZAR — UPDATE dinámico: solo toca lo que viene en `datos`
-   Regla: "si no viene (undefined), no lo toques".
-   Evita borrar campos por accidente (ej. PrecioActivo en tipos
-   que no lo requieren, IdLugarCliente que el front nunca envía).
+   ACTUALIZAR
    ========================================================= */
 async function actualizar(id, datos, idUsuario) {
     try {
@@ -300,7 +291,6 @@ async function actualizar(id, datos, idUsuario) {
 
         const current = actual.recordset[0];
 
-        // --- Validaciones de duplicados (solo si viene el campo) ---
         if (datos.NoSerie !== undefined && datos.NoSerie) {
             const dup = await pool.request()
                 .input('NoSerie', sql.NVarChar(150), datos.NoSerie)
@@ -338,7 +328,6 @@ async function actualizar(id, datos, idUsuario) {
             }
         }
 
-        // --- Resolver IdTipo / IdEstado / IdEstatus con fallback ---
         let IdTipo = null;
         if (datos.IdTipo) IdTipo = datos.IdTipo;
         else if (datos.Tipo) IdTipo = await getIdPorNombre(pool, 'ActivoFijoTipos', 'IdTipo', datos.Tipo);
@@ -357,7 +346,6 @@ async function actualizar(id, datos, idUsuario) {
         if (!IdEstatus) IdEstatus = current.IdEstatus;
         if (!IdEstatus) IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', 'STOCK');
 
-        // --- Construcción dinámica del UPDATE ---
         const request = pool.request();
         request.input('Id',         sql.Int, id);
         request.input('IdTipo',     sql.Int, IdTipo);
@@ -373,7 +361,6 @@ async function actualizar(id, datos, idUsuario) {
             'FechaModificacion = GETDATE()'
         ];
 
-        // Campos opcionales: [jsKey, colName, tipoSQL, longitud]
         const camposOpcionales = [
             ['IdCartera',       'IdCartera',        sql.Int,       null],
             ['IdMarca',         'IdMarca',          sql.Int,       null],
@@ -429,7 +416,7 @@ async function actualizar(id, datos, idUsuario) {
 }
 
 /* =========================================================
-   ELIMINAR (Soft delete) — Marca como BAJA
+   ELIMINAR (Soft delete)
    ========================================================= */
 async function eliminar(id, idUsuario, motivo = null) {
     try {
@@ -496,7 +483,7 @@ async function eliminar(id, idUsuario, motivo = null) {
 }
 
 /* =========================================================
-   RESTAURAR — Saca un activo de BAJA y lo vuelve a STOCK/DISPONIBLE
+   RESTAURAR
    ========================================================= */
 async function restaurar(id, idUsuario, motivo = null) {
     try {
@@ -545,7 +532,7 @@ async function restaurar(id, idUsuario, motivo = null) {
 }
 
 /* =========================================================
-   HISTÓRICO — Movimientos de un activo
+   HISTÓRICO
    ========================================================= */
 async function historico(idActivo, limite = 200) {
     const pool = await getPool();
@@ -581,11 +568,111 @@ async function historico(idActivo, limite = 200) {
             LEFT JOIN ActivoFijoEstatus  sn   ON sn.IdEstatus  = h.IdEstatusNuevo
             LEFT JOIN ActivoFijoSitios   sia  ON sia.IdSitio   = h.IdSitioAnterior
             LEFT JOIN ActivoFijoSitios   sin_ ON sin_.IdSitio  = h.IdSitioNuevo
-            LEFT JOIN Usuarios           u    ON u.IdUsuario   = h.IdUsuarioMovimiento
+            LEFT JOIN Usuarios           u    = h.IdUsuarioMovimiento
             WHERE h.IdActivoFijoEQ = @Id
             ORDER BY h.FechaMovimiento DESC
         `);
     return r.recordset;
+}
+
+/* =========================================================
+   EXPORTAR A EXCEL (Inteligente + Poppins)
+   ========================================================= */
+async function exportarExcel(payload) {
+    const { titulo, columnas, datos } = payload || {};
+
+    if (!datos || datos.length === 0) {
+        return { ok: false, mensaje: 'No hay datos para exportar.' };
+    }
+
+    const safeTitulo = (titulo || 'Inventario').replace(/[\\/:*?"<>|]/g, '_');
+    const fecha = new Date().toISOString().slice(0, 10);
+    const downloadsDir = path.join(os.homedir(), 'Downloads');
+    const defaultPath = path.join(
+        fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
+        `${safeTitulo}_${fecha}.xlsx`
+    );
+
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Guardar reporte en Excel',
+        defaultPath,
+        filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+    });
+
+    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Inventario');
+
+    // Definir columnas con anchos
+    worksheet.columns = columnas.map(col => ({
+        header: col.header,
+        key: col.key,
+        width: col.width || 15
+    }));
+
+    // Agregar los datos
+    worksheet.addRows(datos);
+
+    // Estilos de encabezado verde con fuente Poppins
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 30;
+    headerRow.eachCell((cell) => {
+        cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF15803D' } // Verde oscuro
+        };
+        cell.font = {
+            color: { argb: 'FFFFFFFF' },
+            bold: true,
+            size: 11,
+            name: 'Poppins'
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+        };
+    });
+
+    // Filtros automáticos
+    worksheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: columnas.length }
+    };
+
+    // Estilos de filas y bordes
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        if (rowNumber === 1) return;
+        row.eachCell((cell) => {
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+            };
+            cell.font = { name: 'Poppins', size: 10 };
+            // Filas alternas grises
+            if (rowNumber % 2 === 0) {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFF8FAFC' }
+                };
+            }
+        });
+    });
+
+    try {
+        await workbook.xlsx.writeFile(filePath);
+        return { ok: true, ruta: filePath };
+    } catch (err) {
+        console.error('[Excel Error]:', err);
+        return { ok: false, mensaje: 'No se pudo escribir el archivo: ' + err.message };
+    }
 }
 
 /* =========================================================
@@ -688,7 +775,7 @@ async function listarCapacidades() {
 }
 
 module.exports = {
-    listar, obtener, crear, actualizar, eliminar, restaurar, historico,
+    listar, obtener, crear, actualizar, eliminar, restaurar, historico, exportarExcel,
     listarTipos, listarMarcas, listarEstados, listarEstatus, listarCarteras,
     listarSitios, listarSubtipos, listarVoltajes,
     listarClasificaciones, listarTamanios, listarCapacidades

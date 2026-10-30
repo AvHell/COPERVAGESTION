@@ -1,6 +1,5 @@
 /* =========================================================
    PRELOAD EXCLUSIVO DEL MÓDULO ACTIVO FIJO
-   Aislado del preload principal. Solo expone lo que AF necesita.
    ========================================================= */
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -10,6 +9,14 @@ contextBridge.exposeInMainWorld('api', {
        ===================================================== */
     volverMenu:    () => ipcRenderer.invoke('volver-menu'),
     usuarioActual: () => ipcRenderer.invoke('usuario-actual'),
+
+    /* =====================================================
+       PERMISOS (FALTABAN Y ROMPÍAN EL RENDERER)
+       ===================================================== */
+    permisos: {
+        mios:  () => ipcRenderer.invoke('permisos:mios'),
+        miRol: () => ipcRenderer.invoke('permisos:mi-rol')
+    },
 
     /* =====================================================
        ABRIR OTRAS VENTANAS DE ACTIVO FIJO
@@ -48,6 +55,9 @@ contextBridge.exposeInMainWorld('api', {
             eliminar:   (id, motivo)    => ipcRenderer.invoke('af-activos-eliminar',   id, motivo),
             restaurar:  (id, motivo)    => ipcRenderer.invoke('af-activos-restaurar',  id, motivo),
             historico:  (id)            => ipcRenderer.invoke('af-activos-historico',  id),
+
+            /* Exportar a Excel */
+            exportarExcel: (payload)    => ipcRenderer.invoke('af-activos-exportar-excel', payload),
 
             /* Catálogos auxiliares para los selects del formulario */
             listarTipos:          () => ipcRenderer.invoke('af-activos-lista-tipos'),
@@ -90,14 +100,10 @@ contextBridge.exposeInMainWorld('api', {
            REPORTES
            ================================================= */
         reportes: {
-            /* --- NUEVO: endpoint consolidado + exportar --- */
             obtenerReporte:         (vista, filtros) => ipcRenderer.invoke('af-rep-obtener-reporte', vista, filtros),
             exportarExcel:          (payload)        => ipcRenderer.invoke('af-rep-exportar-excel', payload),
 
-            /* --- KPIs + catálogos --- */
             resumenGeneral:         ()        => ipcRenderer.invoke('af-rep-resumen-general'),
-
-            /* --- Vistas individuales (retro-compatible) --- */
             resumenPorTipo:         ()        => ipcRenderer.invoke('af-rep-resumen-tipo'),
             resumenPorCartera:      ()        => ipcRenderer.invoke('af-rep-resumen-cartera'),
             inventario:             (filtros) => ipcRenderer.invoke('af-rep-inventario', filtros),
@@ -109,7 +115,6 @@ contextBridge.exposeInMainWorld('api', {
             celulares:              ()        => ipcRenderer.invoke('af-rep-celulares'),
             laptops:                ()        => ipcRenderer.invoke('af-rep-laptops'),
 
-            /* --- Catálogos para filtros --- */
             tiposParaFiltro:        ()        => ipcRenderer.invoke('af-rep-tipos'),
             estadosParaFiltro:      ()        => ipcRenderer.invoke('af-rep-estados'),
             estatusParaFiltro:      ()        => ipcRenderer.invoke('af-rep-estatus'),

@@ -1,9 +1,6 @@
 /* =========================================================
    ACTIVO FIJO — RENDERER DE INVENTARIO
-   Formulario inteligente + tabs (Activos / Eliminados)
-   + Motivo de baja/restauración + Modal de Histórico + Ver
-   Filtro universal · Botones solo icono + tooltip
-   Modales de baja/restauración SIN inputs nativos de SweetAlert
+   Exportador inteligente + Badges sólidos
    ========================================================= */
 const Swal = window.Swal;
 
@@ -28,6 +25,10 @@ let guardando      = false;
 let filtroBusqueda = '';
 let vistaActual    = 'activos';
 
+let permisosUsuario = {};
+let rolUsuario      = null;
+let esAdmin         = false;
+
 /* =========================================================
    REFERENCIAS DOM
    ========================================================= */
@@ -37,6 +38,7 @@ const formulario       = document.getElementById('formulario');
 const mensaje          = document.getElementById('mensaje');
 const btnGuardar       = document.getElementById('btn-guardar');
 const btnNuevo         = document.getElementById('btn-nuevo');
+const btnExportar      = document.getElementById('btn-exportar');
 const sinResultados    = document.getElementById('sin-resultados');
 const sinResultadosTit = document.getElementById('sin-resultados-titulo');
 const sinResultadosTxt = document.getElementById('sin-resultados-texto');
@@ -74,12 +76,39 @@ const inpPrecio        = document.getElementById('precio');
 const inpObservaciones = document.getElementById('observaciones');
 
 /* =========================================================
-   UTILIDADES
+   UTILIDADES Y PERMISOS
    ========================================================= */
 function escaparHTML(str) {
     return String(str ?? '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function puedeAcceder(clave) {
+    if (esAdmin) return true;
+    return !!permisosUsuario[clave];
+}
+
+async function aplicarPermisos() {
+    try {
+        permisosUsuario = (await window.api.permisos.mios()) || {};
+        const rol = await window.api.permisos.miRol();
+        rolUsuario = rol?.codigo || null;
+        esAdmin    = rolUsuario === 'ADMIN';
+    } catch (err) {
+        console.error('[Permisos] Error:', err);
+    }
+
+    document.querySelectorAll('[data-permiso]').forEach(el => {
+        const clave = el.getAttribute('data-permiso');
+        if (!puedeAcceder(clave)) {
+            el.classList.add('permiso-oculto');
+            el.setAttribute('aria-hidden', 'true');
+        } else {
+            el.classList.remove('permiso-oculto');
+            el.removeAttribute('aria-hidden');
+        }
+    });
 }
 
 function formatearPrecio(val) {
@@ -276,11 +305,11 @@ function renderTabla() {
 
         const celda = tr.querySelector('.acciones-tabla');
 
+        // Botón Ver
         const btnVer = document.createElement('button');
         btnVer.type = 'button';
         btnVer.className = 'btn-accion ver';
         btnVer.setAttribute('data-tooltip', 'Ver detalle');
-        btnVer.setAttribute('aria-label', 'Ver detalle');
         btnVer.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -294,7 +323,6 @@ function renderTabla() {
             btnHistorial.type = 'button';
             btnHistorial.className = 'btn-accion historial';
             btnHistorial.setAttribute('data-tooltip', 'Ver histórico');
-            btnHistorial.setAttribute('aria-label', 'Ver histórico');
             btnHistorial.innerHTML = `
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -303,41 +331,42 @@ function renderTabla() {
             btnHistorial.addEventListener('click', () => verHistorico(a.IdActivoFijoEQ, a.NoSerie));
             celda.appendChild(btnHistorial);
 
-            const btnRestaurar = document.createElement('button');
-            btnRestaurar.type = 'button';
-            btnRestaurar.className = 'btn-accion restaurar';
-            btnRestaurar.setAttribute('data-tooltip', 'Restaurar');
-            btnRestaurar.setAttribute('aria-label', 'Restaurar');
-            btnRestaurar.innerHTML = `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="1 4 1 10 7 10"></polyline>
-                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                </svg>`;
-            btnRestaurar.addEventListener('click', () => restaurarActivo(a.IdActivoFijoEQ, a.NoSerie));
-            celda.appendChild(btnRestaurar);
+            if (puedeAcceder('af-act:restaurar')) {
+                const btnRestaurar = document.createElement('button');
+                btnRestaurar.type = 'button';
+                btnRestaurar.className = 'btn-accion restaurar';
+                btnRestaurar.setAttribute('data-tooltip', 'Restaurar');
+                btnRestaurar.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="1 4 1 10 7 10"></polyline>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                    </svg>`;
+                btnRestaurar.addEventListener('click', () => restaurarActivo(a.IdActivoFijoEQ, a.NoSerie));
+                celda.appendChild(btnRestaurar);
+            }
 
             tablaBody.appendChild(tr);
             return;
         }
 
-        const btnEditar = document.createElement('button');
-        btnEditar.type = 'button';
-        btnEditar.className = 'btn-accion editar';
-        btnEditar.setAttribute('data-tooltip', 'Editar');
-        btnEditar.setAttribute('aria-label', 'Editar');
-        btnEditar.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>`;
-        btnEditar.addEventListener('click', () => abrirEdicion(a.IdActivoFijoEQ));
-        celda.appendChild(btnEditar);
+        if (puedeAcceder('af-act:editar')) {
+            const btnEditar = document.createElement('button');
+            btnEditar.type = 'button';
+            btnEditar.className = 'btn-accion editar';
+            btnEditar.setAttribute('data-tooltip', 'Editar');
+            btnEditar.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>`;
+            btnEditar.addEventListener('click', () => abrirEdicion(a.IdActivoFijoEQ));
+            celda.appendChild(btnEditar);
+        }
 
         const btnHistorial = document.createElement('button');
         btnHistorial.type = 'button';
         btnHistorial.className = 'btn-accion historial';
         btnHistorial.setAttribute('data-tooltip', 'Ver histórico');
-        btnHistorial.setAttribute('aria-label', 'Ver histórico');
         btnHistorial.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
@@ -346,27 +375,193 @@ function renderTabla() {
         btnHistorial.addEventListener('click', () => verHistorico(a.IdActivoFijoEQ, a.NoSerie));
         celda.appendChild(btnHistorial);
 
-        const btnEliminar = document.createElement('button');
-        btnEliminar.type = 'button';
-        btnEliminar.className = 'btn-accion eliminar';
-        btnEliminar.setAttribute('data-tooltip', 'Dar de baja');
-        btnEliminar.setAttribute('aria-label', 'Dar de baja');
-        btnEliminar.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                <path d="M10 11v6M14 11v6"></path>
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-            </svg>`;
-        btnEliminar.addEventListener('click', () => eliminarActivo(a.IdActivoFijoEQ));
-        celda.appendChild(btnEliminar);
+        if (puedeAcceder('af-act:eliminar')) {
+            const btnEliminar = document.createElement('button');
+            btnEliminar.type = 'button';
+            btnEliminar.className = 'btn-accion eliminar';
+            btnEliminar.setAttribute('data-tooltip', 'Dar de baja');
+            btnEliminar.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                    <path d="M10 11v6M14 11v6"></path>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                </svg>`;
+            btnEliminar.addEventListener('click', () => eliminarActivo(a.IdActivoFijoEQ));
+            celda.appendChild(btnEliminar);
+        }
 
         tablaBody.appendChild(tr);
     });
 }
 
 /* =========================================================
-   VER ACTIVO (solo X)
+   EXPORTAR INTELIGENTE A EXCEL
+   ========================================================= */
+btnExportar.addEventListener('click', async () => {
+    if (!activos || activos.length === 0) {
+        toastError('Sin datos', 'No hay activos para exportar.');
+        return;
+    }
+
+    const opcionesTipo = tipos.map(t => `<option value="${t.IdTipo}">${t.Nombre}</option>`).join('');
+
+    const { value: idTipo, isConfirmed } = await Swal.fire({
+        title: 'Exportar a Excel',
+        html: `
+            <p style="font-size:0.9rem; color:#575347; margin-bottom:15px;">
+                Selecciona el tipo de activo. El Excel se generará con las columnas exactas que necesita ese tipo.
+            </p>
+            <select id="swal-tipo-export" class="export-tipo-select">
+                <option value="">Todos los tipos (Reporte General)</option>
+                ${opcionesTipo}
+            </select>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Generar Excel',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            cancelButton: 'swal2-cancel swal2-styled'
+        },
+        preConfirm: () => {
+            return document.getElementById('swal-tipo-export').value;
+        }
+    });
+
+    if (!isConfirmed) return;
+
+    let datosExport = [];
+    let columnas = [];
+    let tituloReporte = 'Inventario_General';
+
+    if (idTipo) {
+        // Filtrar por tipo
+        const tipoSel = tipos.find(t => t.IdTipo == idTipo);
+        datosExport = activos.filter(a => a.IdTipo == idTipo);
+        tituloReporte = `Inventario_${tipoSel.Nombre.replace(/\s+/g, '_')}`;
+
+        if (datosExport.length === 0) {
+            toastError('Sin datos', `No hay activos registrados de tipo "${tipoSel.Nombre}".`);
+            return;
+        }
+
+        // Columnas base
+        columnas = [
+            { header: 'No. Serie', key: 'NoSerie', width: 20 },
+            { header: 'Marca', key: 'Marca', width: 15 },
+            { header: 'Modelo', key: 'Modelo', width: 20 },
+            { header: 'Tipo', key: 'Tipo', width: 15 },
+            { header: 'Estado', key: 'Estado', width: 15 },
+            { header: 'Estatus', key: 'Estatus', width: 15 }
+        ];
+
+        // Columnas dinámicas según el tipo
+        if (tipoSel.RequiereIMEI) {
+            columnas.push({ header: 'IMEI 1', key: 'IMEI1', width: 20 });
+            columnas.push({ header: 'IMEI 2', key: 'IMEI2', width: 20 });
+        }
+        if (tipoSel.RequiereTelefono) columnas.push({ header: 'Teléfono', key: 'NoTelefono', width: 15 });
+        if (tipoSel.RequiereSitio) columnas.push({ header: 'Sitio', key: 'Sitio', width: 15 });
+        if (tipoSel.RequiereSubtipo) columnas.push({ header: 'Subtipo', key: 'Subtipo', width: 15 });
+        if (tipoSel.RequiereClasificacion) columnas.push({ header: 'Clasificación', key: 'Clasificacion', width: 15 });
+        if (tipoSel.RequiereTamanio) columnas.push({ header: 'Tamaño', key: 'Tamanio', width: 15 });
+        if (tipoSel.RequiereCapacidad) columnas.push({ header: 'Capacidad', key: 'Capacidad', width: 15 });
+        if (tipoSel.RequiereVoltaje) columnas.push({ header: 'Voltaje', key: 'Voltaje', width: 15 });
+        if (tipoSel.RequiereUsuarioAsignado) columnas.push({ header: 'Usuario Asignado', key: 'UsuarioAsignado', width: 25 });
+        if (tipoSel.RequierePrecio) columnas.push({ header: 'Precio', key: 'PrecioActivo', width: 15 });
+        if (tipoSel.RequiereEspecificaciones) {
+            columnas.push({ header: 'Procesador', key: 'Procesador', width: 20 });
+            columnas.push({ header: 'RAM', key: 'MemoriaRAM', width: 15 });
+            columnas.push({ header: 'Almacenamiento', key: 'Almacenamiento', width: 20 });
+            columnas.push({ header: 'S.O.', key: 'SistemaOperativo', width: 20 });
+        }
+        if (tipoSel.RequiereAccesorios) columnas.push({ header: 'Accesorios', key: 'Accesorios', width: 25 });
+
+        columnas.push({ header: 'Cartera', key: 'Cartera', width: 15 });
+
+    } else {
+        // Exportación general (todas las columnas que existan)
+        datosExport = activos;
+        columnas = [
+            { header: 'No. Serie', key: 'NoSerie', width: 20 },
+            { header: 'Marca', key: 'Marca', width: 15 },
+            { header: 'Modelo', key: 'Modelo', width: 20 },
+            { header: 'Tipo', key: 'Tipo', width: 15 },
+            { header: 'Estado', key: 'Estado', width: 15 },
+            { header: 'Estatus', key: 'Estatus', width: 15 },
+            { header: 'IMEI 1', key: 'IMEI1', width: 20 },
+            { header: 'Teléfono', key: 'NoTelefono', width: 15 },
+            { header: 'Cartera', key: 'Cartera', width: 15 },
+            { header: 'Sitio', key: 'Sitio', width: 15 },
+            { header: 'Usuario Asignado', key: 'UsuarioAsignado', width: 25 }
+        ];
+    }
+
+    const confirm = await Swal.fire({
+        icon: 'question',
+        title: '¿Generar Excel?',
+        html: `Se exportarán <strong>${datosExport.length}</strong> registros con <strong>${columnas.length}</strong> columnas.`,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, generar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    Swal.fire({
+        title: 'Generando Excel...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const payload = {
+            titulo: tituloReporte,
+            columnas: columnas,
+            datos: datosExport
+        };
+
+        const res = await window.api.activoFijo.activos.exportarExcel(payload);
+        Swal.close();
+
+        if (res && res.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: 'Excel generado',
+                html: `Se guardó en:<br><code style="background:#FFF7E8;padding:4px 8px;border-radius:6px;color:#2E3228;word-break:break-all;font-size:0.82rem;">${escaparHTML(res.ruta)}</code>`,
+                showCloseButton: true,
+                confirmButtonText: 'Aceptar',
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'cl-confirm',
+                    confirmButton: 'swal2-confirm swal2-styled'
+                }
+            });
+        } else if (res && res.mensaje === 'Cancelado') {
+            // Cancelado
+        } else {
+            toastError('No se pudo exportar', res?.mensaje || 'Error desconocido');
+        }
+    } catch (err) {
+        Swal.close();
+        toastError('Error al exportar', err.message);
+    }
+});
+
+/* =========================================================
+   RESTO DE FUNCIONES (Ver, Editar, Guardar, Eliminar, Restaurar)
    ========================================================= */
 function verActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
@@ -484,9 +679,6 @@ function verActivo(id) {
     });
 }
 
-/* =========================================================
-   TABS DE VISTA
-   ========================================================= */
 tabsVista.addEventListener('click', (e) => {
     const btn = e.target.closest('.tab-vista');
     if (!btn || btn.classList.contains('activo')) return;
@@ -506,9 +698,6 @@ tabsVista.addEventListener('click', (e) => {
     cargarActivos();
 });
 
-/* =========================================================
-   BUSCADOR UNIVERSAL
-   ========================================================= */
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
@@ -525,9 +714,6 @@ function limpiarBusqueda() {
 btnLimpiarBusq.addEventListener('click', limpiarBusqueda);
 btnLimpiarVacio.addEventListener('click', limpiarBusqueda);
 
-/* =========================================================
-   MODAL
-   ========================================================= */
 function abrirModal() {
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -545,9 +731,6 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && modal.style.display === 'flex') cerrarModal();
 });
 
-/* =========================================================
-   POBLAR SUBTIPOS
-   ========================================================= */
 function poblarSubtipos(grupo, valorSeleccionado = '') {
     if (!grupo) {
         selSubtipo.innerHTML = '<option value="">— Selecciona un tipo primero —</option>';
@@ -571,9 +754,6 @@ function poblarSubtipos(grupo, valorSeleccionado = '') {
         }).join('');
 }
 
-/* =========================================================
-   MOSTRAR/OCULTAR CAMPOS SEGÚN TIPO
-   ========================================================= */
 selTipo.addEventListener('change', actualizarCamposPorTipo);
 
 function actualizarCamposPorTipo() {
@@ -635,9 +815,6 @@ function actualizarCamposPorTipo() {
     }
 }
 
-/* =========================================================
-   USUARIO ASIGNADO — Regla especial para almacenamiento
-   ========================================================= */
 selClasificacion.addEventListener('change', actualizarUsuarioAsignado);
 
 function actualizarUsuarioAsignado() {
@@ -661,9 +838,6 @@ function actualizarUsuarioAsignado() {
     document.querySelector('.campo-usuario-asignado')?.classList.toggle('oculto', !esExterno);
 }
 
-/* =========================================================
-   LIMPIAR FORMULARIO
-   ========================================================= */
 function limpiarFormulario() {
     selTipo.value = '';
     selMarca.value = '';
@@ -693,9 +867,6 @@ function limpiarFormulario() {
     actualizarCamposPorTipo();
 }
 
-/* =========================================================
-   NUEVO
-   ========================================================= */
 btnNuevo.addEventListener('click', () => {
     if (vistaActual === 'eliminados') return;
     modoEdicion = false;
@@ -707,9 +878,6 @@ btnNuevo.addEventListener('click', () => {
     selTipo.focus();
 });
 
-/* =========================================================
-   EDITAR
-   ========================================================= */
 function abrirEdicion(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     if (!a) { toastError('Activo no encontrado'); return; }
@@ -757,9 +925,6 @@ function abrirEdicion(id) {
     selTipo.focus();
 }
 
-/* =========================================================
-   GUARDAR
-   ========================================================= */
 formulario.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (guardando) return;
@@ -861,10 +1026,6 @@ formulario.addEventListener('submit', async (e) => {
     }
 });
 
-/* =========================================================
-   ELIMINAR (Soft delete → BAJA) — CON MOTIVO
-   Usa textarea custom dentro del html; sin input nativo.
-   ========================================================= */
 async function eliminarActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     const nombre = a ? (a.NoSerie || a.IMEI1 || a.NoTelefono || `#${id}`) : `#${id}`;
@@ -930,9 +1091,6 @@ async function eliminarActivo(id) {
     }
 }
 
-/* =========================================================
-   RESTAURAR — CON MOTIVO
-   ========================================================= */
 async function restaurarActivo(id, noSerie) {
     const resultado = await Swal.fire({
         icon: 'question',
@@ -994,9 +1152,6 @@ async function restaurarActivo(id, noSerie) {
     }
 }
 
-/* =========================================================
-   VER HISTÓRICO
-   ========================================================= */
 async function verHistorico(id, noSerie) {
     try {
         const movs = await window.api.activoFijo.activos.historico(id);
@@ -1074,17 +1229,12 @@ async function verHistorico(id, noSerie) {
     }
 }
 
-/* =========================================================
-   NAVEGACIÓN
-   ========================================================= */
 document.getElementById('btn-volver').addEventListener('click', () => {
     window.api.volverMenu();
 });
 
-/* =========================================================
-   INICIO
-   ========================================================= */
 (async () => {
+    await aplicarPermisos();
     await cargarCatalogos();
     await cargarActivos();
 })();

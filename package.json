@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
+    "exceljs": "^4.4.0",
     "mssql": "^12.7.2",
     "pdf-lib": "^1.17.1",
     "sweetalert2": "^11.26.25",

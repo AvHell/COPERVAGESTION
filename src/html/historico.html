@@ -2,14 +2,14 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#2E3228">
     <title>Histórico del Plano</title>
 
-    <!-- Fuentes premium -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <link rel="stylesheet" href="../css/historico.css">
@@ -21,20 +21,20 @@
          ========================================================= -->
     <header class="header-global">
         <div class="header-inner">
-            <button id="btn-volver" class="btn-back" type="button">
+            <button id="btn-volver" class="btn-back" type="button" aria-label="Volver al menú">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M19 12H5M12 19l-7-7 7-7"/>
                 </svg>
-                <span>Volver al menú</span>
+                <span>Volver</span>
             </button>
 
             <div class="header-titles">
                 <h1>Histórico del Plano</h1>
-                <p>Registro cronológico de movimientos y cambios en los planos de equipos</p>
+                <p>Registro cronológico de movimientos</p>
             </div>
 
-            <div class="header-spacer"></div>
+            <div class="header-spacer" aria-hidden="true"></div>
         </div>
     </header>
 
@@ -48,16 +48,15 @@
                 <h2>Movimientos</h2>
                 <p id="panel-subtitulo">Selecciona un cliente para comenzar</p>
             </div>
-            <div class="panel-actions">
-                <span id="contador-movimientos" class="grupo-count oculto">0 movimientos</span>
-            </div>
+            <span id="contador-movimientos" class="grupo-count oculto">0 movimientos</span>
         </div>
 
         <!-- =====================================================
              FILTROS
              ===================================================== -->
-        <div class="filtros-card">
+        <section class="filtros-card" aria-label="Filtros de búsqueda">
             <div class="filtros-grid">
+
                 <div class="field">
                     <label for="select-cliente">Cliente</label>
                     <select id="select-cliente">
@@ -73,28 +72,56 @@
                 </div>
 
                 <div class="field">
-                    <label for="filtro-desde">Desde</label>
-                    <input type="date" id="filtro-desde">
-                </div>
-
-                <div class="field">
-                    <label for="filtro-hasta">Hasta</label>
-                    <input type="date" id="filtro-hasta">
-                </div>
-
-                <div class="filtro-acciones">
-                    <button id="btn-limpiar-fechas" class="btn-ghost" type="button">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                             style="width:15px;height:15px;">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                    <label for="input-busqueda">Buscar</label>
+                    <div class="input-con-icono">
+                        <svg class="icono-input" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
                         </svg>
-                        <span>Limpiar</span>
-                    </button>
+                        <input type="text" id="input-busqueda"
+                               placeholder="Usuario, equipo o detalle..." autocomplete="off">
+                        <button type="button" id="btn-limpiar-busqueda"
+                                class="btn-limpiar oculto" title="Limpiar búsqueda">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
+
+                <div class="field field-full">
+                    <label>Rango de fechas</label>
+                    <div class="rango-fechas">
+                        <div class="chips-rapidos" role="group" aria-label="Rangos rápidos">
+                            <button type="button" class="chip-fecha" data-dias="1">Hoy</button>
+                            <button type="button" class="chip-fecha" data-dias="7">7 días</button>
+                            <button type="button" class="chip-fecha" data-dias="30">30 días</button>
+                            <button type="button" class="chip-fecha activo" data-dias="0">Todo</button>
+                        </div>
+
+                        <div class="rango-custom">
+                            <input type="date" id="filtro-desde" aria-label="Fecha desde">
+                            <span class="rango-sep">a</span>
+                            <input type="date" id="filtro-hasta" aria-label="Fecha hasta">
+                        </div>
+
+                        <button id="btn-limpiar-filtros" class="btn-ghost" type="button">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                            <span>Limpiar</span>
+                        </button>
+                    </div>
+                </div>
+
             </div>
-        </div>
+        </section>
 
         <!-- =====================================================
              ESTADO INICIAL

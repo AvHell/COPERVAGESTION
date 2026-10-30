@@ -1,8 +1,6 @@
 /* =========================================================
    EQUIPOS — Renderer Premium
-   Flujo:
-     - Estática : pide ubicación, IP, hostname, RED y ADMIN
-     - DHCP     : pide ubicación, hostname libre y ADMIN (NO pide RED ni IP)
+   Colores estrictos sólidos · Tooltips · Sticky Header
    ========================================================= */
 
 const Swal = window.Swal;
@@ -15,8 +13,7 @@ function toastExito(titulo) {
     Swal.fire({
         toast: true, position: 'bottom-end', icon: 'success', title: titulo,
         showConfirmButton: false, timer: 2600, timerProgressBar: true,
-        background: '#ffffff', color: '#1a202c',
-        customClass: { popup: 'cl-toast cl-toast-success' },
+        customClass: { popup: 'cl-toast' },
         didOpen: (t) => {
             t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);
@@ -30,8 +27,7 @@ function toastError(titulo, texto = '') {
         toast: true, position: 'bottom-end', icon: 'error',
         title: texto ? `${titulo} — ${texto}` : titulo,
         showConfirmButton: false, timer: 3400, timerProgressBar: true,
-        background: '#ffffff', color: '#1a202c',
-        customClass: { popup: 'cl-toast cl-toast-error' },
+        customClass: { popup: 'cl-toast' },
         didOpen: (t) => {
             t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);
@@ -58,75 +54,11 @@ function limpiarResiduosSwal() {
 }
 
 /* =========================================================
-   PALETAS
+   RENDERIZADORES DE BADGES
    ========================================================= */
-
-const PALETAS_CLIENTE = {
-    ADAMA:  { bg: 'linear-gradient(135deg, #dbeafe, #93c5fd)', text: '#1e3a8a', border: '#1e40af' },
-    ATT:    { bg: 'linear-gradient(135deg, #e0f2fe, #bae6fd)', text: '#0369a1', border: '#0ea5e9' },
-    CLD:    { bg: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', text: '#be185d', border: '#632444' },
-    DIDI:   { bg: 'linear-gradient(135deg, #ffedd5, #fdba74)', text: '#c2410c', border: '#f97316' },
-    DMEX:   { bg: 'linear-gradient(135deg, #ecfccb, #bef264)', text: '#3f6212', border: '#84cc16' },
-    HBAN:   { bg: 'linear-gradient(135deg, #fef9c3, #fde047)', text: '#854d0e', border: '#eab308' },
-    KUBO:   { bg: 'linear-gradient(135deg, #dcfce7, #4ade80)', text: '#14532d', border: '#16a34a' },
-    FESA: { bg: 'linear-gradient(135deg, #dcfce7, #0d4412)', text: '#14532d', border: '#16d15a' },
-    MEGA:   { bg: 'linear-gradient(135deg, #cffafe, #22d3ee)', text: '#155e75', border: '#0891b2' },
-    NU:     { bg: 'linear-gradient(135deg, #f3e8ff, #c084fc)', text: '#6b21a8', border: '#a855f7' },
-    SHOP:   { bg: 'linear-gradient(135deg, #ffedd5, #fb923c, #ea580c)', text: '#7c2d12', border: '#ea580c' },
-    TOY:    { bg: 'linear-gradient(135deg, #fecaca, #f87171)', text: '#7f1d1d', border: '#dc2626' },
-    TPLAY:  {
-        bg: 'linear-gradient(135deg, #dbeafe 0%, #dcfce7 25%, #fef3c7 50%, #fee2e2 75%, #f3e8ff 100%)',
-        text: '#1e293b',
-        border: '#6366f1'
-    }
-};
-
-const PALETAS_FALLBACK = [
-    { bg: 'linear-gradient(135deg, #f3e8ff, #e9d5ff)', text: '#6b21a8', border: '#c084fc' },
-    { bg: 'linear-gradient(135deg, #e0f2fe, #bae6fd)', text: '#075985', border: '#7dd3fc' },
-    { bg: 'linear-gradient(135deg, #ffe4e6, #fecdd3)', text: '#be123c', border: '#fda4af' },
-    { bg: 'linear-gradient(135deg, #fef9c3, #fef08a)', text: '#854d0e', border: '#fde047' },
-    { bg: 'linear-gradient(135deg, #f0fdf4, #dcfce7)', text: '#166534', border: '#86efac' },
-    { bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', text: '#6d28d9', border: '#c4b5fd' },
-    { bg: 'linear-gradient(135deg, #fff7ed, #ffedd5)', text: '#c2410c', border: '#fdba74' },
-    { bg: 'linear-gradient(135deg, #fef2f2, #fee2e2)', text: '#991b1b', border: '#fca5a5' }
-];
-
-const PALETAS_ROL = {
-    AGT: { bg: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', text: '#1e40af', border: '#60a5fa' },
-    SPR: { bg: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', text: '#166534', border: '#4ade80' },
-    CLD: { bg: 'linear-gradient(135deg, #ffedd5, #fed7aa)', text: '#9a3412', border: '#fb923c' },
-    GRN: { bg: 'linear-gradient(135deg, #e9d5ff, #d8b4fe)', text: '#6b21a8', border: '#c084fc' },
-    CRD: { bg: 'linear-gradient(135deg, #ccfbf1, #99f6e4)', text: '#115e59', border: '#5eead4' },
-    MIS: { bg: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', text: '#9d174d', border: '#f9a8d4' },
-    ADM: { bg: 'linear-gradient(135deg, #e0e7ff, #c7d2fe)', text: '#3730a3', border: '#a5b4fc' }
-};
-
-function hashCodigo(codigo) {
-    const s = String(codigo || '').toUpperCase();
-    let h = 0;
-    for (let i = 0; i < s.length; i++) {
-        h = (h * 31 + s.charCodeAt(i)) | 0;
-    }
-    return Math.abs(h);
-}
-
-function getPaletaCliente(codigo) {
-    const key = String(codigo || '').trim().toUpperCase();
-    if (PALETAS_CLIENTE[key]) return PALETAS_CLIENTE[key];
-    return PALETAS_FALLBACK[hashCodigo(key) % PALETAS_FALLBACK.length];
-}
-
-function getPaletaRol(codigo) {
-    const key = String(codigo || '').trim().toUpperCase();
-    return PALETAS_ROL[key] || PALETAS_FALLBACK[hashCodigo(key) % PALETAS_FALLBACK.length];
-}
-
 function renderBadgeCliente(codigo, nombre = null) {
-    const p = getPaletaCliente(codigo);
-    const style = `background:${p.bg};color:${p.text};border-color:${p.border};`;
     const nombreHTML = nombre ? `<span class="nombre">${escaparHTML(nombre)}</span>` : '';
-    return `<span class="badge-cliente" style="${style}">
+    return `<span class="badge-cliente" data-color="${String(codigo).toUpperCase()}">
                 <span class="codigo">${escaparHTML(codigo)}</span>
                 ${nombreHTML}
             </span>`;
@@ -134,8 +66,26 @@ function renderBadgeCliente(codigo, nombre = null) {
 
 function renderRolPill(codigo) {
     if (!codigo) return `<span class="rol-pill">—</span>`;
-    const p = getPaletaRol(codigo);
-    return `<span class="rol-pill" style="background:${p.bg};color:${p.text};">${escaparHTML(codigo)}</span>`;
+    return `<span class="rol-pill" data-color="${String(codigo).toUpperCase()}">${escaparHTML(codigo)}</span>`;
+}
+
+// El hostname hereda el color del rol
+function renderHostnameBadge(hostname, rolCodigo) {
+    return `<span class="hostname-badge" data-color="${String(rolCodigo).toUpperCase()}">${escaparHTML(hostname)}</span>`;
+}
+
+function renderTipoBadge(tipo) {
+    return `<span class="badge-tipo-ip" data-color="BOTON">${escaparHTML(tipo)}</span>`;
+}
+
+function renderIpBadge(ip) {
+    if (!ip) return `<span class="badge-ip vacia">${iconoRedSVG()}DHCP</span>`;
+    return `<span class="badge-ip" data-color="BOTON">${iconoRedSVG()}${escaparHTML(ip)}</span>`;
+}
+
+function renderBadgePiso(nombre) {
+    if (!nombre) return `<span style="color:#a8a08a;">—</span>`;
+    return `<span class="badge-piso" data-color="BOTON">${escaparHTML(nombre)}</span>`;
 }
 
 /* =========================================================
@@ -186,9 +136,7 @@ const inputNumHost  = document.getElementById('numeroHost');
 const inputPassword = document.getElementById('passwordAdmin');
 
 const btnGuardar    = document.getElementById('btn-guardar');
-
-/* Secciones que se ocultan en DHCP */
-const seccionRed = document.getElementById('seccion-red');
+const seccionRed    = document.getElementById('seccion-red');
 
 /* =========================================================
    UTILIDADES
@@ -498,14 +446,11 @@ selectTipoIP.addEventListener('change', actualizarCamposSegunTipo);
 
 /* =========================================================
    MOSTRAR / OCULTAR SEGÚN TIPO DE IP
-     - Estática: muestra RED, IP, hostname auto/manual. Admin visible.
-     - DHCP    : oculta RED, oculta IP. Admin SIEMPRE visible.
    ========================================================= */
 function actualizarCamposSegunTipo() {
     const tipo = selectTipoIP.value;
     const esEstatica = tipo === 'Estatica';
 
-    /* Hostname */
     if (esEstatica) {
         campoHostEst.classList.remove('campo-oculto');
         campoHostDHCP.classList.add('campo-oculto');
@@ -518,10 +463,8 @@ function actualizarCamposSegunTipo() {
         filaCheckbox.style.display = 'none';
     }
 
-    /* Sección RED completa (solo Estática) */
     if (seccionRed) seccionRed.style.display = esEstatica ? 'block' : 'none';
 
-    /* Limpiar valores de red cuando es DHCP (para no enviar basura) */
     if (!esEstatica) {
         selectMascara.value = '';
         selectPuerta.value  = '';
@@ -739,31 +682,20 @@ function renderTabla() {
             .forEach(e => {
                 const tr = document.createElement('tr');
 
-                const hostnameHTML = `
-                    <span class="hostname-badge" title="${escaparHTML(e.Hostname)}">
-                        ${renderRolPill(e.RolCodigo)}
-                        ${escaparHTML(e.Hostname)}
-                    </span>`;
+                const hostnameHTML = renderHostnameBadge(e.Hostname, e.RolCodigo);
+                const tipoBadge    = renderTipoBadge(e.TipoIP);
+                const ipHTML       = renderIpBadge(e.IP);
+                const pisoHTML     = renderBadgePiso(e.PisoNombre);
+                const rolHTML      = renderRolPill(e.RolCodigo);
 
-                const tipoBadge = e.TipoIP === 'DHCP'
-                    ? `<span class="badge-tipo-ip dhcp">DHCP</span>`
-                    : `<span class="badge-tipo-ip estatica">Estática</span>`;
-
-                const ipHTML = e.IP
-                    ? `<span class="badge-ip estatica">${iconoRedSVG()}${escaparHTML(e.IP)}</span>`
-                    : `<span class="badge-ip vacia">${iconoRedSVG()}DHCP</span>`;
-
-                const pisoHTML = e.PisoNombre
-                    ? `<span class="badge-piso">${escaparHTML(e.PisoNombre)}</span>`
-                    : `<span style="color:#94a3b8;">—</span>`;
-
+                // Admin con el color de botón (Fondo oscuro, Letras claras)
                 const adminHTML = e.UsuarioAdmin
-                    ? `<span class="badge-admin" title="${escaparHTML(e.UsuarioAdmin)}">${iconoUsuarioSVG()}${escaparHTML(e.UsuarioAdmin)}</span>`
+                    ? `<span class="badge-admin" data-color="BOTON" title="${escaparHTML(e.UsuarioAdmin)}">${iconoUsuarioSVG()}${escaparHTML(e.UsuarioAdmin)}</span>`
                     : `<span class="badge-admin vacia">${iconoUsuarioSVG()}Sin asignar</span>`;
 
                 tr.innerHTML = `
                     <td>${hostnameHTML}</td>
-                    <td><span style="font-weight:600;font-size:0.8rem;">${escaparHTML(e.RolCodigo || '—')}</span></td>
+                    <td>${rolHTML}</td>
                     <td>${tipoBadge}</td>
                     <td>${ipHTML}</td>
                     <td>${pisoHTML}</td>
@@ -772,16 +704,19 @@ function renderTabla() {
                 `;
                 const celda = tr.querySelector('.acciones-tabla');
 
+                // Botones con SOLO ICONO y TOOLTIP
                 const btnEditar = document.createElement('button');
                 btnEditar.type = 'button';
                 btnEditar.className = 'secundario';
-                btnEditar.innerHTML = `${iconoEditarSVG()} Editar`;
+                btnEditar.setAttribute('data-tooltip', 'Editar equipo');
+                btnEditar.innerHTML = iconoEditarSVG();
                 btnEditar.addEventListener('click', () => abrirEdicion(e.IdEquipo));
 
                 const btnEliminar = document.createElement('button');
                 btnEliminar.type = 'button';
                 btnEliminar.className = 'peligro';
-                btnEliminar.innerHTML = `${iconoEliminarSVG()} Eliminar`;
+                btnEliminar.setAttribute('data-tooltip', 'Eliminar equipo');
+                btnEliminar.innerHTML = iconoEliminarSVG();
                 btnEliminar.addEventListener('click', () => eliminarEquipo(e.IdEquipo, e.Hostname));
 
                 celda.appendChild(btnEditar);
@@ -863,22 +798,17 @@ async function abrirEdicion(id) {
     inputHostPreview.readOnly = true;
     inputHostPreview.placeholder = 'Se armará automáticamente...';
 
-    /* 1) Cliente */
     selectCli.value = String(e.IdCliente);
 
-    /* 2) Pisos del cliente */
     await cargarPisosDelCliente(e.IdCliente);
     if (e.IdPiso) selectPiso.value = String(e.IdPiso);
 
-    /* 3) Configuraciones y dominios */
     await cargarConfiguracionesDelCliente(e.IdCliente);
 
-    /* 4) Rol y tipo IP */
     selectRol.value = String(e.IdRolEquipo);
     selectTipoIP.value = e.TipoIP;
     actualizarCamposSegunTipo();
 
-    /* 5) Hostname / IP */
     if (e.TipoIP === 'Estatica') {
         inputIP.value = e.IP ?? '';
         inputNumHost.value = e.NumeroHost ?? '';
@@ -887,7 +817,6 @@ async function abrirEdicion(id) {
         inputHostLibre.value = e.Hostname;
     }
 
-    /* 6) Red (solo Estática) */
     if (e.TipoIP === 'Estatica') {
         setSelectValorConHuerfano(selectMascara, e.Mascara);
         setSelectValorConHuerfano(selectPuerta,  e.PuertaEnlace);
@@ -895,7 +824,6 @@ async function abrirEdicion(id) {
         setSelectValorConHuerfano(selectDNS2,    e.DNS2);
     }
 
-    /* 7) Admin (SIEMPRE) */
     setSelectValorConHuerfano(selectDominio, e.UsuarioAdmin);
     inputPassword.value = e.PasswordAdmin ?? '';
 
@@ -952,25 +880,20 @@ btnGuardar.addEventListener('click', async () => {
         puertaEnlace:   esEstatica ? (selectPuerta.value  || null) : null,
         dns1:           esEstatica ? (selectDNS1.value    || null) : null,
         dns2:           esEstatica ? (selectDNS2.value    || null) : null,
-        usuarioAdmin:   selectDominio.value || null,   // admin SIEMPRE
-        passwordAdmin:  inputPassword.value.trim() || null, // admin SIEMPRE
+        usuarioAdmin:   selectDominio.value || null,
+        passwordAdmin:  inputPassword.value.trim() || null,
         activo:         true
     };
 
-    /* ---- Validaciones ---- */
     if (!datos.idCliente || !datos.idRolEquipo) {
         mostrarMensaje('Cliente y rol son obligatorios.', 'error'); return;
     }
     if (!datos.hostname) {
         mostrarMensaje('El hostname es obligatorio.', 'error'); return;
     }
-
-    /* Admin siempre obligatorio (tanto Estática como DHCP) */
     if (!datos.usuarioAdmin || !datos.passwordAdmin) {
         mostrarMensaje('Usuario admin y password son obligatorios.', 'error'); return;
     }
-
-    /* Validaciones exclusivas de Estática */
     if (esEstatica) {
         if (!datos.idPiso)       { mostrarMensaje('El piso es obligatorio para equipos estáticos.', 'error'); return; }
         if (!datos.ip)           { mostrarMensaje('La IP es obligatoria para equipos estáticos.', 'error'); return; }
@@ -996,9 +919,9 @@ btnGuardar.addEventListener('click', async () => {
                 title: 'IP duplicada',
                 html: `<div style="text-align:left;font-size:0.9rem;">
                     La IP <b>${escaparHTML(datos.ip)}</b> ya está asignada al equipo:<br><br>
-                    <div style="background:#f1f5f9;padding:10px;border-radius:6px;border-left:3px solid #b7791f;">
+                    <div style="background:#FFF7E8;padding:10px;border-radius:6px;border-left:3px solid #A99A63;">
                         <b>${escaparHTML(res.choque.Hostname)}</b><br>
-                        <span style="color:#64748b;">${escaparHTML(res.choque.ClienteCodigo)} — ${escaparHTML(res.choque.PisoNombre)}</span>
+                        <span style="color:#7a7563;">${escaparHTML(res.choque.ClienteCodigo)} — ${escaparHTML(res.choque.PisoNombre)}</span>
                     </div></div>`,
                 confirmButtonText: 'Entendido',
                 buttonsStyling: false,
@@ -1010,9 +933,9 @@ btnGuardar.addEventListener('click', async () => {
                 title: 'Hostname duplicado',
                 html: `<div style="text-align:left;font-size:0.9rem;">
                     El hostname <b>${escaparHTML(datos.hostname)}</b> ya está en uso por:<br><br>
-                    <div style="background:#f1f5f9;padding:10px;border-radius:6px;border-left:3px solid #b7791f;">
+                    <div style="background:#FFF7E8;padding:10px;border-radius:6px;border-left:3px solid #A99A63;">
                         <b>${escaparHTML(res.choque.Hostname)}</b><br>
-                        <span style="color:#64748b;">${escaparHTML(res.choque.ClienteCodigo)} — ${escaparHTML(res.choque.PisoNombre)}</span>
+                        <span style="color:#7a7563;">${escaparHTML(res.choque.ClienteCodigo)} — ${escaparHTML(res.choque.PisoNombre)}</span>
                     </div></div>`,
                 confirmButtonText: 'Entendido',
                 buttonsStyling: false,

@@ -1,6 +1,6 @@
 /* =========================================================
    CATÁLOGOS — Renderer Tierra / Oliva 2026
-   Badges dinámicos por hash · Password visible · X en vez de Cancelar
+   Badges sólidos · Iconos en acciones · Tooltips
    ========================================================= */
 
 const Swal = window.Swal;
@@ -51,21 +51,6 @@ function alertaWarning(titulo, mensaje = '') {
     });
 }
 
-function alertaInfo(titulo, mensaje = '') {
-    return Swal.fire({
-        icon: 'info',
-        title: titulo,
-        html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
-        confirmButtonText: 'Entendido',
-        showCloseButton: true,
-        buttonsStyling: false,
-        customClass: {
-            popup: 'cl-alert cl-alert-info',
-            confirmButton: 'swal2-confirm swal2-styled'
-        }
-    });
-}
-
 function escaparHTML(str) {
     return String(str ?? '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -73,22 +58,29 @@ function escaparHTML(str) {
 }
 
 /* =========================================================
-   SISTEMA DE COLORES — 12 VARIANTES TIERRA
-   Cada código/nombre obtiene un color estable por hash.
+   ICONOS SVG
    ========================================================= */
-const COLORES_TIERRA = 12;
-
-function hashCodigo(codigo) {
-    const s = String(codigo || '').toUpperCase().trim();
-    let h = 0;
-    for (let i = 0; i < s.length; i++) {
-        h = (h * 31 + s.charCodeAt(i)) | 0;
-    }
-    return Math.abs(h);
+function iconoEditarSVG() {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>`;
 }
 
+function iconoEliminarSVG() {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+            </svg>`;
+}
+
+/* =========================================================
+   SISTEMA DE COLORES
+   ========================================================= */
 function colorAttr(str) {
-    return `data-color="${hashCodigo(str) % COLORES_TIERRA}"`;
+    return `data-color="${String(str || '').toUpperCase()}"`;
 }
 
 /* =========================================================
@@ -107,11 +99,13 @@ function renderBadgeRol(codigo) {
 }
 
 function renderBadgeTipoConfig(tipo) {
-    return `<span class="badge-codigo" ${colorAttr(tipo)}>${escaparHTML(nombreTipoConfig(tipo))}</span>`;
+    // Tipos de red usan el color de botón
+    return `<span class="badge-codigo" data-color="BOTON">${escaparHTML(nombreTipoConfig(tipo))}</span>`;
 }
 
 function renderBadgePiso(nombre) {
-    return `<span class="badge-piso" ${colorAttr(nombre)}>${escaparHTML(nombre)}</span>`;
+    // Pisos usan el color de botón
+    return `<span class="badge-piso" data-color="BOTON">${escaparHTML(nombre)}</span>`;
 }
 
 function nombreTipoConfig(tipo) {
@@ -234,13 +228,15 @@ const TabClientes = (() => {
             const btnEditar = document.createElement('button');
             btnEditar.type = 'button';
             btnEditar.className = 'secundario';
-            btnEditar.textContent = 'Editar';
+            btnEditar.setAttribute('data-tooltip', 'Editar');
+            btnEditar.innerHTML = iconoEditarSVG();
             btnEditar.addEventListener('click', () => abrirEdicion(c.IdCliente));
 
             const btnEliminar = document.createElement('button');
             btnEliminar.type = 'button';
             btnEliminar.className = 'peligro';
-            btnEliminar.textContent = 'Eliminar';
+            btnEliminar.setAttribute('data-tooltip', 'Eliminar');
+            btnEliminar.innerHTML = iconoEliminarSVG();
             btnEliminar.addEventListener('click', () => eliminar(c.IdCliente));
 
             celda.appendChild(btnEditar);
@@ -463,7 +459,7 @@ const TabPisos = (() => {
                     <th style="width:22%;">Piso</th>
                     <th style="width:48%;">Clientes con acceso</th>
                     <th style="width:15%;">Dimensiones</th>
-                    <th style="width:15%; text-align:right;">Acciones</th>
+                    <th style="width:120px; text-align:right;">Acciones</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -488,13 +484,15 @@ const TabPisos = (() => {
             const btnEditar = document.createElement('button');
             btnEditar.type = 'button';
             btnEditar.className = 'secundario';
-            btnEditar.textContent = 'Editar';
+            btnEditar.setAttribute('data-tooltip', 'Editar');
+            btnEditar.innerHTML = iconoEditarSVG();
             btnEditar.addEventListener('click', () => abrirEdicion(p.IdPiso));
 
             const btnEliminar = document.createElement('button');
             btnEliminar.type = 'button';
             btnEliminar.className = 'peligro';
-            btnEliminar.textContent = 'Eliminar';
+            btnEliminar.setAttribute('data-tooltip', 'Eliminar');
+            btnEliminar.innerHTML = iconoEliminarSVG();
             btnEliminar.addEventListener('click', () => eliminar(p.IdPiso, p.Nombre));
 
             celda.appendChild(btnEditar);
@@ -714,13 +712,15 @@ const TabRoles = (() => {
             const btnEditar = document.createElement('button');
             btnEditar.type = 'button';
             btnEditar.className = 'secundario';
-            btnEditar.textContent = 'Editar';
+            btnEditar.setAttribute('data-tooltip', 'Editar');
+            btnEditar.innerHTML = iconoEditarSVG();
             btnEditar.addEventListener('click', () => abrirEdicion(r.IdRolEquipo));
 
             const btnEliminar = document.createElement('button');
             btnEliminar.type = 'button';
             btnEliminar.className = 'peligro';
-            btnEliminar.textContent = 'Eliminar';
+            btnEliminar.setAttribute('data-tooltip', 'Eliminar');
+            btnEliminar.innerHTML = iconoEliminarSVG();
             btnEliminar.addEventListener('click', () => eliminar(r.IdRolEquipo));
 
             celda.appendChild(btnEditar);
@@ -886,7 +886,7 @@ const TabDominios = (() => {
             const tienePass = d.Password && d.Password.length > 0;
             const passHTML = tienePass
                 ? `<span class="pass-plano">${escaparHTML(d.Password)}</span>`
-                : `<span class="pass-plano sin-dato">sin contraseña</span>`;
+                : `<span class="pass-plano sin-dato" style="background:var(--gray-100); color:var(--gray-400); border-color:var(--gray-200);">sin contraseña</span>`;
             const descHTML = (d.Descripcion && d.Descripcion.trim())
                 ? `<span class="badge-desc">${escaparHTML(d.Descripcion)}</span>`
                 : `<span class="badge-desc vacia">— sin descripción —</span>`;
@@ -903,13 +903,15 @@ const TabDominios = (() => {
             const btnEditar = document.createElement('button');
             btnEditar.type = 'button';
             btnEditar.className = 'secundario';
-            btnEditar.textContent = 'Editar';
+            btnEditar.setAttribute('data-tooltip', 'Editar');
+            btnEditar.innerHTML = iconoEditarSVG();
             btnEditar.addEventListener('click', () => abrirEditar(d));
 
             const btnEliminar = document.createElement('button');
             btnEliminar.type = 'button';
             btnEliminar.className = 'peligro';
-            btnEliminar.textContent = 'Eliminar';
+            btnEliminar.setAttribute('data-tooltip', 'Eliminar');
+            btnEliminar.innerHTML = iconoEliminarSVG();
             btnEliminar.addEventListener('click', () => eliminar(d));
 
             celda.appendChild(btnEditar);
@@ -1152,7 +1154,7 @@ const TabConfig = (() => {
                         <th style="width:22%;">Tipo</th>
                         <th style="width:26%;">Valor</th>
                         <th>Descripción</th>
-                        <th style="width:200px; text-align:right;">Acciones</th>
+                        <th style="width:120px; text-align:right;">Acciones</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -1176,13 +1178,15 @@ const TabConfig = (() => {
                 const btnEditar = document.createElement('button');
                 btnEditar.type = 'button';
                 btnEditar.className = 'secundario';
-                btnEditar.textContent = 'Editar';
+                btnEditar.setAttribute('data-tooltip', 'Editar');
+                btnEditar.innerHTML = iconoEditarSVG();
                 btnEditar.addEventListener('click', () => abrirEditar(c));
 
                 const btnEliminar = document.createElement('button');
                 btnEliminar.type = 'button';
                 btnEliminar.className = 'peligro';
-                btnEliminar.textContent = 'Eliminar';
+                btnEliminar.setAttribute('data-tooltip', 'Eliminar');
+                btnEliminar.innerHTML = iconoEliminarSVG();
                 btnEliminar.addEventListener('click', () => eliminar(c));
 
                 celda.appendChild(btnEditar);

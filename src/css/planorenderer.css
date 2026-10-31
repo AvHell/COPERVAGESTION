@@ -1,10 +1,39 @@
 /* =========================================================
-   CSS COMPARTIDO — VISTA PREVIA Y PDF DEL PLANO
+   CSS DE VISTA PREVIA DEL PLANO
    ---------------------------------------------------------
-   Este archivo se carga desde:
-     - ../css/planorenderer.css (vista previa)
-     - ../css/planorenderer.css (PDF vía <link>)
+   El PDF usa CSS_PDF en plano-renderer.js con la misma paleta.
    ========================================================= */
+
+:root {
+    --plano-fondo: #faf8f2;
+    --plano-superficie: #ffffff;
+    --plano-superficie-suave: #f4f0e6;
+    --plano-borde: #e6e0cf;
+    --plano-borde-fuerte: #cfc7b0;
+    --plano-texto: #2e3228;
+    --plano-texto-secundario: #575347;
+    --plano-texto-suave: #7a7563;
+    --plano-oliva: #6e7b5b;
+    --plano-oliva-oscuro: #566348;
+    --plano-oliva-suave: #e8ebdf;
+    --plano-oro: #a99a63;
+    --plano-rojo: #b5442e;
+    --plano-rojo-suave: #f3ded6;
+    --rol-agt: #557fa8;
+    --rol-agt-suave: #e5edf4;
+    --rol-crd: #8f7016;
+    --rol-crd-suave: #f5efd9;
+    --rol-cld: #c45f86;
+    --rol-cld-suave: #f7e5ec;
+    --rol-spr: #6e7b5b;
+    --rol-spr-suave: #e8ebdf;
+    --rol-grn: #805b9b;
+    --rol-grn-suave: #eee7f2;
+    --rol-adm: #73766d;
+    --rol-adm-suave: #e8e8e4;
+    --rol-mis: #b5442e;
+    --rol-mis-suave: #f3ded6;
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -195,13 +224,13 @@ body {
 }
 
 /* Colores por rol */
-.celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
-.celda[data-rol="SPR"] { background: #dcfce7; border-color: #f90000; }
-.celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
-.celda[data-rol="GRN"] { background: #f3e8ff; border-color: #a855f7; }
-.celda[data-rol="CRD"] { background: #ccfbf1; border-color: #14b8a6; }
-.celda[data-rol="MIS"] { background: #fce7f3; border-color: #ec4899; }
-.celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
+.celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); }
+.celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); }
+.celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); }
+.celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); }
+.celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); }
+.celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); }
+.celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); }
 
 /* =========================================================
    TABLA
@@ -264,13 +293,13 @@ body {
     color: #fff;
     background: #94a3b8;
 }
-.badge-rol[data-rol="AGT"] { background: #3b82f6; }
-.badge-rol[data-rol="SPR"] { background: #ff0000; }
-.badge-rol[data-rol="CLD"] { background: #f97316; }
-.badge-rol[data-rol="GRN"] { background: #a855f7; }
-.badge-rol[data-rol="CRD"] { background: #14b8a6; }
-.badge-rol[data-rol="MIS"] { background: #ec4899; }
-.badge-rol[data-rol="ADM"] { background: #475569; }
+.badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
+.badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
+.badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
+.badge-rol[data-rol="SPR"] { background: var(--rol-spr); }
+.badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
+.badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
+.badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
 
 .badge-cli {
     display: inline-block;
@@ -407,5 +436,121 @@ body.zoom-activo { cursor: zoom-in; }
     .zoom-indicador,
     .zoom-hint {
         display: none !important;
+    }
+}
+
+/* =========================================================
+   PALETA TIERRA / OLIVA — vista previa y PDF
+   ========================================================= */
+
+body {
+    background: var(--plano-fondo);
+    color: var(--plano-texto);
+}
+
+.zoom-scroll-area {
+    background: var(--plano-fondo);
+}
+
+#pdf-zoom-target,
+.pagina-plano,
+.pagina-tabla {
+    background: var(--plano-superficie);
+}
+
+#pdf-zoom-target {
+    box-shadow: 0 4px 24px rgba(46, 50, 40, 0.08);
+}
+
+.encabezado {
+    border-bottom-color: var(--plano-oro);
+}
+
+.encabezado .titulo h1,
+.encabezado .meta strong,
+.seccion-titulo,
+.celda-hostname,
+.identificador-item .cant,
+.identificador-item .nombre-zona-libre {
+    color: var(--plano-texto);
+}
+
+.encabezado .titulo .sub,
+.encabezado .meta,
+.tabla-equipos .bold {
+    color: var(--plano-texto-suave);
+}
+
+.seccion-titulo {
+    border-bottom-color: var(--plano-borde);
+}
+
+.grid-plano {
+    background: var(--plano-superficie-suave);
+    border-color: var(--plano-borde-fuerte);
+}
+
+.celda {
+    background: var(--plano-superficie);
+    border-color: var(--plano-borde-fuerte);
+}
+
+.celda-hostname,
+.tabla-equipos .bold-host {
+    color: var(--plano-texto);
+}
+
+.celda-ip,
+.tabla-equipos tbody td {
+    color: var(--plano-texto-secundario);
+}
+
+.tabla-equipos thead {
+    background: var(--plano-texto);
+}
+
+.tabla-equipos tbody tr {
+    border-bottom-color: var(--plano-borde);
+}
+
+.tabla-equipos tbody tr:nth-child(even),
+.identificadores {
+    background: var(--plano-superficie-suave);
+}
+
+.identificadores,
+.identificador-item {
+    border-color: var(--plano-borde);
+}
+
+.identificador-item {
+    background: var(--plano-superficie);
+}
+
+.celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); }
+.celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); }
+.celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); }
+.celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); }
+.celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); }
+.celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); }
+.celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); }
+
+.badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
+.badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
+.badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
+.badge-rol[data-rol="SPR"] { background: var(--rol-spr); }
+.badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
+.badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
+.badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
+
+@media print {
+    html,
+    body,
+    .zoom-scroll-area {
+        background: #fff;
+    }
+
+    #pdf-zoom-target {
+        box-shadow: none;
     }
 }

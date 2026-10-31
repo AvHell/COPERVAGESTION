@@ -48,6 +48,40 @@ async function verificarIPDuplicada(ip, idEquipoExcluir = null) {
 }
 
 /* =========================================================
+   LISTAR IP ASIGNADAS EN UN SEGMENTO /24
+   ========================================================= */
+async function listarIPsAsignadasEnSegmento(segmento, idEquipoExcluir = null) {
+    const octetos = String(segmento ?? '').split('.');
+    const segmentoValido = octetos.length === 3 && octetos.every(octeto =>
+        /^\d{1,3}$/.test(octeto) && Number(octeto) >= 0 && Number(octeto) <= 255
+    );
+    if (!segmentoValido) {
+        throw new Error('El segmento debe tener el formato IPv4 de tres octetos.');
+    }
+
+    const pool = await getPool();
+    const request = pool.request();
+    const excluir = Number.isInteger(Number(idEquipoExcluir)) && Number(idEquipoExcluir) > 0;
+    if (excluir) request.input('IdEquipoExcluir', sql.Int, Number(idEquipoExcluir));
+
+    const resultado = await request.query(`
+            SELECT DISTINCT LTRIM(RTRIM(IP)) AS IP
+            FROM Equipos
+            WHERE TipoIP = 'Estatica' AND IP IS NOT NULL
+            ${excluir ? 'AND IdEquipo <> @IdEquipoExcluir' : ''}
+        `);
+    const prefijo = octetos.map(Number).join('.');
+    return resultado.recordset.map(registro => String(registro.IP ?? '').trim())
+        .filter(ip => {
+            const partesIP = ip.split('.');
+            return partesIP.length === 4 &&
+                partesIP.every(octeto => /^\d{1,3}$/.test(octeto) && Number(octeto) <= 255) &&
+                partesIP.slice(0, 3).map(Number).join('.') === prefijo;
+        })
+        .map(ip => ip.split('.').map(Number).join('.'));
+}
+
+/* =========================================================
    VERIFICAR HOSTNAME DUPLICADO
    ========================================================= */
 async function verificarHostnameDuplicado(hostname, idEquipoExcluir = null) {
@@ -329,4 +363,7 @@ async function eliminar(id) {
     }
 }
 
-module.exports = { listar, obtenerPorId, crear, actualizar, eliminar, verificarIPDuplicada };
+module.exports = {
+    listar, obtenerPorId, crear, actualizar, eliminar,
+    verificarIPDuplicada, listarIPsAsignadasEnSegmento
+};

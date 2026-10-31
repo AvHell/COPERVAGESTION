@@ -862,6 +862,10 @@ body {
     flex: 1;
     min-width: 0;
 }
+.select-con-boton input {
+    flex: 1;
+    min-width: 0;
+}
 .btn-agregar-mini {
     width: 46px;
     height: 46px;
@@ -883,6 +887,11 @@ body {
     background: var(--tierra-oro);
     color: var(--tierra-carbon);
     border-color: var(--tierra-oro);
+}
+.btn-consultar-ips svg { width: 20px; height: 20px; }
+.btn-consultar-ips:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 .btn-agregar-mini:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
 
@@ -983,6 +992,7 @@ body {
     position: relative;
 }
 .swal2-popup.cl-confirm { width: 520px !important; }
+.swal2-popup.cl-modal-ips { width: min(760px, calc(100vw - 32px)) !important; }
 
 .swal2-popup.cl-confirm::before {
     content: '';
@@ -1170,6 +1180,68 @@ body {
     background: var(--gray-50) !important;
     border-color: var(--gray-300) !important;
     color: var(--gray-800) !important;
+}
+
+.ips-disponibles-resumen {
+    margin: 0 0 14px;
+    text-align: left;
+    color: var(--gray-700);
+}
+.ips-disponibles-resumen span {
+    display: block;
+    color: var(--gray-500);
+    font-size: 0.8rem;
+}
+.ips-disponibles-lista {
+    max-height: min(52vh, 480px);
+    overflow: auto;
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    text-align: left;
+}
+.tabla-ips-disponibles {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+.tabla-ips-disponibles th,
+.tabla-ips-disponibles td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--gray-100);
+}
+.tabla-ips-disponibles th {
+    position: sticky;
+    top: 0;
+    background: var(--gray-50);
+    color: var(--gray-700);
+    font-weight: 700;
+    text-align: left;
+}
+.tabla-ips-disponibles td:last-child,
+.tabla-ips-disponibles th:last-child { text-align: right; }
+.tabla-ips-disponibles code {
+    color: var(--tierra-carbon);
+    font-family: Consolas, monospace;
+    font-size: 0.9rem;
+}
+.tabla-ips-disponibles .btn-usar-ip {
+    padding: 6px 12px;
+    border: 1px solid var(--tierra-oliva);
+    border-radius: 8px;
+    background: var(--tierra-oliva);
+    color: #fff;
+    font: 600 0.78rem var(--font-display);
+    cursor: pointer;
+}
+.tabla-ips-disponibles .btn-usar-ip:hover {
+    background: var(--carbon-600);
+    border-color: var(--carbon-600);
+}
+.ips-disponibles-vacias {
+    padding: 18px;
+    border-radius: 10px;
+    background: var(--gray-50);
+    color: var(--gray-600);
 }
 
 /* =========================================================

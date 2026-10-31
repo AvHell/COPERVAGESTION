@@ -1014,6 +1014,7 @@ ipcMain.handle('equipos:crear',                async (_e, datos) => { const err 
 ipcMain.handle('equipos:actualizar',           async (_e, id, datos) => { const err = requerirSesion('equipos:editar');    if (err) return err; return await equiposDB.actualizar(id, datos); });
 ipcMain.handle('equipos:eliminar',             async (_e, id)    => { const err = requerirSesion('equipos:eliminar');    if (err) return err; return await equiposDB.eliminar(id); });
 ipcMain.handle('equipos:verificarIPDuplicada', async (_e, ip, idExcluir) => { const err = requerirSesion('equipos');      if (err) return err; return await equiposDB.verificarIPDuplicada(ip, idExcluir); });
+ipcMain.handle('equipos:listarIPsAsignadasEnSegmento', async (_e, segmento, idExcluir) => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.listarIPsAsignadasEnSegmento(segmento, idExcluir); });
 
 /* =========================================================
    IPC: DOMINIOS
@@ -1089,6 +1090,13 @@ ipcMain.handle('plano:actualizarZona', async (_e, idZona, nombre, color, fi, ff,
     return await planoDB.actualizarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre, color, fi, ff, ci, cf);
 });
 
+ipcMain.handle('plano:actualizarZonasPorNombre', async (_e, idPiso, nombreActual, colorActual, nombre, color) => {
+    const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
+    return await planoDB.actualizarZonasPorNombre(
+        usuarioActual.IdUsuario, idPiso, nombreActual, colorActual, nombre, color
+    );
+});
+
 ipcMain.handle('plano:eliminarZona', async (_e, idZona, idPiso, nombre) => {
     const err = requerirSesion('plano:zonas:eliminar'); if (err) return err;
     return await planoDB.eliminarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre);
@@ -1122,6 +1130,13 @@ ipcMain.handle('plano:listarZonasLibres', async (_e, idPiso) => { const err = re
 ipcMain.handle('plano:guardarZonaLibre', async (_e, idPiso, nombre, color, celdas) => {
     const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
     return await planoDB.guardarZonaLibre(usuarioActual.IdUsuario, idPiso, nombre, color, celdas);
+});
+
+ipcMain.handle('plano:actualizarZonaLibre', async (_e, idPiso, nombreActual, colorActual, nombre, color) => {
+    const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
+    return await planoDB.actualizarZonaLibre(
+        usuarioActual.IdUsuario, idPiso, nombreActual, colorActual, nombre, color
+    );
 });
 
 ipcMain.handle('plano:eliminarZonaLibre', async (_e, idPiso, nombre, color) => {

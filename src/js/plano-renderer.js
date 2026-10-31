@@ -30,18 +30,20 @@ function crearEstadoPanel(sufijo) {
 /* Zona Libre: marcar celdas vacías */
 let modoZonaLibre = false;
 let celdasLibresSeleccionadas = [];
-let colorSeleccionadoLibre = '#e74c3c';
+let colorSeleccionadoLibre = '#B5442E';
 
 /* Zona Normal: manual 1×1 acumulativo (permite celdas con o sin equipo) */
 let modoZona = false;
 let celdasZonaSeleccionadas = [];  // [{fila, columna}, ...]
-let colorSeleccionado = '#e74c3c';
+let colorSeleccionado = '#B5442E';
 
 /* Edición */
 let modoEdicion = false;
 let equipoEditando = null;
 
 let zonaEditando = null;
+let zonaGrupoEditando = null;
+let zonaLibreEditando = null;
 
 let dragOrigen = null;
 let moverPendiente = null;
@@ -64,8 +66,8 @@ let edEsModoCreacion = false; // por si en el futuro se reutiliza para crear
 let ventanaVistaPrevia = null;
 
 const COLORES_DISPONIBLES = [
-    '#e74c3c', '#e67e22', '#f1c40f', '#27ae60',
-    '#3498db', '#9b59b6', '#95a5a6', '#2c3e50'
+    '#A99A63', '#6E7B5B', '#B5442E', '#C7BFA2',
+    '#8A7353', '#78806B', '#5F6650', '#D6CBA8'
 ];
 
 const CELL_W = 74;
@@ -207,13 +209,13 @@ const CSS_PDF = `
         letter-spacing: -0.01em;
     }
 
-    .celda[data-rol="AGT"] { background: #dbeafe; border-color: #3b82f6; }
-    .celda[data-rol="SPR"] { background: #fcdcdc; border-color: #ff0000; }
-    .celda[data-rol="CLD"] { background: #ffedd5; border-color: #f97316; }
-    .celda[data-rol="GRN"] { background: #f3e8ff; border-color: #a855f7; }
-    .celda[data-rol="CRD"] { background: #ccfbf1; border-color: #14b8a6; }
-    .celda[data-rol="MIS"] { background: #fce7f3; border-color: #ec4899; }
-    .celda[data-rol="ADM"] { background: #e2e8f0; border-color: #475569; }
+    .celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); }
+    .celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); }
+    .celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); }
+    .celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); }
+    .celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); }
+    .celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); }
+    .celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); }
 
     .tabla-equipos {
         width: 100%;
@@ -263,13 +265,13 @@ const CSS_PDF = `
         color: #fff;
         background: #94a3b8;
     }
-    .badge-rol[data-rol="AGT"] { background: #3b82f6; }
-    .badge-rol[data-rol="SPR"] { background: #f70000; }
-    .badge-rol[data-rol="CLD"] { background: #f97316; }
-    .badge-rol[data-rol="GRN"] { background: #a855f7; }
-    .badge-rol[data-rol="CRD"] { background: #14b8a6; }
-    .badge-rol[data-rol="MIS"] { background: #ec4899; }
-    .badge-rol[data-rol="ADM"] { background: #475569; }
+    .badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
+    .badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
+    .badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
+    .badge-rol[data-rol="SPR"] { background: var(--rol-spr); }
+    .badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
+    .badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
+    .badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
 
     .badge-cli {
         display: inline-block;
@@ -319,6 +321,80 @@ const CSS_PDF = `
         text-transform: uppercase;
         letter-spacing: 0.02em;
     }
+
+    :root {
+        --plano-fondo: #faf8f2;
+        --plano-superficie: #ffffff;
+        --plano-superficie-suave: #f4f0e6;
+        --plano-borde: #e6e0cf;
+        --plano-borde-fuerte: #cfc7b0;
+        --plano-texto: #2e3228;
+        --plano-texto-secundario: #575347;
+        --plano-texto-suave: #7a7563;
+        --plano-oliva: #6e7b5b;
+        --plano-oro: #a99a63;
+        --plano-rojo: #b5442e;
+        --plano-rojo-suave: #f3ded6;
+        --rol-agt: #557fa8;
+        --rol-agt-suave: #e5edf4;
+        --rol-crd: #8f7016;
+        --rol-crd-suave: #f5efd9;
+        --rol-cld: #c45f86;
+        --rol-cld-suave: #f7e5ec;
+        --rol-spr: #6e7b5b;
+        --rol-spr-suave: #e8ebdf;
+        --rol-grn: #805b9b;
+        --rol-grn-suave: #eee7f2;
+        --rol-adm: #73766d;
+        --rol-adm-suave: #e8e8e4;
+        --rol-mis: #b5442e;
+        --rol-mis-suave: #f3ded6;
+    }
+
+    html, body { color: var(--plano-texto); }
+    .encabezado { border-bottom-color: var(--plano-oro); }
+    .encabezado .titulo h1,
+    .encabezado .meta strong,
+    .seccion-titulo,
+    .celda-hostname,
+    .identificador-item .cant,
+    .identificador-item .nombre-zona-libre { color: var(--plano-texto); }
+    .encabezado .titulo .sub,
+    .encabezado .meta,
+    .tabla-equipos .bold { color: var(--plano-texto-suave); }
+    .seccion-titulo { border-bottom-color: var(--plano-borde); }
+    .grid-plano {
+        background: var(--plano-superficie-suave);
+        border-color: var(--plano-borde-fuerte);
+    }
+    .celda {
+        background: var(--plano-superficie);
+        border-color: var(--plano-borde-fuerte);
+    }
+    .celda-ip,
+    .tabla-equipos tbody td { color: var(--plano-texto-secundario); }
+    .tabla-equipos thead { background: var(--plano-texto); }
+    .tabla-equipos tbody tr { border-bottom-color: var(--plano-borde); }
+    .tabla-equipos tbody tr:nth-child(even),
+    .identificadores { background: var(--plano-superficie-suave); }
+    .identificadores,
+    .identificador-item { border-color: var(--plano-borde); }
+    .identificador-item { background: var(--plano-superficie); }
+    .celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); }
+    .celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); }
+    .celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); }
+    .celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); }
+    .celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); }
+    .celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); }
+    .celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); }
+
+    .badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
+    .badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
+    .badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
+    .badge-rol[data-rol="SPR"] { background: var(--rol-spr); }
+    .badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
+    .badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
+    .badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
 `;
 
 /* =========================================================
@@ -547,7 +623,11 @@ btnToggleLateral.addEventListener('click', () => {
 });
 btnCerrarLateral.addEventListener('click', cerrarLateral);
 
-document.addEventListener('dragstart', () => {
+document.addEventListener('dragstart', (ev) => {
+    if (ev.target.closest('.btn-editar-equipo')) {
+        ev.preventDefault();
+        return;
+    }
     if (lateralBackdrop) lateralBackdrop.style.pointerEvents = 'none';
 }, true);
 document.addEventListener('dragend', () => {
@@ -609,8 +689,9 @@ function renderColoresZona() {
     });
 }
 
-function abrirModalZona(zona = null) {
+function abrirModalZona(zona = null, grupo = null) {
     zonaEditando = zona;
+    zonaGrupoEditando = grupo;
 
     if (zona) {
         modalZonaTitulo.textContent = 'Editar zona';
@@ -643,6 +724,7 @@ function abrirModalZona(zona = null) {
 modalZonaCancelar.addEventListener('click', () => {
     modalZona.style.display = 'none';
     zonaEditando = null;
+    zonaGrupoEditando = null;
     celdasZonaSeleccionadas = [];
     renderGridPanel(panelIzq);
     renderGridPanel(panelDer);
@@ -654,7 +736,20 @@ modalZonaAceptar.addEventListener('click', async () => {
     if (!panelActivo.idPiso) { alert('Selecciona un piso en el panel activo.'); return; }
 
     try {
-        if (zonaEditando) {
+        if (zonaGrupoEditando) {
+            const res = await window.api.plano.actualizarZonasPorNombre(
+                panelActivo.idPiso,
+                zonaGrupoEditando.nombre,
+                zonaGrupoEditando.color,
+                nombre,
+                colorSeleccionado
+            );
+            if (!res || res.ok === false) {
+                mostrarToast(res?.mensaje || 'No se pudo actualizar la zona', 'error', 4000);
+                return;
+            }
+            mostrarToast(`Zonas "${zonaGrupoEditando.nombre}" actualizadas`, 'exito');
+        } else if (zonaEditando) {
             await window.api.plano.actualizarZona(
                 zonaEditando.IdZona, nombre, colorSeleccionado,
                 zonaEditando.FilaInicio, zonaEditando.FilaFin,
@@ -697,6 +792,7 @@ modalZonaAceptar.addEventListener('click', async () => {
 
     modalZona.style.display = 'none';
     zonaEditando = null;
+    zonaGrupoEditando = null;
     celdasZonaSeleccionadas = [];
     await recargarPanel(panelActivo);
 });
@@ -715,17 +811,24 @@ function renderColoresZonaLibre() {
     });
 }
 
-function abrirModalZonaLibre() {
+function abrirModalZonaLibre(grupo = null) {
     if (guardandoZonaLibre) return;
-    if (celdasLibresSeleccionadas.length === 0) {
+    if (!grupo && celdasLibresSeleccionadas.length === 0) {
         alert('Primero selecciona una o más celdas vacías.');
         return;
     }
 
     guardandoZonaLibre = true;
-    modalZonaLibreTitulo.textContent = 'Nueva zona libre';
-    modalZonaLibreNombre.value = '';
-    colorSeleccionadoLibre = COLORES_DISPONIBLES[0];
+    zonaLibreEditando = grupo;
+    modalZonaLibreTitulo.textContent = grupo ? 'Editar zona libre' : 'Nueva zona libre';
+    modalZonaLibreNombre.value = grupo?.nombre || '';
+    colorSeleccionadoLibre = grupo?.color || COLORES_DISPONIBLES[0];
+    if (grupo) {
+        celdasLibresSeleccionadas = grupo.celdas.map(celda => ({
+            fila: celda.Fila,
+            columna: celda.Columna
+        }));
+    }
     modalZonaLibreCeldas.textContent = `Celdas seleccionadas: ${celdasLibresSeleccionadas.length}`;
     renderColoresZonaLibre();
     modalZonaLibre.style.display = 'flex';
@@ -739,6 +842,7 @@ function abrirModalZonaLibre() {
 modalZonaLibreCancelar.addEventListener('click', () => {
     modalZonaLibre.style.display = 'none';
     guardandoZonaLibre = false;
+    zonaLibreEditando = null;
     celdasLibresSeleccionadas = [];
     renderGridPanel(panelIzq);
     renderGridPanel(panelDer);
@@ -755,10 +859,21 @@ modalZonaLibreAceptar.addEventListener('click', async () => {
     modalZonaLibreAceptar.disabled = true;
 
     try {
-        await window.api.plano.guardarZonaLibre(
-            panelActivo.idPiso, nombre, colorSeleccionadoLibre,
-            celdasLibresSeleccionadas.slice()
-        );
+        const res = zonaLibreEditando
+            ? await window.api.plano.actualizarZonaLibre(
+                panelActivo.idPiso,
+                zonaLibreEditando.nombre,
+                zonaLibreEditando.color,
+                nombre,
+                colorSeleccionadoLibre
+            )
+            : await window.api.plano.guardarZonaLibre(
+                panelActivo.idPiso, nombre, colorSeleccionadoLibre,
+                celdasLibresSeleccionadas.slice()
+            );
+        if (!res || res.ok === false) {
+            throw new Error(res?.mensaje || 'No se pudo guardar la zona libre');
+        }
         mostrarToast(`Zona libre "${nombre}" guardada`, 'exito');
     } catch (err) {
         mostrarToast('Error al guardar: ' + err.message, 'error', 4000);
@@ -769,6 +884,7 @@ modalZonaLibreAceptar.addEventListener('click', async () => {
     modalZonaLibre.style.display = 'none';
     modalZonaLibreAceptar.disabled = false;
     guardandoZonaLibre = false;
+    zonaLibreEditando = null;
     celdasLibresSeleccionadas = [];
     await recargarPanel(panelActivo);
 });
@@ -1120,8 +1236,11 @@ async function abrirModalEditarEquipo(equipo, panel) {
     const idPisoReal = equipo.IdPiso ?? panel.idPiso;
 
     if (editarTitulo) editarTitulo.textContent = `Editar equipo — ${equipo.Hostname}`;
+    const posicion = equipo._fila != null && equipo._col != null
+        ? `Fila ${equipo._fila}, Columna ${equipo._col}`
+        : 'Sin ubicar';
     if (editarInfo) editarInfo.innerHTML = `
-        <div><b>Posición:</b> Fila ${equipo._fila}, Columna ${equipo._col}</div>
+        <div><b>Posición:</b> ${posicion}</div>
         <div><b>Cliente actual:</b> ${equipo.ClienteCodigo || '—'}</div>
         <div><b>Rol actual:</b> ${equipo.RolCodigo || '—'}</div>
         <div><b>Piso:</b> ${pisos.find(p => Number(p.IdPiso) === Number(idPisoReal))?.Nombre || ''}</div>
@@ -2215,7 +2334,7 @@ function renderizarLlavesZonas(panel) {
             x: lado === 'derecha' ? zonaXRight : zonaXLeft,
             y: yFinal,
             h: Math.max(zonaH, 30),
-            color: zona.Color || '#3b82f6',
+            color: zona.Color || '#A99A63',
             nombre: zona.Nombre,
             zona
         });
@@ -2304,6 +2423,8 @@ function renderPanelLateral() {
     renderListaSinUbicarFiltrada();
     renderListaZonas();
     actualizarBadge();
+    window.PermisosUI?.aplicar(listaSinUbicar);
+    window.PermisosUI?.aplicar(listaZonas);
 }
 
 function renderTabs() {
@@ -2379,7 +2500,24 @@ function renderListaSinUbicarFiltrada() {
                 <div class="equipo-ubicacion">${clienteNom} · ${pisoNom}</div>
             </div>
         `;
+        const btnEditar = document.createElement('button');
+        btnEditar.type = 'button';
+        btnEditar.className = 'secundario btn-editar-equipo';
+        btnEditar.dataset.permiso = 'equipos:editar';
+        btnEditar.textContent = 'Editar';
+        btnEditar.setAttribute('aria-label', `Editar equipo ${e.Hostname}`);
+        btnEditar.draggable = false;
+        btnEditar.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            abrirModalEditarEquipo(e, panelActivo);
+        });
+        li.appendChild(btnEditar);
         li.addEventListener('dragstart', (ev) => {
+            if (ev.target.closest('button')) {
+                ev.preventDefault();
+                return;
+            }
             dragOrigen = {
                 tipo: 'lista',
                 idEquipo: e.IdEquipo,
@@ -2437,8 +2575,8 @@ function renderListaZonas() {
 
         if (g.zonas.length > 1) {
             const cantSpan = document.createElement('span');
+            cantSpan.className = 'cant-zonas';
             cantSpan.textContent = `${g.zonas.length}`;
-            cantSpan.style.cssText = 'font-size:0.7rem;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:8px;';
             li.appendChild(colorDiv);
             li.appendChild(nombreSpan);
             li.appendChild(cantSpan);
@@ -2448,13 +2586,20 @@ function renderListaZonas() {
         }
 
         const btnEditar = document.createElement('button');
+        btnEditar.type = 'button';
         btnEditar.textContent = 'Editar';
         btnEditar.className = 'secundario';
-        btnEditar.addEventListener('click', () => abrirModalZona(g.zonas[0]));
+        btnEditar.dataset.permiso = 'plano:zonas:gestionar';
+        btnEditar.addEventListener('click', () => abrirModalZona(g.zonas[0], {
+            nombre: g.nombre,
+            color: g.color
+        }));
 
         const btnEliminar = document.createElement('button');
+        btnEliminar.type = 'button';
         btnEliminar.textContent = 'Eliminar';
         btnEliminar.className = 'peligro';
+        btnEliminar.dataset.permiso = 'plano:zonas:eliminar';
         btnEliminar.addEventListener('click', () => {
             const total = g.zonas.length;
             const mensaje = total > 1
@@ -2511,12 +2656,14 @@ function renderListaZonas() {
             nombreSpan.className = 'nombre-zona';
             nombreSpan.textContent = g.nombre + ' (libre)';
             const cantSpan = document.createElement('span');
+            cantSpan.className = 'cant-celdas';
             cantSpan.textContent = `${g.celdas.length} c.`;
-            cantSpan.style.cssText = 'font-size:0.7rem;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:8px;';
 
             const btnEliminar = document.createElement('button');
+            btnEliminar.type = 'button';
             btnEliminar.textContent = 'Eliminar';
             btnEliminar.className = 'peligro';
+            btnEliminar.dataset.permiso = 'plano:zonas:eliminar';
             btnEliminar.addEventListener('click', () => {
                 mostrarConfirmacion(
                     'Eliminar zona libre',
@@ -2529,9 +2676,17 @@ function renderListaZonas() {
                 );
             });
 
+            const btnEditar = document.createElement('button');
+            btnEditar.type = 'button';
+            btnEditar.textContent = 'Editar';
+            btnEditar.className = 'secundario';
+            btnEditar.dataset.permiso = 'plano:zonas:gestionar';
+            btnEditar.addEventListener('click', () => abrirModalZonaLibre(g));
+
             li.appendChild(colorDiv);
             li.appendChild(nombreSpan);
             li.appendChild(cantSpan);
+            li.appendChild(btnEditar);
             li.appendChild(btnEliminar);
             listaZonas.appendChild(li);
         });
@@ -3193,7 +3348,7 @@ function construirBloquesPlano(panel, layout) {
         }
         ocupacion.push({ top: yFinal, bottom: yFinal + Math.max(zonaH, alturaMin) });
 
-        const colorZona = normalizarColor(zona.Color, '#3b82f6');
+        const colorZona = normalizarColor(zona.Color, '#A99A63');
         const OFFSET_LLAVE = 8;
         const xBase = lado === 'derecha' ? zonaXRight + OFFSET_LLAVE : zonaXLeft - OFFSET_LLAVE;
         const hLlave = Math.max(zonaH, 30);
@@ -3588,6 +3743,30 @@ function generarHTMLParaPDF(panel) {
    ATAJOS: ENTER para guardar (Zona Libre y Zona 1×1)
    ========================================================= */
 document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') {
+        const hayModoActivo = modoZona || modoZonaLibre || modoEdicion;
+        if (!hayModoActivo) return;
+        if (modalZonaLibreAceptar.disabled || edGuardando) return;
+
+        ev.preventDefault();
+        if (modalZona.style.display === 'flex') modalZonaCancelar.click();
+        if (modalZonaLibre.style.display === 'flex') modalZonaLibreCancelar.click();
+        if (modalEditarEquipo.style.display === 'flex') editarCancelar?.click();
+
+        modoZona = false;
+        modoZonaLibre = false;
+        modoEdicion = false;
+        celdasZonaSeleccionadas = [];
+        celdasLibresSeleccionadas = [];
+        [gridIzq, gridDer].forEach(grid => {
+            if (grid) grid.classList.remove('modo-zona-libre');
+        });
+        actualizarBotonesModo();
+        renderGridPanel(panelIzq);
+        renderGridPanel(panelDer);
+        return;
+    }
+
     if (ev.key !== 'Enter') return;
 
     if (modoZonaLibre && celdasLibresSeleccionadas.length > 0 && !guardandoZonaLibre) {

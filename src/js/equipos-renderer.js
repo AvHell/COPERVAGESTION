@@ -134,6 +134,7 @@ const filaCheckbox      = document.getElementById('filaCheckboxHostname');
 const inputIP       = document.getElementById('ip');
 const inputNumHost  = document.getElementById('numeroHost');
 const inputPassword = document.getElementById('passwordAdmin');
+const btnIPsDisponibles = document.getElementById('btn-ips-disponibles');
 
 const btnGuardar    = document.getElementById('btn-guardar');
 const seccionRed    = document.getElementById('seccion-red');
@@ -443,6 +444,7 @@ document.querySelectorAll('.btn-agregar-mini[data-tipo]').forEach(btn => {
 document.getElementById('btn-nuevo-dominio').addEventListener('click', agregarDominio);
 
 selectTipoIP.addEventListener('change', actualizarCamposSegunTipo);
+btnIPsDisponibles.addEventListener('click', consultarIPsDisponibles);
 
 /* =========================================================
    MOSTRAR / OCULTAR SEGÚN TIPO DE IP
@@ -450,6 +452,7 @@ selectTipoIP.addEventListener('change', actualizarCamposSegunTipo);
 function actualizarCamposSegunTipo() {
     const tipo = selectTipoIP.value;
     const esEstatica = tipo === 'Estatica';
+    btnIPsDisponibles.disabled = !esEstatica;
 
     if (esEstatica) {
         campoHostEst.classList.remove('campo-oculto');
@@ -512,6 +515,105 @@ function configurarInputIP(input) {
     });
 }
 configurarInputIP(inputIP);
+
+function obtenerSegmentoIPv4(valor) {
+    const octetos = String(valor ?? '').trim().split('.');
+    if (octetos.length < 3 || octetos.length > 4) return null;
+
+    const segmento = octetos.slice(0, 3);
+    const valido = segmento.every(octeto =>
+        /^\d{1,3}$/.test(octeto) && Number(octeto) >= 0 && Number(octeto) <= 255
+    );
+    if (!valido) return null;
+
+    if (octetos.length === 4 && octetos[3] !== '' &&
+        (!/^\d{1,3}$/.test(octetos[3]) || Number(octetos[3]) > 255)) {
+        return null;
+    }
+
+    return segmento.map(Number).join('.');
+}
+
+async function consultarIPsDisponibles() {
+    const segmento = obtenerSegmentoIPv4(inputIP.value);
+    if (!segmento) {
+        toastError('Segmento inválido', 'Ingresa una IPv4 válida para consultar sus primeros tres octetos.');
+        inputIP.focus();
+        return;
+    }
+
+    btnIPsDisponibles.disabled = true;
+    try {
+        const resultado = await window.api.equipos.listarIPsAsignadasEnSegmento(segmento, idEditando);
+        if (!Array.isArray(resultado)) {
+            throw new Error(resultado?.mensaje || 'No se pudieron consultar las IP asignadas.');
+        }
+
+        const prefijo = `${segmento}.`;
+        const ipsReservadas = [
+            ...resultado,
+            selectPuerta.value,
+            selectDNS1.value,
+            selectDNS2.value
+        ];
+        const hostsOcupados = new Set(ipsReservadas.map(ip => {
+            const partes = String(ip ?? '').trim().split('.');
+            if (partes.length !== 4 || partes.slice(0, 3).map(Number).join('.') !== segmento) return null;
+            const host = Number(partes[3]);
+            return Number.isInteger(host) && host >= 1 && host <= 254 ? host : null;
+        }).filter(host => host !== null));
+
+        const ipsLibres = [];
+        for (let host = 1; host <= 254; host++) {
+            if (!hostsOcupados.has(host)) ipsLibres.push(`${prefijo}${host}`);
+        }
+
+        const filas = ipsLibres.map(ip => {
+            const host = ip.slice(ip.lastIndexOf('.') + 1);
+            return `<tr>
+                <td><code>${ip}</code></td>
+                <td>${host}</td>
+                <td><button type="button" class="btn-usar-ip" data-ip-disponible="${ip}">Usar IP</button></td>
+            </tr>`;
+        }).join('');
+
+        await Swal.fire({
+            title: `IPs disponibles — ${segmento}.0/24`,
+            html: `
+                <p class="ips-disponibles-resumen">
+                    <strong>${ipsLibres.length}</strong> libres de 254 hosts utilizables
+                    <span>Rango de hosts: ${segmento}.1 a ${segmento}.254</span>
+                </p>
+                ${ipsLibres.length
+                    ? `<div class="ips-disponibles-lista">
+                        <table class="tabla-ips-disponibles">
+                            <thead><tr><th>Dirección IP</th><th>Host</th><th></th></tr></thead>
+                            <tbody>${filas}</tbody>
+                        </table>
+                    </div>`
+                    : '<p class="ips-disponibles-vacias">No hay direcciones disponibles en este segmento.</p>'}
+            `,
+            showConfirmButton: false,
+            showCloseButton: true,
+            width: 680,
+            customClass: { popup: 'cl-confirm cl-modal-ips' },
+            didOpen: popup => {
+                popup.querySelectorAll('[data-ip-disponible]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        inputIP.value = btn.dataset.ipDisponible;
+                        actualizarPreviewHostname();
+                        Swal.close();
+                        inputIP.focus();
+                    });
+                });
+            }
+        });
+    } catch (err) {
+        toastError('No se pudieron consultar las IP disponibles', err.message);
+    } finally {
+        btnIPsDisponibles.disabled = selectTipoIP.value !== 'Estatica';
+    }
+}
 
 function construirHostname(idRol, idCli, ip) {
     if (!idRol || !idCli || !ip) return '';

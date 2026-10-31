@@ -104,7 +104,8 @@ contextBridge.exposeInMainWorld('api', {
         obtenerPorId:         (id)              => ipcRenderer.invoke('equipos:obtenerPorId', id),
         actualizar:           (id, datos)       => ipcRenderer.invoke('equipos:actualizar', id, datos),
         eliminar:             (id)              => ipcRenderer.invoke('equipos:eliminar', id),
-        verificarIPDuplicada: (ip, idExcluir)   => ipcRenderer.invoke('equipos:verificarIPDuplicada', ip, idExcluir)
+        verificarIPDuplicada: (ip, idExcluir)   => ipcRenderer.invoke('equipos:verificarIPDuplicada', ip, idExcluir),
+        listarIPsAsignadasEnSegmento: (segmento, idExcluir) => ipcRenderer.invoke('equipos:listarIPsAsignadasEnSegmento', segmento, idExcluir)
     },
 
     /* =========================================================
@@ -171,12 +172,13 @@ contextBridge.exposeInMainWorld('api', {
         listarZonas:    (idPiso)                                                       => ipcRenderer.invoke('plano:listarZonas', idPiso),
         crearZona:      (idPiso, nombre, color, fi, ff, ci, cf)                        => ipcRenderer.invoke('plano:crearZona', idPiso, nombre, color, fi, ff, ci, cf),
         actualizarZona: (idZona, nombre, color, fi, ff, ci, cf, idPiso)                => ipcRenderer.invoke('plano:actualizarZona', idZona, nombre, color, fi, ff, ci, cf, idPiso),
+        actualizarZonasPorNombre: (idPiso, nombreActual, colorActual, nombre, color)     => ipcRenderer.invoke('plano:actualizarZonasPorNombre', idPiso, nombreActual, colorActual, nombre, color),
         eliminarZona:   (idZona, idPiso, nombre)                                       => ipcRenderer.invoke('plano:eliminarZona', idZona, idPiso, nombre),
-
         eliminarZonasPorNombre: (idPiso, nombre, color)                                => ipcRenderer.invoke('plano:eliminarZonasPorNombre', idPiso, nombre, color),
 
         listarZonasLibres:  (idPiso)                          => ipcRenderer.invoke('plano:listarZonasLibres', idPiso),
         guardarZonaLibre:   (idPiso, nombre, color, celdas)   => ipcRenderer.invoke('plano:guardarZonaLibre', idPiso, nombre, color, celdas),
+        actualizarZonaLibre: (idPiso, nombreActual, colorActual, nombre, color) => ipcRenderer.invoke('plano:actualizarZonaLibre', idPiso, nombreActual, colorActual, nombre, color),
         eliminarZonaLibre:  (idPiso, nombre, color)           => ipcRenderer.invoke('plano:eliminarZonaLibre', idPiso, nombre, color),
 
         exportarPDF: (opciones) => ipcRenderer.invoke('plano:exportarPDF', opciones)

@@ -401,6 +401,29 @@ async function guardarZonaLibre(idUsuario, idPiso, nombre, color, celdas) {
     }
 }
 
+async function actualizarZonaLibre(idUsuario, idPiso, nombreActual, colorActual, nombre, color) {
+    const pool = await getPool();
+    const r = await pool.request()
+        .input('IdPiso', sql.Int, idPiso)
+        .input('NombreActual', sql.NVarChar(100), nombreActual)
+        .input('ColorActual', sql.VarChar(20), colorActual)
+        .input('Nombre', sql.NVarChar(100), nombre)
+        .input('Color', sql.VarChar(20), color)
+        .query(`UPDATE PlanoZonasLibres
+                SET Nombre = @Nombre, Color = @Color
+                WHERE IdPiso = @IdPiso
+                  AND Nombre = @NombreActual
+                  AND ((@ColorActual IS NULL AND Color IS NULL) OR Color = @ColorActual)`);
+
+    if (r.rowsAffected[0] === 0) {
+        return { ok: false, mensaje: 'No se encontró la zona libre para actualizar' };
+    }
+
+    await historicos.registrar(idUsuario, idPiso, null, 'ZonaLibre',
+        `Zona libre "${nombreActual}" actualizada a "${nombre}"`);
+    return { ok: true, mensaje: 'Zona libre actualizada' };
+}
+
 async function eliminarZonaLibre(idUsuario, idPiso, nombre, color) {
     const pool = await getPool();
     await pool.request()
@@ -470,6 +493,29 @@ async function actualizarZona(idUsuario, idPiso, idZona, nombre, color, fi, ff, 
     return { ok: true, mensaje: 'Zona actualizada' };
 }
 
+async function actualizarZonasPorNombre(idUsuario, idPiso, nombreActual, colorActual, nombre, color) {
+    const pool = await getPool();
+    const r = await pool.request()
+        .input('IdPiso', sql.Int, idPiso)
+        .input('NombreActual', sql.NVarChar(100), nombreActual)
+        .input('ColorActual', sql.VarChar(20), colorActual)
+        .input('Nombre', sql.NVarChar(100), nombre)
+        .input('Color', sql.VarChar(20), color)
+        .query(`UPDATE PlanoZonas
+                SET Nombre = @Nombre, Color = @Color
+                WHERE IdPiso = @IdPiso
+                  AND Nombre = @NombreActual
+                  AND ((@ColorActual IS NULL AND Color IS NULL) OR Color = @ColorActual)`);
+
+    if (r.rowsAffected[0] === 0) {
+        return { ok: false, mensaje: 'No se encontraron zonas para actualizar' };
+    }
+
+    await historicos.registrar(idUsuario, idPiso, null, 'EditarZona',
+        `Zona "${nombreActual}" actualizada a "${nombre}" — ${r.rowsAffected[0]} registro(s)`);
+    return { ok: true, mensaje: `Se actualizaron ${r.rowsAffected[0]} zonas` };
+}
+
 /* Eliminar zona por IdZona (una sola, se usa al editar una específica) */
 async function eliminarZona(idUsuario, idPiso, idZona, nombre) {
     const pool = await getPool();
@@ -510,5 +556,6 @@ module.exports = {
     asignar, mover, quitar, intercambiar,
     moverEntrePisos, swapEntrePisos,
     listarZonas, crearZona, actualizarZona, eliminarZona, eliminarZonasPorNombre,
-    listarZonasLibres, guardarZonaLibre, eliminarZonaLibre
+    listarZonasLibres, guardarZonaLibre, actualizarZonaLibre, eliminarZonaLibre,
+    actualizarZonasPorNombre
 };

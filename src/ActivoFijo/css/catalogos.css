@@ -1299,6 +1299,11 @@ body {
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
 }
+.swal2-container.cl-toast-container {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
 
 .swal2-popup.cl-alert,
 .swal2-popup.cl-confirm {
@@ -1356,6 +1361,18 @@ body {
 .swal2-popup.cl-confirm .swal2-close:hover {
     background: var(--gray-100) !important;
     color: var(--gray-700) !important;
+}
+.swal2-popup.cl-toast .swal2-close {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    flex: 0 0 28px !important;
+    align-self: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    margin: 0 0 0 8px !important;
 }
 
 .swal2-popup.cl-alert .swal2-icon,

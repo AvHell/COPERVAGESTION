@@ -67,6 +67,41 @@ const CATALOGOS = {
             { nombre: 'Nombre', tipo: 'NVarChar', longitud: 100, requerido: true, unico: true }
         ]
     },
+    puestosEntregaResponsiva: {
+        tabla: 'ActivoFijoResponsivasPuestosEntrega',
+        pk:    'IdPuestoEntregaResponsiva',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 100, requerido: true, unico: true }
+        ]
+    },
+    motivosResponsiva: {
+        tabla: 'ActivoFijoResponsivasMotivos',
+        pk:    'IdMotivoResponsiva',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 150, requerido: true, unico: true }
+        ]
+    },
+    proyectosResponsiva: {
+        tabla: 'ActivoFijoResponsivasProyectos',
+        pk:    'IdProyectoResponsiva',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 200, requerido: true, unico: true }
+        ]
+    },
+    descripcionesResponsiva: {
+        tabla: 'ActivoFijoResponsivasDescripciones',
+        pk:    'IdDescripcionResponsiva',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 300, requerido: true, unico: true }
+        ]
+    },
+    areasEntregaResponsiva: {
+        tabla: 'ActivoFijoResponsivasAreasEntrega',
+        pk:    'IdAreaEntregaResponsiva',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 100, requerido: true, unico: true }
+        ]
+    },
 
     /* ---------------------------------------------------
        CATÁLOGOS NUEVOS (periféricos)
@@ -177,6 +212,14 @@ const CATALOGOS_ESPECIFICACIONES = [
     { clave: 'usuariosAsignados', tabla: 'ActivoFijoUsuariosAsignados', pk: 'IdUsuarioAsignado', longitud: 200, origen: 'UsuarioAsignado' }
 ];
 
+const CATALOGOS_RESPONSIVAS = [
+    { tabla: 'ActivoFijoResponsivasMotivos', pk: 'IdMotivoResponsiva', longitud: 150, origen: 'MotivoSalida' },
+    { tabla: 'ActivoFijoResponsivasProyectos', pk: 'IdProyectoResponsiva', longitud: 200, origen: 'NombreProyecto' },
+    { tabla: 'ActivoFijoResponsivasDescripciones', pk: 'IdDescripcionResponsiva', longitud: 300, origen: 'DescripcionSolicitud' },
+    { tabla: 'ActivoFijoResponsivasAreasEntrega', pk: 'IdAreaEntregaResponsiva', longitud: 100, origen: 'AreaEntrega' },
+    { tabla: 'ActivoFijoResponsivasPuestosEntrega', pk: 'IdPuestoEntregaResponsiva', longitud: 100, origen: 'PuestoEntrega' }
+];
+
 let inicializacionExtendida;
 
 async function asegurarCatalogosExtendidos() {
@@ -206,6 +249,45 @@ async function asegurarCatalogosExtendidos() {
                       );
                 `);
             }
+
+            for (const cfg of CATALOGOS_RESPONSIVAS) {
+                await pool.request().query(`
+                    IF OBJECT_ID(N'dbo.${cfg.tabla}', N'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.${cfg.tabla} (
+                            ${cfg.pk} INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                            Nombre NVARCHAR(${cfg.longitud}) NOT NULL,
+                            Activo BIT NOT NULL CONSTRAINT DF_${cfg.pk}_Activo DEFAULT (1)
+                        );
+                    END;
+
+                    INSERT INTO dbo.${cfg.tabla} (Nombre)
+                    SELECT DISTINCT LTRIM(RTRIM(r.${cfg.origen}))
+                    FROM dbo.ActivoFijoResponsivas r
+                    WHERE r.${cfg.origen} IS NOT NULL
+                      AND LTRIM(RTRIM(r.${cfg.origen})) <> ''
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM dbo.${cfg.tabla} c
+                          WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(r.${cfg.origen})))
+                      );
+                `);
+            }
+
+            await pool.request().query(`
+                INSERT INTO dbo.ActivoFijoPuestos (Nombre)
+                SELECT DISTINCT LTRIM(RTRIM(p.Puesto))
+                FROM (
+                    SELECT PuestoRecibe AS Puesto FROM dbo.ActivoFijoResponsivas
+                ) p
+                WHERE p.Puesto IS NOT NULL
+                  AND LTRIM(RTRIM(p.Puesto)) <> ''
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM dbo.ActivoFijoPuestos c
+                      WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(p.Puesto)))
+                  );
+            `);
 
             await pool.request().query(`
                 UPDATE dbo.ActivoFijoEstatus SET Activo = 1

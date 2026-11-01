@@ -647,7 +647,7 @@ async function historico(idActivo, limite = 200) {
             LEFT JOIN ActivoFijoEstatus  sn   ON sn.IdEstatus  = h.IdEstatusNuevo
             LEFT JOIN ActivoFijoSitios   sia  ON sia.IdSitio   = h.IdSitioAnterior
             LEFT JOIN ActivoFijoSitios   sin_ ON sin_.IdSitio  = h.IdSitioNuevo
-            LEFT JOIN Usuarios           u    = h.IdUsuarioMovimiento
+            LEFT JOIN Usuarios           u    ON u.IdUsuario = h.IdUsuarioMovimiento
             WHERE h.IdActivoFijoEQ = @Id
             ORDER BY h.FechaMovimiento DESC
         `);

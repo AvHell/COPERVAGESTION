@@ -80,7 +80,7 @@ function toastExito(titulo) {
     Swal.fire({
         toast: true, position: 'bottom-end', icon: 'success', title: titulo,
         showConfirmButton: false, timer: 2400, timerProgressBar: true,
-        customClass: { popup: 'cl-toast' },
+        customClass: { container: 'cl-toast-container', popup: 'cl-toast' },
         didOpen: (t) => {
             t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);
@@ -94,7 +94,7 @@ function toastError(titulo, texto = '') {
         toast: true, position: 'bottom-end', icon: 'error',
         title: texto ? `${titulo} — ${texto}` : titulo,
         showConfirmButton: false, timer: 3400, timerProgressBar: true,
-        customClass: { popup: 'cl-toast' },
+        customClass: { container: 'cl-toast-container', popup: 'cl-toast' },
         didOpen: (t) => {
             t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);

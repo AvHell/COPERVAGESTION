@@ -89,6 +89,9 @@
                         </svg>
                     </button>
                 </div>
+                <button type="button" id="btn-catalogos-responsiva" class="btn-ghost">
+                    Administrar catálogos
+                </button>
                 <button id="btn-nuevo" class="btn-primary">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M12 5v14M5 12h14"/>
@@ -190,15 +193,15 @@
                     </div>
                     <div class="campo-item">
                         <label for="motivo">Motivo de la salida</label>
-                        <input type="text" id="motivo" maxlength="150" placeholder="Ej. USO OPERATIVO, HOME OFFICE">
+                        <select id="motivo"><option value="">— Seleccionar motivo —</option></select>
                     </div>
-                    <div class="campo-full">
+                    <div class="campo-item">
                         <label for="proyecto">Nombre del proyecto / servicio</label>
-                        <input type="text" id="proyecto" maxlength="200" placeholder="Ej. Asignación de celular">
+                        <select id="proyecto"><option value="">— Seleccionar proyecto —</option></select>
                     </div>
-                    <div class="campo-full">
+                    <div class="campo-item">
                         <label for="descripcion">Descripción de la solicitud</label>
-                        <input type="text" id="descripcion" maxlength="300" placeholder="Ej. TELÉFONO CELULAR">
+                        <select id="descripcion"><option value="">— Seleccionar descripción —</option></select>
                     </div>
 
                     <div class="seccion-titulo campo-full">Información de quien recibe</div>
@@ -209,11 +212,7 @@
                     </div>
                     <div class="campo-item">
                         <label for="puesto-recibe">Puesto</label>
-                        <input type="text" id="puesto-recibe" maxlength="100">
-                    </div>
-                    <div class="campo-item">
-                        <label for="area-recibe">Área</label>
-                        <input type="text" id="area-recibe" maxlength="100">
+                        <select id="puesto-recibe"><option value="">— Seleccionar puesto —</option></select>
                     </div>
                     <div class="campo-item">
                         <label for="correo-recibe">Correo</label>
@@ -221,11 +220,7 @@
                     </div>
                     <div class="campo-item">
                         <label for="cartera">Cartera</label>
-                        <select id="cartera"><option value="">— Sin cartera —</option></select>
-                    </div>
-                    <div class="campo-full">
-                        <label for="puesto-cat">Puesto (catálogo)</label>
-                        <select id="puesto-cat"><option value="">— Sin puesto —</option></select>
+                        <select id="cartera" required><option value="">— Seleccionar cartera —</option></select>
                     </div>
                     <div class="campo-full">
                         <label for="observaciones">Observaciones</label>
@@ -236,30 +231,15 @@
 
                     <div class="campo-item">
                         <label for="nombre-entrega">Nombre</label>
-                        <input type="text" id="nombre-entrega" maxlength="200" placeholder="Ej. Iván Lara">
+                        <select id="nombre-entrega" required><option value="">— Seleccionar usuario —</option></select>
                     </div>
                     <div class="campo-item">
                         <label for="puesto-entrega">Puesto</label>
-                        <input type="text" id="puesto-entrega" maxlength="100" placeholder="Ej. Soporte">
+                        <select id="puesto-entrega" required><option value="">— Seleccionar puesto —</option></select>
                     </div>
                     <div class="campo-full">
                         <label for="area-entrega">Área</label>
-                        <input type="text" id="area-entrega" maxlength="100" value="Sistemas">
-                    </div>
-
-                    <div class="seccion-titulo campo-full">Documentos</div>
-
-                    <div class="campo-item">
-                        <label for="ruta-pdf">Ruta PDF responsiva</label>
-                        <input type="text" id="ruta-pdf" maxlength="500" placeholder="Se llena al generar el PDF">
-                    </div>
-                    <div class="campo-item">
-                        <label for="ruta-ine">Ruta INE</label>
-                        <input type="text" id="ruta-ine" maxlength="500" placeholder="Opcional">
-                    </div>
-                    <div class="campo-full">
-                        <label for="ruta-comprobante">Ruta comprobante de domicilio</label>
-                        <input type="text" id="ruta-comprobante" maxlength="500" placeholder="Opcional">
+                        <select id="area-entrega" required><option value="">— Seleccionar área —</option></select>
                     </div>
                 </div>
 

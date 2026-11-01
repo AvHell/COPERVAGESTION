@@ -155,7 +155,7 @@ function toastExito(titulo) {
     Swal.fire({
         toast: true, position: 'bottom-end', icon: 'success', title: titulo,
         showConfirmButton: false, timer: 2600, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-success' },
+        customClass: { container: 'cl-toast-container', popup: 'cl-toast cl-toast-success' },
         didOpen: (t) => {
             t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);
@@ -169,7 +169,7 @@ function toastError(titulo, texto = '') {
         toast: true, position: 'bottom-end', icon: 'error',
         title: texto ? `${titulo} — ${texto}` : titulo,
         showConfirmButton: false, timer: 3400, timerProgressBar: true,
-        customClass: { popup: 'cl-toast cl-toast-error' },
+        customClass: { container: 'cl-toast-container', popup: 'cl-toast cl-toast-error' },
         didOpen: (t) => {
             t.style.boxShadow = 'none';
             t.addEventListener('mouseenter', Swal.stopTimer);
@@ -333,7 +333,10 @@ function renderTabla() {
             <td data-label="Marca / Modelo">${escaparHTML(marcaModelo)}</td>
             <td data-label="Tipo"><span class="badge badge-tipo">${escaparHTML(a.Tipo)}</span></td>
             <td data-label="Estado"><span class="badge badge-estado-${escaparHTML(a.Estado)}">${escaparHTML(a.Estado)}</span></td>
-            <td data-label="Estatus"><span class="badge badge-estatus-${escaparHTML(a.Estatus)}">${escaparHTML(a.Estatus)}</span></td>
+            <td data-label="Estatus">
+                <span class="badge badge-estatus-${escaparHTML(a.Estatus)}">${escaparHTML(a.Estatus)}</span>
+                ${a.UsuarioAsignado ? `<span class="usuario-inventario">Usuario de inventario: ${escaparHTML(a.UsuarioAsignado)}</span>` : ''}
+            </td>
             <td data-label="Acciones" class="acciones-tabla"></td>
         `;
 

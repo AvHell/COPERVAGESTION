@@ -90,11 +90,14 @@ contextBridge.exposeInMainWorld('api', {
             /* PDF */
             verPDF:             (id)               => ipcRenderer.invoke('af-resp-ver-pdf',             id),
             guardarPDF:         (id)               => ipcRenderer.invoke('af-resp-guardar-pdf',         id),
-            existePDF:          (ruta)             => ipcRenderer.invoke('af-resp-existe-pdf',          ruta),
-            abrirPDF:           (ruta)             => ipcRenderer.invoke('af-resp-abrir-pdf',           ruta),
 
             listarCarteras:     ()                 => ipcRenderer.invoke('af-resp-lista-carteras'),
-            listarPuestos:      ()                 => ipcRenderer.invoke('af-resp-lista-puestos')
+            listarPuestos:      ()                 => ipcRenderer.invoke('af-resp-lista-puestos'),
+            listarCatalogo:     (clave)            => ipcRenderer.invoke('af-resp-lista-catalogo', clave),
+            crearCatalogo:      (clave, datos)     => ipcRenderer.invoke('af-resp-catalogo-crear', clave, datos),
+            actualizarCatalogo: (clave, id, datos) => ipcRenderer.invoke('af-resp-catalogo-actualizar', clave, id, datos),
+            eliminarCatalogo:   (clave, id)        => ipcRenderer.invoke('af-resp-catalogo-eliminar', clave, id),
+            listarUsuariosEntrega: ()             => ipcRenderer.invoke('af-resp-lista-usuarios-entrega')
         },
 
         /* =================================================

@@ -659,6 +659,11 @@ ipcMain.handle('af-resp-devolver',            async (_e, id, f, obs) => { const 
 ipcMain.handle('af-resp-eliminar',            async (_e, id, motivo) => { const err = requerirSesion('af-resp:eliminar');    if (err) return err; return await activoFijoResponsivasDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
 ipcMain.handle('af-resp-lista-carteras',      async ()               => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarCarteras(); });
 ipcMain.handle('af-resp-lista-puestos',       async ()               => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarPuestos(); });
+ipcMain.handle('af-resp-lista-catalogo',      async (_e, clave)      => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarCatalogoResponsiva(clave); });
+ipcMain.handle('af-resp-catalogo-crear',      async (_e, clave, datos) => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.crearCatalogoResponsiva(clave, datos); });
+ipcMain.handle('af-resp-catalogo-actualizar', async (_e, clave, id, datos) => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.actualizarCatalogoResponsiva(clave, id, datos); });
+ipcMain.handle('af-resp-catalogo-eliminar',   async (_e, clave, id) => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.eliminarCatalogoResponsiva(clave, id); });
+ipcMain.handle('af-resp-lista-usuarios-entrega', async ()            => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarUsuariosEntrega(); });
 
 /* =========================================================
    IPC: REPORTES AF
@@ -830,7 +835,7 @@ async function construirPDFResponsiva(idResponsiva) {
     setCampo('imei_uno',              d.IMEI1);
     setCampo('imei_dos',              d.IMEI2);
     setCampo('nombre_recibe',         d.NombreRecibe);
-    setCampo('area_recibe',           d.AreaRecibe);
+    setCampo('area_recibe',           d.Cartera);
     setCampo('puesto_recibe',         d.PuestoRecibe, 5);
     setCampo('nombre_entrega',        d.NombreEntrega);
     setCampo('puesto_entrega',        d.PuestoEntrega);
@@ -889,7 +894,7 @@ ipcMain.handle('af-resp-ver-pdf', async (_e, idResponsiva) => {
 });
 
 /* =========================================================
-   IPC: GUARDAR PDF (genera + diálogo + guarda + actualiza BD)
+   IPC: GUARDAR PDF (genera + diálogo + guarda localmente)
    ========================================================= */
 ipcMain.handle('af-resp-guardar-pdf', async (_e, idResponsiva) => {
     const err = requerirSesion('af-resp:pdf'); if (err) return err;
@@ -908,63 +913,10 @@ ipcMain.handle('af-resp-guardar-pdf', async (_e, idResponsiva) => {
 
         fs.writeFileSync(filePath, res.bytes);
 
-        await activoFijoResponsivasDB.actualizarRutaPDF(
-            idResponsiva, filePath, usuarioActual?.IdUsuario
-        );
-
         return { ok: true, mensaje: 'PDF guardado correctamente.', ruta: filePath };
     } catch (err) {
         console.error('Error guardando PDF:', err);
         return { ok: false, mensaje: 'Error al guardar PDF: ' + err.message };
-    }
-});
-
-/* =========================================================
-   IPC: VERIFICAR SI EL PDF GUARDADO EXISTE EN DISCO
-   ========================================================= */
-ipcMain.handle('af-resp-existe-pdf', async (_e, ruta) => {
-    const err = requerirSesion('af-resp:pdf'); if (err) return err;
-
-    if (!ruta) {
-        return { ok: true, existe: false, mensaje: 'La responsiva no tiene ruta de PDF registrada.' };
-    }
-
-    try {
-        const existe = fs.existsSync(ruta);
-        return {
-            ok: true,
-            existe,
-            ruta,
-            mensaje: existe ? 'PDF encontrado.' : 'El archivo PDF ya no existe en disco.'
-        };
-    } catch (err) {
-        return { ok: false, existe: false, mensaje: 'Error al verificar PDF: ' + err.message };
-    }
-});
-
-/* =========================================================
-   IPC: ABRIR PDF GUARDADO (abre el persistente)
-   ========================================================= */
-ipcMain.handle('af-resp-abrir-pdf', async (_e, ruta) => {
-    const err = requerirSesion('af-resp:pdf'); if (err) return err;
-
-    if (!ruta) {
-        return { ok: false, mensaje: 'La responsiva no tiene ruta de PDF registrada.' };
-    }
-
-    try {
-        if (!fs.existsSync(ruta)) {
-            return { ok: false, mensaje: 'El archivo PDF ya no existe en disco.' };
-        }
-
-        const resultado = await shell.openPath(ruta);
-        if (resultado) {
-            return { ok: false, mensaje: 'No se pudo abrir el PDF: ' + resultado };
-        }
-
-        return { ok: true, mensaje: 'PDF abierto.' };
-    } catch (err) {
-        return { ok: false, mensaje: 'Error al abrir PDF: ' + err.message };
     }
 });
 

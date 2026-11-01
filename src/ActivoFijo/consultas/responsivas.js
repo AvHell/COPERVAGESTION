@@ -46,14 +46,10 @@ async function listar(filtros = {}) {
             r.Observaciones,
             r.NombreRecibe,
             r.PuestoRecibe,
-            r.AreaRecibe,
             r.CorreoRecibe,
             r.NombreEntrega,
             r.PuestoEntrega,
             r.AreaEntrega,
-            r.RutaPDF,
-            r.RutaINE,
-            r.RutaComprobanteDomicilio,
             r.IdCartera,
             r.IdPuesto,
             r.FechaCreacion,
@@ -67,6 +63,15 @@ async function listar(filtros = {}) {
             af.NoTelefono,
             af.Modelo,
             af.PrecioActivo,
+            af.UsuarioAsignado,
+            (
+                SELECT TOP 1 u.IdUsuario
+                FROM Usuarios u
+                WHERE u.Activo = 1
+                  AND UPPER(COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(u.Nombres, ' ', u.Apellidos))), ''), u.NombreUsuario)) =
+                      UPPER(LTRIM(RTRIM(r.NombreEntrega)))
+                ORDER BY u.IdUsuario
+            ) AS IdUsuarioEntrega,
             m.Nombre     AS Marca,
             t.Nombre     AS Tipo,
             es.Nombre    AS Estado,
@@ -95,7 +100,25 @@ async function obtener(id) {
         .input('Id', sql.Int, id)
         .query(`
             SELECT
-                r.*,
+                r.IdResponsiva,
+                r.FolioTicket,
+                r.TipoResponsiva,
+                r.FechaAsignacion,
+                r.FechaDevolucionProgramada,
+                r.FechaDevolucionReal,
+                r.EstatusResponsiva,
+                r.MotivoSalida,
+                r.NombreProyecto,
+                r.DescripcionSolicitud,
+                r.Observaciones,
+                r.NombreRecibe,
+                r.PuestoRecibe,
+                r.CorreoRecibe,
+                r.NombreEntrega,
+                r.PuestoEntrega,
+                r.AreaEntrega,
+                r.IdCartera,
+                r.IdPuesto,
                 af.NoSerie,
                 af.IMEI1,
                 af.IMEI2,
@@ -142,16 +165,11 @@ async function obtenerParaPDF(id) {
 
                 r.NombreRecibe,
                 r.PuestoRecibe,
-                r.AreaRecibe,
                 r.CorreoRecibe,
 
                 r.NombreEntrega,
                 r.PuestoEntrega,
                 r.AreaEntrega,
-
-                r.RutaPDF,
-                r.RutaINE,
-                r.RutaComprobanteDomicilio,
 
                 af.IdActivoFijoEQ,
                 af.NoSerie,
@@ -171,36 +189,15 @@ async function obtenerParaPDF(id) {
                 t.RequiereIMEI,
                 t.RequiereTelefono,
 
-                c.Nombre  AS Cartera,
-                p.Nombre  AS PuestoCatalogo
+                c.Nombre  AS Cartera
             FROM ActivoFijoResponsivas r
             INNER JOIN ActivoFijoEquipos af ON af.IdActivoFijoEQ = r.IdActivoFijoEQ
             INNER JOIN ActivoFijoTipos   t  ON t.IdTipo = af.IdTipo
             LEFT  JOIN ActivoFijoMarcas  m  ON m.IdMarca = af.IdMarca
             LEFT  JOIN ActivoFijoCarteras c ON c.IdCartera = r.IdCartera
-            LEFT  JOIN ActivoFijoPuestos  p ON p.IdPuesto  = r.IdPuesto
             WHERE r.IdResponsiva = @Id
         `);
     return r.recordset[0] ?? null;
-}
-
-/* =========================================================
-   ACTUALIZAR RUTA PDF
-   ========================================================= */
-async function actualizarRutaPDF(id, ruta, idUsuario) {
-    const pool = await getPool();
-    await pool.request()
-        .input('Id',        sql.Int,           id)
-        .input('Ruta',      sql.NVarChar(500), ruta)
-        .input('IdUsuario', sql.Int,           idUsuario || null)
-        .query(`
-            UPDATE ActivoFijoResponsivas SET
-                RutaPDF = @Ruta,
-                FechaGeneracionPDF = GETDATE(),
-                IdUsuarioModificacion = @IdUsuario,
-                FechaModificacion = GETDATE()
-            WHERE IdResponsiva = @Id
-        `);
 }
 
 /* =========================================================
@@ -224,13 +221,14 @@ async function activosDisponibles() {
             t.RequiereIMEI,
             t.RequiereTelefono,
             st.Nombre AS Estatus,
-            af.Observaciones
+            af.Observaciones,
+            af.UsuarioAsignado
         FROM ActivoFijoEquipos af
         INNER JOIN ActivoFijoTipos   t  ON t.IdTipo = af.IdTipo
         INNER JOIN ActivoFijoEstatus st ON st.IdEstatus = af.IdEstatus
         LEFT  JOIN ActivoFijoMarcas  m  ON m.IdMarca = af.IdMarca
         WHERE t.RequiereResponsiva = 1
-          AND st.Nombre IN ('DISPONIBLE', 'DEVUELTO')
+          AND st.Nombre IN ('DISPONIBLE', 'DEVUELTO', 'ASIGNADO')
           AND NOT EXISTS (
               SELECT 1
               FROM ActivoFijoResponsivas r
@@ -238,6 +236,123 @@ async function activosDisponibles() {
                 AND r.EstatusResponsiva IN ('ASIGNADO','PENDIENTE')
           )
         ORDER BY t.Nombre, m.Nombre, af.NoSerie
+    `);
+    return r.recordset;
+}
+
+async function validarCatalogosResponsiva(datos) {
+    const campos = [
+        ['MotivoSalida', 'motivosResponsiva'],
+        ['NombreProyecto', 'proyectosResponsiva'],
+        ['DescripcionSolicitud', 'descripcionesResponsiva'],
+        ['AreaEntrega', 'areasEntregaResponsiva']
+    ];
+
+    for (const [campo, catalogo] of campos) {
+        const valor = String(datos[campo] ?? '').trim();
+        if (valor && !await catalogosDB.esValorActivo(catalogo, valor)) {
+            return `El valor "${valor}" ya no está disponible en el catálogo. Actualiza la lista y vuelve a intentarlo.`;
+        }
+    }
+
+    return null;
+}
+
+async function validarCarteraActiva(idCartera) {
+    if (!idCartera) return false;
+    const pool = await getPool();
+    const r = await pool.request()
+        .input('IdCartera', sql.Int, idCartera)
+        .query(`
+            SELECT 1 AS Existe
+            FROM ActivoFijoCarteras
+            WHERE IdCartera = @IdCartera
+              AND Activo = 1
+        `);
+    return r.recordset.length > 0;
+}
+
+async function obtenerNombrePorIdCatalogo(clave, id) {
+    if (!id) return null;
+    await catalogosDB.asegurarCatalogosExtendidos();
+    const cfg = catalogosDB.CATALOGOS[clave];
+    if (!cfg) throw new Error(`Catálogo no válido: ${clave}`);
+
+    const pool = await getPool();
+    const r = await pool.request()
+        .input('Id', sql.Int, id)
+        .query(`SELECT Nombre FROM ${cfg.tabla} WHERE ${cfg.pk} = @Id AND Activo = 1`);
+    return r.recordset[0]?.Nombre ?? null;
+}
+
+async function obtenerDatosEntrega(idUsuario, idPuesto, idArea) {
+    if (!idUsuario || !idPuesto || !idArea) {
+        return { ok: false, mensaje: 'Selecciona quién entrega, su puesto y su área.' };
+    }
+
+    const pool = await getPool();
+    const usuario = await pool.request()
+        .input('IdUsuario', sql.Int, idUsuario)
+        .query(`
+            SELECT COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(Nombres, ' ', Apellidos))), ''), NombreUsuario) AS Nombre
+            FROM Usuarios
+            WHERE IdUsuario = @IdUsuario AND Activo = 1
+        `);
+    if (!usuario.recordset[0]?.Nombre) {
+        return { ok: false, mensaje: 'El usuario seleccionado no está activo. Actualiza la lista y vuelve a seleccionarlo.' };
+    }
+
+    const [puesto, area] = await Promise.all([
+        obtenerNombrePorIdCatalogo('puestosEntregaResponsiva', idPuesto),
+        obtenerNombrePorIdCatalogo('areasEntregaResponsiva', idArea)
+    ]);
+    if (!puesto || !area) {
+        return { ok: false, mensaje: 'El puesto o el área seleccionados ya no están activos en sus catálogos.' };
+    }
+
+    return { ok: true, nombre: usuario.recordset[0].Nombre, puesto, area };
+}
+
+async function listarCatalogoResponsiva(clave) {
+    return catalogosDB.listar(validarCatalogoResponsiva(clave));
+}
+
+function validarCatalogoResponsiva(clave) {
+    const claveNormalizada = typeof clave === 'string' ? clave.trim() : '';
+    const permitidos = new Set([
+        'carteras',
+        'puestos',
+        'puestosEntregaResponsiva',
+        'motivosResponsiva',
+        'proyectosResponsiva',
+        'descripcionesResponsiva',
+        'areasEntregaResponsiva'
+    ]);
+    if (!permitidos.has(claveNormalizada) || !catalogosDB.CATALOGOS[claveNormalizada]) {
+        throw new Error(`Catálogo de responsivas no válido: ${clave}`);
+    }
+    return claveNormalizada;
+}
+
+async function crearCatalogoResponsiva(clave, datos) {
+    return catalogosDB.crear(validarCatalogoResponsiva(clave), datos);
+}
+
+async function actualizarCatalogoResponsiva(clave, id, datos) {
+    return catalogosDB.actualizar(validarCatalogoResponsiva(clave), id, datos);
+}
+
+async function eliminarCatalogoResponsiva(clave, id) {
+    return catalogosDB.eliminar(validarCatalogoResponsiva(clave), id);
+}
+
+async function listarUsuariosEntrega() {
+    const pool = await getPool();
+    const r = await pool.request().query(`
+        SELECT IdUsuario, Nombres, Apellidos, NombreUsuario
+        FROM Usuarios
+        WHERE Activo = 1
+        ORDER BY Nombres, Apellidos
     `);
     return r.recordset;
 }
@@ -256,8 +371,14 @@ async function crear(datos, idUsuario) {
         if (!['ASIGNADO', 'PENDIENTE'].includes(estatusResponsiva)) {
             return { ok: false, mensaje: 'Una responsiva nueva debe iniciar como ASIGNADO o PENDIENTE.' };
         }
-        if (!datos.IdActivoFijoEQ || !datos.NombreRecibe) {
-            return { ok: false, mensaje: 'Selecciona un activo disponible e indica quién lo recibe.' };
+        if (!datos.IdActivoFijoEQ || !datos.NombreRecibe || !datos.IdUsuarioEntrega) {
+            return { ok: false, mensaje: 'Selecciona un activo, indica quién lo recibe y selecciona quién entrega.' };
+        }
+
+        const errorCatalogo = await validarCatalogosResponsiva(datos);
+        if (errorCatalogo) return { ok: false, mensaje: errorCatalogo };
+        if (!await validarCarteraActiva(datos.IdCartera)) {
+            return { ok: false, mensaje: 'Selecciona una cartera activa del catálogo.' };
         }
 
         tx = new sql.Transaction(pool);
@@ -284,7 +405,7 @@ async function crear(datos, idUsuario) {
             return { ok: false, mensaje: 'El activo seleccionado no existe.' };
         }
         const estadoActivo = activo.recordset[0];
-        if (estadoActivo.TieneResponsivaActiva || !['DISPONIBLE', 'DEVUELTO'].includes(estadoActivo.Estatus.toUpperCase())) {
+        if (estadoActivo.TieneResponsivaActiva || !['DISPONIBLE', 'DEVUELTO', 'ASIGNADO'].includes(estadoActivo.Estatus.toUpperCase())) {
             await tx.rollback();
             transaccionAbierta = false;
             return {
@@ -303,6 +424,14 @@ async function crear(datos, idUsuario) {
             return { ok: false, mensaje: 'No existe el estatus ASIGNADO activo en el catálogo.' };
         }
 
+        const entrega = await obtenerDatosEntrega(datos.IdUsuarioEntrega, datos.IdPuestoEntrega, datos.IdAreaEntregaResponsiva);
+        if (!entrega.ok) {
+            await tx.rollback();
+            transaccionAbierta = false;
+            return { ok: false, mensaje: entrega.mensaje };
+        }
+        const puestoRecibe = await obtenerNombrePorIdCatalogo('puestos', datos.IdPuesto);
+
         const result = await new sql.Request(tx)
             .input('FolioTicket',       sql.NVarChar(50),  datos.FolioTicket)
             .input('IdActivoFijoEQ',    sql.Int,           datos.IdActivoFijoEQ)
@@ -315,34 +444,28 @@ async function crear(datos, idUsuario) {
             .input('DescripcionSolicitud', sql.NVarChar(300), datos.DescripcionSolicitud || null)
             .input('Observaciones',     sql.NVarChar(500), datos.Observaciones || null)
             .input('NombreRecibe',      sql.NVarChar(200), datos.NombreRecibe)
-            .input('PuestoRecibe',      sql.NVarChar(100), datos.PuestoRecibe || null)
-            .input('AreaRecibe',        sql.NVarChar(100), datos.AreaRecibe || null)
+            .input('PuestoRecibe',      sql.NVarChar(100), puestoRecibe)
             .input('CorreoRecibe',      sql.NVarChar(150), datos.CorreoRecibe || null)
             .input('IdCartera',         sql.Int,           datos.IdCartera || null)
             .input('IdPuesto',          sql.Int,           datos.IdPuesto || null)
-            .input('NombreEntrega',     sql.NVarChar(200), datos.NombreEntrega || null)
-            .input('PuestoEntrega',     sql.NVarChar(100), datos.PuestoEntrega || null)
-            .input('AreaEntrega',       sql.NVarChar(100), datos.AreaEntrega || 'Sistemas')
-            .input('RutaPDF',           sql.NVarChar(500), datos.RutaPDF || null)
-            .input('RutaINE',           sql.NVarChar(500), datos.RutaINE || null)
-            .input('RutaComprobanteDomicilio', sql.NVarChar(500), datos.RutaComprobanteDomicilio || null)
+            .input('NombreEntrega',     sql.NVarChar(200), entrega.nombre)
+            .input('PuestoEntrega',     sql.NVarChar(100), entrega.puesto)
+            .input('AreaEntrega',       sql.NVarChar(100), entrega.area)
             .input('IdUsuario',         sql.Int,           idUsuario || null)
             .query(`
                 INSERT INTO ActivoFijoResponsivas (
                     FolioTicket, IdActivoFijoEQ, TipoResponsiva,
                     FechaAsignacion, FechaDevolucionProgramada, EstatusResponsiva,
                     MotivoSalida, NombreProyecto, DescripcionSolicitud, Observaciones,
-                    NombreRecibe, PuestoRecibe, AreaRecibe, CorreoRecibe, IdCartera, IdPuesto,
+                    NombreRecibe, PuestoRecibe, CorreoRecibe, IdCartera, IdPuesto,
                     NombreEntrega, PuestoEntrega, AreaEntrega,
-                    RutaPDF, RutaINE, RutaComprobanteDomicilio,
                     IdUsuarioCreacion
                 ) VALUES (
                     @FolioTicket, @IdActivoFijoEQ, @TipoResponsiva,
                     @FechaAsignacion, @FechaDevolucionProgramada, @EstatusResponsiva,
                     @MotivoSalida, @NombreProyecto, @DescripcionSolicitud, @Observaciones,
-                    @NombreRecibe, @PuestoRecibe, @AreaRecibe, @CorreoRecibe, @IdCartera, @IdPuesto,
+                    @NombreRecibe, @PuestoRecibe, @CorreoRecibe, @IdCartera, @IdPuesto,
                     @NombreEntrega, @PuestoEntrega, @AreaEntrega,
-                    @RutaPDF, @RutaINE, @RutaComprobanteDomicilio,
                     @IdUsuario
                 );
                 SELECT SCOPE_IDENTITY() AS Id;
@@ -389,6 +512,17 @@ async function actualizar(id, datos, idUsuario) {
             return { ok: false, mensaje: 'El estatus de una responsiva solo puede cambiarse mediante las acciones Devolver o Cancelar.' };
         }
 
+        const errorCatalogo = await validarCatalogosResponsiva(datos);
+        if (errorCatalogo) return { ok: false, mensaje: errorCatalogo };
+        if (!await validarCarteraActiva(datos.IdCartera)) {
+            return { ok: false, mensaje: 'Selecciona una cartera activa del catálogo.' };
+        }
+        if (!datos.IdUsuarioEntrega) return { ok: false, mensaje: 'Selecciona quién entrega el activo.' };
+
+        const entrega = await obtenerDatosEntrega(datos.IdUsuarioEntrega, datos.IdPuestoEntrega, datos.IdAreaEntregaResponsiva);
+        if (!entrega.ok) return { ok: false, mensaje: entrega.mensaje };
+        const puestoRecibe = await obtenerNombrePorIdCatalogo('puestos', datos.IdPuesto);
+
         const result = await pool.request()
             .input('Id',                sql.Int,           id)
             .input('FolioTicket',       sql.NVarChar(50),  datos.FolioTicket)
@@ -401,17 +535,13 @@ async function actualizar(id, datos, idUsuario) {
             .input('DescripcionSolicitud', sql.NVarChar(300), datos.DescripcionSolicitud || null)
             .input('Observaciones',     sql.NVarChar(500), datos.Observaciones || null)
             .input('NombreRecibe',      sql.NVarChar(200), datos.NombreRecibe)
-            .input('PuestoRecibe',      sql.NVarChar(100), datos.PuestoRecibe || null)
-            .input('AreaRecibe',        sql.NVarChar(100), datos.AreaRecibe || null)
+            .input('PuestoRecibe',      sql.NVarChar(100), puestoRecibe)
             .input('CorreoRecibe',      sql.NVarChar(150), datos.CorreoRecibe || null)
             .input('IdCartera',         sql.Int,           datos.IdCartera || null)
             .input('IdPuesto',          sql.Int,           datos.IdPuesto || null)
-            .input('NombreEntrega',     sql.NVarChar(200), datos.NombreEntrega || null)
-            .input('PuestoEntrega',     sql.NVarChar(100), datos.PuestoEntrega || null)
-            .input('AreaEntrega',       sql.NVarChar(100), datos.AreaEntrega || 'Sistemas')
-            .input('RutaPDF',           sql.NVarChar(500), datos.RutaPDF || null)
-            .input('RutaINE',           sql.NVarChar(500), datos.RutaINE || null)
-            .input('RutaComprobanteDomicilio', sql.NVarChar(500), datos.RutaComprobanteDomicilio || null)
+            .input('NombreEntrega',     sql.NVarChar(200), entrega.nombre)
+            .input('PuestoEntrega',     sql.NVarChar(100), entrega.puesto)
+            .input('AreaEntrega',       sql.NVarChar(100), entrega.area)
             .input('IdUsuario',         sql.Int,           idUsuario || null)
             .query(`
                 UPDATE ActivoFijoResponsivas SET
@@ -426,16 +556,12 @@ async function actualizar(id, datos, idUsuario) {
                     Observaciones = @Observaciones,
                     NombreRecibe = @NombreRecibe,
                     PuestoRecibe = @PuestoRecibe,
-                    AreaRecibe = @AreaRecibe,
                     CorreoRecibe = @CorreoRecibe,
                     IdCartera = @IdCartera,
                     IdPuesto = @IdPuesto,
                     NombreEntrega = @NombreEntrega,
                     PuestoEntrega = @PuestoEntrega,
                     AreaEntrega = @AreaEntrega,
-                    RutaPDF = @RutaPDF,
-                    RutaINE = @RutaINE,
-                    RutaComprobanteDomicilio = @RutaComprobanteDomicilio,
                     IdUsuarioModificacion = @IdUsuario,
                     FechaModificacion = GETDATE()
                 WHERE IdResponsiva = @Id
@@ -485,22 +611,32 @@ async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
             .input('Id', sql.Int, id)
             .input('IdUsuario', sql.Int, idUsuario || null)
             .query(`
-                UPDATE ActivoFijoEquipos SET
-                    IdEstatus = (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'DISPONIBLE'),
+                UPDATE af SET
+                    IdEstatus = (
+                        SELECT TOP 1 IdEstatus
+                        FROM ActivoFijoEstatus
+                        WHERE UPPER(Nombre) = CASE
+                            WHEN NULLIF(LTRIM(RTRIM(af.UsuarioAsignado)), '') IS NULL THEN 'DISPONIBLE'
+                            ELSE 'ASIGNADO'
+                        END
+                          AND Activo = 1
+                        ORDER BY IdEstatus
+                    ),
                     IdUsuarioModificacion = @IdUsuario,
                     FechaModificacion = GETDATE()
-                WHERE IdActivoFijoEQ IN (
+                FROM ActivoFijoEquipos af
+                WHERE af.IdActivoFijoEQ IN (
                     SELECT IdActivoFijoEQ FROM ActivoFijoResponsivas
                     WHERE IdResponsiva = @Id
                 )
                   AND NOT EXISTS (
                       SELECT 1 FROM ActivoFijoResponsivas r
-                      WHERE r.IdActivoFijoEQ = ActivoFijoEquipos.IdActivoFijoEQ
+                      WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
                         AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
                   )
             `);
 
-        return { ok: true, mensaje: 'Devolución registrada. El activo vuelve a estar disponible.' };
+        return { ok: true, mensaje: 'Devolución registrada. El activo queda libre para una nueva responsiva y conserva su usuario de inventario.' };
     } catch (err) {
         return { ok: false, mensaje: 'Error al devolver: ' + err.message };
     }
@@ -556,24 +692,34 @@ async function eliminar(id, idUsuario, motivo = null) {
             .input('Id',        sql.Int, id)
             .input('IdUsuario', sql.Int, idUsuario || null)
             .query(`
-                UPDATE ActivoFijoEquipos SET
-                    IdEstatus = (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'DISPONIBLE'),
+                UPDATE af SET
+                    IdEstatus = (
+                        SELECT TOP 1 IdEstatus
+                        FROM ActivoFijoEstatus
+                        WHERE UPPER(Nombre) = CASE
+                            WHEN NULLIF(LTRIM(RTRIM(af.UsuarioAsignado)), '') IS NULL THEN 'DISPONIBLE'
+                            ELSE 'ASIGNADO'
+                        END
+                          AND Activo = 1
+                        ORDER BY IdEstatus
+                    ),
                     IdUsuarioModificacion = @IdUsuario,
                     FechaModificacion = GETDATE()
-                WHERE IdActivoFijoEQ IN (
+                FROM ActivoFijoEquipos af
+                WHERE af.IdActivoFijoEQ IN (
                     SELECT IdActivoFijoEQ FROM ActivoFijoResponsivas
                     WHERE IdResponsiva = @Id
                 )
                   AND NOT EXISTS (
                       SELECT 1 FROM ActivoFijoResponsivas r
-                      WHERE r.IdActivoFijoEQ = ActivoFijoEquipos.IdActivoFijoEQ
+                      WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
                         AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
                   )
             `);
 
         return {
             ok: true,
-            mensaje: 'Responsiva cancelada. El activo vuelve a estar disponible. La responsiva queda como histórico.'
+            mensaje: 'Responsiva cancelada. El activo queda libre para una nueva responsiva y conserva su usuario de inventario. La responsiva queda como histórico.'
         };
     } catch (err) {
         return { ok: false, mensaje: 'Error al cancelar: ' + err.message };
@@ -599,47 +745,9 @@ async function listarPuestos() {
     return r.recordset;
 }
 
-/* =========================================================
-   VERIFICAR SI EXISTE PDF EN DISCO
-   ========================================================= */
-async function existePDF(ruta) {
-    if (!ruta) return { ok: false, existe: false, mensaje: 'La responsiva no tiene ruta de PDF registrada.' };
-    try {
-        const fs = require('fs');
-        const existe = fs.existsSync(ruta);
-        return {
-            ok: true,
-            existe,
-            ruta,
-            mensaje: existe ? 'PDF encontrado.' : 'El archivo PDF ya no existe en disco.'
-        };
-    } catch (err) {
-        return { ok: false, existe: false, mensaje: 'Error al verificar PDF: ' + err.message };
-    }
-}
-
-/* =========================================================
-   ABRIR PDF EN EL VISOR DEL SISTEMA
-   ========================================================= */
-async function abrirPDF(ruta) {
-    if (!ruta) return { ok: false, mensaje: 'La responsiva no tiene ruta de PDF registrada.' };
-    try {
-        const fs = require('fs');
-        const { shell } = require('electron');
-        if (!fs.existsSync(ruta)) {
-            return { ok: false, mensaje: 'El archivo PDF ya no existe en disco. Debes regenerarlo.' };
-        }
-        const res = await shell.openPath(ruta);
-        if (res) return { ok: false, mensaje: 'No se pudo abrir el PDF: ' + res };
-        return { ok: true, mensaje: 'PDF abierto.' };
-    } catch (err) {
-        return { ok: false, mensaje: 'Error al abrir PDF: ' + err.message };
-    }
-}
-
 module.exports = {
-    listar, obtener, obtenerParaPDF, actualizarRutaPDF,
+    listar, obtener, obtenerParaPDF,
     activosDisponibles, crear, actualizar, devolver, eliminar,
-    listarCarteras, listarPuestos,
-    existePDF, abrirPDF
+    listarCarteras, listarPuestos, listarUsuariosEntrega,
+    listarCatalogoResponsiva, crearCatalogoResponsiva, actualizarCatalogoResponsiva, eliminarCatalogoResponsiva,
 };

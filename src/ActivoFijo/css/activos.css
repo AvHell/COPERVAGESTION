@@ -393,6 +393,14 @@ body {
 .identificadores .principal { font-weight: 600; color: var(--gray-800); font-size: 0.86rem; word-break: break-word; }
 .identificadores .secundario { font-size: 0.74rem; color: var(--gray-500); letter-spacing: 0.01em; }
 .identificadores .vacio { color: var(--gray-400); font-style: italic; font-size: 0.8rem; }
+.usuario-inventario {
+    display: block;
+    margin-top: 5px;
+    color: var(--gray-600);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    white-space: normal;
+}
 
 /* =========================================================
    BADGES SÓLIDOS
@@ -911,6 +919,11 @@ body {
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
 }
+.swal2-container.cl-toast-container {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
 
 .swal2-popup.cl-toast,
 .swal2-popup.cl-confirm,
@@ -952,6 +965,9 @@ body {
     padding: 0 !important;
     font-size: 1.35rem !important;
     font-weight: 400 !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    text-align: center !important;
     color: var(--gray-400) !important;
     background: transparent !important;
     border-radius: 10px !important;
@@ -967,6 +983,18 @@ body {
 .swal2-popup .swal2-close:hover {
     background: var(--gray-100) !important;
     color: var(--gray-700) !important;
+}
+.swal2-popup.cl-toast .swal2-close {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    flex: 0 0 28px !important;
+    align-self: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    margin: 0 0 0 8px !important;
 }
 
 .swal2-popup .swal2-icon {

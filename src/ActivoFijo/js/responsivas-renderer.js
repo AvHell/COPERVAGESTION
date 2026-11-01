@@ -11,6 +11,9 @@ let responsivas      = [];
 let activosDisp      = [];
 let carteras         = [];
 let puestos          = [];
+let puestosEntrega   = [];
+let usuariosEntrega  = [];
+let catalogosResponsiva = {};
 let modoEdicion      = false;
 let idEditando       = null;
 let guardando        = false;
@@ -46,23 +49,19 @@ const inpTipoResp      = document.getElementById('tipo-responsiva');
 const inpFechaAsig     = document.getElementById('fecha-asignacion');
 const inpFechaDev      = document.getElementById('fecha-devolucion');
 const selEstatus       = document.getElementById('estatus');
-const inpMotivo        = document.getElementById('motivo');
-const inpProyecto      = document.getElementById('proyecto');
-const inpDescripcion   = document.getElementById('descripcion');
+const selMotivo        = document.getElementById('motivo');
+const selProyecto      = document.getElementById('proyecto');
+const selDescripcion   = document.getElementById('descripcion');
 const inpNombreRecibe  = document.getElementById('nombre-recibe');
-const inpPuestoRecibe  = document.getElementById('puesto-recibe');
-const inpAreaRecibe    = document.getElementById('area-recibe');
+const selPuestoRecibe  = document.getElementById('puesto-recibe');
 const inpCorreoRecibe  = document.getElementById('correo-recibe');
 const selCartera       = document.getElementById('cartera');
-const selPuestoCat     = document.getElementById('puesto-cat');
-const inpNombreEntrega = document.getElementById('nombre-entrega');
-const inpPuestoEntrega = document.getElementById('puesto-entrega');
-const inpAreaEntrega   = document.getElementById('area-entrega');
-const inpRutaPDF       = document.getElementById('ruta-pdf');
-const inpRutaINE       = document.getElementById('ruta-ine');
-const inpRutaComprob   = document.getElementById('ruta-comprobante');
+const selNombreEntrega = document.getElementById('nombre-entrega');
+const selPuestoEntrega = document.getElementById('puesto-entrega');
+const selAreaEntrega   = document.getElementById('area-entrega');
 const inpObservaciones = document.getElementById('observaciones');
 const infoActivo       = document.getElementById('info-activo');
+const btnCatalogosResp = document.getElementById('btn-catalogos-responsiva');
 
 /* =========================================================
    UTILIDADES
@@ -215,19 +214,233 @@ function aplicarReglasActivo(activo) {
    ========================================================= */
 async function cargarCatalogos() {
     try {
-        const [c, p] = await Promise.all([
+        const seleccionActual = {
+            cartera: selCartera.value,
+            puestoRecibe: selPuestoRecibe.value,
+            motivo: selMotivo.value,
+            proyecto: selProyecto.value,
+            descripcion: selDescripcion.value,
+            usuarioEntrega: selNombreEntrega.value,
+            puestoEntrega: selPuestoEntrega.value,
+            areaEntrega: selAreaEntrega.value
+        };
+        const [c, motivos, proyectos, descripciones, areas, usuarios, puestosLista, puestosEntregaLista] = await Promise.all([
             window.api.activoFijo.responsivas.listarCarteras(),
-            window.api.activoFijo.responsivas.listarPuestos()
+            window.api.activoFijo.responsivas.listarCatalogo('motivosResponsiva'),
+            window.api.activoFijo.responsivas.listarCatalogo('proyectosResponsiva'),
+            window.api.activoFijo.responsivas.listarCatalogo('descripcionesResponsiva'),
+            window.api.activoFijo.responsivas.listarCatalogo('areasEntregaResponsiva'),
+            window.api.activoFijo.responsivas.listarUsuariosEntrega(),
+            window.api.activoFijo.responsivas.listarCatalogo('puestos'),
+            window.api.activoFijo.responsivas.listarCatalogo('puestosEntregaResponsiva')
         ]);
+        const listas = [c, motivos, proyectos, descripciones, areas, usuarios, puestosLista, puestosEntregaLista];
+        const errorCarga = listas.find(lista => !Array.isArray(lista));
+        if (errorCarga) throw new Error(errorCarga?.mensaje || 'El servidor devolvió datos inválidos para los catálogos.');
         carteras = c;
-        puestos  = p;
+        puestos = puestosLista;
+        puestosEntrega = puestosEntregaLista;
+        usuariosEntrega = usuarios;
+        catalogosResponsiva = {
+            motivosResponsiva: motivos,
+            proyectosResponsiva: proyectos,
+            descripcionesResponsiva: descripciones,
+            areasEntregaResponsiva: areas,
+            puestos,
+            puestosEntregaResponsiva: puestosEntrega
+        };
 
-        selCartera.innerHTML = '<option value="">— Sin cartera —</option>' + carteras.map(x => `<option value="${x.IdCartera}">${escaparHTML(x.Nombre)}</option>`).join('');
-        selPuestoCat.innerHTML = '<option value="">— Sin puesto —</option>' + puestos.map(x => `<option value="${x.IdPuesto}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selCartera.innerHTML = '<option value="">— Seleccionar cartera —</option>' +
+            carteras.map(x => `<option value="${x.IdCartera}">${escaparHTML(x.Nombre)}</option>`).join('');
+        const opcionesPuesto = '<option value="">— Seleccionar puesto —</option>' +
+            puestos.map(x => `<option value="${x.IdPuesto}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selPuestoRecibe.innerHTML = opcionesPuesto;
+        selPuestoEntrega.innerHTML = '<option value="">— Seleccionar puesto —</option>' +
+            puestosEntrega.map(x => `<option value="${x.IdPuestoEntregaResponsiva}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selMotivo.innerHTML = '<option value="">— Seleccionar motivo —</option>' +
+            catalogosResponsiva.motivosResponsiva.map(x => `<option value="${escaparHTML(x.Nombre)}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selProyecto.innerHTML = '<option value="">— Seleccionar proyecto —</option>' +
+            catalogosResponsiva.proyectosResponsiva.map(x => `<option value="${escaparHTML(x.Nombre)}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selDescripcion.innerHTML = '<option value="">— Seleccionar descripción —</option>' +
+            catalogosResponsiva.descripcionesResponsiva.map(x => `<option value="${escaparHTML(x.Nombre)}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selAreaEntrega.innerHTML = '<option value="">— Seleccionar área —</option>' +
+            catalogosResponsiva.areasEntregaResponsiva.map(x => `<option value="${x.IdAreaEntregaResponsiva}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selNombreEntrega.innerHTML = '<option value="">— Seleccionar usuario —</option>' +
+            usuariosEntrega.map(x => {
+                const nombre = [x.Nombres, x.Apellidos].filter(Boolean).join(' ') || x.NombreUsuario;
+                return `<option value="${x.IdUsuario}">${escaparHTML(nombre)}</option>`;
+            }).join('');
+        selCartera.value = seleccionActual.cartera;
+        selPuestoRecibe.value = seleccionActual.puestoRecibe;
+        selMotivo.value = seleccionActual.motivo;
+        selProyecto.value = seleccionActual.proyecto;
+        selDescripcion.value = seleccionActual.descripcion;
+        selNombreEntrega.value = seleccionActual.usuarioEntrega;
+        selPuestoEntrega.value = seleccionActual.puestoEntrega;
+        selAreaEntrega.value = seleccionActual.areaEntrega;
     } catch (err) {
         alertaError('No se pudieron cargar los catálogos', err.message);
     }
 }
+
+const CONFIG_CATALOGOS_RESPONSIVA = {
+    carteras: { titulo: 'Carteras', max: 100, pk: 'IdCartera' },
+    motivosResponsiva: { titulo: 'Motivos de salida', max: 150, pk: 'IdMotivoResponsiva' },
+    proyectosResponsiva: { titulo: 'Proyectos / servicios', max: 200, pk: 'IdProyectoResponsiva' },
+    descripcionesResponsiva: { titulo: 'Descripciones de solicitud', max: 300, pk: 'IdDescripcionResponsiva' },
+    puestos: { titulo: 'Puestos de quien recibe', max: 100, pk: 'IdPuesto' },
+    puestosEntregaResponsiva: { titulo: 'Puestos de quien entrega', max: 100, pk: 'IdPuestoEntregaResponsiva' },
+    areasEntregaResponsiva: { titulo: 'Áreas de quien entrega', max: 100, pk: 'IdAreaEntregaResponsiva' }
+};
+
+async function administrarCatalogosResponsiva() {
+    let registrosPorCatalogo;
+    try {
+        const claves = Object.keys(CONFIG_CATALOGOS_RESPONSIVA);
+        const listas = await Promise.all(
+            claves.map(clave => window.api.activoFijo.responsivas.listarCatalogo(clave))
+        );
+        const errorCarga = listas.find(lista => !Array.isArray(lista));
+        if (errorCarga) throw new Error(errorCarga?.mensaje || 'No se pudieron cargar los catálogos.');
+        registrosPorCatalogo = Object.fromEntries(claves.map((clave, i) => [clave, listas[i]]));
+    } catch (err) {
+        await alertaError('No se pudieron cargar los catálogos', err.message);
+        return;
+    }
+
+    const renderizarCatalogos = () => Object.entries(CONFIG_CATALOGOS_RESPONSIVA).map(([clave, cfg]) => {
+        const registros = registrosPorCatalogo[clave] || [];
+        const filas = registros.length
+            ? registros.map(registro => `
+                <div class="crud-catalogo-fila" data-fila="${clave}-${registro[cfg.pk]}">
+                    <span class="crud-catalogo-nombre">${escaparHTML(registro.Nombre)}</span>
+                    <div class="crud-catalogo-acciones">
+                        <button type="button" class="btn-ghost" data-editar="${clave}" data-id="${registro[cfg.pk]}">Editar</button>
+                        <button type="button" class="btn-ghost" data-eliminar="${clave}" data-id="${registro[cfg.pk]}">Eliminar</button>
+                    </div>
+                </div>`).join('')
+            : '<p class="crud-catalogo-vacio">Sin registros.</p>';
+
+        return `
+            <section class="crud-catalogo" data-catalogo="${clave}">
+                <h4>${escaparHTML(cfg.titulo)}</h4>
+                <div class="crud-catalogo-alta">
+                    <input type="text" maxlength="${cfg.max}" placeholder="Nuevo registro" aria-label="Nuevo registro para ${escaparHTML(cfg.titulo)}">
+                    <button type="button" class="btn-primary" data-agregar="${clave}">Agregar</button>
+                </div>
+                <div class="crud-catalogo-lista">${filas}</div>
+            </section>`;
+    }).join('');
+
+    await Swal.fire({
+        title: 'Administrar catálogos',
+        html: `<div class="crud-catalogos-responsiva">${renderizarCatalogos()}</div><p class="crud-catalogos-mensaje" role="status"></p>`,
+        width: '900px',
+        showConfirmButton: false,
+        showCloseButton: true,
+        customClass: { popup: 'cl-alert cl-crud-catalogos' },
+        didOpen: popup => {
+            const mensajeEstado = popup.querySelector('.crud-catalogos-mensaje');
+            const mostrarError = texto => {
+                mensajeEstado.textContent = texto;
+                mensajeEstado.classList.add('error');
+            };
+            const refrescar = async () => {
+                try {
+                    await cargarCatalogos();
+                    const claves = Object.keys(CONFIG_CATALOGOS_RESPONSIVA);
+                    const listas = await Promise.all(
+                        claves.map(clave => window.api.activoFijo.responsivas.listarCatalogo(clave))
+                    );
+                    const errorCarga = listas.find(lista => !Array.isArray(lista));
+                    if (errorCarga) throw new Error(errorCarga?.mensaje || 'No se pudieron actualizar los catálogos.');
+                    registrosPorCatalogo = Object.fromEntries(claves.map((clave, i) => [clave, listas[i]]));
+                    popup.querySelector('.crud-catalogos-responsiva').innerHTML = renderizarCatalogos();
+                    mensajeEstado.textContent = '';
+                    mensajeEstado.classList.remove('error');
+                } catch (err) {
+                    mostrarError(err.message);
+                }
+            };
+
+            popup.addEventListener('click', async event => {
+                const boton = event.target.closest('button[data-agregar], button[data-editar], button[data-guardar], button[data-cancelar], button[data-eliminar]');
+                if (!boton) return;
+
+                const clave = boton.dataset.agregar || boton.dataset.editar || boton.dataset.guardar || boton.dataset.cancelar || boton.dataset.eliminar;
+                const cfg = CONFIG_CATALOGOS_RESPONSIVA[clave];
+                if (!cfg) return;
+                mensajeEstado.textContent = '';
+                mensajeEstado.classList.remove('error');
+
+                const fila = boton.closest('.crud-catalogo-fila');
+                if (boton.dataset.cancelar) {
+                    await refrescar();
+                    return;
+                }
+
+                if (boton.dataset.editar) {
+                    const registro = registrosPorCatalogo[clave].find(item => Number(item[cfg.pk]) === Number(boton.dataset.id));
+                    if (!registro || !fila) return;
+                    fila.innerHTML = `
+                        <input type="text" maxlength="${cfg.max}" value="${escaparHTML(registro.Nombre)}" aria-label="Editar ${escaparHTML(cfg.titulo)}">
+                        <div class="crud-catalogo-acciones">
+                            <button type="button" class="btn-primary" data-guardar="${clave}" data-id="${registro[cfg.pk]}">Guardar</button>
+                            <button type="button" class="btn-ghost" data-cancelar="${clave}">Cancelar</button>
+                        </div>`;
+                    fila.querySelector('input').focus();
+                    return;
+                }
+
+                try {
+                    let res;
+                    if (boton.dataset.agregar) {
+                        const input = boton.closest('.crud-catalogo-alta').querySelector('input');
+                        const nombre = input.value.trim();
+                        if (!nombre) {
+                            mostrarError('Escribe un nombre antes de agregar.');
+                            input.focus();
+                            return;
+                        }
+                        res = await window.api.activoFijo.responsivas.crearCatalogo(clave, { Nombre: nombre });
+                        if (res?.ok) await refrescar();
+                    } else if (boton.dataset.guardar) {
+                        const input = fila?.querySelector('input');
+                        const nombre = input?.value.trim();
+                        if (!nombre) {
+                            mostrarError('El nombre no puede quedar vacío.');
+                            input?.focus();
+                            return;
+                        }
+                        res = await window.api.activoFijo.responsivas.actualizarCatalogo(clave, Number(boton.dataset.id), { Nombre: nombre });
+                        if (res?.ok) await refrescar();
+                    } else if (boton.dataset.eliminar) {
+                        if (boton.dataset.confirmar !== 'true') {
+                            boton.dataset.confirmar = 'true';
+                            boton.textContent = 'Eliminar';
+                            const cancelar = document.createElement('button');
+                            cancelar.type = 'button';
+                            cancelar.className = 'btn-ghost';
+                            cancelar.dataset.cancelar = clave;
+                            cancelar.textContent = 'Cancelar';
+                            boton.after(cancelar);
+                            return;
+                        }
+                        res = await window.api.activoFijo.responsivas.eliminarCatalogo(clave, Number(boton.dataset.id));
+                        if (res?.ok) await refrescar();
+                    }
+
+                    if (res && !res.ok) mostrarError(res.mensaje || 'No se pudo completar la operación.');
+                } catch (err) {
+                    mostrarError(err.message);
+                }
+            });
+        }
+    });
+
+}
+
+btnCatalogosResp?.addEventListener('click', administrarCatalogosResponsiva);
 
 /* =========================================================
    CARGAR ACTIVOS DISPONIBLES
@@ -240,7 +453,10 @@ async function cargarActivosDisponibles() {
                 const id = [a.Marca, a.Modelo].filter(Boolean).join(' ');
                 const serie = a.NoSerie || a.IMEI1 || a.NoTelefono || 'sin serie';
                 const reglas = obtenerReglas(a);
-                return `<option value="${a.IdActivoFijoEQ}">${reglas.icono} [${escaparHTML(a.Tipo)}] ${escaparHTML(id)} — ${escaparHTML(serie)}</option>`;
+                const usuarioInventario = a.UsuarioAsignado
+                    ? ` · Usuario de inventario: ${escaparHTML(a.UsuarioAsignado)}`
+                    : '';
+                return `<option value="${a.IdActivoFijoEQ}">${reglas.icono} [${escaparHTML(a.Tipo)}] ${escaparHTML(id)} — ${escaparHTML(serie)} · Estatus: ${escaparHTML(a.Estatus)}${usuarioInventario}</option>`;
             }).join('');
     } catch (err) {
         alertaError('No se pudieron cargar los activos', err.message);
@@ -368,7 +584,7 @@ function renderTabla() {
         if (esVistaCanceladas) {
             celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver detalle', 'ver', () => verDetalle(r.IdResponsiva)));
             celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
-            celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket, r.RutaPDF)));
+            celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
             tablaBody.appendChild(tr);
             return;
         }
@@ -376,7 +592,7 @@ function renderTabla() {
         /* ---- Vista ACTIVAS ---- */
         celda.appendChild(crearBotonAccion(iconoEditar(), 'Editar', 'editar', () => abrirEdicion(r.IdResponsiva)));
         celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
-        celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket, r.RutaPDF)));
+        celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
 
         if (r.EstatusResponsiva === 'ASIGNADO' || r.EstatusResponsiva === 'PENDIENTE') {
             celda.appendChild(crearBotonAccion(iconoDevolver(), 'Registrar devolución', 'exito', () => devolverResponsiva(r.IdResponsiva, r.NombreRecibe)));
@@ -489,6 +705,8 @@ selActivo.addEventListener('change', () => {
     if (reglas.requiereIMEI && a.IMEI1) html += `<div><b>IMEI 1:</b> ${escaparHTML(a.IMEI1)}</div>`;
     if (reglas.requiereIMEI && a.IMEI2) html += `<div><b>IMEI 2:</b> ${escaparHTML(a.IMEI2)}</div>`;
     if (reglas.requiereTelefono && a.NoTelefono) html += `<div><b>Teléfono:</b> ${escaparHTML(a.NoTelefono)}</div>`;
+    html += `<div><b>Usuario de inventario:</b> ${escaparHTML(a.UsuarioAsignado || 'Sin usuario registrado')}</div>`;
+    html += `<div><b>Responsiva activa:</b> No; disponible para asignar</div>`;
     if (reglas.esLaptop) {
         if (a.Procesador)     html += `<div><b>Procesador:</b> ${escaparHTML(a.Procesador)}</div>`;
         if (a.MemoriaRAM)     html += `<div><b>RAM:</b> ${escaparHTML(a.MemoriaRAM)}</div>`;
@@ -511,22 +729,17 @@ function limpiarFormulario() {
     inpFechaAsig.value = hoyISO();
     inpFechaDev.value = '';
     selEstatus.value = 'ASIGNADO';
-    inpMotivo.value = '';
-    inpProyecto.value = '';
-    inpDescripcion.value = '';
+    selMotivo.value = '';
+    selProyecto.value = '';
+    selDescripcion.value = '';
     inpNombreRecibe.value = '';
-    inpPuestoRecibe.value = '';
-    inpAreaRecibe.value = '';
+    selPuestoRecibe.value = '';
     inpCorreoRecibe.value = '';
     selCartera.value = '';
-    selPuestoCat.value = '';
     inpObservaciones.value = '';
-    inpNombreEntrega.value = '';
-    inpPuestoEntrega.value = '';
-    inpAreaEntrega.value = 'Sistemas';
-    inpRutaPDF.value = '';
-    inpRutaINE.value = '';
-    inpRutaComprob.value = '';
+    selNombreEntrega.value = '';
+    selPuestoEntrega.value = '';
+    selAreaEntrega.value = '';
 
     const inpIMEI = document.getElementById('imei-1');
     if (inpIMEI) inpIMEI.value = '';
@@ -590,22 +803,17 @@ async function abrirEdicion(id) {
     inpFechaAsig.value     = fechaAInput(r.FechaAsignacion);
     inpFechaDev.value      = fechaAInput(r.FechaDevolucionProgramada);
     selEstatus.value       = r.EstatusResponsiva ?? 'ASIGNADO';
-    inpMotivo.value        = r.MotivoSalida ?? '';
-    inpProyecto.value      = r.NombreProyecto ?? '';
-    inpDescripcion.value   = r.DescripcionSolicitud ?? '';
+    selMotivo.value        = r.MotivoSalida ?? '';
+    selProyecto.value      = r.NombreProyecto ?? '';
+    selDescripcion.value   = r.DescripcionSolicitud ?? '';
     inpNombreRecibe.value  = r.NombreRecibe ?? '';
-    inpPuestoRecibe.value  = r.PuestoRecibe ?? '';
-    inpAreaRecibe.value    = r.AreaRecibe ?? '';
+    selPuestoRecibe.value  = r.IdPuesto != null ? String(r.IdPuesto) : '';
     inpCorreoRecibe.value  = r.CorreoRecibe ?? '';
     selCartera.value       = r.IdCartera != null ? String(r.IdCartera) : '';
-    selPuestoCat.value     = r.IdPuesto  != null ? String(r.IdPuesto)  : '';
     inpObservaciones.value = r.Observaciones ?? '';
-    inpNombreEntrega.value = r.NombreEntrega ?? '';
-    inpPuestoEntrega.value = r.PuestoEntrega ?? '';
-    inpAreaEntrega.value   = r.AreaEntrega ?? 'Sistemas';
-    inpRutaPDF.value       = r.RutaPDF ?? '';
-    inpRutaINE.value       = r.RutaINE ?? '';
-    inpRutaComprob.value   = r.RutaComprobanteDomicilio ?? '';
+    selNombreEntrega.value = r.IdUsuarioEntrega != null ? String(r.IdUsuarioEntrega) : '';
+    selPuestoEntrega.value = String(puestosEntrega.find(x => x.Nombre === r.PuestoEntrega)?.IdPuestoEntregaResponsiva ?? '');
+    selAreaEntrega.value = String(catalogosResponsiva.areasEntregaResponsiva.find(x => x.Nombre === r.AreaEntrega)?.IdAreaEntregaResponsiva ?? '');
 
     const inpIMEI = document.getElementById('imei-1');
     if (inpIMEI) inpIMEI.value = r.IMEI1 ?? '';
@@ -620,6 +828,7 @@ async function abrirEdicion(id) {
     if (r.NoSerie) html += `<div><b>Serie:</b> ${escaparHTML(r.NoSerie)}</div>`;
     if (reglas.requiereIMEI && r.IMEI1) html += `<div><b>IMEI 1:</b> ${escaparHTML(r.IMEI1)}</div>`;
     if (reglas.requiereTelefono && r.NoTelefono) html += `<div><b>Teléfono:</b> ${escaparHTML(r.NoTelefono)}</div>`;
+    html += `<div><b>Usuario de inventario:</b> ${escaparHTML(r.UsuarioAsignado || 'Sin usuario registrado')}</div>`;
     html += '</div>';
     infoActivo.innerHTML = html;
     infoActivo.classList.remove('oculto');
@@ -653,6 +862,9 @@ async function verDetalle(id) {
                 <div class="det-linea"><b>Folio:</b> ${escaparHTML(r.FolioTicket)}</div>
                 <div class="det-linea"><b>Estatus:</b> ${escaparHTML(r.EstatusResponsiva)}</div>
                 <div class="det-linea"><b>Tipo:</b> ${escaparHTML(r.TipoResponsiva ?? '—')}</div>
+                <div class="det-linea"><b>Motivo de salida:</b> ${escaparHTML(r.MotivoSalida ?? '—')}</div>
+                <div class="det-linea"><b>Proyecto / servicio:</b> ${escaparHTML(r.NombreProyecto ?? '—')}</div>
+                <div class="det-linea"><b>Descripción:</b> ${escaparHTML(r.DescripcionSolicitud ?? '—')}</div>
                 <div class="det-linea"><b>Fecha asignación:</b> ${formatearFecha(r.FechaAsignacion)}</div>
                 <div class="det-linea"><b>Fecha devolución:</b> ${formatearFecha(r.FechaDevolucionReal || r.FechaDevolucionProgramada)}</div>
             </div>
@@ -664,8 +876,14 @@ async function verDetalle(id) {
                 <div class="det-titulo">Persona</div>
                 <div class="det-linea"><b>Nombre:</b> ${escaparHTML(r.NombreRecibe)}</div>
                 ${r.PuestoRecibe ? `<div class="det-linea"><b>Puesto:</b> ${escaparHTML(r.PuestoRecibe)}</div>` : ''}
-                ${r.AreaRecibe   ? `<div class="det-linea"><b>Área:</b> ${escaparHTML(r.AreaRecibe)}</div>` : ''}
+                <div class="det-linea"><b>Cartera:</b> ${escaparHTML(r.Cartera ?? '—')}</div>
                 ${r.CorreoRecibe ? `<div class="det-linea"><b>Correo:</b> ${escaparHTML(r.CorreoRecibe)}</div>` : ''}
+            </div>
+            <div class="det-seccion">
+                <div class="det-titulo">Quien entrega</div>
+                <div class="det-linea"><b>Nombre:</b> ${escaparHTML(r.NombreEntrega ?? '—')}</div>
+                <div class="det-linea"><b>Puesto:</b> ${escaparHTML(r.PuestoEntrega ?? '—')}</div>
+                <div class="det-linea"><b>Área:</b> ${escaparHTML(r.AreaEntrega ?? '—')}</div>
             </div>
             ${r.Observaciones ? `
             <div class="det-seccion">
@@ -708,6 +926,14 @@ formulario.addEventListener('submit', async (e) => {
         mostrarMensaje('El nombre de quien recibe es obligatorio.', 'error');
         return;
     }
+    if (!selCartera.value) {
+        mostrarMensaje('Selecciona una cartera activa.', 'error');
+        return;
+    }
+    if (!selNombreEntrega.value || !selPuestoEntrega.value || !selAreaEntrega.value) {
+        mostrarMensaje('Selecciona el usuario, puesto y área de quien entrega.', 'error');
+        return;
+    }
 
     const activo = activosDisp.find(a => a.IdActivoFijoEQ === parseInt(selActivo.value, 10)) || activoActual;
     const reglas = obtenerReglas(activo);
@@ -736,22 +962,18 @@ formulario.addEventListener('submit', async (e) => {
         FechaAsignacion:   inpFechaAsig.value,
         FechaDevolucionProgramada: inpFechaDev.value || null,
         EstatusResponsiva: selEstatus.value,
-        MotivoSalida:      inpMotivo.value.trim() || null,
-        NombreProyecto:    inpProyecto.value.trim() || null,
-        DescripcionSolicitud: inpDescripcion.value.trim() || null,
+        MotivoSalida:      selMotivo.value || null,
+        NombreProyecto:    selProyecto.value || null,
+        DescripcionSolicitud: selDescripcion.value || null,
         Observaciones:     inpObservaciones.value.trim() || null,
         NombreRecibe:      inpNombreRecibe.value.trim(),
-        PuestoRecibe:      inpPuestoRecibe.value.trim() || null,
-        AreaRecibe:        inpAreaRecibe.value.trim() || null,
         CorreoRecibe:      inpCorreoRecibe.value.trim() || null,
         IdCartera:         selCartera.value ? parseInt(selCartera.value, 10) : null,
-        IdPuesto:          selPuestoCat.value ? parseInt(selPuestoCat.value, 10) : null,
-        NombreEntrega:     inpNombreEntrega.value.trim() || null,
-        PuestoEntrega:     inpPuestoEntrega.value.trim() || null,
-        AreaEntrega:       inpAreaEntrega.value.trim() || 'Sistemas',
-        RutaPDF:           inpRutaPDF.value.trim() || null,
-        RutaINE:           inpRutaINE.value.trim() || null,
-        RutaComprobanteDomicilio: inpRutaComprob.value.trim() || null
+        IdPuesto:          selPuestoRecibe.value ? parseInt(selPuestoRecibe.value, 10) : null,
+        IdUsuarioEntrega:  selNombreEntrega.value ? parseInt(selNombreEntrega.value, 10) : null,
+        IdPuestoEntrega:   selPuestoEntrega.value ? parseInt(selPuestoEntrega.value, 10) : null,
+        IdAreaEntregaResponsiva: selAreaEntrega.value ? parseInt(selAreaEntrega.value, 10) : null,
+        AreaEntrega:       catalogosResponsiva.areasEntregaResponsiva.find(x => String(x.IdAreaEntregaResponsiva) === selAreaEntrega.value)?.Nombre || null
     };
 
     setGuardando(true);
@@ -808,23 +1030,17 @@ async function verPDFResponsiva(id, folio) {
 /* =========================================================
    GUARDAR PDF
    ========================================================= */
-async function guardarPDFResponsiva(id, folio, rutaExistente) {
-    const yaExiste = !!rutaExistente;
-
+async function guardarPDFResponsiva(id, folio) {
     const conf = await Swal.fire({
-        icon: yaExiste ? 'warning' : 'question',
-        title: yaExiste ? '¿Sobrescribir PDF guardado?' : '¿Guardar PDF en disco?',
-        html: yaExiste
-            ? `Ya existe un PDF guardado para el folio <strong>${escaparHTML(folio)}</strong>.<br><br>
-               Se te pedirá elegir una nueva ubicación. Si eliges la misma ruta, se <b>sobrescribirá</b>.<br>
-               <small style="color:#7a7563;">Ruta actual: <code>${escaparHTML(rutaExistente)}</code></small>`
-            : `Se generará el PDF del folio <strong>${escaparHTML(folio)}</strong> y podrás elegir dónde guardarlo.`,
+        icon: 'question',
+        title: '¿Guardar PDF en disco?',
+        html: `Se generará el PDF del folio <strong>${escaparHTML(folio)}</strong> y podrás elegir dónde guardarlo. La ruta no se guardará en la responsiva.`,
         showCloseButton: true,
         confirmButtonText: 'Sí, guardar',
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled' + (yaExiste ? ' cl-peligro' : '')
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 
@@ -854,7 +1070,6 @@ async function guardarPDFResponsiva(id, folio, rutaExistente) {
                     confirmButton: 'swal2-confirm swal2-styled'
                 }
             });
-            await cargarResponsivas();
         } else if (res && res.mensaje === 'Cancelado') {
             // Cancelado por el usuario
         } else {

@@ -998,6 +998,124 @@ body {
 }
 .info-activo-grid b { color: var(--gray-800); font-weight: 600; }
 
+.tabla-catalogo-responsiva {
+    max-height: 52vh;
+    overflow: auto;
+    text-align: left;
+}
+.tabla-catalogo-responsiva table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+.tabla-catalogo-responsiva th,
+.tabla-catalogo-responsiva td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--gray-200);
+    text-align: left;
+}
+.tabla-catalogo-responsiva th:last-child,
+.tabla-catalogo-responsiva td:last-child {
+    width: 180px;
+    text-align: right;
+    white-space: nowrap;
+}
+.tabla-catalogo-responsiva .btn-ghost {
+    min-height: 32px;
+    margin-left: 5px;
+    padding: 6px 10px;
+}
+.swal2-popup.cl-crud-catalogos {
+    width: 900px !important;
+    max-width: calc(100vw - 28px) !important;
+}
+.swal2-popup.cl-crud-catalogos .swal2-html-container {
+    max-height: 72vh;
+    overflow-y: auto;
+    padding: 0 24px 20px !important;
+    text-align: left !important;
+}
+.crud-catalogos-responsiva {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    text-align: left;
+}
+.crud-catalogo {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    background: #fff;
+}
+.crud-catalogo h4 {
+    margin: 0 0 10px;
+    color: var(--gray-800);
+    font: 700 0.9rem var(--font-display);
+}
+.crud-catalogo-alta,
+.crud-catalogo-fila {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.crud-catalogo-alta {
+    margin-bottom: 8px;
+}
+.crud-catalogo-alta input,
+.crud-catalogo-fila input {
+    min-width: 0;
+    flex: 1;
+    height: 36px;
+    padding: 7px 10px;
+    border: 1px solid var(--gray-300);
+    border-radius: 8px;
+    color: var(--gray-800);
+    font: 400 0.82rem var(--font-sans);
+}
+.crud-catalogo-alta .btn-primary,
+.crud-catalogo-fila .btn-primary,
+.crud-catalogo-fila .btn-ghost {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 0.76rem;
+}
+.crud-catalogo-lista {
+    max-height: 190px;
+    overflow-y: auto;
+}
+.crud-catalogo-fila {
+    justify-content: space-between;
+    min-height: 38px;
+    padding: 5px 0;
+    border-top: 1px solid var(--gray-100);
+}
+.crud-catalogo-nombre {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--gray-700);
+    font-size: 0.8rem;
+}
+.crud-catalogo-acciones {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 5px;
+}
+.crud-catalogo-vacio {
+    margin: 8px 0 0;
+    color: var(--gray-500);
+    font-size: 0.8rem;
+}
+.crud-catalogos-mensaje {
+    min-height: 1.3em;
+    margin: 10px 24px 0;
+    text-align: left;
+    font-size: 0.82rem;
+}
+.crud-catalogos-mensaje.error {
+    color: var(--rojo-base);
+}
+
 /* =========================================================
    ALERTAS INLINE
    ========================================================= */
@@ -1048,6 +1166,11 @@ body {
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
 }
+.swal2-container.cl-toast-container {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
 
 .swal2-popup.cl-alert,
 .swal2-popup.cl-confirm,
@@ -1068,6 +1191,10 @@ body {
 .swal2-popup.cl-alert   { width: 480px !important; }
 .swal2-popup.cl-confirm { width: 540px !important; }
 .swal2-popup.cl-historico { width: 820px !important; }
+.swal2-popup.cl-crud-catalogos {
+    width: 900px !important;
+    max-width: calc(100vw - 28px) !important;
+}
 
 .swal2-popup.cl-alert::before,
 .swal2-popup.cl-confirm::before,
@@ -1087,6 +1214,9 @@ body {
     padding: 0 !important;
     font-size: 1.35rem !important;
     font-weight: 400 !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    text-align: center !important;
     color: var(--gray-400) !important;
     background: transparent !important;
     border-radius: 10px !important;
@@ -1102,6 +1232,18 @@ body {
 .swal2-popup .swal2-close:hover {
     background: var(--gray-100) !important;
     color: var(--gray-700) !important;
+}
+.swal2-popup.cl-toast .swal2-close {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    flex: 0 0 28px !important;
+    align-self: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    margin: 0 0 0 8px !important;
 }
 
 .swal2-popup .swal2-icon {
@@ -1384,6 +1526,10 @@ body {
 }
 
 @media (max-width: 768px) {
+    .crud-catalogos-responsiva { grid-template-columns: 1fr; }
+    .crud-catalogo-alta .btn-primary,
+    .crud-catalogo-fila .btn-primary,
+    .crud-catalogo-fila .btn-ghost { flex: 0 0 auto; }
     .grid-form { grid-template-columns: 1fr; gap: 16px; }
     .modal-base { max-height: calc(100vh - 20px); }
     .modal-overlay { padding: 10px; }

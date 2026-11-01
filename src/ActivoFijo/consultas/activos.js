@@ -8,6 +8,17 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { dialog } = require('electron');
+const catalogosDB = require('./catalogos');
+
+const CAMPOS_CATALOGO_ESPECIFICACIONES = [
+    ['Modelo', 'modelos'],
+    ['Procesador', 'procesadores'],
+    ['MemoriaRAM', 'memoriasRam'],
+    ['Almacenamiento', 'almacenamientos'],
+    ['SistemaOperativo', 'sistemasOperativos'],
+    ['Accesorios', 'accesorios'],
+    ['UsuarioAsignado', 'usuariosAsignados']
+];
 
 /* =========================================================
    HELPERS
@@ -16,8 +27,19 @@ async function getIdPorNombre(pool, tabla, pk, nombre) {
     if (!nombre) return null;
     const r = await pool.request()
         .input('Nombre', sql.NVarChar(100), String(nombre).trim().toUpperCase())
-        .query(`SELECT ${pk} FROM ${tabla} WHERE UPPER(Nombre) = @Nombre`);
+        .query(`SELECT ${pk} FROM ${tabla} WHERE UPPER(Nombre) = @Nombre AND Activo = 1`);
     return r.recordset[0]?.[pk] ?? null;
+}
+
+async function validarCatalogosEspecificaciones(datos, valoresAnteriores = {}) {
+    for (const [campo, clave] of CAMPOS_CATALOGO_ESPECIFICACIONES) {
+        const valor = datos[campo];
+        if (valor === undefined || valor === null || String(valor).trim() === '') continue;
+        if (await catalogosDB.esValorActivo(clave, valor)) continue;
+        if (String(valoresAnteriores[campo] ?? '').trim() === String(valor).trim()) continue;
+        return `El valor "${valor}" de ${campo} no existe en su catálogo activo.`;
+    }
+    return null;
 }
 
 /* =========================================================
@@ -161,6 +183,10 @@ async function obtener(id) {
 async function crear(datos, idUsuario) {
     try {
         const pool = await getPool();
+        await catalogosDB.asegurarCatalogosExtendidos();
+
+        const errorCatalogo = await validarCatalogosEspecificaciones(datos);
+        if (errorCatalogo) return { ok: false, mensaje: errorCatalogo };
 
         if (datos.NoSerie) {
             const dup = await pool.request()
@@ -208,16 +234,10 @@ async function crear(datos, idUsuario) {
         if (!IdEstado) {
             IdEstado = await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', 'VALIDAR');
         }
+        if (!IdEstado) return { ok: false, mensaje: 'Agrega un estado al catálogo antes de crear activos.' };
 
-        let IdEstatus = null;
-        if (datos.IdEstatus) {
-            IdEstatus = datos.IdEstatus;
-        } else if (datos.Estatus) {
-            IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', datos.Estatus);
-        }
-        if (!IdEstatus) {
-            IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', 'STOCK');
-        }
+        const IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', 'DISPONIBLE');
+        if (!IdEstatus) return { ok: false, mensaje: 'No existe el estatus DISPONIBLE en el catálogo.' };
 
         const result = await pool.request()
             .input('IdCartera',        sql.Int,           datos.IdCartera || null)
@@ -280,16 +300,31 @@ async function crear(datos, idUsuario) {
 async function actualizar(id, datos, idUsuario) {
     try {
         const pool = await getPool();
+        await catalogosDB.asegurarCatalogosExtendidos();
 
         const actual = await pool.request()
             .input('Id', sql.Int, id)
-            .query(`SELECT IdTipo, IdEstado, IdEstatus FROM ActivoFijoEquipos WHERE IdActivoFijoEQ = @Id`);
+            .query(`
+                SELECT af.IdTipo, af.IdEstado, af.IdEstatus, st.Nombre AS Estatus,
+                       CASE WHEN EXISTS (
+                           SELECT 1 FROM ActivoFijoResponsivas r
+                           WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
+                             AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+                       ) THEN 1 ELSE 0 END AS TieneResponsivaActiva,
+                       af.Modelo, af.Procesador, af.MemoriaRAM, af.Almacenamiento,
+                       af.SistemaOperativo, af.Accesorios, af.UsuarioAsignado
+                FROM ActivoFijoEquipos af
+                LEFT JOIN ActivoFijoEstatus st ON st.IdEstatus = af.IdEstatus
+                WHERE af.IdActivoFijoEQ = @Id
+            `);
 
         if (actual.recordset.length === 0) {
             return { ok: false, mensaje: 'El activo ya no existe.' };
         }
 
         const current = actual.recordset[0];
+        const errorCatalogo = await validarCatalogosEspecificaciones(datos, current);
+        if (errorCatalogo) return { ok: false, mensaje: errorCatalogo };
 
         if (datos.NoSerie !== undefined && datos.NoSerie) {
             const dup = await pool.request()
@@ -340,17 +375,34 @@ async function actualizar(id, datos, idUsuario) {
         if (!IdEstado) IdEstado = current.IdEstado;
         if (!IdEstado) IdEstado = await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', 'VALIDAR');
 
-        let IdEstatus = null;
-        if (datos.IdEstatus) IdEstatus = datos.IdEstatus;
-        else if (datos.Estatus) IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', datos.Estatus);
-        if (!IdEstatus) IdEstatus = current.IdEstatus;
-        if (!IdEstatus) IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', 'STOCK');
+        let IdEstatus = current.IdEstatus;
+        if (datos.IdEstatus) {
+            IdEstatus = Number(datos.IdEstatus);
+        } else if (datos.Estatus) {
+            IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', datos.Estatus);
+        }
+        if (!IdEstatus) return { ok: false, mensaje: 'El estatus seleccionado no existe.' };
+
+        const estatusSolicitado = await pool.request()
+            .input('IdEstatus', sql.Int, IdEstatus)
+            .query('SELECT Nombre FROM ActivoFijoEstatus WHERE IdEstatus = @IdEstatus AND Activo = 1');
+        const nombreEstatusSolicitado = estatusSolicitado.recordset[0]?.Nombre?.toUpperCase();
+        if (!nombreEstatusSolicitado) {
+            return { ok: false, mensaje: 'El estatus seleccionado no está activo en el catálogo.' };
+        }
+        if (nombreEstatusSolicitado === 'ASIGNADO' && !current.TieneResponsivaActiva) {
+            return { ok: false, mensaje: 'El estatus ASIGNADO solo se establece al crear una responsiva activa.' };
+        }
+        if (current.TieneResponsivaActiva && Number(IdEstatus) !== Number(current.IdEstatus)) {
+            return { ok: false, mensaje: 'No se puede cambiar el estatus mientras exista una responsiva activa. Registra primero la devolución o cancelación.' };
+        }
 
         const request = pool.request();
         request.input('Id',         sql.Int, id);
         request.input('IdTipo',     sql.Int, IdTipo);
         request.input('IdEstado',   sql.Int, IdEstado);
         request.input('IdEstatus',  sql.Int, IdEstatus);
+        request.input('NombreEstatus', sql.NVarChar(50), nombreEstatusSolicitado);
         request.input('IdUsuario',  sql.Int, idUsuario || null);
 
         const sets = [
@@ -400,11 +452,28 @@ async function actualizar(id, datos, idUsuario) {
         }
 
         const result = await request.query(
-            `UPDATE ActivoFijoEquipos SET ${sets.join(', ')} WHERE IdActivoFijoEQ = @Id`
+            `UPDATE ActivoFijoEquipos SET ${sets.join(', ')}
+             WHERE IdActivoFijoEQ = @Id
+               AND (
+                   @NombreEstatus <> 'ASIGNADO'
+                   OR EXISTS (
+                       SELECT 1 FROM ActivoFijoResponsivas r
+                       WHERE r.IdActivoFijoEQ = ActivoFijoEquipos.IdActivoFijoEQ
+                         AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+                   )
+               )
+               AND (
+                   NOT EXISTS (
+                       SELECT 1 FROM ActivoFijoResponsivas r
+                       WHERE r.IdActivoFijoEQ = ActivoFijoEquipos.IdActivoFijoEQ
+                         AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+                   )
+                   OR @IdEstatus = ActivoFijoEquipos.IdEstatus
+               )`
         );
 
         if (result.rowsAffected[0] === 0) {
-            return { ok: false, mensaje: 'El activo ya no existe.' };
+            return { ok: false, mensaje: 'No se pudo actualizar: el activo no existe o su estatus está protegido por una responsiva activa.' };
         }
         return { ok: true, mensaje: 'Activo actualizado correctamente.' };
     } catch (err) {
@@ -487,17 +556,27 @@ async function eliminar(id, idUsuario, motivo = null) {
    ========================================================= */
 async function restaurar(id, idUsuario, motivo = null) {
     try {
+        await catalogosDB.asegurarCatalogosExtendidos();
         const pool = await getPool();
+
+        const responsivasActivas = await pool.request()
+            .input('Id', sql.Int, id)
+            .query(`
+                SELECT COUNT(*) AS Total
+                FROM ActivoFijoResponsivas
+                WHERE IdActivoFijoEQ = @Id
+                  AND EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+            `);
+        if (responsivasActivas.recordset[0].Total > 0) {
+            return { ok: false, mensaje: 'No se puede restaurar: el activo tiene una responsiva activa.' };
+        }
 
         const result = await pool.request()
             .input('Id',     sql.Int, id)
             .input('IdUser', sql.Int, idUsuario || null)
             .query(`
                 UPDATE ActivoFijoEquipos SET
-                    IdEstatus = ISNULL(
-                        (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'DISPONIBLE'),
-                        (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'STOCK')
-                    ),
+                    IdEstatus = (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'DISPONIBLE' AND Activo = 1),
                     IdUsuarioModificacion = @IdUser,
                     FechaModificacion     = GETDATE()
                 WHERE IdActivoFijoEQ = @Id
@@ -774,9 +853,14 @@ async function listarCapacidades() {
     return r.recordset;
 }
 
+async function listarCatalogosExtendidos() {
+    return catalogosDB.listarEspecificaciones();
+}
+
 module.exports = {
     listar, obtener, crear, actualizar, eliminar, restaurar, historico, exportarExcel,
     listarTipos, listarMarcas, listarEstados, listarEstatus, listarCarteras,
     listarSitios, listarSubtipos, listarVoltajes,
-    listarClasificaciones, listarTamanios, listarCapacidades
+    listarClasificaciones, listarTamanios, listarCapacidades,
+    listarCatalogosExtendidos
 };

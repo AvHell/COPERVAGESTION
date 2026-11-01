@@ -5,6 +5,7 @@ const os = require('os');
 const { PDFDocument } = require('pdf-lib');
 const { autoUpdater } = require('electron-updater');
 const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 
 /* =========================================================
    BASE DE DATOS — MÓDULOS EXISTENTES
@@ -20,6 +21,7 @@ const historicosDB = require('./db/historicos');
 const dominiosDB   = require('./db/dominios');
 const configDB     = require('./db/configuraciones');
 const permisosDB   = require('./db/permisos');
+const mantenimientosDB = require('./db/mantenimientos');
 
 /* =========================================================
    BASE DE DATOS — MÓDULO ACTIVO FIJO
@@ -384,6 +386,7 @@ const crearEquiposWindow   = () => crearVentana('equipos',   'equipos.html',   {
 const crearPlanoWindow     = () => crearVentana('plano',     'plano.html',     { title: 'Plano Visual' });
 const crearUsuariosWindow  = () => crearVentana('usuarios',  'usuarios.html',  { title: 'Usuarios' });
 const crearHistoricoWindow = () => crearVentana('historico', 'historico.html', { title: 'Histórico del Plano' });
+const crearMantenimientosWindow = () => crearVentana('mantenimientos', 'mantenimientos.html', { title: 'Mantenimientos' });
 
 /* =========================================================
    VENTANAS — ACTIVO FIJO
@@ -576,6 +579,7 @@ ipcMain.handle('abrir-equipos',   () => { const err = requerirSesion('equipos');
 ipcMain.handle('abrir-plano',     () => { const err = requerirSesion('plano');     if (err) return err; crearPlanoWindow();     return { ok: true }; });
 ipcMain.handle('abrir-usuarios',  () => { const err = requerirSesion('usuarios');  if (err) return err; crearUsuariosWindow();  return { ok: true }; });
 ipcMain.handle('abrir-historico', () => { const err = requerirSesion('historico'); if (err) return err; crearHistoricoWindow(); return { ok: true }; });
+ipcMain.handle('abrir-mantenimientos', () => { const err = requerirSesion('mantenimientos'); if (err) return err; crearMantenimientosWindow(); return { ok: true }; });
 
 ipcMain.handle('volver-menu', (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -641,6 +645,7 @@ ipcMain.handle('af-activos-lista-voltajes',        async () => { const err = req
 ipcMain.handle('af-activos-lista-clasificaciones', async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarClasificaciones(); });
 ipcMain.handle('af-activos-lista-tamanios',        async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarTamanios(); });
 ipcMain.handle('af-activos-lista-capacidades',     async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCapacidades(); });
+ipcMain.handle('af-activos-lista-catalogos-especificaciones', async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCatalogosExtendidos(); });
 
 /* =========================================================
    IPC: RESPONSIVAS AF
@@ -1009,6 +1014,85 @@ ipcMain.handle('rangos:eliminar',   async (_e, id) => { const err = requerirSesi
    IPC: EQUIPOS
    ========================================================= */
 ipcMain.handle('equipos:listar',               async ()          => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.listar(); });
+ipcMain.handle('equipos:exportarExcel', async () => {
+    const err = requerirSesion('equipos:listado:exportar');
+    if (err) return err;
+    try {
+        const equipos = await equiposDB.listar();
+        if (!equipos.length) return { ok: false, mensaje: 'No hay equipos para exportar.' };
+
+        const encabezados = [
+            'Nombre del cliente', 'Código cliente', 'Nombre del rol', 'Código rol', 'Hostname', 'Tipo IP',
+            'IP', 'Piso', 'Máscara', 'Puerta de enlace', 'DNS 1', 'DNS 2',
+            'Usuario admin', 'Número host', 'Activo'
+        ];
+        const filas = equipos.map(equipo => [
+            equipo.ClienteNombre || '',
+            equipo.ClienteCodigo || '',
+            equipo.RolNombre || '',
+            equipo.RolCodigo || '',
+            equipo.Hostname || '',
+            equipo.TipoIP || '',
+            equipo.IP || '',
+            equipo.PisoNombre || '',
+            equipo.Mascara || '',
+            equipo.PuertaEnlace || '',
+            equipo.DNS1 || '',
+            equipo.DNS2 || '',
+            equipo.UsuarioAdmin || '',
+            equipo.NumeroHost ?? '',
+            equipo.Activo ? 'Sí' : 'No'
+        ]);
+        const hoy = new Date().toISOString().slice(0, 10);
+        const downloadsDir = path.join(os.homedir(), 'Downloads');
+        const defaultPath = path.join(
+            fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
+            `Equipos_${hoy}.xlsx`
+        );
+        const { canceled, filePath } = await dialog.showSaveDialog({
+            title: 'Exportar equipos a Excel',
+            defaultPath,
+            filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (canceled || !filePath) return { ok: false, cancelado: true };
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Coperva';
+        workbook.created = new Date();
+        const worksheet = workbook.addWorksheet('Equipos', {
+            views: [{ state: 'frozen', ySplit: 1 }]
+        });
+        const anchos = [30, 18, 24, 14, 24, 15, 18, 20, 18, 22, 18, 18, 24, 15, 12];
+        worksheet.columns = encabezados.map((header, index) => ({
+            header,
+            key: `columna${index + 1}`,
+            width: anchos[index]
+        }));
+        worksheet.addTable({
+            name: 'TablaEquipos',
+            ref: 'A1',
+            headerRow: true,
+            totalsRow: false,
+            style: { theme: 'TableStyleMedium4', showRowStripes: true },
+            columns: encabezados.map(name => ({ name })),
+            rows: filas
+        });
+        worksheet.getRow(1).eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF55744F' } };
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.alignment = { vertical: 'middle', wrapText: true };
+        });
+        worksheet.eachRow((row, rowNumber) => {
+            row.height = rowNumber === 1 ? 30 : 22;
+            row.alignment = { vertical: 'middle', wrapText: true };
+        });
+        await workbook.xlsx.writeFile(filePath);
+        return { ok: true, ruta: filePath };
+    } catch (error) {
+        console.error('[Equipos] Error exportando Excel:', error);
+        return { ok: false, mensaje: `No se pudo exportar a Excel: ${error.message}` };
+    }
+});
 ipcMain.handle('equipos:obtenerPorId',         async (_e, id)    => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.obtenerPorId(id); });
 ipcMain.handle('equipos:crear',                async (_e, datos) => { const err = requerirSesion('equipos:crear');       if (err) return err; return await equiposDB.crear(datos); });
 ipcMain.handle('equipos:actualizar',           async (_e, id, datos) => { const err = requerirSesion('equipos:editar');    if (err) return err; return await equiposDB.actualizar(id, datos); });
@@ -1044,6 +1128,158 @@ ipcMain.handle('usuarios:eliminar',   async (_e, id)    => { const err = requeri
 
 ipcMain.handle('historicos:listarPorPiso', async (_e, idPiso)              => { const err = requerirSesion('historico'); if (err) return err; return await historicosDB.listarPorPiso(idPiso); });
 ipcMain.handle('historicos:listar',        async (_e, idCliente, idPiso)   => { const err = requerirSesion('historico'); if (err) return err; return await historicosDB.listar(idCliente, idPiso); });
+
+/* =========================================================
+   IPC: MANTENIMIENTOS
+   ========================================================= */
+ipcMain.handle('mantenimientos:listarPisos', async () => {
+    const err = requerirSesion('mantenimientos'); if (err) return err;
+    return await mantenimientosDB.listarPisos();
+});
+ipcMain.handle('mantenimientos:listarUsuarios', async () => {
+    const err = requerirSesion('mantenimientos'); if (err) return err;
+    return await mantenimientosDB.listarUsuariosActivos();
+});
+ipcMain.handle('mantenimientos:obtenerPlano', async (_e, idPiso) => {
+    const err = requerirSesion('mantenimientos'); if (err) return err;
+    return await mantenimientosDB.obtenerPlano(idPiso);
+});
+ipcMain.handle('mantenimientos:listarRegistros', async (_e, idPiso) => {
+    const err = requerirSesion('mantenimientos'); if (err) return err;
+    return await mantenimientosDB.listarRegistros(idPiso);
+});
+ipcMain.handle('mantenimientos:crear', async (_e, datos) => {
+    const err = requerirSesion('mantenimientos'); if (err) return err;
+    const errCrear = requerirSesion('mantenimientos:crear'); if (errCrear) return errCrear;
+    return await mantenimientosDB.crear(datos);
+});
+ipcMain.handle('mantenimientos:exportarExcel', async (_e, idPiso) => {
+    const err = requerirSesion('mantenimientos'); if (err) return err;
+    try {
+        return await exportarMantenimientosExcel(idPiso);
+    } catch (error) {
+        console.error('[Mantenimientos] Error exportando Excel:', error);
+        return { ok: false, mensaje: `No se pudo exportar a Excel: ${error.message}` };
+    }
+});
+
+async function exportarMantenimientosExcel(idPiso) {
+    const registros = await mantenimientosDB.listarRegistros(Number(idPiso));
+    if (registros?.ok === false) return registros;
+    if (!registros.length) return { ok: false, mensaje: 'No hay mantenimientos para exportar en este piso.' };
+
+    const headers = [
+        'Fecha', 'Equipo', 'IP', 'Cliente', 'Rol', 'Ubicación', 'Realizado por', 'Observaciones'
+    ];
+    const filas = registros.map(registro => [
+        registro.FechaMantenimiento instanceof Date
+            ? registro.FechaMantenimiento.toISOString().slice(0, 10)
+            : String(registro.FechaMantenimiento || '').slice(0, 10),
+        registro.Hostname || '',
+        registro.IP || '',
+        registro.Cliente || '',
+        registro.Rol || '',
+        registro.PisoNombre || '',
+        registro.RealizadoPor || '',
+        registro.Observaciones || ''
+    ]);
+
+    const hoy = new Date().toISOString().slice(0, 10);
+    const downloadsDir = path.join(os.homedir(), 'Downloads');
+    const defaultPath = path.join(
+        fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
+        `Mantenimientos_${hoy}.xlsx`
+    );
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Exportar mantenimientos a Excel',
+        defaultPath,
+        filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+    });
+    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Coperva';
+    workbook.created = new Date();
+    const worksheet = workbook.addWorksheet('Registros', {
+        views: [{ state: 'frozen', ySplit: 1 }]
+    });
+    const widths = [15, 23, 18, 30, 24, 20, 38, 58];
+    worksheet.columns = headers.map((_, index) => ({
+        key: `columna${index + 1}`,
+        width: widths[index]
+    }));
+    worksheet.addTable({
+        name: 'TablaMantenimientos',
+        ref: 'A1',
+        headerRow: true,
+        totalsRow: false,
+        style: { theme: 'TableStyleMedium4', showRowStripes: true },
+        columns: headers.map(name => ({ name })),
+        rows: filas
+    });
+    worksheet.getRow(1).eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF55744F' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.alignment = { vertical: 'middle', wrapText: true };
+    });
+    worksheet.eachRow((row, rowNumber) => {
+        row.height = rowNumber === 1 ? 30 : 36;
+        row.alignment = { vertical: 'top', wrapText: true };
+    });
+
+    const resumenMap = new Map();
+    for (const registro of registros) {
+        const key = [
+            registro.Cliente || '',
+            registro.Rol || '',
+            registro.PisoNombre || '',
+            registro.Hostname || '',
+            registro.RealizadoPor || ''
+        ].join('|');
+        const resumen = resumenMap.get(key) || {
+            cliente: registro.Cliente || '',
+            rol: registro.Rol || '',
+            ubicacion: registro.PisoNombre || '',
+            equipo: registro.Hostname || '',
+            responsable: registro.RealizadoPor || '',
+            cantidad: 0
+        };
+        resumen.cantidad += 1;
+        resumenMap.set(key, resumen);
+    }
+
+    const resumenHeaders = ['Cliente', 'Rol', 'Ubicación', 'Equipo', 'Realizado por', 'Mantenimientos'];
+    const resumenFilas = [...resumenMap.values()].map(item => [
+        item.cliente, item.rol, item.ubicacion, item.equipo, item.responsable, item.cantidad
+    ]);
+    const resumenSheet = workbook.addWorksheet('Resumen');
+    const resumenWidths = [30, 24, 20, 23, 38, 20];
+    resumenSheet.columns = resumenHeaders.map((_, index) => ({
+        key: `resumen${index + 1}`,
+        width: resumenWidths[index]
+    }));
+    resumenSheet.addTable({
+        name: 'ResumenMantenimientos',
+        ref: 'A1',
+        headerRow: true,
+        totalsRow: false,
+        style: { theme: 'TableStyleMedium4', showRowStripes: true },
+        columns: resumenHeaders.map(name => ({ name })),
+        rows: resumenFilas
+    });
+    resumenSheet.eachRow((row, rowNumber) => {
+        row.height = rowNumber === 1 ? 30 : 36;
+        row.alignment = { vertical: 'top', wrapText: true };
+        if (rowNumber === 1) row.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF55744F' } };
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.alignment = { vertical: 'middle', wrapText: true };
+        });
+    });
+    resumenSheet.views = [{ state: 'frozen', ySplit: 1 }];
+    await workbook.xlsx.writeFile(filePath);
+    return { ok: true, ruta: filePath };
+}
 
 /* =========================================================
    IPC: PLANO

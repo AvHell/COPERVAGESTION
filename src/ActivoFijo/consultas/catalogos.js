@@ -1,5 +1,5 @@
 /* =========================================================
-   ACTIVO FIJO — CATÁLOGOS (12 CRUDs en un solo módulo)
+   ACTIVO FIJO — CATÁLOGOS CRUD
    Soft delete: se marca Activo = 0, no se borra
    ========================================================= */
 const { getPool, sql } = require('../../js/db/conexion');
@@ -115,8 +115,143 @@ const CATALOGOS = {
         campos: [
             { nombre: 'Nombre', tipo: 'NVarChar', longitud: 50, requerido: true, unico: true }
         ]
+    },
+    modelos: {
+        tabla: 'ActivoFijoModelos',
+        pk:    'IdModelo',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 150, requerido: true, unico: true }
+        ]
+    },
+    procesadores: {
+        tabla: 'ActivoFijoProcesadores',
+        pk:    'IdProcesador',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 150, requerido: true, unico: true }
+        ]
+    },
+    memoriasRam: {
+        tabla: 'ActivoFijoMemoriasRAM',
+        pk:    'IdMemoriaRAM',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 50, requerido: true, unico: true }
+        ]
+    },
+    almacenamientos: {
+        tabla: 'ActivoFijoAlmacenamientos',
+        pk:    'IdAlmacenamiento',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 50, requerido: true, unico: true }
+        ]
+    },
+    sistemasOperativos: {
+        tabla: 'ActivoFijoSistemasOperativos',
+        pk:    'IdSistemaOperativo',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 100, requerido: true, unico: true }
+        ]
+    },
+    accesorios: {
+        tabla: 'ActivoFijoAccesorios',
+        pk:    'IdAccesorio',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 300, requerido: true, unico: true }
+        ]
+    },
+    usuariosAsignados: {
+        tabla: 'ActivoFijoUsuariosAsignados',
+        pk:    'IdUsuarioAsignado',
+        campos: [
+            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 200, requerido: true, unico: true }
+        ]
     }
 };
+
+const CATALOGOS_ESPECIFICACIONES = [
+    { clave: 'modelos', tabla: 'ActivoFijoModelos', pk: 'IdModelo', longitud: 150, origen: 'Modelo' },
+    { clave: 'procesadores', tabla: 'ActivoFijoProcesadores', pk: 'IdProcesador', longitud: 150, origen: 'Procesador' },
+    { clave: 'memoriasRam', tabla: 'ActivoFijoMemoriasRAM', pk: 'IdMemoriaRAM', longitud: 50, origen: 'MemoriaRAM' },
+    { clave: 'almacenamientos', tabla: 'ActivoFijoAlmacenamientos', pk: 'IdAlmacenamiento', longitud: 50, origen: 'Almacenamiento' },
+    { clave: 'sistemasOperativos', tabla: 'ActivoFijoSistemasOperativos', pk: 'IdSistemaOperativo', longitud: 100, origen: 'SistemaOperativo' },
+    { clave: 'accesorios', tabla: 'ActivoFijoAccesorios', pk: 'IdAccesorio', longitud: 300, origen: 'Accesorios' },
+    { clave: 'usuariosAsignados', tabla: 'ActivoFijoUsuariosAsignados', pk: 'IdUsuarioAsignado', longitud: 200, origen: 'UsuarioAsignado' }
+];
+
+let inicializacionExtendida;
+
+async function asegurarCatalogosExtendidos() {
+    if (!inicializacionExtendida) {
+        inicializacionExtendida = (async () => {
+            const pool = await getPool();
+            for (const cfg of CATALOGOS_ESPECIFICACIONES) {
+                await pool.request().query(`
+                    IF OBJECT_ID(N'dbo.${cfg.tabla}', N'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.${cfg.tabla} (
+                            ${cfg.pk} INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                            Nombre NVARCHAR(${cfg.longitud}) NOT NULL,
+                            Activo BIT NOT NULL CONSTRAINT DF_${cfg.pk}_Activo DEFAULT (1)
+                        );
+                    END;
+
+                    INSERT INTO dbo.${cfg.tabla} (Nombre)
+                    SELECT DISTINCT LTRIM(RTRIM(a.${cfg.origen}))
+                    FROM dbo.ActivoFijoEquipos a
+                    WHERE a.${cfg.origen} IS NOT NULL
+                      AND LTRIM(RTRIM(a.${cfg.origen})) <> ''
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM dbo.${cfg.tabla} c
+                          WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(a.${cfg.origen})))
+                      );
+                `);
+            }
+
+            await pool.request().query(`
+                UPDATE dbo.ActivoFijoEstatus SET Activo = 1
+                WHERE UPPER(Nombre) = 'DISPONIBLE' AND Activo = 0;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM dbo.ActivoFijoEstatus WHERE UPPER(Nombre) = 'DISPONIBLE'
+                )
+                    INSERT INTO dbo.ActivoFijoEstatus (Nombre, Activo) VALUES ('DISPONIBLE', 1);
+
+                UPDATE af SET IdEstatus = disponible.IdEstatus
+                FROM dbo.ActivoFijoEquipos af
+                INNER JOIN dbo.ActivoFijoEstatus actual ON actual.IdEstatus = af.IdEstatus
+                CROSS JOIN (
+                    SELECT TOP 1 IdEstatus FROM dbo.ActivoFijoEstatus
+                    WHERE UPPER(Nombre) = 'DISPONIBLE' AND Activo = 1
+                    ORDER BY IdEstatus
+                ) disponible
+                WHERE UPPER(actual.Nombre) IN ('STOCK', 'ASIGNADO')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM dbo.ActivoFijoResponsivas r
+                      WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
+                        AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+                  );
+
+                UPDATE af SET IdEstatus = asignado.IdEstatus
+                FROM dbo.ActivoFijoEquipos af
+                CROSS JOIN (
+                    SELECT TOP 1 IdEstatus FROM dbo.ActivoFijoEstatus
+                    WHERE UPPER(Nombre) = 'ASIGNADO' AND Activo = 1
+                    ORDER BY IdEstatus
+                ) asignado
+                WHERE EXISTS (
+                    SELECT 1 FROM dbo.ActivoFijoResponsivas r
+                    WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
+                      AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+                );
+            `);
+        })().catch(err => {
+            inicializacionExtendida = null;
+            throw err;
+        });
+    }
+
+    return inicializacionExtendida;
+}
 
 /* =========================================================
    HELPERS INTERNOS
@@ -142,6 +277,7 @@ function tipoSql(tipo, longitud) {
    - si no                          → Activo = 1
    ========================================================= */
 async function listar(clave, filtros = {}) {
+    await asegurarCatalogosExtendidos();
     const { tabla, pk } = getConfig(clave);
     const pool = await getPool();
 
@@ -158,6 +294,7 @@ async function listar(clave, filtros = {}) {
    ========================================================= */
 async function crear(clave, datos) {
     try {
+        await asegurarCatalogosExtendidos();
         const cfg = getConfig(clave);
         const pool = await getPool();
 
@@ -220,6 +357,7 @@ async function crear(clave, datos) {
    ========================================================= */
 async function actualizar(clave, id, datos) {
     try {
+        await asegurarCatalogosExtendidos();
         const cfg = getConfig(clave);
         const pool = await getPool();
 
@@ -288,6 +426,7 @@ async function actualizar(clave, id, datos) {
    ========================================================= */
 async function eliminar(clave, id) {
     try {
+        await asegurarCatalogosExtendidos();
         const cfg = getConfig(clave);
         const pool = await getPool();
 
@@ -318,6 +457,7 @@ async function eliminar(clave, id) {
    ========================================================= */
 async function restaurar(clave, id) {
     try {
+        await asegurarCatalogosExtendidos();
         const cfg = getConfig(clave);
         const pool = await getPool();
 
@@ -339,4 +479,27 @@ async function restaurar(clave, id) {
     }
 }
 
-module.exports = { listar, crear, actualizar, eliminar, restaurar, CATALOGOS };
+async function esValorActivo(clave, nombre) {
+    if (!nombre) return false;
+    await asegurarCatalogosExtendidos();
+    const cfg = getConfig(clave);
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('Nombre', sql.NVarChar(300), String(nombre).trim())
+        .query(`SELECT TOP 1 1 AS Existe FROM ${cfg.tabla} WHERE UPPER(Nombre) = UPPER(@Nombre) AND Activo = 1`);
+    return result.recordset.length > 0;
+}
+
+async function listarEspecificaciones() {
+    await asegurarCatalogosExtendidos();
+    const resultados = await Promise.all(CATALOGOS_ESPECIFICACIONES.map(async cfg => ({
+        clave: cfg.clave,
+        registros: await listar(cfg.clave)
+    })));
+    return Object.fromEntries(resultados.map(item => [item.clave, item.registros]));
+}
+
+module.exports = {
+    listar, crear, actualizar, eliminar, restaurar, CATALOGOS,
+    asegurarCatalogosExtendidos, esValorActivo, listarEspecificaciones
+};

@@ -71,7 +71,8 @@ contextBridge.exposeInMainWorld('api', {
             listarVoltajes:       () => ipcRenderer.invoke('af-activos-lista-voltajes'),
             listarClasificaciones:() => ipcRenderer.invoke('af-activos-lista-clasificaciones'),
             listarTamanios:       () => ipcRenderer.invoke('af-activos-lista-tamanios'),
-            listarCapacidades:    () => ipcRenderer.invoke('af-activos-lista-capacidades')
+            listarCapacidades:    () => ipcRenderer.invoke('af-activos-lista-capacidades'),
+            listarCatalogosExtendidos: () => ipcRenderer.invoke('af-activos-lista-catalogos-especificaciones')
         },
 
         /* =================================================

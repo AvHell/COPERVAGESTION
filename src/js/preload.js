@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('api', {
     abrirPlano:     () => ipcRenderer.invoke('abrir-plano'),
     abrirUsuarios:  () => ipcRenderer.invoke('abrir-usuarios'),
     abrirHistorico: () => ipcRenderer.invoke('abrir-historico'),
+    abrirMantenimientos: () => ipcRenderer.invoke('abrir-mantenimientos'),
     volverMenu:     () => ipcRenderer.invoke('volver-menu'),
     cerrarVentana:  () => ipcRenderer.invoke('ventana:cerrar-actual'),
 
@@ -100,6 +101,7 @@ contextBridge.exposeInMainWorld('api', {
        ========================================================= */
     equipos: {
         listar:               ()                => ipcRenderer.invoke('equipos:listar'),
+        exportarExcel:        ()                => ipcRenderer.invoke('equipos:exportarExcel'),
         crear:                (datos)           => ipcRenderer.invoke('equipos:crear', datos),
         obtenerPorId:         (id)              => ipcRenderer.invoke('equipos:obtenerPorId', id),
         actualizar:           (id, datos)       => ipcRenderer.invoke('equipos:actualizar', id, datos),
@@ -146,6 +148,18 @@ contextBridge.exposeInMainWorld('api', {
     historicos: {
         listar:        (idCliente, idPiso) => ipcRenderer.invoke('historicos:listar', idCliente, idPiso),
         listarPorPiso: (idPiso)            => ipcRenderer.invoke('historicos:listarPorPiso', idPiso)
+    },
+
+    /* =========================================================
+       MANTENIMIENTOS
+       ========================================================= */
+    mantenimientos: {
+        listarPisos: () => ipcRenderer.invoke('mantenimientos:listarPisos'),
+        listarUsuarios: () => ipcRenderer.invoke('mantenimientos:listarUsuarios'),
+        obtenerPlano: (idPiso) => ipcRenderer.invoke('mantenimientos:obtenerPlano', idPiso),
+        listarRegistros: (idPiso) => ipcRenderer.invoke('mantenimientos:listarRegistros', idPiso),
+        crear: (datos) => ipcRenderer.invoke('mantenimientos:crear', datos),
+        exportarExcel: (idPiso) => ipcRenderer.invoke('mantenimientos:exportarExcel', idPiso)
     },
 
     /* =========================================================

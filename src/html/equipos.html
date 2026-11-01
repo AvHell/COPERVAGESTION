@@ -57,12 +57,21 @@
                 </button>
             </div>
 
-            <button id="btn-nuevo" class="btn-primary" data-permiso="equipos:crear">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M12 5v14M5 12h14"/>
-                </svg>
-                <span>Nuevo equipo</span>
-            </button>
+            <div class="toolbar-actions">
+                <button id="btn-exportar-excel" class="btn-export" data-permiso="equipos:listado:exportar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 3v12m0 0 4-4m-4 4-4-4"/>
+                        <path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>
+                    </svg>
+                    <span>Exportar Excel</span>
+                </button>
+                <button id="btn-nuevo" class="btn-primary" data-permiso="equipos:crear">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    <span>Nuevo equipo</span>
+                </button>
+            </div>
         </div>
 
         <div id="sin-resultados" class="empty-state oculto">

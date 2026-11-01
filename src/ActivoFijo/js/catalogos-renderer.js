@@ -85,7 +85,7 @@ const CATALOGOS_FRONT = {
         pk: 'IdEstatus',
         campos: [
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
-              hint: 'Situación operativa. Ej. STOCK, DISPONIBLE, ASIGNADO, BAJA.' }
+              hint: 'Situación operativa. Los activos nuevos inician como DISPONIBLE y ASIGNADO se controla con responsivas.' }
         ]
     },
     carteras: {
@@ -167,6 +167,69 @@ const CATALOGOS_FRONT = {
             { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
               hint: 'Ej. 240 GB, 480 GB, 8 GB, 16 GB.' }
         ]
+    },
+    modelos: {
+        titulo: 'Modelos',
+        tituloSingular: 'modelo',
+        pk: 'IdModelo',
+        campos: [
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 150,
+              hint: 'Modelo comercial del equipo. Ej. ThinkPad T14, ProDesk 400 G4.' }
+        ]
+    },
+    procesadores: {
+        titulo: 'Procesadores',
+        tituloSingular: 'procesador',
+        pk: 'IdProcesador',
+        campos: [
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 150,
+              hint: 'Procesadores disponibles para los equipos.' }
+        ]
+    },
+    memoriasRam: {
+        titulo: 'Memorias RAM',
+        tituloSingular: 'memoria RAM',
+        pk: 'IdMemoriaRAM',
+        campos: [
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+              hint: 'Capacidades y tipo de memoria. Ej. 8 GB DDR4.' }
+        ]
+    },
+    almacenamientos: {
+        titulo: 'Almacenamientos',
+        tituloSingular: 'almacenamiento',
+        pk: 'IdAlmacenamiento',
+        campos: [
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+              hint: 'Capacidad y tipo. Ej. 512 GB SSD.' }
+        ]
+    },
+    sistemasOperativos: {
+        titulo: 'Sistemas operativos',
+        tituloSingular: 'sistema operativo',
+        pk: 'IdSistemaOperativo',
+        campos: [
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+              hint: 'Ej. Windows 11 Pro.' }
+        ]
+    },
+    accesorios: {
+        titulo: 'Accesorios',
+        tituloSingular: 'accesorio',
+        pk: 'IdAccesorio',
+        campos: [
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 300,
+              hint: 'Conjunto o accesorio frecuente. Ej. Cargador, mouse y teclado.' }
+        ]
+    },
+    usuariosAsignados: {
+        titulo: 'Usuarios asignados',
+        tituloSingular: 'usuario asignado',
+        pk: 'IdUsuarioAsignado',
+        campos: [
+            { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 200,
+              hint: 'Usuarios externos o responsables reutilizados en la captura.' }
+        ]
     }
 };
 
@@ -195,10 +258,11 @@ const AYUDA_CATALOGO = {
         tips: ['Se usa como filtro en el inventario.', 'No confundir con Estatus (situación operativa).']
     },
     estatus: {
-        resumen: 'Situación operativa del activo (STOCK, DISPONIBLE, ASIGNADO, BAJA, etc.).',
+        resumen: 'Situación operativa del activo (DISPONIBLE, ASIGNADO, BAJA, etc.).',
         tips: [
             'El estatus <b>BAJA</b> dispara el soft delete y mueve el activo a Eliminados.',
-            'El estatus <b>STOCK / DISPONIBLE</b> es al que vuelve un activo al restaurarse.'
+            'Los activos creados o importados inician como DISPONIBLE.',
+            'ASIGNADO se establece al crear una responsiva y se libera al devolverla o cancelarla.'
         ]
     },
     carteras: {
@@ -238,7 +302,14 @@ const AYUDA_CATALOGO = {
     capacidades: {
         resumen: 'Capacidades posibles. Ej. 240 GB, 480 GB, 8 GB, 16 GB.',
         tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Capacidad" activo.']
-    }
+    },
+    modelos: { resumen: 'Modelos disponibles para asociar a los activos.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+    procesadores: { resumen: 'Procesadores disponibles para completar las especificaciones.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+    memoriasRam: { resumen: 'Opciones de memoria RAM utilizadas en los activos.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+    almacenamientos: { resumen: 'Opciones de almacenamiento disponibles.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+    sistemasOperativos: { resumen: 'Sistemas operativos disponibles para los equipos.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+    accesorios: { resumen: 'Conjuntos de accesorios reutilizables.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+    usuariosAsignados: { resumen: 'Usuarios reutilizables para activos que no se asignan mediante responsiva.', tips: ['Los valores históricos fueron precargados automáticamente.'] }
 };
 
 /* =========================================================

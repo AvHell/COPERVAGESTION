@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2E3228">
+    <title>Mantenimientos</title>
+    <link rel="stylesheet" href="../css/mantenimientos.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <header class="topbar">
+        <button id="btn-volver" class="btn btn-secundario" type="button">← Volver</button>
+        <div>
+            <p class="eyebrow">Control de equipos</p>
+            <h1>Mantenimientos</h1>
+        </div>
+        <div class="topbar-actions">
+            <label for="select-piso">Piso</label>
+            <select id="select-piso" aria-label="Seleccionar piso"></select>
+            <button id="btn-exportar-excel" class="btn btn-secundario" type="button">Exportar Excel</button>
+            <button id="btn-ver-historial" class="btn btn-secundario" type="button">
+                Historial <span id="contador-registros" class="contador">0</span>
+            </button>
+            <button id="btn-actualizar" class="btn btn-secundario" type="button">Actualizar</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="mapa-panel">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Plano de equipos</p>
+                    <h2 id="titulo-piso">Selecciona un piso</h2>
+                </div>
+                <div class="leyenda">
+                    <span><i class="leyenda-punto sin-mantenimiento"></i>Sin registro</span>
+                    <span><i class="leyenda-punto mantenido"></i>Mantenimiento</span>
+                    <span><i class="leyenda-punto clonado"></i>Marco rojo: mantenimiento de clonación</span>
+                </div>
+            </div>
+            <div id="mapa-vacio" class="estado-vacio">Selecciona un piso para consultar su plano.</div>
+            <div id="mapa-scroll" class="mapa-scroll" tabindex="0" aria-label="Plano desplazable">
+                <div id="mapa" class="mapa" aria-label="Mapa del piso"></div>
+            </div>
+            <p class="ayuda">Usa la rueda del ratón para desplazarte por el plano. Selecciona un equipo para consultar el historial o registrar un mantenimiento.</p>
+        </section>
+
+    </main>
+
+    <dialog id="dialog-historial" class="dialog-historial">
+        <section class="historial-panel">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Bitácora del piso</p>
+                    <h2>Historial de mantenimientos</h2>
+                </div>
+                <button id="btn-cerrar-historial" class="btn btn-secundario" type="button">Cerrar</button>
+            </div>
+            <div class="tabla-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Equipo</th>
+                            <th>IP</th>
+                            <th>Cliente</th>
+                            <th>Rol</th>
+                            <th>Ubicación</th>
+                            <th>Realizado por</th>
+                            <th>Observaciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historial-body"></tbody>
+                </table>
+                <div id="historial-vacio" class="estado-vacio">No hay mantenimientos registrados para este piso.</div>
+            </div>
+        </section>
+    </dialog>
+
+    <dialog id="dialog-equipo" class="dialog-equipo">
+        <form id="form-mantenimiento" method="dialog" novalidate>
+            <div class="dialog-heading">
+                <div>
+                    <p class="eyebrow">Equipo seleccionado</p>
+                    <h2 id="equipo-titulo">Equipo</h2>
+                </div>
+                <button id="btn-cerrar-dialogo" class="btn-cerrar" type="button" aria-label="Cerrar">×</button>
+            </div>
+            <dl id="equipo-detalle" class="equipo-detalle equipo-detalle-badges"></dl>
+            <div id="ultimo-registro" class="ultimo-registro"></div>
+            <div class="campo">
+                <label for="fecha-mantenimiento">Fecha del mantenimiento</label>
+                <input id="fecha-mantenimiento" name="fechaMantenimiento" type="date" required>
+            </div>
+            <div class="campo">
+                <label for="usuario-realizo">Realizado por</label>
+                <select id="usuario-realizo" name="idUsuarios" multiple size="4" required>
+                </select>
+                <small class="campo-ayuda">Selecciona hasta dos personas (Ctrl + clic para elegir una segunda).</small>
+            </div>
+            <div class="campo">
+                <label for="observaciones">Observaciones</label>
+                <textarea id="observaciones" name="observaciones" rows="4" maxlength="1000" required
+                    placeholder="Describe el trabajo realizado"></textarea>
+                <small class="campo-ayuda">Si incluyes “clonación” en las observaciones, el marco del equipo se resaltará en rojo.</small>
+            </div>
+            <div class="dialog-actions">
+                <button id="btn-cancelar" class="btn btn-secundario" type="button">Cerrar</button>
+                <button id="btn-guardar" class="btn btn-principal" type="submit">Registrar mantenimiento</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script src="../js/mantenimientos-renderer.js"></script>
+</body>
+</html>

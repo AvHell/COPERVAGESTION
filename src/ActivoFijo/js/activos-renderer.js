@@ -19,6 +19,15 @@ let voltajes       = [];
 let clasificaciones= [];
 let tamanios       = [];
 let capacidades    = [];
+let catalogosEspecificaciones = {
+    modelos: [],
+    procesadores: [],
+    memoriasRam: [],
+    almacenamientos: [],
+    sistemasOperativos: [],
+    accesorios: [],
+    usuariosAsignados: []
+};
 let modoEdicion    = false;
 let idEditando     = null;
 let guardando      = false;
@@ -174,6 +183,7 @@ function toastError(titulo, texto = '') {
    ========================================================= */
 async function cargarCatalogos() {
     try {
+        const extras = await window.api.activoFijo.activos.listarCatalogosExtendidos();
         const [t, m, e, s, c, si, sub, vol, cla, tam, cap] = await Promise.all([
             window.api.activoFijo.activos.listarTipos(),
             window.api.activoFijo.activos.listarMarcas(),
@@ -199,13 +209,15 @@ async function cargarCatalogos() {
         clasificaciones = cla;
         tamanios        = tam;
         capacidades     = cap;
+        catalogosEspecificaciones = extras;
 
         selTipo.innerHTML    = '<option value="">— Seleccionar —</option>' +
             tipos.map(x => `<option value="${x.IdTipo}">${escaparHTML(x.Nombre)}</option>`).join('');
         selMarca.innerHTML   = '<option value="">— Sin marca —</option>' +
             marcas.map(x => `<option value="${x.IdMarca}">${escaparHTML(x.Nombre)}</option>`).join('');
         selEstado.innerHTML  = estados.map(x => `<option value="${x.IdEstado}">${escaparHTML(x.Nombre)}</option>`).join('');
-        selEstatus.innerHTML = estatus.map(x => `<option value="${x.IdEstatus}">${escaparHTML(x.Nombre)}</option>`).join('');
+        selEstatus.innerHTML = '<option value="">— Seleccionar estatus —</option>' +
+            estatus.map(x => `<option value="${x.IdEstatus}" ${x.Nombre.toUpperCase() === 'ASIGNADO' ? 'disabled' : ''}>${escaparHTML(x.Nombre)}</option>`).join('');
         selCartera.innerHTML = '<option value="">— Sin cartera —</option>' +
             carteras.map(x => `<option value="${x.IdCartera}">${escaparHTML(x.Nombre)}</option>`).join('');
         selSitio.innerHTML   = '<option value="">— Sin sitio —</option>' +
@@ -218,9 +230,31 @@ async function cargarCatalogos() {
             capacidades.map(x => `<option value="${x.IdCapacidad}">${escaparHTML(x.Nombre)}</option>`).join('');
         selVoltaje.innerHTML = '<option value="">— Sin voltaje —</option>' +
             voltajes.map(x => `<option value="${x.IdVoltaje}">${escaparHTML(x.Nombre)}</option>`).join('');
+        poblarCatalogoTexto(inpModelo, catalogosEspecificaciones.modelos, '— Seleccionar modelo —');
+        poblarCatalogoTexto(inpProcesador, catalogosEspecificaciones.procesadores, '— Seleccionar procesador —');
+        poblarCatalogoTexto(inpRAM, catalogosEspecificaciones.memoriasRam, '— Seleccionar memoria —');
+        poblarCatalogoTexto(inpAlmacenamiento, catalogosEspecificaciones.almacenamientos, '— Seleccionar almacenamiento —');
+        poblarCatalogoTexto(inpSO, catalogosEspecificaciones.sistemasOperativos, '— Seleccionar sistema operativo —');
+        poblarCatalogoTexto(inpAccesorios, catalogosEspecificaciones.accesorios, '— Seleccionar accesorios —');
+        poblarCatalogoTexto(inpUsuarioAsig, catalogosEspecificaciones.usuariosAsignados, '— Seleccionar usuario —');
     } catch (err) {
         toastError('No se pudieron cargar los catálogos', err.message);
     }
+}
+
+function poblarCatalogoTexto(select, registros, placeholder) {
+    select.innerHTML = `<option value="">${placeholder}</option>` +
+        registros.map(registro => `<option value="${escaparHTML(registro.Nombre)}">${escaparHTML(registro.Nombre)}</option>`).join('');
+}
+
+function seleccionarCatalogoTexto(select, valor) {
+    const texto = String(valor ?? '');
+    if (texto && !Array.from(select.options).some(option => option.value === texto)) {
+        const option = new Option(`${texto} (inactivo)`, texto, true, true);
+        option.disabled = true;
+        select.add(option);
+    }
+    select.value = texto;
 }
 
 /* =========================================================
@@ -842,7 +876,9 @@ function limpiarFormulario() {
     selTipo.value = '';
     selMarca.value = '';
     selEstado.value = estados[0]?.IdEstado ?? '';
-    selEstatus.value = estatus[0]?.IdEstatus ?? '';
+    const estatusDisponible = estatus.find(x => x.Nombre.toUpperCase() === 'DISPONIBLE');
+    selEstatus.value = estatusDisponible?.IdEstatus ?? '';
+    selEstatus.disabled = true;
     selCartera.value = '';
     selSitio.value = '';
     selSubtipo.innerHTML = '<option value="">— Selecciona un tipo primero —</option>';
@@ -888,6 +924,7 @@ function abrirEdicion(id) {
 
     selTipo.value = a.IdTipo != null ? String(a.IdTipo) : '';
     actualizarCamposPorTipo();
+    selEstatus.disabled = false;
 
     selMarca.value         = a.IdMarca   != null ? String(a.IdMarca)   : '';
     selEstado.value        = a.IdEstado  != null ? String(a.IdEstado)  : '';
@@ -906,21 +943,22 @@ function abrirEdicion(id) {
 
     actualizarUsuarioAsignado();
 
-    inpModelo.value         = a.Modelo ?? '';
+    seleccionarCatalogoTexto(inpModelo, a.Modelo);
     inpNoSerie.value        = a.NoSerie ?? '';
     inpIMEI1.value          = a.IMEI1 ?? '';
     inpIMEI2.value          = a.IMEI2 ?? '';
     inpNoTelefono.value     = a.NoTelefono ?? '';
-    inpUsuarioAsig.value    = a.UsuarioAsignado ?? '';
-    inpProcesador.value     = a.Procesador ?? '';
-    inpRAM.value            = a.MemoriaRAM ?? '';
-    inpAlmacenamiento.value = a.Almacenamiento ?? '';
-    inpSO.value             = a.SistemaOperativo ?? '';
-    inpAccesorios.value     = a.Accesorios ?? '';
+    seleccionarCatalogoTexto(inpUsuarioAsig, a.UsuarioAsignado);
+    seleccionarCatalogoTexto(inpProcesador, a.Procesador);
+    seleccionarCatalogoTexto(inpRAM, a.MemoriaRAM);
+    seleccionarCatalogoTexto(inpAlmacenamiento, a.Almacenamiento);
+    seleccionarCatalogoTexto(inpSO, a.SistemaOperativo);
+    seleccionarCatalogoTexto(inpAccesorios, a.Accesorios);
     inpPrecio.value         = a.PrecioActivo ?? '';
     inpObservaciones.value  = a.Observaciones ?? '';
 
     ocultarMensaje();
+    selEstatus.disabled = a.Estatus?.toUpperCase() === 'ASIGNADO';
     abrirModal();
     selTipo.focus();
 }
@@ -964,6 +1002,15 @@ formulario.addEventListener('submit', async (e) => {
     }
     if (tipo.RequiereVoltaje && !selVoltaje.value) {
         mostrarMensaje('El voltaje es obligatorio para este tipo.', 'error'); return;
+    }
+    if (tipo.RequiereEspecificaciones && (!inpProcesador.value || !inpRAM.value || !inpAlmacenamiento.value || !inpSO.value)) {
+        mostrarMensaje('Selecciona procesador, memoria RAM, almacenamiento y sistema operativo del catálogo.', 'error'); return;
+    }
+    if (tipo.RequiereAccesorios && !inpAccesorios.value) {
+        mostrarMensaje('Selecciona los accesorios del catálogo.', 'error'); return;
+    }
+    if (tipo.RequiereUsuarioAsignado && !document.querySelector('.campo-usuario-asignado')?.classList.contains('oculto') && !inpUsuarioAsig.value) {
+        mostrarMensaje('Selecciona el usuario asignado del catálogo.', 'error'); return;
     }
     if (tipo.RequierePrecio && !inpPrecio.value.trim()) {
         mostrarMensaje('El precio es obligatorio para este tipo.', 'error'); return;

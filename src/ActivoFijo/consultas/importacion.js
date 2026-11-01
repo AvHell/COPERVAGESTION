@@ -3,6 +3,7 @@
    src/ActivoFijo/consultas/importacion.js
    ========================================================= */
 const { getPool, sql } = require('../../js/db/conexion');
+const catalogosDB = require('./catalogos');
 
 /* =========================================================
    HELPERS
@@ -11,8 +12,16 @@ async function getIdPorNombre(pool, tabla, pk, nombre) {
     if (!nombre) return null;
     const r = await pool.request()
         .input('Nombre', sql.NVarChar(100), String(nombre).trim().toUpperCase())
-        .query(`SELECT ${pk} FROM ${tabla} WHERE UPPER(Nombre) = @Nombre`);
+        .query(`SELECT ${pk} FROM ${tabla} WHERE UPPER(Nombre) = @Nombre AND Activo = 1`);
     return r.recordset[0]?.[pk] ?? null;
+}
+
+async function getNombreCatalogo(pool, tabla, nombre) {
+    if (!nombre) return null;
+    const r = await pool.request()
+        .input('Nombre', sql.NVarChar(300), String(nombre).trim())
+        .query(`SELECT TOP 1 Nombre FROM ${tabla} WHERE UPPER(Nombre) = UPPER(@Nombre) AND Activo = 1`);
+    return r.recordset[0]?.Nombre ?? null;
 }
 
 async function getIdSubtipoPorGrupoYNombre(pool, grupo, nombre) {
@@ -22,7 +31,8 @@ async function getIdSubtipoPorGrupoYNombre(pool, grupo, nombre) {
         .input('Nombre', sql.NVarChar(100), String(nombre).trim().toUpperCase())
         .query(`SELECT IdSubtipo FROM ActivoFijoSubtipos
                 WHERE UPPER(Grupo) = UPPER(@Grupo)
-                  AND UPPER(Nombre) = @Nombre`);
+                  AND UPPER(Nombre) = @Nombre
+                  AND Activo = 1`);
     return r.recordset[0]?.IdSubtipo ?? null;
 }
 
@@ -32,7 +42,7 @@ async function getIdSubtipoPorGrupoYNombre(pool, grupo, nombre) {
 function construirLayout(tipo) {
     const columnas = [
         { key: 'Marca',   etiqueta: 'Marca',   catalogo: 'marcas' },
-        { key: 'Modelo',  etiqueta: 'Modelo',  catalogo: null },
+        { key: 'Modelo',  etiqueta: 'Modelo',  catalogo: 'modelos' },
         { key: 'NoSerie', etiqueta: 'NoSerie', catalogo: null, opcional: true }
     ];
 
@@ -62,22 +72,21 @@ function construirLayout(tipo) {
         columnas.push({ key: 'Voltaje', etiqueta: 'Voltaje', catalogo: 'voltajes' });
     }
     if (tipo.RequiereUsuarioAsignado) {
-        columnas.push({ key: 'UsuarioAsignado', etiqueta: 'UsuarioAsignado', catalogo: null });
+        columnas.push({ key: 'UsuarioAsignado', etiqueta: 'UsuarioAsignado', catalogo: 'usuariosAsignados' });
     }
     if (tipo.RequierePrecio) {
         columnas.push({ key: 'PrecioActivo', etiqueta: 'Precio', catalogo: null });
     }
     if (tipo.RequiereEspecificaciones) {
-        columnas.push({ key: 'Procesador', etiqueta: 'Procesador', catalogo: null });
-        columnas.push({ key: 'MemoriaRAM', etiqueta: 'RAM', catalogo: null });
-        columnas.push({ key: 'Almacenamiento', etiqueta: 'Almacenamiento', catalogo: null });
-        columnas.push({ key: 'SistemaOperativo', etiqueta: 'S.O.', catalogo: null });
+        columnas.push({ key: 'Procesador', etiqueta: 'Procesador', catalogo: 'procesadores' });
+        columnas.push({ key: 'MemoriaRAM', etiqueta: 'RAM', catalogo: 'memoriasRam' });
+        columnas.push({ key: 'Almacenamiento', etiqueta: 'Almacenamiento', catalogo: 'almacenamientos' });
+        columnas.push({ key: 'SistemaOperativo', etiqueta: 'S.O.', catalogo: 'sistemasOperativos' });
     }
     if (tipo.RequiereAccesorios) {
-        columnas.push({ key: 'Accesorios', etiqueta: 'Accesorios', catalogo: null });
+        columnas.push({ key: 'Accesorios', etiqueta: 'Accesorios', catalogo: 'accesorios' });
     }
 
-    columnas.push({ key: 'Estatus', etiqueta: 'Estatus', catalogo: 'estatus' });
     columnas.push({ key: 'CarteraAsignado', etiqueta: 'Cartera', catalogo: 'carteras' });
 
     const ejemplo = {
@@ -105,7 +114,6 @@ function construirLayout(tipo) {
         else if (c.key === 'Almacenamiento') ejemplo[c.key] = '256 GB SSD';
         else if (c.key === 'SistemaOperativo') ejemplo[c.key] = 'Windows 11';
         else if (c.key === 'Accesorios') ejemplo[c.key] = 'Cargador, Cable';
-        else if (c.key === 'Estatus') ejemplo[c.key] = 'DISPONIBLE';
         else if (c.key === 'CarteraAsignado') ejemplo[c.key] = 'NU';
     });
 
@@ -119,13 +127,13 @@ function construirLayout(tipo) {
 }
 
 /* =========================================================
-   LISTAR LAYOUTS DISPONIBLES (TODOS LOS TIPOS DE LA BD)
+   LISTAR LAYOUTS DISPONIBLES (TIPOS ACTIVOS)
    ========================================================= */
 async function listarLayouts() {
+    await catalogosDB.asegurarCatalogosExtendidos();
     const pool = await getPool();
     
-    // Esta consulta trae TODOS los registros sin importar filtros
-    const r = await pool.request().query('SELECT * FROM ActivoFijoTipos ORDER BY Nombre');
+    const r = await pool.request().query('SELECT * FROM ActivoFijoTipos WHERE Activo = 1 ORDER BY Nombre');
 
     // Log para que veas en la consola de Node cuántos encontró
     console.log(`[Importar] Tipos encontrados en la BD: ${r.recordset.length}`);
@@ -150,15 +158,36 @@ async function listarLayouts() {
    OBTENER LAYOUT COMPLETO
    ========================================================= */
 async function obtenerLayout(clave) {
+    await catalogosDB.asegurarCatalogosExtendidos();
     const pool = await getPool();
     const r = await pool.request()
         .input('IdTipo', sql.Int, parseInt(clave, 10))
-        .query('SELECT * FROM ActivoFijoTipos WHERE IdTipo = @IdTipo');
+        .query('SELECT * FROM ActivoFijoTipos WHERE IdTipo = @IdTipo AND Activo = 1');
 
     if (r.recordset.length === 0) throw new Error(`Tipo no encontrado: ${clave}`);
     
     const tipo = r.recordset[0];
     const layout = construirLayout(tipo);
+    for (const columna of layout.columnas) {
+        if (!columna.catalogo) continue;
+        if (columna.catalogo === 'subtipos') {
+            const subtipo = await pool.request()
+                .input('Grupo', sql.NVarChar(50), columna.grupoSubtipo)
+                .query(`
+                    SELECT TOP 1 Nombre FROM ActivoFijoSubtipos
+                    WHERE Grupo = @Grupo AND Activo = 1
+                    ORDER BY Nombre
+                `);
+            layout.ejemplo[columna.key] = subtipo.recordset[0]?.Nombre || '';
+            continue;
+        }
+        const catalogo = catalogosDB.CATALOGOS[columna.catalogo];
+        if (!catalogo) continue;
+        const opcion = await pool.request().query(
+            `SELECT TOP 1 Nombre FROM ${catalogo.tabla} WHERE Activo = 1 ORDER BY Nombre`
+        );
+        layout.ejemplo[columna.key] = opcion.recordset[0]?.Nombre || '';
+    }
 
     const ejemploPorEtiqueta = {};
     layout.columnas.forEach(col => {
@@ -190,12 +219,31 @@ async function importar(datos, idUsuario) {
     if (!Array.isArray(filas) || filas.length === 0) return { ok: false, mensaje: 'No hay filas para importar.' };
 
     const pool   = await getPool();
+    await catalogosDB.asegurarCatalogosExtendidos();
     const IdTipo = parseInt(idTipoStr, 10);
 
     const layoutInfo = await obtenerLayout(idTipoStr);
+    const tipoResult = await pool.request()
+        .input('IdTipo', sql.Int, IdTipo)
+        .query(`
+            SELECT Nombre, RequiereSubtipo, RequiereClasificacion, RequiereTamanio,
+                   RequiereCapacidad, RequiereVoltaje, RequierePrecio,
+                   RequiereEspecificaciones, RequiereAccesorios, RequiereUsuarioAsignado
+            FROM ActivoFijoTipos
+            WHERE IdTipo = @IdTipo AND Activo = 1
+        `);
+    const tipo = tipoResult.recordset[0];
+    if (!tipo) return { ok: false, mensaje: 'El tipo seleccionado ya no está activo.' };
     
-    const IdEstadoDefault  = await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', 'NUEVO');
-    const IdEstatusDefault = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', 'STOCK');
+    const IdEstadoDefault  = await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', 'NUEVO')
+        || await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', 'VALIDAR');
+    const IdEstatusDefault = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', 'DISPONIBLE');
+    if (!IdEstadoDefault) {
+        return { ok: false, mensaje: 'Agrega un estado NUEVO o VALIDAR al catálogo antes de importar activos.' };
+    }
+    if (!IdEstatusDefault) {
+        return { ok: false, mensaje: 'No existe el estatus DISPONIBLE en el catálogo.' };
+    }
 
     const insertados = [];
     const errores    = [];
@@ -210,10 +258,9 @@ async function importar(datos, idUsuario) {
             });
 
             const marcaNombre   = filaNormalizada['Marca'];
-            const modelo        = filaNormalizada['Modelo'];
+            let modelo          = filaNormalizada['Modelo'];
             const noSerie       = filaNormalizada['NoSerie'];
             const sitioNombre   = filaNormalizada['Sitio'];
-            const estatusNombre = filaNormalizada['Estatus'] || filaNormalizada['Estado'];
             const carteraNombre = filaNormalizada['Cartera'] || filaNormalizada['CarteraAsignado'];
             
             const imei1           = filaNormalizada['IMEI1'];
@@ -224,27 +271,89 @@ async function importar(datos, idUsuario) {
             const tamanioNombre   = filaNormalizada['Tamanio'] || filaNormalizada['Tamaño'];
             const capacidadNombre = filaNormalizada['Capacidad'];
             const voltajeNombre   = filaNormalizada['Voltaje'];
-            const usuarioAsignado = filaNormalizada['UsuarioAsignado'];
+            let usuarioAsignado = filaNormalizada['UsuarioAsignado'];
             const precioStr       = filaNormalizada['Precio'];
-            const procesador      = filaNormalizada['Procesador'];
-            const ram             = filaNormalizada['RAM'] || filaNormalizada['MemoriaRAM'];
-            const almacenamiento  = filaNormalizada['Almacenamiento'];
-            const so              = filaNormalizada['S.O.'] || filaNormalizada['SistemaOperativo'];
-            const accesorios      = filaNormalizada['Accesorios'];
+            let procesador        = filaNormalizada['Procesador'];
+            let ram               = filaNormalizada['RAM'] || filaNormalizada['MemoriaRAM'];
+            let almacenamiento    = filaNormalizada['Almacenamiento'];
+            let so                = filaNormalizada['S.O.'] || filaNormalizada['SistemaOperativo'];
+            let accesorios        = filaNormalizada['Accesorios'];
 
-            if (!marcaNombre && !noSerie) {
-                errores.push({ fila: numFila, mensaje: 'Fila sin Marca ni NoSerie.' });
+            if (!noSerie && !imei1 && !noTelefono) {
+                errores.push({ fila: numFila, mensaje: 'Captura al menos NoSerie, IMEI1 o NoTeléfono.' });
+                continue;
+            }
+            if (tipo.RequiereSubtipo && !subtipoNombre) {
+                errores.push({ fila: numFila, mensaje: 'El subtipo es obligatorio para este tipo.' });
+                continue;
+            }
+            if (tipo.RequiereClasificacion && !clasificacionNombre) {
+                errores.push({ fila: numFila, mensaje: 'La clasificación es obligatoria para este tipo.' });
+                continue;
+            }
+            if (tipo.RequiereTamanio && !tamanioNombre) {
+                errores.push({ fila: numFila, mensaje: 'El tamaño es obligatorio para este tipo.' });
+                continue;
+            }
+            if (tipo.RequiereCapacidad && !capacidadNombre) {
+                errores.push({ fila: numFila, mensaje: 'La capacidad es obligatoria para este tipo.' });
+                continue;
+            }
+            if (tipo.RequiereVoltaje && !voltajeNombre) {
+                errores.push({ fila: numFila, mensaje: 'El voltaje es obligatorio para este tipo.' });
+                continue;
+            }
+            if (tipo.RequierePrecio && !precioStr) {
+                errores.push({ fila: numFila, mensaje: 'El precio es obligatorio para este tipo.' });
+                continue;
+            }
+            if (tipo.RequiereEspecificaciones && (!procesador || !ram || !almacenamiento || !so)) {
+                errores.push({ fila: numFila, mensaje: 'Procesador, RAM, almacenamiento y sistema operativo son obligatorios.' });
+                continue;
+            }
+            if (tipo.RequiereAccesorios && !accesorios) {
+                errores.push({ fila: numFila, mensaje: 'Los accesorios son obligatorios para este tipo.' });
+                continue;
+            }
+            const requiereUsuario = tipo.RequiereUsuarioAsignado
+                && (!['SSD NVME', 'DISCO MECANICO'].includes(tipo.Nombre)
+                    || (clasificacionNombre || '').toUpperCase() === 'EXTERNO');
+            if (requiereUsuario && !usuarioAsignado) {
+                errores.push({ fila: numFila, mensaje: 'UsuarioAsignado es obligatorio para este tipo.' });
                 continue;
             }
 
             const IdMarca   = await getIdPorNombre(pool, 'ActivoFijoMarcas',   'IdMarca',   marcaNombre);
             const IdSitio   = await getIdPorNombre(pool, 'ActivoFijoSitios',   'IdSitio',   sitioNombre);
             const IdCartera = await getIdPorNombre(pool, 'ActivoFijoCarteras', 'IdCartera', carteraNombre);
-            const IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus',  'IdEstatus', estatusNombre);
             const IdClasificacion = await getIdPorNombre(pool, 'ActivoFijoClasificaciones', 'IdClasificacion', clasificacionNombre);
             const IdTamanio = await getIdPorNombre(pool, 'ActivoFijoTamanios', 'IdTamanio', tamanioNombre);
             const IdCapacidad = await getIdPorNombre(pool, 'ActivoFijoCapacidades', 'IdCapacidad', capacidadNombre);
             const IdVoltaje = await getIdPorNombre(pool, 'ActivoFijoVoltajes', 'IdVoltaje', voltajeNombre);
+
+            const catalogosImportados = [
+                ['Modelo', 'ActivoFijoModelos', modelo, value => { modelo = value; }],
+                ['Procesador', 'ActivoFijoProcesadores', procesador, value => { procesador = value; }],
+                ['RAM', 'ActivoFijoMemoriasRAM', ram, value => { ram = value; }],
+                ['Almacenamiento', 'ActivoFijoAlmacenamientos', almacenamiento, value => { almacenamiento = value; }],
+                ['Sistema Operativo', 'ActivoFijoSistemasOperativos', so, value => { so = value; }],
+                ['Accesorios', 'ActivoFijoAccesorios', accesorios, value => { accesorios = value; }],
+                ['UsuarioAsignado', 'ActivoFijoUsuariosAsignados', usuarioAsignado, value => { usuarioAsignado = value; }]
+            ];
+            let errorCatalogo = null;
+            for (const [etiqueta, tabla, valor, asignar] of catalogosImportados) {
+                if (!valor) continue;
+                const nombreCatalogo = await getNombreCatalogo(pool, tabla, valor);
+                if (!nombreCatalogo) {
+                    errorCatalogo = `${etiqueta} "${valor}" no existe en su catálogo activo.`;
+                    break;
+                }
+                asignar(nombreCatalogo);
+            }
+            if (errorCatalogo) {
+                errores.push({ fila: numFila, mensaje: errorCatalogo });
+                continue;
+            }
 
             let IdSubtipo = null;
             const colSubtipo = layoutInfo.columnas.find(c => c.key === 'Subtipo');
@@ -264,6 +373,26 @@ async function importar(datos, idUsuario) {
                 errores.push({ fila: numFila, mensaje: `Cartera "${carteraNombre}" no existe.` });
                 continue;
             }
+            if (sitioNombre && !IdSitio) {
+                errores.push({ fila: numFila, mensaje: `Sitio "${sitioNombre}" no existe.` });
+                continue;
+            }
+            if (clasificacionNombre && !IdClasificacion) {
+                errores.push({ fila: numFila, mensaje: `Clasificación "${clasificacionNombre}" no existe.` });
+                continue;
+            }
+            if (tamanioNombre && !IdTamanio) {
+                errores.push({ fila: numFila, mensaje: `Tamaño "${tamanioNombre}" no existe.` });
+                continue;
+            }
+            if (capacidadNombre && !IdCapacidad) {
+                errores.push({ fila: numFila, mensaje: `Capacidad "${capacidadNombre}" no existe.` });
+                continue;
+            }
+            if (voltajeNombre && !IdVoltaje) {
+                errores.push({ fila: numFila, mensaje: `Voltaje "${voltajeNombre}" no existe.` });
+                continue;
+            }
 
             if (noSerie) {
                 const dup = await pool.request()
@@ -274,11 +403,32 @@ async function importar(datos, idUsuario) {
                     continue;
                 }
             }
+            if (imei1 && imei2 && imei1 === imei2) {
+                errores.push({ fila: numFila, mensaje: 'IMEI1 e IMEI2 no pueden tener el mismo valor.' });
+                continue;
+            }
+            let identificadorDuplicado = false;
+            for (const [campo, valor] of [['IMEI', imei1], ['IMEI', imei2], ['teléfono', noTelefono]]) {
+                if (!valor) continue;
+                const columna = campo === 'IMEI' ? 'IMEI1 = @Valor OR IMEI2 = @Valor' : 'NoTelefono = @Valor';
+                const duplicado = await pool.request()
+                    .input('Valor', sql.NVarChar(50), valor)
+                    .query(`SELECT 1 FROM ActivoFijoEquipos WHERE ${columna}`);
+                if (duplicado.recordset.length > 0) {
+                    errores.push({ fila: numFila, mensaje: `El ${campo} "${valor}" ya existe.` });
+                    identificadorDuplicado = true;
+                    break;
+                }
+            }
+            if (identificadorDuplicado) continue;
 
             let precioNum = null;
             if (precioStr) {
                 precioNum = parseFloat(precioStr.replace(/[^0-9.-]+/g, ""));
-                if (isNaN(precioNum)) precioNum = null;
+                if (!Number.isFinite(precioNum) || precioNum < 0) {
+                    errores.push({ fila: numFila, mensaje: `Precio "${precioStr}" no es un número válido.` });
+                    continue;
+                }
             }
 
             const result = await pool.request()
@@ -291,7 +441,7 @@ async function importar(datos, idUsuario) {
                 .input('IMEI2',            sql.NVarChar(50),  imei2                  || null)
                 .input('NoTelefono',       sql.NVarChar(50),  noTelefono             || null)
                 .input('IdEstado',         sql.Int,           IdEstadoDefault)
-                .input('IdEstatus',        sql.Int,           IdEstatus              || IdEstatusDefault)
+                .input('IdEstatus',        sql.Int,           IdEstatusDefault)
                 .input('IdSitio',          sql.Int,           IdSitio                || null)
                 .input('IdSubtipo',        sql.Int,           IdSubtipo              || null)
                 .input('IdClasificacion',  sql.Int,           IdClasificacion        || null)
@@ -299,7 +449,7 @@ async function importar(datos, idUsuario) {
                 .input('IdCapacidad',      sql.Int,           IdCapacidad            || null)
                 .input('IdVoltaje',        sql.Int,           IdVoltaje              || null)
                 .input('UsuarioAsignado',  sql.NVarChar(200), usuarioAsignado        || null)
-                .input('PrecioActivo',     sql.Decimal(18,2), precioNum              || null)
+                .input('PrecioActivo',     sql.Decimal(18,2), precioNum)
                 .input('Procesador',       sql.NVarChar(150), procesador             || null)
                 .input('MemoriaRAM',       sql.NVarChar(50),  ram                    || null)
                 .input('Almacenamiento',   sql.NVarChar(50),  almacenamiento         || null)

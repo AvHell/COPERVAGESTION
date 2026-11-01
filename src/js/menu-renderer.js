@@ -13,6 +13,7 @@ const MODULOS = {
     plano:     () => window.api.abrirPlano(),
     usuarios:  () => window.api.abrirUsuarios(),
     historico: () => window.api.abrirHistorico(),
+    mantenimientos: () => window.api.abrirMantenimientos(),
 
     /* Activo Fijo */
     activofijo_catalogos:   () => window.api.abrirActivoFijoCatalogos(),

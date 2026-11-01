@@ -20,6 +20,7 @@ function toastExito(titulo) {
             t.addEventListener('mouseleave', Swal.resumeTimer);
         }
     });
+
 }
 
 function toastError(titulo, texto = '') {
@@ -57,16 +58,19 @@ function limpiarResiduosSwal() {
    RENDERIZADORES DE BADGES
    ========================================================= */
 function renderBadgeCliente(codigo, nombre = null) {
-    const nombreHTML = nombre ? `<span class="nombre">${escaparHTML(nombre)}</span>` : '';
+    const nombreHTML = `<span class="nombre">${escaparHTML(nombre || codigo)}</span>`;
+    const codigoHTML = nombre
+        ? `<span class="codigo">${escaparHTML(codigo)}</span>`
+        : '';
     return `<span class="badge-cliente" data-color="${String(codigo).toUpperCase()}">
-                <span class="codigo">${escaparHTML(codigo)}</span>
                 ${nombreHTML}
+                ${codigoHTML}
             </span>`;
 }
 
-function renderRolPill(codigo) {
+function renderRolPill(codigo, nombre = '') {
     if (!codigo) return `<span class="rol-pill">—</span>`;
-    return `<span class="rol-pill" data-color="${String(codigo).toUpperCase()}">${escaparHTML(codigo)}</span>`;
+    return `<span class="rol-pill" data-color="${String(codigo).toUpperCase()}" title="${escaparHTML(nombre || codigo)}">${escaparHTML(nombre || codigo)}</span>`;
 }
 
 // El hostname hereda el color del rol
@@ -138,6 +142,7 @@ const btnIPsDisponibles = document.getElementById('btn-ips-disponibles');
 
 const btnGuardar    = document.getElementById('btn-guardar');
 const seccionRed    = document.getElementById('seccion-red');
+const btnExportarExcel = document.getElementById('btn-exportar-excel');
 
 /* =========================================================
    UTILIDADES
@@ -171,7 +176,7 @@ async function cargarClientes() {
         clientes.forEach(c => {
             const opt = document.createElement('option');
             opt.value = String(c.IdCliente);
-            opt.textContent = `${c.Codigo} - ${c.Nombre}`;
+            opt.textContent = c.Nombre ? `${c.Nombre} (${c.Codigo})` : c.Codigo;
             selectCli.appendChild(opt);
         });
     } catch (err) {
@@ -186,7 +191,7 @@ async function cargarRoles() {
         roles.forEach(r => {
             const opt = document.createElement('option');
             opt.value = String(r.IdRolEquipo);
-            opt.textContent = `${r.Codigo} - ${r.Nombre}`;
+            opt.textContent = r.Nombre ? `${r.Nombre} (${r.Codigo})` : r.Codigo;
             selectRol.appendChild(opt);
         });
     } catch (err) {
@@ -657,6 +662,23 @@ inputBusqueda.addEventListener('input', () => {
     renderTabla();
 });
 
+btnExportarExcel.addEventListener('click', async () => {
+    btnExportarExcel.disabled = true;
+    try {
+        const resultado = await window.api.equipos.exportarExcel();
+        if (resultado?.ok) {
+            toastExito(`Excel exportado: ${resultado.ruta}`);
+        } else if (!resultado?.cancelado) {
+            toastError('No se pudo exportar a Excel', resultado?.mensaje || 'Error desconocido');
+        }
+    } catch (error) {
+        console.error('[Equipos] Error exportando Excel:', error);
+        toastError('No se pudo exportar a Excel', error.message);
+    } finally {
+        btnExportarExcel.disabled = false;
+    }
+});
+
 btnLimpiarBusq.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
@@ -717,7 +739,7 @@ function renderTabla() {
 
     const listaFiltrada = equipos.filter(e => {
         if (!filtroBusqueda) return true;
-        const texto = [e.Hostname, e.ClienteCodigo, e.ClienteNombre, e.PisoNombre, e.RolCodigo, e.IP, e.UsuarioAdmin]
+        const texto = [e.Hostname, e.ClienteCodigo, e.ClienteNombre, e.PisoNombre, e.RolCodigo, e.RolNombre, e.IP, e.UsuarioAdmin]
             .filter(Boolean).join(' ').toLowerCase();
         return texto.includes(filtroBusqueda);
     });
@@ -766,12 +788,13 @@ function renderTabla() {
         tabla.innerHTML = `
             <thead>
                 <tr>
-                    <th style="width:22%;">Hostname</th>
-                    <th style="width:10%;">Rol</th>
-                    <th style="width:11%;">Tipo</th>
-                    <th style="width:16%;">IP</th>
-                    <th style="width:14%;">Piso</th>
-                    <th style="width:19%;">Usuario admin</th>
+                    <th style="width:17%;">Hostname</th>
+                    <th style="width:16%;">Cliente</th>
+                    <th style="width:12%;">Rol</th>
+                    <th style="width:9%;">Tipo</th>
+                    <th style="width:12%;">IP</th>
+                    <th style="width:12%;">Piso</th>
+                    <th style="width:14%;">Usuario admin</th>
                     <th style="width:8%; text-align:right;">Acciones</th>
                 </tr>
             </thead>
@@ -788,7 +811,8 @@ function renderTabla() {
                 const tipoBadge    = renderTipoBadge(e.TipoIP);
                 const ipHTML       = renderIpBadge(e.IP);
                 const pisoHTML     = renderBadgePiso(e.PisoNombre);
-                const rolHTML      = renderRolPill(e.RolCodigo);
+                const clienteHTML  = renderBadgeCliente(e.ClienteCodigo, e.ClienteNombre);
+                const rolHTML      = renderRolPill(e.RolCodigo, e.RolNombre);
 
                 // Admin con el color de botón (Fondo oscuro, Letras claras)
                 const adminHTML = e.UsuarioAdmin
@@ -796,12 +820,13 @@ function renderTabla() {
                     : `<span class="badge-admin vacia">${iconoUsuarioSVG()}Sin asignar</span>`;
 
                 tr.innerHTML = `
-                    <td>${hostnameHTML}</td>
-                    <td>${rolHTML}</td>
-                    <td>${tipoBadge}</td>
-                    <td>${ipHTML}</td>
-                    <td>${pisoHTML}</td>
-                    <td>${adminHTML}</td>
+                    <td data-label="Hostname">${hostnameHTML}</td>
+                    <td data-label="Cliente">${clienteHTML}</td>
+                    <td data-label="Rol">${rolHTML}</td>
+                    <td data-label="Tipo">${tipoBadge}</td>
+                    <td data-label="IP">${ipHTML}</td>
+                    <td data-label="Piso">${pisoHTML}</td>
+                    <td data-label="Usuario admin">${adminHTML}</td>
                     <td class="acciones-tabla"></td>
                 `;
                 const celda = tr.querySelector('.acciones-tabla');
@@ -1091,6 +1116,7 @@ async function eliminarEquipo(id, hostname) {
    INICIO
    ========================================================= */
 (async () => {
+    await window.PermisosUI?.init();
     await cargarClientes();
     await cargarRoles();
     await recargarEquipos();

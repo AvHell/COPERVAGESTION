@@ -16,6 +16,7 @@ const CATALOGO = {
   'plano':                         { grupo: 'Plano',        etiqueta: 'Acceso al módulo' },
   'usuarios':                      { grupo: 'Usuarios',     etiqueta: 'Acceso al módulo' },
   'historico':                     { grupo: 'Histórico',    etiqueta: 'Acceso al módulo' },
+  'mantenimientos':                { grupo: 'Mantenimientos', etiqueta: 'Acceso al módulo' },
 
   'activofijo_catalogos':          { grupo: 'Activo Fijo',  etiqueta: 'Catálogos' },
   'activofijo_activos':            { grupo: 'Activo Fijo',  etiqueta: 'Inventario' },
@@ -42,6 +43,7 @@ const CATALOGO = {
   'equipos:crear':                 { grupo: 'Equipos',      etiqueta: 'Crear equipo' },
   'equipos:editar':                { grupo: 'Equipos',      etiqueta: 'Editar equipo' },
   'equipos:eliminar':              { grupo: 'Equipos',      etiqueta: 'Eliminar equipo' },
+  'mantenimientos:crear':          { grupo: 'Mantenimientos', etiqueta: 'Registrar mantenimiento' },
 
   /* ---------- PLANO ---------- */
   'plano:ver':                     { grupo: 'Plano',        etiqueta: 'Ver plano' },

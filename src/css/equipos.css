@@ -200,6 +200,12 @@ body {
     box-shadow: var(--shadow-sm);
     backdrop-filter: blur(8px);
 }
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
 
 /* Buscador */
 .buscador {
@@ -285,6 +291,24 @@ body {
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 .btn-primary:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
 .btn-primary svg { width: 16px; height: 16px; }
+.btn-export {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 46px;
+    padding: 11px 18px;
+    border: 1.5px solid var(--tierra-arena);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--tierra-carbon);
+    font: 600 0.86rem var(--font-display);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.btn-export:hover { background: var(--gray-100); }
+.btn-export:disabled { opacity: 0.55; cursor: wait; }
+.btn-export svg { width: 16px; height: 16px; }
 
 /* Botón ghost */
 .btn-ghost {
@@ -319,7 +343,7 @@ body {
     box-shadow: var(--shadow-sm);
     border: 1px solid var(--gray-200);
     /* FIX: Overflow para tooltips */
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
     padding-top: 50px;
     margin-top: -50px;
@@ -330,7 +354,8 @@ body {
 
 .data-table {
     width: 100%;
-    min-width: 800px;
+    min-width: 0;
+    table-layout: fixed;
     border-collapse: separate;
     border-spacing: 0;
     font-size: 0.86rem;
@@ -338,10 +363,10 @@ body {
 .data-table thead { background: var(--tierra-crema); }
 .data-table th {
     text-align: left;
-    padding: 14px 20px;
+    padding: 14px 10px;
     font-weight: 600;
     color: var(--gray-600);
-    font-size: 0.7rem;
+    font-size: 0.74rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     border-bottom: 1px solid var(--gray-200);
@@ -353,9 +378,10 @@ body {
 
 .data-table tbody tr + tr td { border-top: 1px solid var(--gray-100); }
 .data-table td {
-    padding: 14px 20px;
+    padding: 12px 10px;
     color: var(--gray-700);
     vertical-align: middle;
+    overflow: hidden;
 }
 .data-table tbody tr:hover td { background: var(--tierra-crema); }
 .data-table tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius-lg); }
@@ -505,11 +531,14 @@ body {
     /* Fuente del Botón */
     font-family: var(--font-display);
     font-weight: 600;
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     letter-spacing: -0.005em;
     border: 1px solid transparent;
-    white-space: nowrap;
+    white-space: normal;
     line-height: 1.2;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Fondo Base y fallback para cualquier badge */
@@ -528,12 +557,16 @@ body {
 .badge-cliente { gap: 6px; }
 .badge-cliente .nombre {
     font-family: var(--font-sans);
-    font-size: 0.74rem;
-    font-weight: 500;
-    opacity: 0.9;
-    max-width: 160px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    max-width: 190px;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.badge-cliente .codigo {
+    font-size: 0.7rem;
+    font-weight: 500;
+    opacity: 0.9;
     padding-left: 6px;
     margin-left: 2px;
     border-left: 1px solid rgba(255, 247, 232, 0.3);
@@ -581,6 +614,8 @@ body {
 [data-color="ADAMA"]{ background: #2563eb !important; color: #ffffff !important; border-color: #1d4ed8 !important; }
 [data-color="KUBO"] { background: #15803d !important; color: #ffffff !important; border-color: #166534 !important; }
 [data-color="DIDI"] { background: #ea580c !important; color: #ffffff !important; border-color: #c2410c !important; }
+[data-color="FESA"] { background: #0f766e !important; color: #ffffff !important; border-color: #115e59 !important; }
+[data-color="FRN"]  { background: #6d28d9 !important; color: #ffffff !important; border-color: #5b21b6 !important; }
 
 /* ROLES */
 [data-color="AGT"] { background: #93c5fd !important; color: #1e3a8a !important; border-color: #60a5fa !important; } /* Azul claro sólido */
@@ -1260,6 +1295,7 @@ body {
     .sticky-toolbar { flex-direction: column; align-items: stretch; }
     .buscador { max-width: none; }
     .btn-primary { justify-content: center; }
+    .toolbar-actions > button { flex: 1; }
     
     .field-row-3 { grid-template-columns: repeat(2, 1fr); }
 }
@@ -1275,13 +1311,58 @@ body {
     .field-row-2,
     .field-row-4 { grid-template-columns: 1fr; }
 
-    .card-table { overflow-x: auto; }
-    .data-table { min-width: 700px; }
+    .card-table { overflow: visible; padding: 0; margin: 0; }
+    .data-table,
+    .data-table tbody { display: block; width: 100%; }
+    .data-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+    .data-table tbody tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 12px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .data-table td {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+        padding: 8px 2px;
+        border: 0 !important;
+        font-size: 0.84rem;
+    }
+    .data-table td::before {
+        content: attr(data-label);
+        color: var(--gray-500);
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+    .data-table td.acciones-tabla {
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+    }
+    .data-table td.acciones-tabla::before { content: "Acciones"; }
+    .data-table .badge-cliente .nombre { max-width: 110px; }
+    .grupo-cliente-header .badge-cliente .nombre { max-width: 80px; }
 
     .acciones-tabla {
-        flex-direction: column;
+        flex-direction: row;
         gap: 6px;
-        align-items: stretch;
+        align-items: center;
     }
     .acciones-tabla .secundario,
     .acciones-tabla .peligro {

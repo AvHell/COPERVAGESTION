@@ -3,6 +3,7 @@
    Soft delete: al cancelar NO se borra, queda como histórico
    ========================================================= */
 const { getPool, sql } = require('../../js/db/conexion');
+const catalogosDB = require('./catalogos');
 
 /* =========================================================
    LISTAR
@@ -207,6 +208,7 @@ async function actualizarRutaPDF(id, ruta, idUsuario) {
    Excluye los que ya tienen responsiva activa
    ========================================================= */
 async function activosDisponibles() {
+    await catalogosDB.asegurarCatalogosExtendidos();
     const pool = await getPool();
     const r = await pool.request().query(`
         SELECT
@@ -244,29 +246,70 @@ async function activosDisponibles() {
    CREAR RESPONSIVA
    ========================================================= */
 async function crear(datos, idUsuario) {
+    let tx;
+    let transaccionAbierta = false;
     try {
         const pool = await getPool();
+        await catalogosDB.asegurarCatalogosExtendidos();
 
-        // Verificar que no tenga otra responsiva activa
-        const respActiva = await pool.request()
-            .input('IdActivo', sql.Int, datos.IdActivoFijoEQ)
-            .query(`
-                SELECT TOP 1 IdResponsiva
-                FROM ActivoFijoResponsivas
-                WHERE IdActivoFijoEQ = @IdActivo
-                  AND EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
-            `);
-        if (respActiva.recordset.length > 0) {
-            return { ok: false, mensaje: 'Este activo ya tiene una responsiva activa. Debe devolverse o cancelarse antes de reasignar.' };
+        const estatusResponsiva = String(datos.EstatusResponsiva || 'ASIGNADO').toUpperCase();
+        if (!['ASIGNADO', 'PENDIENTE'].includes(estatusResponsiva)) {
+            return { ok: false, mensaje: 'Una responsiva nueva debe iniciar como ASIGNADO o PENDIENTE.' };
+        }
+        if (!datos.IdActivoFijoEQ || !datos.NombreRecibe) {
+            return { ok: false, mensaje: 'Selecciona un activo disponible e indica quién lo recibe.' };
         }
 
-        const result = await pool.request()
+        tx = new sql.Transaction(pool);
+        await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+        transaccionAbierta = true;
+
+        const activo = await new sql.Request(tx)
+            .input('IdActivo', sql.Int, datos.IdActivoFijoEQ)
+            .query(`
+                SELECT st.Nombre AS Estatus,
+                       CASE WHEN EXISTS (
+                           SELECT 1
+                           FROM ActivoFijoResponsivas r WITH (UPDLOCK, HOLDLOCK)
+                           WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
+                             AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+                       ) THEN 1 ELSE 0 END AS TieneResponsivaActiva
+                FROM ActivoFijoEquipos af WITH (UPDLOCK, HOLDLOCK)
+                INNER JOIN ActivoFijoEstatus st ON st.IdEstatus = af.IdEstatus
+                WHERE af.IdActivoFijoEQ = @IdActivo
+            `);
+        if (activo.recordset.length === 0) {
+            await tx.rollback();
+            transaccionAbierta = false;
+            return { ok: false, mensaje: 'El activo seleccionado no existe.' };
+        }
+        const estadoActivo = activo.recordset[0];
+        if (estadoActivo.TieneResponsivaActiva || !['DISPONIBLE', 'DEVUELTO'].includes(estadoActivo.Estatus.toUpperCase())) {
+            await tx.rollback();
+            transaccionAbierta = false;
+            return {
+                ok: false,
+                mensaje: estadoActivo.TieneResponsivaActiva
+                    ? 'Este activo ya tiene una responsiva activa. Debe devolverse o cancelarse antes de reasignar.'
+                    : `El activo tiene estatus ${estadoActivo.Estatus} y no está disponible para asignación.`
+            };
+        }
+
+        const estatusAsignado = await new sql.Request(tx)
+            .query(`SELECT TOP 1 IdEstatus FROM ActivoFijoEstatus WHERE UPPER(Nombre) = 'ASIGNADO' AND Activo = 1 ORDER BY IdEstatus`);
+        if (estatusAsignado.recordset.length === 0) {
+            await tx.rollback();
+            transaccionAbierta = false;
+            return { ok: false, mensaje: 'No existe el estatus ASIGNADO activo en el catálogo.' };
+        }
+
+        const result = await new sql.Request(tx)
             .input('FolioTicket',       sql.NVarChar(50),  datos.FolioTicket)
             .input('IdActivoFijoEQ',    sql.Int,           datos.IdActivoFijoEQ)
             .input('TipoResponsiva',    sql.NVarChar(50),  datos.TipoResponsiva)
             .input('FechaAsignacion',   sql.Date,          datos.FechaAsignacion)
             .input('FechaDevolucionProgramada', sql.Date,  datos.FechaDevolucionProgramada || null)
-            .input('EstatusResponsiva', sql.NVarChar(30),  datos.EstatusResponsiva || 'ASIGNADO')
+            .input('EstatusResponsiva', sql.NVarChar(30),  estatusResponsiva)
             .input('MotivoSalida',      sql.NVarChar(150), datos.MotivoSalida || null)
             .input('NombreProyecto',    sql.NVarChar(200), datos.NombreProyecto || null)
             .input('DescripcionSolicitud', sql.NVarChar(300), datos.DescripcionSolicitud || null)
@@ -305,23 +348,27 @@ async function crear(datos, idUsuario) {
                 SELECT SCOPE_IDENTITY() AS Id;
             `);
 
-        // Actualizar estatus del activo si está asignado
-        if ((datos.EstatusResponsiva || 'ASIGNADO') !== 'DEVUELTO') {
-            await pool.request()
-                .input('IdActivo', sql.Int, datos.IdActivoFijoEQ)
-                .input('IdUsuario', sql.Int, idUsuario || null)
-                .query(`
-                    UPDATE ActivoFijoEquipos SET
-                        IdEstatus = (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'ASIGNADO'),
-                        IdUsuarioModificacion = @IdUsuario,
-                        FechaModificacion = GETDATE()
-                    WHERE IdActivoFijoEQ = @IdActivo
-                      AND IdEstatus <> (SELECT IdEstatus FROM ActivoFijoEstatus WHERE Nombre = 'ASIGNADO')
-                `);
-        }
+        await new sql.Request(tx)
+            .input('IdActivo', sql.Int, datos.IdActivoFijoEQ)
+            .input('IdEstatus', sql.Int, estatusAsignado.recordset[0].IdEstatus)
+            .input('IdUsuario', sql.Int, idUsuario || null)
+            .query(`
+                UPDATE ActivoFijoEquipos SET
+                    IdEstatus = @IdEstatus,
+                    IdUsuarioModificacion = @IdUsuario,
+                    FechaModificacion = GETDATE()
+                WHERE IdActivoFijoEQ = @IdActivo
+            `);
 
+        await tx.commit();
+        transaccionAbierta = false;
         return { ok: true, mensaje: 'Responsiva creada correctamente.', id: result.recordset[0].Id };
     } catch (err) {
+        if (tx && transaccionAbierta) {
+            try { await tx.rollback(); } catch (rollbackError) {
+                console.error('[Responsivas] Error al revertir asignación:', rollbackError);
+            }
+        }
         return { ok: false, mensaje: 'Error al crear responsiva: ' + err.message };
     }
 }
@@ -332,6 +379,15 @@ async function crear(datos, idUsuario) {
 async function actualizar(id, datos, idUsuario) {
     try {
         const pool = await getPool();
+        const actual = await pool.request()
+            .input('Id', sql.Int, id)
+            .query('SELECT EstatusResponsiva FROM ActivoFijoResponsivas WHERE IdResponsiva = @Id');
+        if (actual.recordset.length === 0) {
+            return { ok: false, mensaje: 'La responsiva ya no existe.' };
+        }
+        if (String(datos.EstatusResponsiva || '').toUpperCase() !== actual.recordset[0].EstatusResponsiva.toUpperCase()) {
+            return { ok: false, mensaje: 'El estatus de una responsiva solo puede cambiarse mediante las acciones Devolver o Cancelar.' };
+        }
 
         const result = await pool.request()
             .input('Id',                sql.Int,           id)
@@ -401,6 +457,7 @@ async function actualizar(id, datos, idUsuario) {
    ========================================================= */
 async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
     try {
+        await catalogosDB.asegurarCatalogosExtendidos();
         const pool = await getPool();
 
         const result = await pool.request()
@@ -436,6 +493,11 @@ async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
                     SELECT IdActivoFijoEQ FROM ActivoFijoResponsivas
                     WHERE IdResponsiva = @Id
                 )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ActivoFijoResponsivas r
+                      WHERE r.IdActivoFijoEQ = ActivoFijoEquipos.IdActivoFijoEQ
+                        AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+                  )
             `);
 
         return { ok: true, mensaje: 'Devolución registrada. El activo vuelve a estar disponible.' };
@@ -454,6 +516,7 @@ async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
    ========================================================= */
 async function eliminar(id, idUsuario, motivo = null) {
     try {
+        await catalogosDB.asegurarCatalogosExtendidos();
         const pool = await getPool();
 
         // 1. Construir el texto de la observación de cancelación
@@ -501,6 +564,11 @@ async function eliminar(id, idUsuario, motivo = null) {
                     SELECT IdActivoFijoEQ FROM ActivoFijoResponsivas
                     WHERE IdResponsiva = @Id
                 )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ActivoFijoResponsivas r
+                      WHERE r.IdActivoFijoEQ = ActivoFijoEquipos.IdActivoFijoEQ
+                        AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+                  )
             `);
 
         return {

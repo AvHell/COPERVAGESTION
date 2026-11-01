@@ -39,7 +39,6 @@ const ventanas   = {};
 const HTML       = path.join(__dirname, '../html');
 const HTML_AF    = path.join(__dirname, '..', 'ActivoFijo', 'html');
 const PRELOAD    = path.join(__dirname, 'preload.js');
-const PRELOAD_AF = path.join(__dirname, '..', 'ActivoFijo', 'preload-activofijo.js');
 
 const PLANTILLA_PDF = app.isPackaged
   ? path.join(process.resourcesPath, 'Formatos', 'ResponsivaCelulares.pdf')
@@ -275,26 +274,6 @@ function volverAlLogin(motivo = null) {
     }, 300);
 }
 
-function volverAlMenu(winActual) {
-    if (winActual && !winActual.isDestroyed()) winActual.close();
-
-    if (!haySesion()) {
-        volverAlLogin('expirada');
-        return;
-    }
-
-    setTimeout(() => {
-        if (!ventanas['menu'] || ventanas['menu'].isDestroyed()) {
-            crearMenuWindow();
-        } else {
-            const w = ventanas['menu'];
-            if (w.isMinimized()) w.restore();
-            if (!w.isVisible()) w.show();
-            w.focus();
-        }
-    }, 100);
-}
-
 /* =========================================================
    GATE DE PERMISOS
    ========================================================= */
@@ -320,6 +299,34 @@ function requerirSesion(clave = null) {
         return negarAcceso(clave);
     }
     return null;
+}
+
+const RUTAS_MODULOS = {
+    catalogos: { basePath: HTML, archivo: 'catalogos.html', permiso: 'catalogos', titulo: 'Catálogos del Sistema' },
+    equipos: { basePath: HTML, archivo: 'equipos.html', permiso: 'equipos', titulo: 'Equipos' },
+    plano: { basePath: HTML, archivo: 'plano.html', permiso: 'plano', titulo: 'Plano Visual' },
+    historico: { basePath: HTML, archivo: 'historico.html', permiso: 'historico', titulo: 'Histórico del Plano' },
+    mantenimientos: { basePath: HTML, archivo: 'mantenimientos.html', permiso: 'mantenimientos', titulo: 'Mantenimientos' },
+    usuarios: { basePath: HTML, archivo: 'usuarios.html', permiso: 'usuarios', titulo: 'Usuarios' },
+    roles: { basePath: HTML, archivo: 'roles.html', permiso: 'catalogos', titulo: 'Roles' },
+    activofijo_catalogos: { basePath: HTML_AF, archivo: 'catalogos.html', permiso: 'activofijo_catalogos', titulo: 'Catálogos - Activo Fijo' },
+    activofijo_activos: { basePath: HTML_AF, archivo: 'activos.html', permiso: 'activofijo_activos', titulo: 'Inventario - Activo Fijo' },
+    activofijo_responsivas: { basePath: HTML_AF, archivo: 'responsivas.html', permiso: 'activofijo_responsivas', titulo: 'Responsivas - Activo Fijo' },
+    activofijo_reportes: { basePath: HTML_AF, archivo: 'reportes.html', permiso: 'activofijo_reportes', titulo: 'Reportes - Activo Fijo' },
+    activofijo_importar: { basePath: HTML_AF, archivo: 'importar.html', permiso: 'activofijo_importar', titulo: 'Importar Masivo - Activo Fijo' }
+};
+
+async function navegarModuloEnVentana(win, modulo) {
+    const ruta = RUTAS_MODULOS[modulo];
+    if (!ruta) return { ok: false, mensaje: 'El módulo solicitado no existe.' };
+    const err = requerirSesion(ruta.permiso);
+    if (err) return err;
+    if (!win || win.isDestroyed()) return { ok: false, mensaje: 'La ventana actual ya no está disponible.' };
+
+    win.setTitle(ruta.titulo);
+    await win.loadFile(path.join(ruta.basePath, ruta.archivo));
+    win.focus();
+    return { ok: true };
 }
 
 /* =========================================================
@@ -380,37 +387,6 @@ function crearVentana(nombre, archivo, opciones = {}) {
    VENTANAS — SISTEMA
    ========================================================= */
 const crearLoginWindow     = () => crearVentana('login',     'login.html',     { title: 'Iniciar Sesión', maximizar: true });
-const crearMenuWindow      = () => crearVentana('menu',      'menu.html',      { title: 'Menú Principal' });
-const crearCatalogosWindow = () => crearVentana('catalogos', 'catalogos.html', { title: 'Catálogos del Sistema' });
-const crearEquiposWindow   = () => crearVentana('equipos',   'equipos.html',   { title: 'Equipos' });
-const crearPlanoWindow     = () => crearVentana('plano',     'plano.html',     { title: 'Plano Visual' });
-const crearUsuariosWindow  = () => crearVentana('usuarios',  'usuarios.html',  { title: 'Usuarios' });
-const crearHistoricoWindow = () => crearVentana('historico', 'historico.html', { title: 'Histórico del Plano' });
-const crearMantenimientosWindow = () => crearVentana('mantenimientos', 'mantenimientos.html', { title: 'Mantenimientos' });
-
-/* =========================================================
-   VENTANAS — ACTIVO FIJO
-   ========================================================= */
-const crearActivoFijoCatalogosWindow = () => crearVentana(
-    'activofijo-catalogos', 'catalogos.html',
-    { title: 'Catálogos - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
-);
-const crearActivoFijoActivosWindow = () => crearVentana(
-    'activofijo-activos', 'activos.html',
-    { title: 'Inventario - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
-);
-const crearActivoFijoResponsivasWindow = () => crearVentana(
-    'activofijo-responsivas', 'responsivas.html',
-    { title: 'Responsivas - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
-);
-const crearActivoFijoReportesWindow = () => crearVentana(
-    'activofijo-reportes', 'reportes.html',
-    { title: 'Reportes - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
-);
-const crearActivoFijoImportarWindow = () => crearVentana(
-    'activofijo-importar', 'importar.html',
-    { title: 'Importar Masivo - Activo Fijo', basePath: HTML_AF, preload: PRELOAD_AF }
-);
 
 /* =========================================================
    UTILIDADES
@@ -418,17 +394,6 @@ const crearActivoFijoImportarWindow = () => crearVentana(
 function cerrarVentana(nombre) {
     const w = ventanas[nombre];
     if (w && !w.isDestroyed()) w.close();
-}
-
-function asegurarMenuAbierto() {
-    if (!ventanas['menu'] || ventanas['menu'].isDestroyed()) {
-        crearMenuWindow();
-    } else {
-        const w = ventanas['menu'];
-        if (w.isMinimized()) w.restore();
-        if (!w.isVisible()) w.show();
-        w.focus();
-    }
 }
 
 /* =========================================================
@@ -477,6 +442,7 @@ ipcMain.handle('logout', async () => {
 });
 
 ipcMain.handle('usuario-actual', () => usuarioActual);
+ipcMain.handle('app:version', () => app.getVersion());
 
 /* =========================================================
    IPC: PERMISOS
@@ -557,34 +523,44 @@ ipcMain.handle('abrir-menu', async (e) => {
         return { ok: true };
     }
 
-    asegurarMenuAbierto();
-
     const win = BrowserWindow.fromWebContents(e.sender);
-    if (win && !win.isDestroyed()) {
-        const esLogin = ventanas['login'] && ventanas['login'].id === win.id;
-        if (esLogin) {
-            cerrandoPorLogout = true;
-            win.close();
-            setTimeout(() => { cerrandoPorLogout = false; }, 200);
-        } else {
-            win.close();
+    if (win && ventanas['login'] && ventanas['login'].id === win.id) {
+        const moduloInicial = tienePermiso('catalogos')
+            ? 'catalogos'
+            : Object.keys(RUTAS_MODULOS).find(modulo => tienePermiso(RUTAS_MODULOS[modulo].permiso));
+        if (!moduloInicial) return negarAcceso('al menos un módulo');
+        ventanas['login'] = null;
+        ventanas['menu'] = win;
+        const resultado = await navegarModuloEnVentana(win, moduloInicial);
+        if (resultado?.ok === false) {
+            ventanas['menu'] = null;
+            ventanas['login'] = win;
         }
+        return resultado;
     }
 
-    return { ok: true };
+    return navegarModuloEnVentana(win, 'catalogos');
 });
 
-ipcMain.handle('abrir-catalogos', () => { const err = requerirSesion('catalogos'); if (err) return err; crearCatalogosWindow(); return { ok: true }; });
-ipcMain.handle('abrir-equipos',   () => { const err = requerirSesion('equipos');   if (err) return err; crearEquiposWindow();   return { ok: true }; });
-ipcMain.handle('abrir-plano',     () => { const err = requerirSesion('plano');     if (err) return err; crearPlanoWindow();     return { ok: true }; });
-ipcMain.handle('abrir-usuarios',  () => { const err = requerirSesion('usuarios');  if (err) return err; crearUsuariosWindow();  return { ok: true }; });
-ipcMain.handle('abrir-historico', () => { const err = requerirSesion('historico'); if (err) return err; crearHistoricoWindow(); return { ok: true }; });
-ipcMain.handle('abrir-mantenimientos', () => { const err = requerirSesion('mantenimientos'); if (err) return err; crearMantenimientosWindow(); return { ok: true }; });
+ipcMain.handle('navegar-modulo', (e, modulo) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    return navegarModuloEnVentana(win, modulo);
+});
+
+ipcMain.handle('abrir-catalogos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'catalogos'));
+ipcMain.handle('abrir-equipos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'equipos'));
+ipcMain.handle('abrir-plano', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'plano'));
+ipcMain.handle('abrir-usuarios', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'usuarios'));
+ipcMain.handle('abrir-historico', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'historico'));
+ipcMain.handle('abrir-mantenimientos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'mantenimientos'));
 
 ipcMain.handle('volver-menu', (e) => {
     const win = BrowserWindow.fromWebContents(e.sender);
-    volverAlMenu(win);
-    return { ok: true };
+    if (!haySesion()) {
+        volverAlLogin('expirada');
+        return { ok: true };
+    }
+    return navegarModuloEnVentana(win, 'catalogos');
 });
 
 ipcMain.handle('ventana:cerrar-actual', (e) => {
@@ -596,11 +572,11 @@ ipcMain.handle('ventana:cerrar-actual', (e) => {
 /* =========================================================
    IPC: ACTIVO FIJO — abrir ventanas
    ========================================================= */
-ipcMain.handle('abrir-activofijo-catalogos',   () => { const err = requerirSesion('activofijo_catalogos');   if (err) return err; crearActivoFijoCatalogosWindow();   return { ok: true }; });
-ipcMain.handle('abrir-activofijo-activos',     () => { const err = requerirSesion('activofijo_activos');     if (err) return err; crearActivoFijoActivosWindow();     return { ok: true }; });
-ipcMain.handle('abrir-activofijo-responsivas', () => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; crearActivoFijoResponsivasWindow(); return { ok: true }; });
-ipcMain.handle('abrir-activofijo-reportes',    () => { const err = requerirSesion('activofijo_reportes');    if (err) return err; crearActivoFijoReportesWindow();    return { ok: true }; });
-ipcMain.handle('abrir-activofijo-importar',    () => { const err = requerirSesion('activofijo_importar');    if (err) return err; crearActivoFijoImportarWindow();    return { ok: true }; });
+ipcMain.handle('abrir-activofijo-catalogos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_catalogos'));
+ipcMain.handle('abrir-activofijo-activos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_activos'));
+ipcMain.handle('abrir-activofijo-responsivas', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_responsivas'));
+ipcMain.handle('abrir-activofijo-reportes', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_reportes'));
+ipcMain.handle('abrir-activofijo-importar', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_importar'));
 
 /* =========================================================
    IPC: CATÁLOGOS AF

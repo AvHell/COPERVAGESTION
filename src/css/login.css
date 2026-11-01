@@ -245,6 +245,39 @@ body {
     z-index: 1;
 }
 
+.brand-title {
+    width: fit-content;
+    max-width: 100%;
+}
+
+.brand-title::before {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    left: -12px;
+    top: 44%;
+    width: calc(100% + 24px);
+    height: 1.05em;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(169,154,99,.48), rgba(110,123,91,.58), transparent);
+    filter: blur(13px);
+    animation: brandGlow 5s ease-in-out infinite;
+}
+
+.brand-title span {
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes brandGlow {
+    0%, 100% { opacity: .38; transform: translateX(-8px) scaleX(.9); }
+    50% { opacity: .9; transform: translateX(8px) scaleX(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .brand-title::before { animation: none; }
+}
+
 .brand-tagline {
     color: var(--tierra-arena);
     font-size: 0.86rem;

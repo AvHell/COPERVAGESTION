@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
     logout:        ()     => ipcRenderer.invoke('logout'),
     usuarioActual: ()     => ipcRenderer.invoke('usuario-actual'),
     haySesion:     ()     => ipcRenderer.invoke('sesion:hay'),
+    version:       ()     => ipcRenderer.invoke('app:version'),
 
     consumirMotivoLogin: () => ipcRenderer.invoke('login:motivo-consumir'),
     onLoginMotivo:       (cb) => ipcRenderer.on('login:motivo', (_e, m) => cb(m)),
@@ -43,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
     abrirMantenimientos: () => ipcRenderer.invoke('abrir-mantenimientos'),
     volverMenu:     () => ipcRenderer.invoke('volver-menu'),
     cerrarVentana:  () => ipcRenderer.invoke('ventana:cerrar-actual'),
+    navegarModulo:  (modulo) => ipcRenderer.invoke('navegar-modulo', modulo),
 
     /* =========================================================
        MÓDULO ACTIVO FIJO
@@ -196,5 +198,82 @@ contextBridge.exposeInMainWorld('api', {
         eliminarZonaLibre:  (idPiso, nombre, color)           => ipcRenderer.invoke('plano:eliminarZonaLibre', idPiso, nombre, color),
 
         exportarPDF: (opciones) => ipcRenderer.invoke('plano:exportarPDF', opciones)
+    },
+
+    /* =========================================================
+       ACTIVO FIJO
+       ========================================================= */
+    activoFijo: {
+        catalogos: {
+            listar: (clave, filtros) => ipcRenderer.invoke('af-catalogos-listar', clave, filtros),
+            crear: (clave, datos) => ipcRenderer.invoke('af-catalogos-crear', clave, datos),
+            actualizar: (clave, id, datos) => ipcRenderer.invoke('af-catalogos-actualizar', clave, id, datos),
+            eliminar: (clave, id) => ipcRenderer.invoke('af-catalogos-eliminar', clave, id),
+            restaurar: (clave, id) => ipcRenderer.invoke('af-catalogos-restaurar', clave, id)
+        },
+        activos: {
+            listar: filtros => ipcRenderer.invoke('af-activos-listar', filtros),
+            obtener: id => ipcRenderer.invoke('af-activos-obtener', id),
+            crear: datos => ipcRenderer.invoke('af-activos-crear', datos),
+            actualizar: (id, datos) => ipcRenderer.invoke('af-activos-actualizar', id, datos),
+            eliminar: (id, motivo) => ipcRenderer.invoke('af-activos-eliminar', id, motivo),
+            restaurar: (id, motivo) => ipcRenderer.invoke('af-activos-restaurar', id, motivo),
+            historico: id => ipcRenderer.invoke('af-activos-historico', id),
+            exportarExcel: payload => ipcRenderer.invoke('af-activos-exportar-excel', payload),
+            listarTipos: () => ipcRenderer.invoke('af-activos-lista-tipos'),
+            listarMarcas: () => ipcRenderer.invoke('af-activos-lista-marcas'),
+            listarEstados: () => ipcRenderer.invoke('af-activos-lista-estados'),
+            listarEstatus: () => ipcRenderer.invoke('af-activos-lista-estatus'),
+            listarCarteras: () => ipcRenderer.invoke('af-activos-lista-carteras'),
+            listarSitios: () => ipcRenderer.invoke('af-activos-lista-sitios'),
+            listarSubtipos: () => ipcRenderer.invoke('af-activos-lista-subtipos'),
+            listarVoltajes: () => ipcRenderer.invoke('af-activos-lista-voltajes'),
+            listarClasificaciones: () => ipcRenderer.invoke('af-activos-lista-clasificaciones'),
+            listarTamanios: () => ipcRenderer.invoke('af-activos-lista-tamanios'),
+            listarCapacidades: () => ipcRenderer.invoke('af-activos-lista-capacidades'),
+            listarCatalogosExtendidos: () => ipcRenderer.invoke('af-activos-lista-catalogos-especificaciones')
+        },
+        responsivas: {
+            listar: filtros => ipcRenderer.invoke('af-resp-listar', filtros),
+            obtener: id => ipcRenderer.invoke('af-resp-obtener', id),
+            activosDisponibles: () => ipcRenderer.invoke('af-resp-activos-disponibles'),
+            crear: datos => ipcRenderer.invoke('af-resp-crear', datos),
+            actualizar: (id, datos) => ipcRenderer.invoke('af-resp-actualizar', id, datos),
+            devolver: (id, fecha, obs) => ipcRenderer.invoke('af-resp-devolver', id, fecha, obs),
+            eliminar: (id, motivo) => ipcRenderer.invoke('af-resp-eliminar', id, motivo),
+            verPDF: id => ipcRenderer.invoke('af-resp-ver-pdf', id),
+            guardarPDF: id => ipcRenderer.invoke('af-resp-guardar-pdf', id),
+            listarCarteras: () => ipcRenderer.invoke('af-resp-lista-carteras'),
+            listarPuestos: () => ipcRenderer.invoke('af-resp-lista-puestos'),
+            listarCatalogo: clave => ipcRenderer.invoke('af-resp-lista-catalogo', clave),
+            crearCatalogo: (clave, datos) => ipcRenderer.invoke('af-resp-catalogo-crear', clave, datos),
+            actualizarCatalogo: (clave, id, datos) => ipcRenderer.invoke('af-resp-catalogo-actualizar', clave, id, datos),
+            eliminarCatalogo: (clave, id) => ipcRenderer.invoke('af-resp-catalogo-eliminar', clave, id),
+            listarUsuariosEntrega: () => ipcRenderer.invoke('af-resp-lista-usuarios-entrega')
+        },
+        reportes: {
+            obtenerReporte: (vista, filtros) => ipcRenderer.invoke('af-rep-obtener-reporte', vista, filtros),
+            exportarExcel: payload => ipcRenderer.invoke('af-rep-exportar-excel', payload),
+            resumenGeneral: () => ipcRenderer.invoke('af-rep-resumen-general'),
+            resumenPorTipo: () => ipcRenderer.invoke('af-rep-resumen-tipo'),
+            resumenPorCartera: () => ipcRenderer.invoke('af-rep-resumen-cartera'),
+            inventario: filtros => ipcRenderer.invoke('af-rep-inventario', filtros),
+            responsivasActivas: () => ipcRenderer.invoke('af-rep-responsivas-activas'),
+            asignacionesPorPersona: () => ipcRenderer.invoke('af-rep-asignaciones-persona'),
+            porTicket: () => ipcRenderer.invoke('af-rep-por-ticket'),
+            historialAsignaciones: filtros => ipcRenderer.invoke('af-rep-historial-asignaciones', filtros),
+            historialActivo: id => ipcRenderer.invoke('af-rep-historial-activo', id),
+            celulares: () => ipcRenderer.invoke('af-rep-celulares'),
+            laptops: () => ipcRenderer.invoke('af-rep-laptops'),
+            tiposParaFiltro: () => ipcRenderer.invoke('af-rep-tipos'),
+            estadosParaFiltro: () => ipcRenderer.invoke('af-rep-estados'),
+            estatusParaFiltro: () => ipcRenderer.invoke('af-rep-estatus'),
+            carterasParaFiltro: () => ipcRenderer.invoke('af-rep-carteras')
+        },
+        importacion: {
+            listarLayouts: () => ipcRenderer.invoke('af-import-layouts'),
+            obtenerLayout: clave => ipcRenderer.invoke('af-import-layout', clave),
+            importar: datos => ipcRenderer.invoke('af-import-procesar', datos)
+        }
     }
 });

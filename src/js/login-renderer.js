@@ -7,9 +7,17 @@ const inputPassword      = document.getElementById('password');
 const btnLogin           = document.getElementById('btn-login');
 const btnTogglePassword  = document.getElementById('btn-toggle-password');
 const mensaje            = document.getElementById('mensaje');
+const versionApp         = document.getElementById('app-version');
 
 const iconoOjo           = btnTogglePassword.querySelector('.icono-ojo');
 const iconoOjoCerrado    = btnTogglePassword.querySelector('.icono-ojo-cerrado');
+
+window.api.version().then(version => {
+    versionApp.textContent = version;
+}).catch(error => {
+    console.error('[Login] No se pudo cargar la versión de la aplicación:', error);
+    versionApp.textContent = '—';
+});
 
 /* =========================================================
    TOGGLE PASSWORD
@@ -106,10 +114,21 @@ async function hacerLogin() {
             const rol    = res.usuario?.RolNombre ? ` · ${res.usuario.RolNombre}` : '';
             mostrarMensaje(`¡Bienvenido, ${nombre}${rol}!`, 'ok');
 
-            // Esperar un poco y abrir el menú
+            // Esperar un poco y abrir Catálogos como página inicial
             setTimeout(async () => {
-                await window.api.abrirMenu();
-                window.close();
+                try {
+                    const apertura = await window.api.abrirMenu();
+                    if (apertura?.ok === false) {
+                        mostrarMensaje(apertura.mensaje || 'No se pudo abrir la página inicial.', 'error');
+                        btnLogin.disabled = false;
+                        btnLogin.querySelector('.btn-text').textContent = 'Entrar';
+                    }
+                } catch (error) {
+                    console.error('[Login] Error abriendo la página inicial:', error);
+                    mostrarMensaje('No se pudo abrir la página inicial.', 'error');
+                    btnLogin.disabled = false;
+                    btnLogin.querySelector('.btn-text').textContent = 'Entrar';
+                }
             }, 500);
         } else {
             mostrarMensaje(res.mensaje || 'Credenciales incorrectas.', 'error');

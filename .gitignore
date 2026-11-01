@@ -1,4 +1,10 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
 *.log
+
+# Local database credentials and app configuration must never be committed.
+src/js/db/db-credentials.dat
+src/js/db/*.local.js

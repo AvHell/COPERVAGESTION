@@ -1,0 +1,121 @@
+:root {
+    color-scheme: light;
+    font-family: Inter, "Segoe UI", sans-serif;
+    color: #263126;
+    background: #f2f4ee;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    display: grid;
+    min-height: 100vh;
+    margin: 0;
+    padding: 28px;
+    place-items: center;
+    background:
+        radial-gradient(circle at 15% 15%, rgba(161, 177, 137, .2), transparent 34%),
+        radial-gradient(circle at 90% 85%, rgba(204, 190, 133, .2), transparent 32%),
+        #f2f4ee;
+}
+
+.setup-card {
+    width: min(100%, 520px);
+    padding: 38px;
+    border: 1px solid #e4e9df;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgba(35, 48, 34, .12);
+}
+
+.setup-icon {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 20px;
+    place-items: center;
+    border-radius: 15px;
+    background: #eef2e9;
+    font-size: 1.4rem;
+}
+
+.eyebrow {
+    margin: 0 0 8px;
+    color: #647a56;
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+}
+
+h1 {
+    margin: 0;
+    font-size: 1.65rem;
+    letter-spacing: -.04em;
+}
+
+.intro, .security-note {
+    color: #667164;
+    font-size: .86rem;
+    line-height: 1.55;
+}
+
+.intro { margin: 12px 0 24px; }
+
+form { display: grid; gap: 9px; }
+
+label {
+    margin-top: 6px;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+label span { color: #858e80; font-weight: 400; }
+
+input {
+    width: 100%;
+    height: 43px;
+    padding: 0 12px;
+    border: 1px solid #dce2d8;
+    border-radius: 9px;
+    outline: none;
+    background: #fff;
+    font: inherit;
+}
+
+input:focus {
+    border-color: #708766;
+    box-shadow: 0 0 0 3px rgba(112, 135, 102, .14);
+}
+
+button {
+    min-height: 46px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 10px;
+    color: #fff;
+    background: #526b49;
+    font: 700 .88rem Inter, "Segoe UI", sans-serif;
+    cursor: pointer;
+}
+
+button:hover { background: #435a3b; }
+button:disabled { opacity: .65; cursor: wait; }
+
+.message {
+    display: none;
+    margin: 6px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: .8rem;
+    line-height: 1.45;
+}
+
+.message.visible { display: block; }
+.message.error { color: #8a3027; background: #fff0ed; }
+.message.success { color: #37603a; background: #edf7ec; }
+.security-note { margin: 18px 0 0; font-size: .73rem; }
+
+@media (max-width: 520px) {
+    body { padding: 14px; }
+    .setup-card { padding: 26px 21px; }
+}

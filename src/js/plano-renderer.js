@@ -70,6 +70,26 @@ const COLORES_DISPONIBLES = [
     '#8A7353', '#78806B', '#5F6650', '#D6CBA8'
 ];
 
+const COLORES_CLIENTE_POR_CODIGO = Object.freeze({
+    MEGA: '#217a4b',
+    NATR: '#5b92e5',
+    PHIE: '#eab308',
+    TOYL: '#ef4444',
+    NU: '#a855f7',
+    CLD: '#dc2626',
+    TPLAY: '#1e40af',
+    ATT: '#3b82f6',
+    DMEX: '#4ade80',
+    SHOP: '#f97316',
+    HBAN: '#fde047',
+    TOY: '#b91c1c',
+    ADAMA: '#2563eb',
+    KUBO: '#15803d',
+    DIDI: '#ea580c',
+    FESA: '#0f766e',
+    FRN: '#6d28d9'
+});
+
 const CELL_W = 74;
 const CELL_H = 52;
 const CELL_GAP = 5;
@@ -273,6 +293,38 @@ const CSS_PDF = `
     .badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
     .badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
 
+    .badge-cli[data-color] { border: 1px solid transparent; }
+    [data-color="MEGA"] { background: #217a4b !important; color: #ffffff !important; border-color: #14532d !important; }
+    [data-color="NATR"] { background: #5b92e5 !important; color: #ffffff !important; border-color: #3b82f6 !important; }
+    [data-color="PHIE"] { background: #eab308 !important; color: #3f3010 !important; border-color: #a16207 !important; }
+    [data-color="TOYL"] { background: #ef4444 !important; color: #ffffff !important; border-color: #b91c1c !important; }
+    [data-color="NU"] { background: #a855f7 !important; color: #ffffff !important; border-color: #7e22ce !important; }
+    [data-color="CLD"] { background: #dc2626 !important; color: #ffffff !important; border-color: #991b1b !important; }
+    [data-color="TPLAY"] { background: #1e40af !important; color: #ffffff !important; border-color: #1e3a8a !important; }
+    [data-color="ATT"] { background: #3b82f6 !important; color: #ffffff !important; border-color: #2563eb !important; }
+    [data-color="DMEX"] { background: #4ade80 !important; color: #064e3b !important; border-color: #22c55e !important; }
+    [data-color="SHOP"] { background: #f97316 !important; color: #ffffff !important; border-color: #c2410c !important; }
+    [data-color="HBAN"] { background: #fde047 !important; color: #713f12 !important; border-color: #ca8a04 !important; }
+    [data-color="TOY"] { background: #b91c1c !important; color: #ffffff !important; border-color: #7f1d1d !important; }
+    [data-color="ADAMA"] { background: #2563eb !important; color: #ffffff !important; border-color: #1d4ed8 !important; }
+    [data-color="KUBO"] { background: #15803d !important; color: #ffffff !important; border-color: #166534 !important; }
+    [data-color="DIDI"] { background: #ea580c !important; color: #ffffff !important; border-color: #c2410c !important; }
+    [data-color="FESA"] { background: #0f766e !important; color: #ffffff !important; border-color: #115e59 !important; }
+    [data-color="FRN"] { background: #6d28d9 !important; color: #ffffff !important; border-color: #5b21b6 !important; }
+
+    .badge-dhcp {
+        display: inline-block;
+        padding: 1px 5px;
+        border: 1px solid #cfc7b0;
+        border-radius: 3px;
+        background: #f4f0e6;
+        color: #575347;
+        font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+    }
+
     .badge-cli {
         display: inline-block;
         padding: 1px 6px;
@@ -335,20 +387,20 @@ const CSS_PDF = `
         --plano-oro: #a99a63;
         --plano-rojo: #b5442e;
         --plano-rojo-suave: #f3ded6;
-        --rol-agt: #557fa8;
-        --rol-agt-suave: #e5edf4;
-        --rol-crd: #8f7016;
-        --rol-crd-suave: #f5efd9;
-        --rol-cld: #c45f86;
-        --rol-cld-suave: #f7e5ec;
-        --rol-spr: #6e7b5b;
-        --rol-spr-suave: #e8ebdf;
-        --rol-grn: #805b9b;
-        --rol-grn-suave: #eee7f2;
-        --rol-adm: #73766d;
-        --rol-adm-suave: #e8e8e4;
-        --rol-mis: #b5442e;
-        --rol-mis-suave: #f3ded6;
+        --rol-agt: #93c5fd;
+        --rol-agt-suave: #93c5fd;
+        --rol-crd: #fef08a;
+        --rol-crd-suave: #fef08a;
+        --rol-cld: #fbcfe8;
+        --rol-cld-suave: #fbcfe8;
+        --rol-spr: #bbf7d0;
+        --rol-spr-suave: #bbf7d0;
+        --rol-grn: #d8b4fe;
+        --rol-grn-suave: #d8b4fe;
+        --rol-adm: #1d201a;
+        --rol-adm-suave: #1d201a;
+        --rol-mis: #fca5a5;
+        --rol-mis-suave: #fca5a5;
     }
 
     html, body { color: var(--plano-texto); }
@@ -395,6 +447,50 @@ const CSS_PDF = `
     .badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
     .badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
     .badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
+
+    .celda[data-rol="AGT"] { background: #93c5fd !important; border-color: #60a5fa !important; }
+    .celda[data-rol="CRD"] { background: #fef08a !important; border-color: #fde047 !important; }
+    .celda[data-rol="CLD"] { background: #fbcfe8 !important; border-color: #f9a8d4 !important; }
+    .celda[data-rol="SPR"] { background: #bbf7d0 !important; border-color: #86efac !important; }
+    .celda[data-rol="GRN"] { background: #d8b4fe !important; border-color: #c084fc !important; }
+    .celda[data-rol="ADM"] { background: #1d201a !important; border-color: #000000 !important; }
+    .celda[data-rol="MIS"] { background: #fca5a5 !important; border-color: #f87171 !important; }
+    .celda[data-rol="AGT"] .celda-hostname, .celda[data-rol="AGT"] .celda-ip { color: #1e3a8a !important; }
+    .celda[data-rol="CRD"] .celda-hostname, .celda[data-rol="CRD"] .celda-ip { color: #713f12 !important; }
+    .celda[data-rol="CLD"] .celda-hostname, .celda[data-rol="CLD"] .celda-ip { color: #831843 !important; }
+    .celda[data-rol="SPR"] .celda-hostname, .celda[data-rol="SPR"] .celda-ip { color: #14532d !important; }
+    .celda[data-rol="GRN"] .celda-hostname, .celda[data-rol="GRN"] .celda-ip { color: #4c1d95 !important; }
+    .celda[data-rol="ADM"] .celda-hostname, .celda[data-rol="ADM"] .celda-ip { color: #ffffff !important; }
+    .celda[data-rol="MIS"] .celda-hostname, .celda[data-rol="MIS"] .celda-ip { color: #7f1d1d !important; }
+    .badge-rol[data-rol="AGT"] { background: #93c5fd !important; border-color: #60a5fa !important; color: #1e3a8a !important; }
+    .badge-rol[data-rol="CRD"] { background: #fef08a !important; border-color: #fde047 !important; color: #713f12 !important; }
+    .badge-rol[data-rol="CLD"] { background: #fbcfe8 !important; border-color: #f9a8d4 !important; color: #831843 !important; }
+    .badge-rol[data-rol="SPR"] { background: #bbf7d0 !important; border-color: #86efac !important; color: #14532d !important; }
+    .badge-rol[data-rol="GRN"] { background: #d8b4fe !important; border-color: #c084fc !important; color: #4c1d95 !important; }
+    .badge-rol[data-rol="ADM"] { background: #1d201a !important; border-color: #000000 !important; color: #ffffff !important; }
+    .badge-rol[data-rol="MIS"] { background: #fca5a5 !important; border-color: #f87171 !important; color: #7f1d1d !important; }
+
+    .celda[data-rol="AGT"] { background: #93c5fd; border-color: #60a5fa; }
+    .celda[data-rol="CRD"] { background: #fef08a; border-color: #fde047; }
+    .celda[data-rol="CLD"] { background: #fbcfe8; border-color: #f9a8d4; }
+    .celda[data-rol="SPR"] { background: #bbf7d0; border-color: #86efac; }
+    .celda[data-rol="GRN"] { background: #d8b4fe; border-color: #c084fc; }
+    .celda[data-rol="ADM"] { background: #1d201a; border-color: #000000; }
+    .celda[data-rol="MIS"] { background: #fca5a5; border-color: #f87171; }
+    .celda[data-rol="AGT"] .celda-hostname, .celda[data-rol="AGT"] .celda-ip { color: #1e3a8a; }
+    .celda[data-rol="CRD"] .celda-hostname, .celda[data-rol="CRD"] .celda-ip { color: #713f12; }
+    .celda[data-rol="CLD"] .celda-hostname, .celda[data-rol="CLD"] .celda-ip { color: #831843; }
+    .celda[data-rol="SPR"] .celda-hostname, .celda[data-rol="SPR"] .celda-ip { color: #14532d; }
+    .celda[data-rol="GRN"] .celda-hostname, .celda[data-rol="GRN"] .celda-ip { color: #4c1d95; }
+    .celda[data-rol="ADM"] .celda-hostname, .celda[data-rol="ADM"] .celda-ip { color: #ffffff; }
+    .celda[data-rol="MIS"] .celda-hostname, .celda[data-rol="MIS"] .celda-ip { color: #7f1d1d; }
+    .badge-rol[data-rol="AGT"] { background: #93c5fd; border-color: #60a5fa; color: #1e3a8a; }
+    .badge-rol[data-rol="CRD"] { background: #fef08a; border-color: #fde047; color: #713f12; }
+    .badge-rol[data-rol="CLD"] { background: #fbcfe8; border-color: #f9a8d4; color: #831843; }
+    .badge-rol[data-rol="SPR"] { background: #bbf7d0; border-color: #86efac; color: #14532d; }
+    .badge-rol[data-rol="GRN"] { background: #d8b4fe; border-color: #c084fc; color: #4c1d95; }
+    .badge-rol[data-rol="ADM"] { background: #1d201a; border-color: #000000; color: #ffffff; }
+    .badge-rol[data-rol="MIS"] { background: #fca5a5; border-color: #f87171; color: #7f1d1d; }
 `;
 
 /* =========================================================
@@ -1746,6 +1842,7 @@ function renderFiltroClientes(panel) {
         const chip = document.createElement('button');
         chip.className = 'chip-cliente' + (activo ? ' activo' : '');
         chip.dataset.idCliente = c.IdCliente;
+        chip.dataset.color = String(c.Codigo || '').toUpperCase();
         chip.innerHTML = `
             <span class="chip-check">${activo ? '✓' : ''}</span>
             <span class="chip-codigo">${c.Codigo}</span>
@@ -3209,25 +3306,12 @@ function construirBloquesPlano(panel, layout) {
     }
     const totalEquipos = equiposList.length;
 
-    const COLORES_CLIENTE_POR_CODIGO = {
-        'MEGA':'#22c55e','DIDI':'#f97316','NU':'#a855f7','ATT':'#0ea5e9',
-        'ADAMA':'#1e40af','CLD':'#ec4899','DMEX':'#84cc16','HBAN':'#eab308',
-        'KUBO':'#16a34a','FESA':'#0d9488','SHOP':'#ea580c','TOY':'#dc2626',
-        'TOYL':'#dc2626','TPLAY':'#6366f1','PHIE':'#f59e0b'
-    };
-    const COLORES_FALLBACK = [
-        '#3b82f6','#22c55e','#f97316','#a855f7','#14b8a6','#ec4899',
-        '#eab308','#ef4444','#06b6d4','#8b5cf6','#84cc16','#f43f5e'
-    ];
-
     const colorPorCliente = new Map();
-    let fallbackIdx = 0;
     equiposList.forEach(e => {
         const id = e.IdCliente;
         if (id == null || colorPorCliente.has(id)) return;
         const codigo = String(e.ClienteCodigo || '').toUpperCase().trim();
-        let color = COLORES_CLIENTE_POR_CODIGO[codigo];
-        if (!color) { color = COLORES_FALLBACK[fallbackIdx % COLORES_FALLBACK.length]; fallbackIdx++; }
+        const color = COLORES_CLIENTE_POR_CODIGO[codigo] || '#2e3228';
         colorPorCliente.set(id, color);
     });
 
@@ -3259,7 +3343,9 @@ function construirBloquesPlano(panel, layout) {
             const zl = zonasLibresMap.get(`${fila}-${col}`);
 
             if (contenido) {
-                const ipMostrar = contenido.IP ? contenido.IP : 'DHCP';
+                const esDhcpSinIp = ['DHC', 'DHCP'].includes(String(contenido.TipoIP || '').trim().toUpperCase())
+                    && !String(contenido.IP || '').trim();
+                const ipMostrar = esDhcpSinIp ? 'DHCP' : (contenido.IP || '-');
                 celdasHTML += `
                     <div class="celda ocupada" data-rol="${contenido.RolCodigo || ''}">
                         <div class="celda-contenido">
@@ -3290,9 +3376,9 @@ function construirBloquesPlano(panel, layout) {
         bordesEquipoHTML += `
             <div style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET}px;width:${CELL_W + BORDE_OFFSET * 2}px;height:${CELL_H + BORDE_OFFSET * 2}px;border:2.5px solid ${colorCli};border-radius:6px;pointer-events:none;box-sizing:border-box;z-index:4;"></div>`;
 
-        const codigoCli = e.ClienteCodigo || '?';
+        const codigoCli = String(e.ClienteCodigo || '?').toUpperCase().trim();
         etiquetasEquipoHTML += `
-            <div style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;height:${CHIP_ALTO}px;max-width:${CELL_W + BORDE_OFFSET * 2}px;padding:0 6px;background:${colorCli};color:#fff;font-size:${CHIP_FONT}rem;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;border-radius:3px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:visible;pointer-events:none;box-sizing:border-box;z-index:5;text-shadow:0 1px 1px rgba(0,0,0,0.25);">${codigoCli}</div>`;
+            <div data-color="${codigoCli}" style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;height:${CHIP_ALTO}px;max-width:${CELL_W + BORDE_OFFSET * 2}px;padding:0 6px;background:${colorCli};color:#fff;font-size:${CHIP_FONT}rem;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;border-radius:3px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:visible;pointer-events:none;box-sizing:border-box;z-index:5;text-shadow:0 1px 1px rgba(0,0,0,0.25);">${codigoCli}</div>`;
     });
 
     let textosLibresHTML = '';
@@ -3374,21 +3460,29 @@ function construirBloquesPlano(panel, layout) {
             </div>`;
     });
 
-    const filasTabla = equiposList.map(e => `
-        <tr>
-            <td class="bold-host">${e.Hostname || '-'}</td>
-            <td class="center">${e.ClienteCodigo || '-'}</td>
-            <td class="center"><span class="badge-rol" data-rol="${e.RolCodigo || ''}">${e.RolCodigo || '-'}</span></td>
-            <td class="mono">${e.IP || '-'}</td>
-            <td class="mono">${e.Mascara || '-'}</td>
-            <td class="mono">${e.PuertaEnlace || '-'}</td>
-            <td class="mono">${e.DNS1 || '-'}</td>
-            <td class="mono">${e.DNS2 || '-'}</td>
-            <td class="mono">${e.UsuarioAdmin || '-'}</td>
-            <td class="mono">${e.PasswordAdmin || '-'}</td>
-            <td class="mono">${e.DescripcionAdmin || '-'}</td>
-        </tr>
-    `).join('');
+    const filasTabla = equiposList.map(e => {
+        const esDhcpSinIp = ['DHC', 'DHCP'].includes(String(e.TipoIP || '').trim().toUpperCase())
+            && !String(e.IP || '').trim();
+        const celdaRed = valor => esDhcpSinIp
+            ? '<span class="badge-dhcp">DHCP</span>'
+            : (valor || '-');
+        const codigoCliente = String(e.ClienteCodigo || '').toUpperCase().trim();
+        return `
+            <tr>
+                <td class="bold-host">${e.Hostname || '-'}</td>
+                <td class="center"><span class="badge-cli" data-color="${codigoCliente}">${e.ClienteCodigo || '-'}</span></td>
+                <td class="center"><span class="badge-rol" data-rol="${e.RolCodigo || ''}">${e.RolCodigo || '-'}</span></td>
+                <td class="mono">${celdaRed(e.IP)}</td>
+                <td class="mono">${celdaRed(e.Mascara)}</td>
+                <td class="mono">${celdaRed(e.PuertaEnlace)}</td>
+                <td class="mono">${celdaRed(e.DNS1)}</td>
+                <td class="mono">${celdaRed(e.DNS2)}</td>
+                <td class="mono">${e.UsuarioAdmin || '-'}</td>
+                <td class="mono">${e.PasswordAdmin || '-'}</td>
+                <td class="mono">${e.DescripcionAdmin || '-'}</td>
+            </tr>
+        `;
+    }).join('');
 
     const porRol = {};
     equiposList.forEach(e => {
@@ -3410,7 +3504,7 @@ function construirBloquesPlano(panel, layout) {
     const clientesHTML = Object.entries(porCliente).sort((a, b) => b[1] - a[1])
         .map(([cli, cant]) => `
             <div class="identificador-item">
-                <span class="badge-cli">${cli}</span>
+                <span class="badge-cli" data-color="${String(cli).toUpperCase().trim()}">${cli}</span>
                 <span class="cant">${cant}</span>
             </div>`).join('');
 

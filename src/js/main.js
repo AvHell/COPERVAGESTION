@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -22,6 +22,8 @@ const dominiosDB   = require('./db/dominios');
 const configDB     = require('./db/configuraciones');
 const permisosDB   = require('./db/permisos');
 const mantenimientosDB = require('./db/mantenimientos');
+const conexionDB = require('./db/conexion');
+const credencialesDB = require('./db/credenciales');
 
 /* =========================================================
    BASE DE DATOS — MÓDULO ACTIVO FIJO
@@ -39,6 +41,7 @@ const ventanas   = {};
 const HTML       = path.join(__dirname, '../html');
 const HTML_AF    = path.join(__dirname, '..', 'ActivoFijo', 'html');
 const PRELOAD    = path.join(__dirname, 'preload.js');
+const PRELOAD_CONFIG = path.join(__dirname, 'preload-configuracion.js');
 
 const PLANTILLA_PDF = app.isPackaged
   ? path.join(process.resourcesPath, 'Formatos', 'ResponsivaCelulares.pdf')
@@ -388,6 +391,20 @@ function crearVentana(nombre, archivo, opciones = {}) {
    ========================================================= */
 const crearLoginWindow     = () => crearVentana('login',     'login.html',     { title: 'Iniciar Sesión', maximizar: true });
 
+const crearConfiguracionDBWindow = () => crearVentana(
+    'configuracion-db',
+    'configurar-conexion.html',
+    {
+        title: 'Configurar conexión segura',
+        preload: PRELOAD_CONFIG,
+        width: 650,
+        height: 900,
+        minWidth: 420,
+        minHeight: 650,
+        maximizar: false
+    }
+);
+
 /* =========================================================
    UTILIDADES
    ========================================================= */
@@ -443,6 +460,45 @@ ipcMain.handle('logout', async () => {
 
 ipcMain.handle('usuario-actual', () => usuarioActual);
 ipcMain.handle('app:version', () => app.getVersion());
+
+ipcMain.handle('db-config:guardar', async (event, datos) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win !== ventanas['configuracion-db'] || win.isDestroyed()) {
+        return { ok: false, mensaje: 'La configuración solo puede guardarse desde la ventana de instalación.' };
+    }
+
+    let pool;
+    try {
+        const configuracion = credencialesDB.validar(datos);
+        pool = await new conexionDB.sql.ConnectionPool(
+            conexionDB.crearConfig(configuracion)
+        ).connect();
+        credencialesDB.guardar(configuracion);
+        crearLoginWindow();
+        win.close();
+        return { ok: true };
+    } catch (error) {
+        console.error('[Configuración DB] No se pudo validar o guardar la conexión:', error.code || error.name);
+        if (error.message.startsWith('Completa ') || error.message.startsWith('Uno o más campos')) {
+            return { ok: false, mensaje: error.message };
+        }
+        if (error.message.includes('cifrado seguro') || error.message.includes('guardar la configuración cifrada')) {
+            return { ok: false, mensaje: error.message };
+        }
+        return {
+            ok: false,
+            mensaje: 'No se pudo conectar o guardar. Verifica los datos y que el servidor permita la conexión desde esta computadora.'
+        };
+    } finally {
+        if (pool) {
+            try {
+                await pool.close();
+            } catch (error) {
+                console.error('[Configuración DB] No se pudo cerrar el pool de prueba:', error.code || error.name);
+            }
+        }
+    }
+});
 
 /* =========================================================
    IPC: PERMISOS
@@ -1376,14 +1432,33 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
    ========================================================= */
 app.whenReady().then(() => {
     construirMenuApp();
-    crearLoginWindow();
+    try {
+        let configuracion = credencialesDB.cargar();
+        if (!configuracion) {
+            configuracion = credencialesDB.desdeEntorno();
+            if (configuracion) credencialesDB.guardar(configuracion);
+        }
+        if (configuracion) crearLoginWindow();
+        else crearConfiguracionDBWindow();
+    } catch (error) {
+        console.error('[Configuración DB] Se requiere configurar o reparar la conexión:', error.message);
+        crearConfiguracionDBWindow();
+    }
 
     if (app.isPackaged) {
         setTimeout(() => verificarActualizaciones(false), 3000);
     }
 
     app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) crearLoginWindow();
+        if (BrowserWindow.getAllWindows().length === 0) {
+            try {
+                if (credencialesDB.cargar()) crearLoginWindow();
+                else crearConfiguracionDBWindow();
+            } catch (error) {
+                console.error('[App] No se pudo recuperar la configuración de inicio:', error.message);
+                crearConfiguracionDBWindow();
+            }
+        }
     });
 });
 

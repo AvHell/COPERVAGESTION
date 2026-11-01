@@ -1,39 +1,41 @@
 const sql = require('mssql');
+const credenciales = require('./credenciales');
 
-const config = {
-    user:     'copervaservicios_',
-    password: 'tumama22',
-    server:   'sql.bsite.net',
-    database: 'copervaservicios_',
-    options: {
-        instanceName: 'MSSQL2016',
-        trustServerCertificate: true,
-        encrypt: true,
-        enableArithAbort: true,
-        connectionTimeout: 30000,
-        requestTimeout: 30000,
-        // ✅ FIX: desactivar keep-alive TCP lento, usar el default
-        // ✅ FIX: usar TDS 7.4 (default en mssql moderno)
-        useUTC: false
-    },
-    pool: {
-        // ✅ FIX: subir max para permitir más concurrencia (Promise.all)
-        max: 20,
-        min: 2,          // ✅ mantener 2 conexiones calientes para evitar cold-start
-        idleTimeoutMillis: 60000,
-        // ✅ FIX: forzar que las conexiones se renueven antes del timeout del server
-        acquireTimeoutMillis: 30000,
-        createTimeoutMillis: 30000,
-        destroyTimeoutMillis: 5000,
-        reapIntervalMillis: 1000,
-        createRetryIntervalMillis: 200
+function crearConfig(credencial = credenciales.cargar()) {
+    if (!credencial) {
+        throw new Error('Falta configurar la conexión a la base de datos. Ejecuta la aplicación para iniciar la configuración.');
     }
-};
+    const { instanceName, ...datosConexion } = credencial;
+
+    return {
+        ...datosConexion,
+        options: {
+            ...(instanceName ? { instanceName } : {}),
+            trustServerCertificate: true,
+            encrypt: true,
+            enableArithAbort: true,
+            connectionTimeout: 30000,
+            requestTimeout: 30000,
+            useUTC: false
+        },
+        pool: {
+            max: 20,
+            min: 2,
+            idleTimeoutMillis: 60000,
+            acquireTimeoutMillis: 30000,
+            createTimeoutMillis: 30000,
+            destroyTimeoutMillis: 5000,
+            reapIntervalMillis: 1000,
+            createRetryIntervalMillis: 200
+        }
+    };
+}
 
 let poolPromise = null;
 
 function getPool() {
     if (!poolPromise) {
+        const config = crearConfig();
         poolPromise = new sql.ConnectionPool(config)
             .connect()
             .then(pool => {
@@ -57,4 +59,4 @@ process.on('SIGINT', async () => {
     process.exit(0);
 });
 
-module.exports = { getPool, sql };
+module.exports = { getPool, sql, crearConfig };

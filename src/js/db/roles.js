@@ -1,12 +1,36 @@
 const { getPool, sql } = require('./conexion');
 
+let columnasColorPromise = null;
+
+async function asegurarColumnaColor() {
+    if (!columnasColorPromise) {
+        columnasColorPromise = getPool().then(pool => pool.request().query(`
+            IF COL_LENGTH(N'dbo.RolesEquipo', N'ColorHex') IS NULL
+                ALTER TABLE dbo.RolesEquipo ADD ColorHex VARCHAR(7) NULL;
+        `)).catch(error => {
+            columnasColorPromise = null;
+            throw error;
+        });
+    }
+    return columnasColorPromise;
+}
+
+function validarColor(color) {
+    const valor = String(color || '').trim().toUpperCase();
+    if (!/^#[0-9A-F]{6}$/.test(valor)) {
+        throw new Error('El color debe ser un código hexadecimal válido de 6 dígitos.');
+    }
+    return valor;
+}
+
 /* =========================================================
    LISTAR
    ========================================================= */
 async function listar() {
+    await asegurarColumnaColor();
     const pool = await getPool();
     const result = await pool.request().query(
-        'SELECT IdRolEquipo, Codigo, Nombre, Descripcion FROM RolesEquipo ORDER BY Codigo'
+        'SELECT IdRolEquipo, Codigo, Nombre, Descripcion, ColorHex FROM RolesEquipo ORDER BY Codigo'
     );
     return result.recordset;
 }
@@ -14,8 +38,10 @@ async function listar() {
 /* =========================================================
    CREAR
    ========================================================= */
-async function crear(codigo, nombre, descripcion) {
+async function crear(codigo, nombre, descripcion, colorHex = '#6E7B5B') {
     try {
+        colorHex = validarColor(colorHex);
+        await asegurarColumnaColor();
         const pool = await getPool();
 
         // Verificación explícita de duplicado
@@ -31,7 +57,8 @@ async function crear(codigo, nombre, descripcion) {
             .input('Codigo', sql.VarChar(10), codigo)
             .input('Nombre', sql.NVarChar(100), nombre)
             .input('Descripcion', sql.NVarChar(200), descripcion)
-            .query('INSERT INTO RolesEquipo (Codigo, Nombre, Descripcion) VALUES (@Codigo, @Nombre, @Descripcion)');
+            .input('ColorHex', sql.VarChar(7), colorHex)
+            .query('INSERT INTO RolesEquipo (Codigo, Nombre, Descripcion, ColorHex) VALUES (@Codigo, @Nombre, @Descripcion, @ColorHex)');
 
         return { ok: true, mensaje: 'Rol creado correctamente.' };
     } catch (err) {
@@ -45,8 +72,10 @@ async function crear(codigo, nombre, descripcion) {
 /* =========================================================
    ACTUALIZAR
    ========================================================= */
-async function actualizar(id, codigo, nombre, descripcion) {
+async function actualizar(id, codigo, nombre, descripcion, colorHex = '#6E7B5B') {
     try {
+        colorHex = validarColor(colorHex);
+        await asegurarColumnaColor();
         const pool = await getPool();
 
         // Verificar duplicado en OTRO registro
@@ -64,7 +93,8 @@ async function actualizar(id, codigo, nombre, descripcion) {
             .input('Codigo', sql.VarChar(10), codigo)
             .input('Nombre', sql.NVarChar(100), nombre)
             .input('Descripcion', sql.NVarChar(200), descripcion)
-            .query('UPDATE RolesEquipo SET Codigo = @Codigo, Nombre = @Nombre, Descripcion = @Descripcion WHERE IdRolEquipo = @IdRolEquipo');
+            .input('ColorHex', sql.VarChar(7), colorHex)
+            .query('UPDATE RolesEquipo SET Codigo = @Codigo, Nombre = @Nombre, Descripcion = @Descripcion, ColorHex = @ColorHex WHERE IdRolEquipo = @IdRolEquipo');
 
         if (result.rowsAffected[0] === 0) {
             return { ok: false, mensaje: 'El rol ya no existe.' };

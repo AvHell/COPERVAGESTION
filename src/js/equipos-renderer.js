@@ -54,6 +54,81 @@ function limpiarResiduosSwal() {
     });
 }
 
+let tooltipAccionActivo = null;
+let tooltipAccionElemento = null;
+
+function mostrarTooltipAccion(elemento) {
+    const texto = elemento.dataset.tooltip;
+    if (!texto) return;
+
+    if (!tooltipAccionActivo) {
+        tooltipAccionActivo = document.createElement('div');
+        tooltipAccionActivo.className = 'tooltip-accion-equipos';
+        tooltipAccionActivo.id = 'tooltip-accion-equipos';
+        tooltipAccionActivo.setAttribute('role', 'tooltip');
+        document.body.append(tooltipAccionActivo);
+    }
+
+    tooltipAccionElemento = elemento;
+    tooltipAccionActivo.textContent = texto;
+    tooltipAccionActivo.style.display = 'block';
+    elemento.setAttribute('aria-describedby', tooltipAccionActivo.id);
+
+    const boton = elemento.getBoundingClientRect();
+    const tooltip = tooltipAccionActivo.getBoundingClientRect();
+    const left = Math.max(8, Math.min(
+        boton.left + boton.width / 2 - tooltip.width / 2,
+        window.innerWidth - tooltip.width - 8
+    ));
+    const below = boton.bottom + 8;
+    const top = below + tooltip.height <= window.innerHeight - 8
+        ? below
+        : Math.max(8, boton.top - tooltip.height - 8);
+
+    tooltipAccionActivo.style.left = `${left}px`;
+    tooltipAccionActivo.style.top = `${top}px`;
+}
+
+function ocultarTooltipAccion() {
+    if (tooltipAccionElemento) tooltipAccionElemento.removeAttribute('aria-describedby');
+    tooltipAccionElemento = null;
+    if (tooltipAccionActivo) tooltipAccionActivo.style.display = 'none';
+}
+
+document.addEventListener('pointerover', event => {
+    const button = event.target instanceof Element
+        ? event.target.closest('.acciones-tabla [data-tooltip]')
+        : null;
+    if (button && button !== tooltipAccionElemento) mostrarTooltipAccion(button);
+});
+
+document.addEventListener('pointerout', event => {
+    const button = event.target instanceof Element
+        ? event.target.closest('.acciones-tabla [data-tooltip]')
+        : null;
+    const related = event.relatedTarget instanceof Element
+        ? event.relatedTarget.closest('.acciones-tabla [data-tooltip]')
+        : null;
+    if (button === tooltipAccionElemento && related !== button) ocultarTooltipAccion();
+});
+
+document.addEventListener('focusin', event => {
+    const button = event.target instanceof Element
+        ? event.target.closest('.acciones-tabla [data-tooltip]')
+        : null;
+    if (button) mostrarTooltipAccion(button);
+});
+
+document.addEventListener('focusout', event => {
+    const button = event.target instanceof Element
+        ? event.target.closest('.acciones-tabla [data-tooltip]')
+        : null;
+    if (button === tooltipAccionElemento) ocultarTooltipAccion();
+});
+
+window.addEventListener('scroll', ocultarTooltipAccion, true);
+window.addEventListener('resize', ocultarTooltipAccion);
+
 /* =========================================================
    RENDERIZADORES DE BADGES
    ========================================================= */

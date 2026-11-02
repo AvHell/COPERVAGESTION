@@ -236,7 +236,7 @@ function renderTabla() {
                  stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
                 <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
-            <span class="badge-cliente ${claseCodigo}">
+            <span class="badge-cliente ${claseCodigo}" data-color="${escaparHTML(grupoCliente.codigo)}">
                 <span class="codigo">${escaparHTML(grupoCliente.codigo)}</span>
                 <span class="nombre">${escaparHTML(grupoCliente.nombre)}</span>
             </span>

@@ -120,6 +120,7 @@ const tabla             = document.getElementById('tabla-clientes');
 const formulario        = document.getElementById('formulario');
 const inputCodigo       = document.getElementById('codigo');
 const inputNombre       = document.getElementById('nombre');
+const inputColor        = document.getElementById('color-cliente');
 const mensaje           = document.getElementById('mensaje');
 const btnGuardar        = document.getElementById('btn-guardar');
 const sinResultados     = document.getElementById('sin-resultados');
@@ -236,7 +237,7 @@ function renderTabla() {
 
         tr.innerHTML = `
             <td>
-                <span class="badge-codigo ${claseCodigo}">
+                <span class="badge-codigo ${claseCodigo}" data-color="${escaparHTML(c.Codigo)}">
                     ${escaparHTML(c.Codigo)}
                 </span>
             </td>
@@ -312,6 +313,7 @@ document.getElementById('btn-nuevo').addEventListener('click', () => {
     modalTitulo.textContent = 'Nuevo cliente';
     inputCodigo.value = '';
     inputNombre.value = '';
+    inputColor.value = '#6E7B5B';
     inputCodigo.disabled = false;
     ocultarMensaje();
     abrirModal();
@@ -333,6 +335,7 @@ function abrirEdicion(id) {
 
     inputCodigo.value = c.Codigo ?? '';
     inputNombre.value = c.Nombre ?? '';
+    inputColor.value = c.ColorHex || '#6E7B5B';
     inputCodigo.disabled = false;
 
     ocultarMensaje();
@@ -365,14 +368,15 @@ formulario.addEventListener('submit', async (e) => {
     try {
         let res;
         if (modoEdicion && idEditando !== null && idEditando !== undefined) {
-            res = await window.api.clientes.actualizar(idEditando, codigo, nombre);
+            res = await window.api.clientes.actualizar(idEditando, codigo, nombre, inputColor.value);
         } else {
-            res = await window.api.clientes.crear(codigo, nombre);
+            res = await window.api.clientes.crear(codigo, nombre, inputColor.value);
         }
 
         if (res && res.ok) {
             cerrarModal();
             await cargarClientes();
+            await window.PermisosUI?.refrescarColores();
             toastExito(res.mensaje || 'Operación exitosa');
         } else {
             mostrarMensaje(res?.mensaje || 'No se pudo guardar el cliente.', 'error');
@@ -414,6 +418,7 @@ async function eliminarCliente(id) {
         const res = await window.api.clientes.eliminar(id);
         if (res && res.ok) {
             await cargarClientes();
+            await window.PermisosUI?.refrescarColores();
             toastExito(res.mensaje || 'Cliente eliminado');
         } else {
             toastError('No se pudo eliminar', res?.mensaje || 'Error desconocido');

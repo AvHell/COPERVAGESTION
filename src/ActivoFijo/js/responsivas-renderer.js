@@ -506,10 +506,11 @@ function iconoCancelar() {
 /* =========================================================
    BOTONES DE ACCIÓN (solo icono + tooltip)
    ========================================================= */
-function crearBotonAccion(icono, tooltip, clase, accion) {
+function crearBotonAccion(icono, tooltip, clase, accion, permiso) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `btn-accion ${clase}`;
+    if (permiso) btn.dataset.permiso = permiso;
     btn.setAttribute('data-tooltip', tooltip);
     btn.setAttribute('aria-label', tooltip);
     btn.innerHTML = icono;
@@ -582,21 +583,21 @@ function renderTabla() {
         const celda = tr.querySelector('.acciones-tabla');
 
         if (esVistaCanceladas) {
-            celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver detalle', 'ver', () => verDetalle(r.IdResponsiva)));
-            celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
-            celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
+            celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver detalle', 'ver', () => verDetalle(r.IdResponsiva), 'af-resp:listado:ver'));
+            celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket), 'af-resp:pdf'));
+            celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket), 'af-resp:pdf'));
             tablaBody.appendChild(tr);
             return;
         }
 
         /* ---- Vista ACTIVAS ---- */
-        celda.appendChild(crearBotonAccion(iconoEditar(), 'Editar', 'editar', () => abrirEdicion(r.IdResponsiva)));
-        celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
-        celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket)));
+        celda.appendChild(crearBotonAccion(iconoEditar(), 'Editar', 'editar', () => abrirEdicion(r.IdResponsiva), 'af-resp:editar'));
+        celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket), 'af-resp:pdf'));
+        celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket), 'af-resp:pdf'));
 
         if (r.EstatusResponsiva === 'ASIGNADO' || r.EstatusResponsiva === 'PENDIENTE') {
-            celda.appendChild(crearBotonAccion(iconoDevolver(), 'Registrar devolución', 'exito', () => devolverResponsiva(r.IdResponsiva, r.NombreRecibe)));
-            celda.appendChild(crearBotonAccion(iconoCancelar(), 'Cancelar responsiva', 'eliminar', () => cancelarResponsiva(r.IdResponsiva, r.FolioTicket)));
+            celda.appendChild(crearBotonAccion(iconoDevolver(), 'Registrar devolución', 'exito', () => devolverResponsiva(r.IdResponsiva, r.NombreRecibe), 'af-resp:devolver'));
+            celda.appendChild(crearBotonAccion(iconoCancelar(), 'Cancelar responsiva', 'eliminar', () => cancelarResponsiva(r.IdResponsiva, r.FolioTicket), 'af-resp:eliminar'));
         }
 
         tablaBody.appendChild(tr);

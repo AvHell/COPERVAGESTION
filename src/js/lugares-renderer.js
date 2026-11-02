@@ -172,7 +172,7 @@ function renderTabla() {
 
         const chipsClientes = (p.clientes || []).map(c => {
             const clase = claseCodigoCliente(c.Codigo);
-            return `<span class="badge-cliente ${clase}" style="margin-right:4px;">
+            return `<span class="badge-cliente ${clase}" data-color="${escaparHTML(c.Codigo)}" style="margin-right:4px;">
                         <span class="codigo">${escaparHTML(c.Codigo)}</span>
                         <span class="nombre">${escaparHTML(c.Nombre)}</span>
                     </span>`;

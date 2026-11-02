@@ -31,9 +31,11 @@ Si una credencial se incluyó alguna vez en un commit o en un repositorio remoto
 ## Desarrollo y empaquetado
 
 ```powershell
-npm install
+npm ci
 npm start
-npm run dist
+npm run dist:all
 ```
+
+`npm ci` instala las dependencias exactas de `package-lock.json`; úsalo también para reconstruir una instalación local incompleta antes de empaquetar. `npm run dist:all` genera el instalador NSIS y la versión portable para Windows x64 en `dist`. Ambos paquetes incluyen la plantilla `Formatos/ResponsivaCelulares.pdf` como recurso de la aplicación.
 
 La versión de la aplicación se mantiene en `package.json` y `package-lock.json`. El publicador de actualizaciones está configurado en la sección `build.publish` de `package.json`.

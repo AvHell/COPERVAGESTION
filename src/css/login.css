@@ -188,6 +188,61 @@ body {
     overflow: hidden;
 }
 
+.brand-motion {
+    position: absolute;
+    z-index: 0;
+    top: 50%;
+    left: 58%;
+    width: min(76%, 310px);
+    aspect-ratio: 1;
+    transform: translate(-50%, -43%);
+    pointer-events: none;
+    opacity: .7;
+}
+.brand-motion-core,
+.brand-motion-orbit,
+.brand-motion-wave {
+    position: absolute;
+    display: block;
+    border-radius: 50%;
+}
+.brand-motion-core {
+    inset: 18%;
+    background:
+        radial-gradient(circle at 32% 26%, rgba(255,247,232,.88), transparent 9%),
+        radial-gradient(circle at 34% 30%, #c4b36e 0, #8b956c 26%, #52634b 57%, #303b31 78%);
+    box-shadow: inset -20px -24px 48px rgba(13,20,16,.48), 0 0 54px rgba(169,154,99,.25);
+    animation: sphereDrift 8s ease-in-out infinite;
+}
+.brand-motion-orbit {
+    inset: 7%;
+    border: 1px solid rgba(255,247,232,.2);
+    transform: rotate(-24deg) scaleY(.42);
+    box-shadow: 0 0 24px rgba(199,191,162,.15);
+    animation: orbitDrift 12s linear infinite;
+}
+.brand-motion-wave {
+    inset: 12% 4%;
+    border: 2px solid rgba(199,191,162,.2);
+    border-left-color: transparent;
+    border-right-color: rgba(169,154,99,.55);
+    transform: rotate(-32deg) scaleY(.54);
+    filter: blur(1px);
+    animation: waveDrift 7s ease-in-out infinite alternate;
+}
+@keyframes sphereDrift {
+    0%, 100% { transform: translate3d(-4px, 2px, 0) scale(.97); }
+    50% { transform: translate3d(8px, -9px, 0) scale(1.03); }
+}
+@keyframes orbitDrift {
+    from { transform: rotate(-24deg) scaleY(.42); }
+    to { transform: rotate(336deg) scaleY(.42); }
+}
+@keyframes waveDrift {
+    from { transform: rotate(-38deg) scaleY(.48) translateX(-6px); opacity: .55; }
+    to { transform: rotate(-22deg) scaleY(.62) translateX(8px); opacity: .95; }
+}
+
 .login-brand::before {
     content: '';
     position: absolute;
@@ -275,7 +330,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .brand-title::before { animation: none; }
+    .brand-title::before,
+    .brand-motion-core,
+    .brand-motion-orbit,
+    .brand-motion-wave { animation: none; }
 }
 
 .brand-tagline {

@@ -55,18 +55,39 @@
       '#cfg-contenedor-grupos button.secundario': 'catalogos:config:gestionar',
       '#cfg-contenedor-grupos button.peligro': 'catalogos:config:gestionar',
       '.tab-btn[data-tab="dominios"]': 'catalogos:dominios:gestionar',
-      '.tab-btn[data-tab="config"]': 'catalogos:config:gestionar'
+      '.tab-btn[data-tab="config"]': 'catalogos:config:gestionar',
+      '.tab-btn[data-tab="roles"]': 'catalogos',
+      '.tab-btn[data-tab="pisos"]': 'catalogos'
     },
     'equipos.html': {
       '#btn-nuevo': 'equipos:crear',
       '#btn-guardar': 'equipos:crear|equipos:editar',
       '#btn-exportar-excel': 'equipos:listado:exportar',
+      '#btn-nuevo-dominio': 'catalogos:dominios:gestionar',
+      '.btn-agregar-mini[data-tipo]': 'catalogos:config:gestionar',
+      '#btn-ips-disponibles': 'equipos:listado:ver',
+      '.btn-usar-ip': 'equipos:listado:ver',
+      '#contenedor-grupos': 'equipos:listado:ver',
       '.data-table button.secundario': 'equipos:editar',
       '.data-table button.peligro': 'equipos:eliminar'
     },
+    'plano.html': {
+      '#contenedor-principal': 'plano:ver',
+      '#btn-exportar-pdf-doc': 'plano:exportar',
+      '#btn-aplicar-dim-izq': 'plano:editar-dim',
+      '#btn-aplicar-dim-der': 'plano:editar-dim',
+      '#btn-modo-zona': 'plano:zonas:gestionar',
+      '#btn-modo-zona-libre': 'plano:zonas:gestionar',
+      '#modal-zona-aceptar': 'plano:zonas:gestionar',
+      '#modal-zona-libre-aceptar': 'plano:zonas:gestionar',
+      '#editar-confirmar': 'equipos:editar',
+      '.btn-editar-equipo': 'equipos:editar'
+    },
     'clientes.html': {
       '#btn-nuevo': 'catalogos:clientes:crear',
-      '#btn-guardar': 'catalogos:clientes:crear|catalogos:clientes:editar'
+      '#btn-guardar': 'catalogos:clientes:crear|catalogos:clientes:editar',
+      '#tabla-clientes button.secundario': 'catalogos:clientes:editar',
+      '#tabla-clientes button.peligro': 'catalogos:clientes:eliminar'
     },
     'usuarios.html': {
       '#btn-nuevo': 'usuarios:crear',
@@ -77,47 +98,54 @@
       '#btn-editar-rol': 'usuarios',
       '#btn-toggle-rol': 'usuarios',
       '#btn-eliminar-rol': 'usuarios',
+      '.card-tabla': 'usuarios:listado:ver',
+      '#tabla-usuarios': 'usuarios:listado:ver',
       '#tabla-usuarios button.secundario': 'usuarios:editar',
       '#tabla-usuarios button.peligro': 'usuarios:eliminar'
     },
     'roles.html': {
       '#btn-nuevo': 'catalogos',
-      '#btn-guardar': 'catalogos'
+      '#btn-guardar': 'catalogos',
+      '#tabla-roles button.secundario': 'catalogos',
+      '#tabla-roles button.peligro': 'catalogos'
     },
-    'dominios.html': { '#btn-nuevo': 'catalogos:dominios:gestionar' },
-    'configred.html': { '#btn-nueva': 'catalogos:config:gestionar' },
+    'dominios.html': {
+      '#btn-nuevo': 'catalogos:dominios:gestionar',
+      '#tabla-dominios button.secundario': 'catalogos:dominios:gestionar',
+      '#tabla-dominios button.peligro': 'catalogos:dominios:gestionar'
+    },
+    'configred.html': {
+      '#btn-nueva': 'catalogos:config:gestionar',
+      'table button.secundario': 'catalogos:config:gestionar',
+      'table button.peligro': 'catalogos:config:gestionar'
+    },
+    'lugares.html': {
+      '#btn-nuevo': 'catalogos',
+      'table button.secundario': 'catalogos',
+      'table button.peligro': 'catalogos'
+    },
     'mantenimientos.html': {
       '#btn-nuevo': 'mantenimientos:crear',
       '#btn-guardar': 'mantenimientos:crear',
-      '#btn-exportar-excel': 'mantenimientos'
+      '#btn-exportar-excel': 'mantenimientos',
+      '#btn-ver-historial': 'mantenimientos'
     },
-    'activos.html': {
-      '#btn-nuevo': 'af-act:crear',
-      '#btn-guardar': 'af-act:crear|af-act:editar',
-      '#btn-exportar': 'af-act:listado:ver'
+    'historico.html': {
+      '.main-content': 'historico'
     },
-    'responsivas.html': {
-      '#btn-nuevo': 'af-resp:crear',
-      '#btn-guardar': 'af-resp:crear|af-resp:editar',
-      '#btn-catalogos-responsiva': 'activofijo_responsivas'
-    },
-    'reportes.html': {
-      '#btn-exportar': 'af-rep:exportar',
-      '#btn-recargar': 'af-rep:ver'
-    },
-    'importar.html': {
-      '#btn-importar': 'af-imp:ejecutar',
-      '#btn-descargar-plantilla': 'af-imp:ejecutar'
-    }
   };
 
   let permisos = {};
   let rol = null;
   let observer = null;
+  const coloresClientes = new Map();
+  const coloresRoles = new Map();
 
   function puede(claves) {
     if (rol === 'ADMIN') return true;
-    return String(claves || '').split('|').some(clave => permisos[clave.trim()] === true);
+    return String(claves || '').split('|').some(grupo =>
+      grupo.split('&').every(clave => permisos[clave.trim()] === true)
+    );
   }
 
   function obtenerPagina() {
@@ -130,18 +158,32 @@
 
   function aplicarReglasPagina(root = document) {
     const reglasAF = {
-      'catalogos.html': { '#btn-nuevo': 'af-cat:crear', '#btn-guardar': 'af-cat:crear|af-cat:editar' },
+      'catalogos.html': {
+        '#btn-nuevo': 'af-cat:crear',
+        '#btn-guardar': 'af-cat:crear|af-cat:editar',
+        '#card-tabla': 'af-cat:listado:ver'
+      },
       'activos.html': {
         '#btn-nuevo': 'af-act:crear',
         '#btn-guardar': 'af-act:crear|af-act:editar',
-        '#btn-exportar': 'af-act:listado:ver'
+        '#btn-exportar': 'af-act:listado:ver',
+        '#card-tabla': 'af-act:listado:ver'
       },
       'responsivas.html': {
         '#btn-nuevo': 'af-resp:crear',
         '#btn-guardar': 'af-resp:crear|af-resp:editar',
-        '#btn-catalogos-responsiva': 'activofijo_responsivas'
+        '#btn-catalogos-responsiva': 'activofijo_responsivas',
+        '#card-tabla': 'af-resp:listado:ver',
+        '[data-agregar]': 'activofijo_responsivas',
+        '[data-editar]': 'activofijo_responsivas',
+        '[data-guardar]': 'activofijo_responsivas',
+        '[data-eliminar]': 'activofijo_responsivas'
       },
-      'reportes.html': { '#btn-exportar': 'af-rep:exportar', '#btn-recargar': 'af-rep:ver' },
+      'reportes.html': {
+        '#btn-exportar': 'af-rep:exportar',
+        '#btn-recargar': 'af-rep:ver',
+        '#card-tabla': 'af-rep:ver'
+      },
       'importar.html': { '#btn-importar': 'af-imp:ejecutar', '#btn-descargar-plantilla': 'af-imp:ejecutar' }
     };
     const pagina = obtenerPagina();
@@ -202,6 +244,70 @@
     });
   }
 
+  function contraste(hex) {
+    const canales = hex.slice(1).match(/.{2}/g).map(canal => parseInt(canal, 16) / 255)
+      .map(canal => canal <= 0.04045 ? canal / 12.92 : ((canal + 0.055) / 1.055) ** 2.4);
+    return canales[0] * 0.2126 + canales[1] * 0.7152 + canales[2] * 0.0722 > 0.42 ? '#20271f' : '#ffffff';
+  }
+
+  function aplicarColores(root = document) {
+    const elementos = [];
+    if (root.matches?.('[data-color], [data-rol]')) elementos.push(root);
+    elementos.push(...root.querySelectorAll('[data-color], [data-rol]'));
+    elementos.forEach(el => {
+      const codigo = String(el.dataset.color || el.dataset.rol || '').trim().toUpperCase();
+      if (!codigo || codigo === 'BOTON') return;
+      const esCliente = el.matches('.badge-cliente, .badge-cli') ||
+        el.dataset.colorKind === 'client' ||
+        (obtenerPagina() === 'clientes.html' && el.matches('.badge-codigo'));
+      const esRol = el.matches('.rol-pill, .hostname-badge') ||
+        el.matches('.badge-equipo') ||
+        el.hasAttribute('data-rol') ||
+        el.dataset.colorKind === 'role' ||
+        ((obtenerPagina() === 'roles.html' || obtenerPagina() === 'catalogos.html') &&
+          el.matches('.badge-codigo'));
+      const color = esCliente ? coloresClientes.get(codigo) : esRol ? coloresRoles.get(codigo) : null;
+      if (!color || !/^#[0-9A-F]{6}$/i.test(color)) return;
+      const esCeldaEquipo = el.matches('.celda[data-rol]');
+      let fondo = color;
+      if (esCeldaEquipo) {
+        const partes = color.slice(1).match(/.{2}/g).map(canal => parseInt(canal, 16));
+        fondo = `#${partes.map(canal => Math.round(canal + (255 - canal) * .78).toString(16).padStart(2, '0')).join('')}`;
+      }
+      el.style.setProperty('background-color', fondo, 'important');
+      el.style.setProperty('border-color', color, 'important');
+      el.style.setProperty('color', esCeldaEquipo ? '#20271f' : contraste(color), 'important');
+    });
+  }
+
+  async function refrescarColores() {
+    if (obtenerPagina() === 'login.html' || !window.api?.catalogosColores) return;
+    try {
+      const catalogos = await window.api.catalogosColores();
+      if (!catalogos || catalogos.ok === false) {
+        throw new Error(catalogos?.mensaje || 'No se pudieron obtener los colores configurados.');
+      }
+      coloresClientes.clear();
+      coloresRoles.clear();
+      (catalogos.clientes || []).forEach(item => {
+        if (item.codigo && /^#[0-9A-F]{6}$/i.test(item.colorHex || '')) {
+          coloresClientes.set(String(item.codigo).toUpperCase(), item.colorHex);
+        }
+      });
+      (catalogos.roles || []).forEach(item => {
+        if (item.codigo && /^#[0-9A-F]{6}$/i.test(item.colorHex || '')) {
+          coloresRoles.set(String(item.codigo).toUpperCase(), item.colorHex);
+        }
+      });
+      aplicarColores();
+      return true;
+    } catch (error) {
+      console.error('[PermisosUI] No se pudieron aplicar los colores de clientes y roles:', error);
+      mostrarError('No se pudieron cargar los colores configurados.');
+      return false;
+    }
+  }
+
   function montarMenu() {
     if (obtenerPagina() === 'login.html' || document.querySelector('.app-sidebar')) return;
     const link = document.createElement('link');
@@ -221,11 +327,18 @@
       <nav class="app-sidebar-nav" aria-label="Navegación principal"></nav>
       <div class="app-sidebar-footer">
         <div class="app-sidebar-user"><strong class="app-sidebar-user-name">Usuario</strong><small class="app-sidebar-user-role"></small></div>
-        <button type="button" class="app-sidebar-logout">Cerrar sesión</button>
+        <button type="button" class="app-sidebar-logout" title="Cerrar sesión" aria-label="Cerrar sesión">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"></path>
+          </svg>
+          <span>Cerrar sesión</span>
+        </button>
       </div>`;
     document.body.prepend(aside);
     const collapsed = localStorage.getItem('app-sidebar-collapsed') === 'true';
     document.body.classList.toggle('app-sidebar-collapsed', collapsed);
+    aside.querySelector('.app-sidebar-toggle').textContent = collapsed ? '›' : '‹';
+    aside.querySelector('.app-sidebar-toggle').setAttribute('aria-label', collapsed ? 'Expandir menú' : 'Contraer menú');
 
     const nav = aside.querySelector('.app-sidebar-nav');
     const actual = obtenerPagina();
@@ -336,6 +449,7 @@
         )].join(' ');
         if (options.toast) {
           classObject.container = agregarClase(classObject.container, 'global-toast-container');
+          classObject.popup = agregarClase(classObject.popup, 'cl-toast');
           return fireOriginal({ ...options, showCloseButton: false, backdrop: false, customClass: classObject }, ...rest);
         }
         classObject.container = agregarClase(classObject.container, 'app-swal-container');
@@ -373,12 +487,27 @@
     observer = new MutationObserver(mutations => {
       if (mutations.some(mutation => [...mutation.addedNodes].some(node => node.nodeType === Node.ELEMENT_NODE))) {
         aplicarReglasPagina();
+        aplicarColores();
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
+    await refrescarColores();
   }
 
   function mostrarError(texto) {
+    if (window.Swal) {
+      window.Swal.fire({
+        toast: true,
+        position: 'bottom-end',
+        icon: 'error',
+        title: texto,
+        showConfirmButton: false,
+        timer: 3400,
+        timerProgressBar: true,
+        customClass: { popup: 'cl-toast cl-toast-error' }
+      });
+      return;
+    }
     const aviso = document.createElement('div');
     aviso.className = 'app-toast-error';
     aviso.textContent = texto;
@@ -389,7 +518,10 @@
   window.PermisosUI = {
     init,
     aplicar: aplicarReglasPagina,
+    refrescarColores,
     puede,
+    colorCliente: codigo => coloresClientes.get(String(codigo || '').trim().toUpperCase()) || null,
+    colorRol: codigo => coloresRoles.get(String(codigo || '').trim().toUpperCase()) || null,
     puedoRemoto: async clave => {
       const resultado = await window.api.permisos.puedo(clave);
       return !!(resultado && resultado.ok && resultado.permitido);

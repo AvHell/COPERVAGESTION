@@ -174,6 +174,7 @@ const TabClientes = (() => {
     const formulario = $('form-cliente');
     const inputCodigo = $('cli-codigo');
     const inputNombre = $('cli-nombre');
+    const inputColor = $('cli-color');
     const mensaje = $('cli-mensaje');
     const btnGuardar = $('cli-guardar');
 
@@ -267,6 +268,7 @@ const TabClientes = (() => {
         modalTitulo.textContent = 'Editar cliente';
         inputCodigo.value = c.Codigo ?? '';
         inputNombre.value = c.Nombre ?? '';
+        inputColor.value = c.ColorHex || '#6E7B5B';
         ocultarMensaje();
         abrirModal();
         inputNombre.focus();
@@ -295,6 +297,7 @@ const TabClientes = (() => {
             const res = await window.api.clientes.eliminar(id);
             if (res && res.ok) {
                 await cargar();
+                await window.PermisosUI?.refrescarColores();
                 await alertaExito('Cliente eliminado', res.mensaje || 'El cliente se eliminó correctamente.');
             } else {
                 alertaError('No se pudo eliminar', res?.mensaje || 'Ocurrió un error inesperado.');
@@ -311,6 +314,7 @@ const TabClientes = (() => {
             modalTitulo.textContent = 'Nuevo cliente';
             inputCodigo.value = '';
             inputNombre.value = '';
+            inputColor.value = '#6E7B5B';
             ocultarMensaje();
             abrirModal();
             inputCodigo.focus();
@@ -345,12 +349,13 @@ const TabClientes = (() => {
             setGuardando(true);
             try {
                 let res;
-                if (modoEdicion) res = await window.api.clientes.actualizar(idEditando, codigo, nombre);
-                else res = await window.api.clientes.crear(codigo, nombre);
+                if (modoEdicion) res = await window.api.clientes.actualizar(idEditando, codigo, nombre, inputColor.value);
+                else res = await window.api.clientes.crear(codigo, nombre, inputColor.value);
 
                 if (res && res.ok) {
                     cerrarModal();
                     await cargar();
+                    await window.PermisosUI?.refrescarColores();
                     await alertaExito('Guardado correctamente', res.mensaje || (modoEdicion ? 'Cliente actualizado.' : 'Cliente creado.'));
                 } else {
                     mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');
@@ -653,6 +658,7 @@ const TabRoles = (() => {
     const inputCodigo = $('rol-codigo');
     const inputNombre = $('rol-nombre');
     const inputDesc = $('rol-descripcion');
+    const inputColor = $('rol-color');
     const mensaje = $('rol-mensaje');
     const btnGuardar = $('rol-guardar');
 
@@ -747,6 +753,7 @@ const TabRoles = (() => {
         inputCodigo.value = r.Codigo ?? '';
         inputNombre.value = r.Nombre ?? '';
         inputDesc.value = r.Descripcion ?? '';
+        inputColor.value = r.ColorHex || '#6E7B5B';
         ocultarMensaje();
         abrirModal();
         inputNombre.focus();
@@ -774,6 +781,7 @@ const TabRoles = (() => {
             const res = await window.api.roles.eliminar(id);
             if (res && res.ok) {
                 await cargar();
+                await window.PermisosUI?.refrescarColores();
                 await alertaExito('Rol eliminado', res.mensaje || 'El rol se eliminó correctamente.');
             } else {
                 alertaError('No se pudo eliminar', res?.mensaje || 'Ocurrió un error inesperado.');
@@ -791,6 +799,7 @@ const TabRoles = (() => {
             inputCodigo.value = '';
             inputNombre.value = '';
             inputDesc.value = '';
+            inputColor.value = '#6E7B5B';
             ocultarMensaje();
             abrirModal();
             inputCodigo.focus();
@@ -828,12 +837,13 @@ const TabRoles = (() => {
             setGuardando(true);
             try {
                 let res;
-                if (modoEdicion) res = await window.api.roles.actualizar(idEditando, codigo, nombre, desc);
-                else res = await window.api.roles.crear(codigo, nombre, desc);
+                if (modoEdicion) res = await window.api.roles.actualizar(idEditando, codigo, nombre, desc, inputColor.value);
+                else res = await window.api.roles.crear(codigo, nombre, desc, inputColor.value);
 
                 if (res && res.ok) {
                     cerrarModal();
                     await cargar();
+                    await window.PermisosUI?.refrescarColores();
                     await alertaExito('Guardado correctamente', res.mensaje || (modoEdicion ? 'Rol actualizado.' : 'Rol creado.'));
                 } else {
                     mostrarMensaje(res?.mensaje || 'No se pudo guardar.', 'error');

@@ -1,12 +1,36 @@
 const { getPool, sql } = require('./conexion');
 
+let columnasColorPromise = null;
+
+async function asegurarColumnaColor() {
+    if (!columnasColorPromise) {
+        columnasColorPromise = getPool().then(pool => pool.request().query(`
+            IF COL_LENGTH(N'dbo.Clientes', N'ColorHex') IS NULL
+                ALTER TABLE dbo.Clientes ADD ColorHex VARCHAR(7) NULL;
+        `)).catch(error => {
+            columnasColorPromise = null;
+            throw error;
+        });
+    }
+    return columnasColorPromise;
+}
+
+function validarColor(color) {
+    const valor = String(color || '').trim().toUpperCase();
+    if (!/^#[0-9A-F]{6}$/.test(valor)) {
+        throw new Error('El color debe ser un código hexadecimal válido de 6 dígitos.');
+    }
+    return valor;
+}
+
 /* =========================================================
    LISTAR
    ========================================================= */
 async function listar() {
+    await asegurarColumnaColor();
     const pool = await getPool();
     const result = await pool.request().query(
-        'SELECT IdCliente, Codigo, Nombre FROM Clientes ORDER BY Codigo'
+        'SELECT IdCliente, Codigo, Nombre, ColorHex FROM Clientes ORDER BY Codigo'
     );
     return result.recordset;
 }
@@ -14,8 +38,10 @@ async function listar() {
 /* =========================================================
    CREAR
    ========================================================= */
-async function crear(codigo, nombre) {
+async function crear(codigo, nombre, colorHex = '#6E7B5B') {
     try {
+        colorHex = validarColor(colorHex);
+        await asegurarColumnaColor();
         const pool = await getPool();
 
         // Verificación explícita de duplicado (opcional pero útil)
@@ -30,7 +56,8 @@ async function crear(codigo, nombre) {
         await pool.request()
             .input('Codigo', sql.VarChar(10), codigo)
             .input('Nombre', sql.NVarChar(150), nombre)
-            .query('INSERT INTO Clientes (Codigo, Nombre) VALUES (@Codigo, @Nombre)');
+            .input('ColorHex', sql.VarChar(7), colorHex)
+            .query('INSERT INTO Clientes (Codigo, Nombre, ColorHex) VALUES (@Codigo, @Nombre, @ColorHex)');
 
         return { ok: true, mensaje: 'Cliente creado correctamente.' };
     } catch (err) {
@@ -45,8 +72,10 @@ async function crear(codigo, nombre) {
 /* =========================================================
    ACTUALIZAR
    ========================================================= */
-async function actualizar(id, codigo, nombre) {
+async function actualizar(id, codigo, nombre, colorHex = '#6E7B5B') {
     try {
+        colorHex = validarColor(colorHex);
+        await asegurarColumnaColor();
         const pool = await getPool();
 
         // Verificar duplicado en OTRO registro
@@ -63,7 +92,8 @@ async function actualizar(id, codigo, nombre) {
             .input('IdCliente', sql.Int, id)
             .input('Codigo', sql.VarChar(10), codigo)
             .input('Nombre', sql.NVarChar(150), nombre)
-            .query('UPDATE Clientes SET Codigo = @Codigo, Nombre = @Nombre WHERE IdCliente = @IdCliente');
+            .input('ColorHex', sql.VarChar(7), colorHex)
+            .query('UPDATE Clientes SET Codigo = @Codigo, Nombre = @Nombre, ColorHex = @ColorHex WHERE IdCliente = @IdCliente');
 
         if (result.rowsAffected[0] === 0) {
             return { ok: false, mensaje: 'El cliente ya no existe.' };

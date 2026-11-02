@@ -60,8 +60,8 @@ contextBridge.exposeInMainWorld('api', {
        ========================================================= */
     clientes: {
         listar:     ()                       => ipcRenderer.invoke('clientes:listar'),
-        crear:      (codigo, nombre)         => ipcRenderer.invoke('clientes:crear', codigo, nombre),
-        actualizar: (id, codigo, nombre)     => ipcRenderer.invoke('clientes:actualizar', id, codigo, nombre),
+        crear:      (codigo, nombre, color)  => ipcRenderer.invoke('clientes:crear', codigo, nombre, color),
+        actualizar: (id, codigo, nombre, color) => ipcRenderer.invoke('clientes:actualizar', id, codigo, nombre, color),
         eliminar:   (id)                     => ipcRenderer.invoke('clientes:eliminar', id)
     },
 
@@ -70,10 +70,12 @@ contextBridge.exposeInMainWorld('api', {
        ========================================================= */
     roles: {
         listar:     ()                                  => ipcRenderer.invoke('roles:listar'),
-        crear:      (codigo, nombre, descripcion)       => ipcRenderer.invoke('roles:crear', codigo, nombre, descripcion),
-        actualizar: (id, codigo, nombre, descripcion)   => ipcRenderer.invoke('roles:actualizar', id, codigo, nombre, descripcion),
+        crear:      (codigo, nombre, descripcion, color) => ipcRenderer.invoke('roles:crear', codigo, nombre, descripcion, color),
+        actualizar: (id, codigo, nombre, descripcion, color) => ipcRenderer.invoke('roles:actualizar', id, codigo, nombre, descripcion, color),
         eliminar:   (id)                                => ipcRenderer.invoke('roles:eliminar', id)
     },
+
+    catalogosColores: () => ipcRenderer.invoke('catalogos:colores'),
 
     /* =========================================================
        PISOS

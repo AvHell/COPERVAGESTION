@@ -390,6 +390,13 @@
                         <label for="cli-nombre">Nombre <span class="req">*</span></label>
                         <input type="text" id="cli-nombre" maxlength="150" placeholder="Cliente NU" required>
                     </div>
+                    <div class="field field-color">
+                        <label for="cli-color">Color del cliente</label>
+                        <div class="color-picker-field">
+                            <input type="color" id="cli-color" value="#6E7B5B" aria-label="Color hexadecimal del cliente">
+                            <span>El color se utilizará en las etiquetas y vistas del sistema.</span>
+                        </div>
+                    </div>
                     <div id="cli-mensaje" class="alert oculto"></div>
                 </div>
                 <div class="modal-footer">
@@ -491,6 +498,13 @@
                     <div class="field">
                         <label for="rol-descripcion">Descripción</label>
                         <input type="text" id="rol-descripcion" maxlength="200" placeholder="Descripción breve (opcional)">
+                    </div>
+                    <div class="field field-color">
+                        <label for="rol-color">Color del rol</label>
+                        <div class="color-picker-field">
+                            <input type="color" id="rol-color" value="#6E7B5B" aria-label="Color hexadecimal del rol">
+                            <span>El color se utilizará en las etiquetas y vistas del sistema.</span>
+                        </div>
                     </div>
                     <div id="rol-mensaje" class="alert oculto"></div>
                 </div>

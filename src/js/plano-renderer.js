@@ -497,30 +497,21 @@ const CSS_PDF = `
    TOAST
    ========================================================= */
 function mostrarToast(mensaje, tipo = 'exito', duracion = 2800) {
-    let cont = document.getElementById('toast-container');
-    if (!cont) {
-        cont = document.createElement('div');
-        cont.id = 'toast-container';
-        cont.className = 'toast-container';
-        document.body.appendChild(cont);
-    }
-
-    const iconos = { exito: '✓', error: '✕', info: 'i', warn: '!' };
-
-    const toast = document.createElement('div');
-    toast.className = `toast ${tipo}`;
-    toast.innerHTML = `
-        <span class="toast-icon">${iconos[tipo] || '✓'}</span>
-        <span class="toast-texto">${mensaje}</span>
-    `;
-    cont.appendChild(toast);
-
-    setTimeout(() => {
-        toast.classList.add('saliendo');
-        setTimeout(() => {
-            if (toast.parentNode) toast.parentNode.removeChild(toast);
-        }, 250);
-    }, duracion);
+    const iconos = { exito: 'success', error: 'error', info: 'info', warn: 'warning' };
+    window.Swal.fire({
+        toast: true,
+        position: 'bottom-end',
+        icon: iconos[tipo] || 'success',
+        title: String(mensaje),
+        showConfirmButton: false,
+        timer: duracion,
+        timerProgressBar: true,
+        customClass: { popup: `cl-toast cl-toast-${tipo === 'exito' ? 'success' : tipo === 'error' ? 'error' : 'info'}` },
+        didOpen: toast => {
+            toast.addEventListener('mouseenter', window.Swal.stopTimer);
+            toast.addEventListener('mouseleave', window.Swal.resumeTimer);
+        }
+    });
 }
 
 /* =========================================================
@@ -746,8 +737,18 @@ document.querySelectorAll('.grid-plano').forEach(grid => {
    ========================================================= */
 let accionPendiente = null;
 
-function mostrarConfirmacion(titulo, contenidoHTML, alAceptar) {
+function mostrarConfirmacion(titulo, contenidoHTML, alAceptar, permiso) {
     modalTitulo.textContent = titulo;
+    if (permiso) {
+        modalAceptar.dataset.permiso = permiso;
+        window.PermisosUI?.aplicar(modalAceptar);
+    } else {
+        delete modalAceptar.dataset.permiso;
+        modalAceptar.hidden = false;
+        modalAceptar.disabled = false;
+        modalAceptar.classList.remove('permiso-ui-oculto');
+        modalAceptar.removeAttribute('aria-hidden');
+    }
     if (typeof contenidoHTML === 'string' && contenidoHTML.startsWith('<')) {
         modalTexto.innerHTML = contenidoHTML;
     } else {
@@ -1944,7 +1945,7 @@ function conectarEventosPanel(panel, selectLugar, inputFilas, inputColumnas, btn
             } else {
                 mostrarToast(`Dimensiones cambiadas a ${nuevasFilas} × ${nuevasColumnas}`, 'exito');
             }
-        });
+        }, 'plano:editar-dim');
     });
 }
 
@@ -2185,6 +2186,10 @@ function renderGridPanel(panel) {
                 if (!modoZona && !modoZonaLibre && !modoEdicion) {
                     celda.draggable = true;
                     celda.addEventListener('dragstart', (ev) => {
+                        if (window.PermisosUI && !window.PermisosUI.puede('plano:mover|plano:intercambiar')) {
+                            ev.preventDefault();
+                            return;
+                        }
                         ocultarTooltip();
                         dragOrigen = {
                             tipo: 'celda',
@@ -2209,6 +2214,7 @@ function renderGridPanel(panel) {
 
                 const btnCerrar = celda.querySelector('.cerrar');
                 if (btnCerrar) {
+                    btnCerrar.dataset.permiso = 'plano:quitar';
                     btnCerrar.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         if (!modoZona && !modoZonaLibre && !modoEdicion) confirmarQuitar(contenido, panel);
@@ -2611,6 +2617,10 @@ function renderListaSinUbicarFiltrada() {
         });
         li.appendChild(btnEditar);
         li.addEventListener('dragstart', (ev) => {
+            if (window.PermisosUI && !window.PermisosUI.puede('plano:asignar')) {
+                ev.preventDefault();
+                return;
+            }
             if (ev.target.closest('button')) {
                 ev.preventDefault();
                 return;
@@ -2727,7 +2737,8 @@ function renderListaZonas() {
                     } catch (err) {
                         mostrarToast('Error al eliminar: ' + err.message, 'error', 4000);
                     }
-                }
+                },
+                'plano:zonas:eliminar'
             );
         });
 
@@ -2769,7 +2780,8 @@ function renderListaZonas() {
                         await window.api.plano.eliminarZonaLibre(panelActivo.idPiso, g.nombre, g.color);
                         mostrarToast(`Zona libre "${g.nombre}" eliminada`, 'exito');
                         await recargarPanel(panelActivo);
-                    }
+                    },
+                    'plano:zonas:eliminar'
                 );
             });
 
@@ -2799,6 +2811,14 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
     const panelOrigen = dragOrigen.panelSufijo === 'izq' ? panelIzq : panelDer;
     const mismoPanel = panelOrigen === panelDestino;
     const contenidoDestino = panelDestino.celdas[filaDestino - 1][columnaDestino - 1];
+    const permisoDrop = dragOrigen.tipo === 'lista'
+        ? `plano:asignar${contenidoDestino ? '&plano:quitar' : ''}`
+        : (contenidoDestino ? 'plano:intercambiar' : 'plano:mover');
+    if (window.PermisosUI && !window.PermisosUI.puede(permisoDrop)) {
+        dragOrigen = null;
+        mostrarToast('No tienes permiso para realizar esta acción en el plano.', 'error');
+        return;
+    }
 
     if (dragOrigen.tipo === 'lista') {
         const idEq = dragOrigen.idEquipo;
@@ -2817,7 +2837,10 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                         await window.api.plano.asignar(panelDestino.idPiso, equipo.IdEquipo, filaDestino, columnaDestino);
                         mostrarToast(`"${equipo.Hostname}" asignado en (${filaDestino}, ${columnaDestino})`, 'exito');
                         await recargarPanel(panelDestino);
-                    }
+                    },
+                    contenidoDestino
+                        ? 'plano:quitar&plano:asignar'
+                        : 'plano:asignar'
                 );
             } else {
                 mostrarConfirmacion(
@@ -2827,7 +2850,8 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                         await window.api.plano.asignar(panelDestino.idPiso, equipo.IdEquipo, filaDestino, columnaDestino);
                         mostrarToast(`"${equipo.Hostname}" asignado en (${filaDestino}, ${columnaDestino})`, 'exito');
                         await recargarPanel(panelDestino);
-                    }
+                    },
+                    'plano:asignar'
                 );
             }
         } else {
@@ -2869,7 +2893,8 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                         );
                         mostrarToast(`"${equipoOrigen.Hostname}" movido`, 'exito');
                         await recargarPanel(panelDestino);
-                    }
+                    },
+                    'plano:mover'
                 );
             } else {
                 mostrarConfirmacion(
@@ -2884,7 +2909,8 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
                         );
                         mostrarToast(`"${equipoOrigen.Hostname}" ↔ "${contenidoDestino.Hostname}"`, 'exito');
                         await recargarPanel(panelDestino);
-                    }
+                    },
+                    'plano:intercambiar'
                 );
             }
             return;
@@ -2951,7 +2977,10 @@ async function abrirModalMoverEntrePisos(datos) {
     formEditarMover.style.display = 'none';
     moverMensaje.style.display = 'none';
 
-    document.querySelector('.check-mantener').style.display = conSwap ? 'none' : 'block';
+    const puedeEditarEquipo = window.PermisosUI?.puede('equipos:editar') ?? true;
+    document.querySelector('.check-mantener').style.display =
+        conSwap || !puedeEditarEquipo ? 'none' : 'block';
+    actualizarPermisoMover();
 
     llenarSelectClientesMover();
     llenarSelectRolesMover();
@@ -2970,7 +2999,22 @@ async function abrirModalMoverEntrePisos(datos) {
 
 chkMantener.addEventListener('change', () => {
     formEditarMover.style.display = chkMantener.checked ? 'none' : 'block';
+    actualizarPermisoMover();
 });
+
+function actualizarPermisoMover() {
+    if (!moverPendiente) return;
+    const { conSwap, desdeLista, equipoDestino } = moverPendiente;
+    let permiso = conSwap
+        ? 'plano:intercambiar'
+        : desdeLista
+            ? 'plano:asignar'
+            : 'plano:mover';
+    if (!conSwap && desdeLista && equipoDestino) permiso += '&plano:quitar';
+    if (!conSwap && !chkMantener.checked) permiso += '&equipos:editar';
+    moverConfirmar.dataset.permiso = permiso;
+    window.PermisosUI?.aplicar(moverConfirmar);
+}
 
 moverCancelar.addEventListener('click', () => {
     modalMover.style.display = 'none';
@@ -3150,7 +3194,8 @@ function confirmarQuitar(equipo, panel) {
             await window.api.plano.quitar(equipo.IdEquipo, panel.idPiso, equipo.Hostname);
             mostrarToast(`"${equipo.Hostname}" quitado del plano`, 'exito');
             await recargarPanel(panel);
-        }
+        },
+        'plano:quitar'
     );
 }
 
@@ -3306,14 +3351,28 @@ function construirBloquesPlano(panel, layout) {
     }
     const totalEquipos = equiposList.length;
 
+    const colorClientePorCodigo = codigo => {
+        const codigoNormalizado = String(codigo || '').toUpperCase().trim();
+        const colorGuardado = window.PermisosUI?.colorCliente?.(codigoNormalizado) ||
+            clientes.find(cliente => String(cliente.Codigo || '').toUpperCase() === codigoNormalizado)?.ColorHex;
+        if (/^#[0-9A-F]{6}$/i.test(colorGuardado || '')) return colorGuardado;
+        return COLORES_CLIENTE_POR_CODIGO[codigoNormalizado] || '#2e3228';
+    };
     const colorPorCliente = new Map();
     equiposList.forEach(e => {
         const id = e.IdCliente;
         if (id == null || colorPorCliente.has(id)) return;
-        const codigo = String(e.ClienteCodigo || '').toUpperCase().trim();
-        const color = COLORES_CLIENTE_POR_CODIGO[codigo] || '#2e3228';
-        colorPorCliente.set(id, color);
+        colorPorCliente.set(id, colorClientePorCodigo(e.ClienteCodigo));
     });
+    const colorRolPorCodigo = codigo => {
+        const color = window.PermisosUI?.colorRol?.(codigo) ||
+            roles.find(rol => String(rol.Codigo || '').toUpperCase() === String(codigo || '').toUpperCase())?.ColorHex;
+        return /^#[0-9A-F]{6}$/i.test(color || '') ? color : null;
+    };
+    const colorSuave = color => {
+        const canales = color.slice(1).match(/.{2}/g).map(canal => parseInt(canal, 16));
+        return `#${canales.map(canal => Math.round(canal + (255 - canal) * .78).toString(16).padStart(2, '0')).join('')}`;
+    };
 
     function normalizarColor(c, fallback = '#e2e8f0') {
         if (!c || typeof c !== 'string') return fallback;
@@ -3346,8 +3405,12 @@ function construirBloquesPlano(panel, layout) {
                 const esDhcpSinIp = ['DHC', 'DHCP'].includes(String(contenido.TipoIP || '').trim().toUpperCase())
                     && !String(contenido.IP || '').trim();
                 const ipMostrar = esDhcpSinIp ? 'DHCP' : (contenido.IP || '-');
+                const colorRol = colorRolPorCodigo(contenido.RolCodigo);
+                const estiloRol = colorRol
+                    ? ` style="background-color:${colorSuave(colorRol)};border-color:${colorRol};"`
+                    : '';
                 celdasHTML += `
-                    <div class="celda ocupada" data-rol="${contenido.RolCodigo || ''}">
+                    <div class="celda ocupada" data-rol="${contenido.RolCodigo || ''}"${estiloRol}>
                         <div class="celda-contenido">
                             <div class="celda-hostname">${contenido.Hostname || ''}</div>
                             <div class="celda-ip">${ipMostrar}</div>
@@ -3369,7 +3432,8 @@ function construirBloquesPlano(panel, layout) {
     const CHIP_FONT = 0.6;
 
     equiposList.forEach(e => {
-        const colorCli = colorPorCliente.get(e.IdCliente) || '#3b82f6';
+        const colorCli = colorPorCliente.get(e.IdCliente) || colorClientePorCodigo(e.ClienteCodigo);
+        const colorTextoCliente = colorTextoContraste(colorCli);
         const x = (e.col - 1) * (CELL_W + GAP);
         const y = (e.fila - 1) * (CELL_H + GAP);
 
@@ -3378,7 +3442,7 @@ function construirBloquesPlano(panel, layout) {
 
         const codigoCli = String(e.ClienteCodigo || '?').toUpperCase().trim();
         etiquetasEquipoHTML += `
-            <div data-color="${codigoCli}" style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;height:${CHIP_ALTO}px;max-width:${CELL_W + BORDE_OFFSET * 2}px;padding:0 6px;background:${colorCli};color:#fff;font-size:${CHIP_FONT}rem;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;border-radius:3px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:visible;pointer-events:none;box-sizing:border-box;z-index:5;text-shadow:0 1px 1px rgba(0,0,0,0.25);">${codigoCli}</div>`;
+            <div data-color="${codigoCli}" data-color-kind="client" style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;height:${CHIP_ALTO}px;max-width:${CELL_W + BORDE_OFFSET * 2}px;padding:0 6px;background-color:${colorCli} !important;color:${colorTextoCliente} !important;border-color:${colorCli} !important;font-size:${CHIP_FONT}rem;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;border-radius:3px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:visible;pointer-events:none;box-sizing:border-box;z-index:5;">${codigoCli}</div>`;
     });
 
     let textosLibresHTML = '';
@@ -3467,11 +3531,12 @@ function construirBloquesPlano(panel, layout) {
             ? '<span class="badge-dhcp">DHCP</span>'
             : (valor || '-');
         const codigoCliente = String(e.ClienteCodigo || '').toUpperCase().trim();
+        const colorCliente = colorClientePorCodigo(codigoCliente);
         return `
             <tr>
                 <td class="bold-host">${e.Hostname || '-'}</td>
-                <td class="center"><span class="badge-cli" data-color="${codigoCliente}">${e.ClienteCodigo || '-'}</span></td>
-                <td class="center"><span class="badge-rol" data-rol="${e.RolCodigo || ''}">${e.RolCodigo || '-'}</span></td>
+                <td class="center"><span class="badge-cli" data-color="${codigoCliente}" style="background-color:${colorCliente} !important;color:${colorTextoContraste(colorCliente)} !important;border-color:${colorCliente} !important;">${e.ClienteCodigo || '-'}</span></td>
+                <td class="center"><span class="badge-rol" data-rol="${e.RolCodigo || ''}"${colorRolPorCodigo(e.RolCodigo) ? ` style="background-color:${colorRolPorCodigo(e.RolCodigo)};color:${colorTextoContraste(colorRolPorCodigo(e.RolCodigo))};"` : ''}>${e.RolCodigo || '-'}</span></td>
                 <td class="mono">${celdaRed(e.IP)}</td>
                 <td class="mono">${celdaRed(e.Mascara)}</td>
                 <td class="mono">${celdaRed(e.PuertaEnlace)}</td>
@@ -3492,7 +3557,7 @@ function construirBloquesPlano(panel, layout) {
     const rolesHTML = Object.entries(porRol).sort((a, b) => b[1] - a[1])
         .map(([rol, cant]) => `
             <div class="identificador-item">
-                <span class="badge-rol" data-rol="${rol}">${rol}</span>
+                <span class="badge-rol" data-rol="${rol}"${colorRolPorCodigo(rol) ? ` style="background-color:${colorRolPorCodigo(rol)};color:${colorTextoContraste(colorRolPorCodigo(rol))};"` : ''}>${rol}</span>
                 <span class="cant">${cant}</span>
             </div>`).join('');
 
@@ -3502,11 +3567,14 @@ function construirBloquesPlano(panel, layout) {
         porCliente[c] = (porCliente[c] || 0) + 1;
     });
     const clientesHTML = Object.entries(porCliente).sort((a, b) => b[1] - a[1])
-        .map(([cli, cant]) => `
+        .map(([cli, cant]) => {
+            const colorCliente = colorClientePorCodigo(cli);
+            return `
             <div class="identificador-item">
-                <span class="badge-cli" data-color="${String(cli).toUpperCase().trim()}">${cli}</span>
+                <span class="badge-cli" data-color="${String(cli).toUpperCase().trim()}" style="background-color:${colorCliente} !important;color:${colorTextoContraste(colorCliente)} !important;border-color:${colorCliente} !important;">${cli}</span>
                 <span class="cant">${cant}</span>
-            </div>`).join('');
+            </div>`;
+        }).join('');
 
     const zonasLibresGrupos = Object.values(gruposLibres);
     const zonasLibresHTML = zonasLibresGrupos.length > 0

@@ -120,22 +120,29 @@
 .app-sidebar-user { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .app-sidebar-user strong { overflow: hidden; color: #fff; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
 .app-sidebar-user small { color: #b6b9ad; font-size: .68rem; }
-.app-sidebar-logout { min-height: 36px; font: 600 .78rem Inter, sans-serif; }
+.app-sidebar-logout { min-height: 36px; gap: 8px; padding: 0 10px; font: 600 .78rem Inter, sans-serif; }
+.app-sidebar-logout svg { width: 16px; height: 16px; flex: 0 0 16px; }
 .app-sidebar-logout:hover { background: rgba(255,255,255,.12); }
 
 body.app-shell {
     padding-left: 278px !important;
 }
 body.app-shell.app-sidebar-collapsed { padding-left: 92px !important; }
-body.app-shell.app-sidebar-collapsed .app-sidebar { width: 72px; }
-body.app-shell.app-sidebar-collapsed .app-sidebar-brand { justify-content: center; padding-inline: 0; }
+body.app-shell.app-sidebar-collapsed .app-sidebar { width: 72px; padding-inline: 6px; }
+body.app-shell.app-sidebar-collapsed .app-sidebar-brand {
+    justify-content: space-between;
+    gap: 0;
+    padding: 0 0 12px;
+}
+body.app-shell.app-sidebar-collapsed .app-sidebar-logo { flex-basis: 30px; width: 30px; height: 30px; }
 body.app-shell.app-sidebar-collapsed .app-sidebar-brand-text,
 body.app-shell.app-sidebar-collapsed .app-sidebar-section-title,
 body.app-shell.app-sidebar-collapsed .app-sidebar-link > span:not(.app-sidebar-icon),
 body.app-shell.app-sidebar-collapsed .app-sidebar-user,
-body.app-shell.app-sidebar-collapsed .app-sidebar-logout { display: none; }
-body.app-shell.app-sidebar-collapsed .app-sidebar-toggle { position: absolute; top: 62px; right: 20px; }
+body.app-shell.app-sidebar-collapsed .app-sidebar-logout > span { display: none; }
+body.app-shell.app-sidebar-collapsed .app-sidebar-toggle { flex-basis: 28px; width: 28px; height: 28px; }
 body.app-shell.app-sidebar-collapsed .app-sidebar-link { justify-content: center; padding-inline: 0; }
+body.app-shell.app-sidebar-collapsed .app-sidebar-logout { justify-content: center; width: 100%; padding: 0; }
 body.app-shell #btn-volver { display: none !important; }
 body.app-shell .app-header,
 body.app-shell .greeting,
@@ -156,25 +163,65 @@ body.app-shell .menu-main { display: none !important; }
     font: 500 .85rem Inter, sans-serif;
 }
 
+.global-toast-container,
+.swal2-container:has(.swal2-popup.swal2-toast) {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+.swal2-popup.swal2-toast.cl-toast {
+    width: auto !important;
+    min-width: 260px !important;
+    padding: 14px 18px !important;
+    border: 1px solid #e6e0cf !important;
+    border-radius: 14px !important;
+    color: #2e3228 !important;
+    background: #fff !important;
+    box-shadow: 0 8px 24px -6px rgba(46,50,40,.25) !important;
+    font-family: Inter, system-ui, sans-serif !important;
+}
+.swal2-popup.swal2-toast.cl-toast .swal2-title {
+    padding: 0 !important;
+    color: #2e3228 !important;
+    font: 600 .92rem/1.35 Inter, system-ui, sans-serif !important;
+    text-align: left !important;
+    letter-spacing: -.01em !important;
+}
+.swal2-popup.swal2-toast.cl-toast .swal2-icon {
+    width: 32px !important;
+    height: 32px !important;
+    margin: 0 12px 0 0 !important;
+    border-width: 2px !important;
+}
+.swal2-popup.swal2-toast.cl-toast .swal2-close { display: none !important; }
+.swal2-popup.swal2-toast.cl-toast .swal2-timer-progress-bar { background: #a99a63 !important; }
+.swal2-popup.swal2-toast.cl-toast-error { border-left: 4px solid #b5442e !important; }
+.swal2-popup.swal2-toast.cl-toast-success { border-left: 4px solid #6e7b5b !important; }
+
 @media (max-width: 760px) {
     body.app-shell { padding-left: 92px !important; }
-    body.app-shell .app-sidebar { width: 72px; }
-    body.app-shell .app-sidebar-brand { justify-content: center; padding-inline: 0; }
+    body.app-shell .app-sidebar { width: 72px; padding-inline: 6px; }
+    body.app-shell .app-sidebar-brand { justify-content: space-between; gap: 0; padding: 0 0 12px; }
+    body.app-shell .app-sidebar-logo { flex-basis: 30px; width: 30px; height: 30px; }
+    body.app-shell .app-sidebar-toggle { flex-basis: 28px; width: 28px; height: 28px; }
     body.app-shell .app-sidebar-brand-text,
     body.app-shell .app-sidebar-section-title,
     body.app-shell .app-sidebar-link > span:not(.app-sidebar-icon),
     body.app-shell .app-sidebar-user,
-    body.app-shell .app-sidebar-logout { display: none; }
-    body.app-shell .app-sidebar-toggle { position: absolute; top: 62px; right: 20px; }
+    body.app-shell .app-sidebar-logout > span { display: none; }
+    body.app-shell .app-sidebar-logout { display: inline-flex; }
+    body.app-shell .app-sidebar-toggle { position: static; }
     body.app-shell .app-sidebar-link { justify-content: center; padding-inline: 0; }
     body.app-shell:not(.app-sidebar-collapsed) { padding-left: 278px !important; }
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar { width: 258px; }
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-brand { justify-content: flex-start; padding-inline: 6px; }
+    body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-logo { flex-basis: 36px; width: 36px; height: 36px; }
+    body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-toggle { flex-basis: 30px; width: 30px; height: 30px; }
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-brand-text,
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-section-title,
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-link > span:not(.app-sidebar-icon),
-    body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-user,
-    body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-logout { display: initial; }
+    body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-user { display: initial; }
+    body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-logout > span { display: inline; }
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-section-title { display: block; }
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-user,
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-brand-text { display: flex; }

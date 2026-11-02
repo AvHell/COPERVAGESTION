@@ -93,7 +93,9 @@ function crearCelda(fila, columna, equipo) {
         hostname.className = 'hostname';
         hostname.textContent = equipo.Hostname || 'Sin hostname';
         const cliente = document.createElement('span');
-        cliente.className = 'cliente';
+        cliente.className = 'cliente badge-mantenimiento badge-cliente';
+        cliente.dataset.color = String(equipo.ClienteCodigo || '').toUpperCase();
+        cliente.dataset.colorKind = 'client';
         cliente.textContent = equipo.Cliente || 'Cliente no disponible';
         const rol = document.createElement('span');
         rol.className = 'rol';

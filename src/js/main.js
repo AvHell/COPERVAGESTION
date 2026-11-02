@@ -961,14 +961,24 @@ ipcMain.handle('clientes:listar', async () => {
     }
     return await clientesDB.listar();
 });
-ipcMain.handle('clientes:crear',      async (_e, codigo, nombre)  => { const err = requerirSesion('catalogos:clientes:crear');  if (err) return err; return await clientesDB.crear(codigo, nombre); });
-ipcMain.handle('clientes:actualizar', async (_e, id, codigo, nombre) => { const err = requerirSesion('catalogos:clientes:editar'); if (err) return err; return await clientesDB.actualizar(id, codigo, nombre); });
+ipcMain.handle('clientes:crear',      async (_e, codigo, nombre, color)  => { const err = requerirSesion('catalogos:clientes:crear');  if (err) return err; return await clientesDB.crear(codigo, nombre, color); });
+ipcMain.handle('clientes:actualizar', async (_e, id, codigo, nombre, color) => { const err = requerirSesion('catalogos:clientes:editar'); if (err) return err; return await clientesDB.actualizar(id, codigo, nombre, color); });
 ipcMain.handle('clientes:eliminar',   async (_e, id)              => { const err = requerirSesion('catalogos:clientes:eliminar'); if (err) return err; return await clientesDB.eliminar(id); });
 
 ipcMain.handle('roles:listar',     async ()                                       => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.listar(); });
-ipcMain.handle('roles:crear',      async (_e, codigo, nombre, descripcion)        => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.crear(codigo, nombre, descripcion); });
-ipcMain.handle('roles:actualizar', async (_e, id, codigo, nombre, descripcion)    => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.actualizar(id, codigo, nombre, descripcion); });
+ipcMain.handle('roles:crear',      async (_e, codigo, nombre, descripcion, color)        => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.crear(codigo, nombre, descripcion, color); });
+ipcMain.handle('roles:actualizar', async (_e, id, codigo, nombre, descripcion, color)    => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.actualizar(id, codigo, nombre, descripcion, color); });
 ipcMain.handle('roles:eliminar',   async (_e, id)                                 => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.eliminar(id); });
+
+ipcMain.handle('catalogos:colores', async () => {
+    const err = requerirSesion();
+    if (err) return err;
+    const [clientes, roles] = await Promise.all([clientesDB.listar(), rolesDB.listar()]);
+    return {
+        clientes: clientes.map(({ Codigo, ColorHex }) => ({ codigo: Codigo, colorHex: ColorHex })),
+        roles: roles.map(({ Codigo, ColorHex }) => ({ codigo: Codigo, colorHex: ColorHex }))
+    };
+});
 
 /* =========================================================
    IPC: PISOS

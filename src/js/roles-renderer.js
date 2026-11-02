@@ -117,6 +117,7 @@ const formulario       = document.getElementById('formulario');
 const inputCodigo      = document.getElementById('codigo');
 const inputNombre      = document.getElementById('nombre');
 const inputDesc        = document.getElementById('descripcion');
+const inputColor       = document.getElementById('color-rol');
 const mensaje          = document.getElementById('mensaje');
 const btnGuardar       = document.getElementById('btn-guardar');
 const sinResultados    = document.getElementById('sin-resultados');
@@ -237,7 +238,7 @@ function renderTabla() {
 
         tr.innerHTML = `
             <td>
-                <span class="badge-codigo ${claseCodigo}">
+                <span class="badge-codigo ${claseCodigo}" data-color="${escaparHTML(r.Codigo)}">
                     ${escaparHTML(r.Codigo)}
                 </span>
             </td>
@@ -315,6 +316,7 @@ document.getElementById('btn-nuevo').addEventListener('click', () => {
     inputCodigo.value = '';
     inputNombre.value = '';
     inputDesc.value   = '';
+    inputColor.value = '#6E7B5B';
     inputCodigo.disabled = false;
     ocultarMensaje();
     abrirModal();
@@ -337,6 +339,7 @@ function abrirEdicion(id) {
     inputCodigo.value = r.Codigo ?? '';
     inputNombre.value = r.Nombre ?? '';
     inputDesc.value   = r.Descripcion ?? '';
+    inputColor.value = r.ColorHex || '#6E7B5B';
     inputCodigo.disabled = false;
 
     ocultarMensaje();
@@ -374,14 +377,15 @@ formulario.addEventListener('submit', async (e) => {
     try {
         let res;
         if (modoEdicion && idEditando !== null && idEditando !== undefined) {
-            res = await window.api.roles.actualizar(idEditando, codigo, nombre, desc);
+            res = await window.api.roles.actualizar(idEditando, codigo, nombre, desc, inputColor.value);
         } else {
-            res = await window.api.roles.crear(codigo, nombre, desc);
+            res = await window.api.roles.crear(codigo, nombre, desc, inputColor.value);
         }
 
         if (res && res.ok) {
             cerrarModal();
             await cargarRoles();
+            await window.PermisosUI?.refrescarColores();
             toastExito(res.mensaje || 'Operación exitosa');
         } else {
             mostrarMensaje(res?.mensaje || 'No se pudo guardar el rol.', 'error');
@@ -423,6 +427,7 @@ async function eliminarRol(id) {
         const res = await window.api.roles.eliminar(id);
         if (res && res.ok) {
             await cargarRoles();
+            await window.PermisosUI?.refrescarColores();
             toastExito(res.mensaje || 'Rol eliminado');
         } else {
             toastError('No se pudo eliminar', res?.mensaje || 'Error desconocido');

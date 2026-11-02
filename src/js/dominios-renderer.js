@@ -191,7 +191,7 @@ function renderTabla() {
 
         tr.innerHTML = `
             <td>
-                <span class="badge-cliente ${claseCodigo}">
+                <span class="badge-cliente ${claseCodigo}" data-color="${escaparHTML(d.ClienteCodigo)}">
                     ${escaparHTML(d.ClienteCodigo)}
                 </span>
             </td>

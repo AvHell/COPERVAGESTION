@@ -180,7 +180,7 @@ async function crear(datos) {
             .input('IdEquipo', sql.Int, idEquipo)
             .input('IdPiso', sql.Int, idPiso)
             .input('IdUsuario', sql.Int, idUsuarios[0])
-            .input('FechaMantenimiento', sql.Date, fecha)
+            .input('FechaMantenimiento', sql.VarChar(10), fecha)
             .input('Observaciones', sql.NVarChar(1000), observaciones)
             .input('SeRealizoClonacion', sql.Bit, seRealizoClonacion)
             .input('Hostname', sql.NVarChar(50), equipo.Hostname)
@@ -202,7 +202,7 @@ async function crear(datos) {
                 )
                 OUTPUT INSERTED.IdMantenimiento
                 VALUES (
-                    @IdEquipo, @IdPiso, @IdUsuario, @FechaMantenimiento, @Observaciones,
+                    @IdEquipo, @IdPiso, @IdUsuario, CONVERT(date, @FechaMantenimiento, 23), @Observaciones,
                     @SeRealizoClonacion,
                     @Hostname, @IP, @ClienteCodigo, @ClienteNombre, @RolCodigo, @RolNombre,
                     @PisoNombre, @Fila, @Columna, @RealizadoPor

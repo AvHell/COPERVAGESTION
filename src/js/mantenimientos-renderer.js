@@ -35,7 +35,7 @@ function mostrarMensaje(texto, error = false, detalle = '') {
 function fechaLocal(fecha) {
     if (!fecha) return '';
     if (fecha instanceof Date) {
-        return `${String(fecha.getUTCDate()).padStart(2, '0')}/${String(fecha.getUTCMonth() + 1).padStart(2, '0')}/${fecha.getUTCFullYear()}`;
+        return `${String(fecha.getDate()).padStart(2, '0')}/${String(fecha.getMonth() + 1).padStart(2, '0')}/${fecha.getFullYear()}`;
     }
     const isoDate = String(fecha).match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (isoDate) return `${isoDate[3]}/${isoDate[2]}/${isoDate[1]}`;

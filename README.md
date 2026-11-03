@@ -12,15 +12,15 @@ Aplicación de escritorio Electron para administrar equipos, pisos, activo fijo 
 
 Las credenciales de base de datos no se guardan en el código ni en un archivo `.env`. En el primer inicio, la aplicación solicita servidor, instancia (opcional), base de datos, usuario y contraseña; prueba la conexión y guarda el bloque cifrado mediante `safeStorage` de Electron, respaldado por el almacenamiento seguro del sistema operativo (DPAPI en Windows).
 
-El archivo cifrado se guarda en el directorio de datos de usuario de Electron (`app.getPath('userData')`), fuera de la carpeta de instalación y del repositorio. Por ello, instalar una actualización no elimina la conexión guardada. La configuración queda ligada al perfil de Windows que la creó: ejecuta la aplicación con ese mismo usuario. No copies el archivo cifrado a otra computadora o perfil.
+El archivo cifrado se guarda en el directorio de datos de usuario de Electron (`app.getPath('userData')`), fuera de la carpeta de instalación y del repositorio. Al instalar una versión nueva, la aplicación elimina únicamente esa configuración de conexión para evitar reutilizar datos locales antiguos; el asistente solicitará probar y guardar de nuevo el acceso SQL. La configuración queda ligada al perfil de Windows que la creó: ejecuta la aplicación con ese mismo usuario. No copies el archivo cifrado a otra computadora o perfil.
 
 Para desarrollo o despliegues administrados se admite una configuración inicial por variables de entorno: `DB_SERVER`, `DB_DATABASE`, `DB_USER` y `DB_PASSWORD`; `DB_INSTANCE` es opcional. Si están completas y todavía no hay una configuración cifrada, se guardan cifradas al iniciar. La configuración visual de primer inicio es la opción recomendada. No guardes estas variables en el repositorio, scripts compartidos, logs ni archivos `.env` distribuidos.
 
 Para cambiar las credenciales guardadas, elimina **solo** `db-credentials.dat` del directorio de datos de usuario de la aplicación y vuelve a iniciarla para abrir el asistente de configuración. No es necesario reinstalar ni borrar otros datos de usuario.
 
-### Actualizaciones desde versiones anteriores
+### Actualizaciones
 
-La versión 3.0.0 ya no contiene la credencial que usaban versiones antiguas. En la primera ejecución después de actualizar, configura y valida de nuevo la conexión una sola vez. Las actualizaciones posteriores conservan la configuración cifrada mientras se use el mismo perfil de Windows y no se desinstalen/borran los datos de usuario.
+Las actualizaciones se anuncian mediante un cuadro de diálogo nativo y son obligatorias. Mientras se descarga e instala una nueva versión, las ventanas de la aplicación permanecen bloqueadas. Al iniciar una versión distinta, se elimina `db-credentials.dat` y se vuelve a solicitar la configuración de SQL; el resto de datos locales de la aplicación no se borra. La versión instalada se registra en `app-version.txt` para que la limpieza se ejecute una sola vez por versión.
 
 ### Límite de seguridad importante
 

@@ -70,6 +70,8 @@ if (process.platform === 'win32') {
 let usuarioActual        = null;
 let cerrandoPorLogout    = false;
 let motivoLoginPendiente = null;
+let actualizacionObligatoria = false;
+let mostrandoErrorActualizacion = false;
 
 /* =========================================================
    ARRANQUE
@@ -90,38 +92,85 @@ try {
     autoUpdater.logger = console;
 }
 
-async function preguntarDescargar(info) {
-    const { response } = await dialog.showMessageBox({
-        type: 'info',
-        title: 'Actualización disponible',
-        message: `Hay una nueva versión disponible (${info.version}).`,
-        detail: '¿Deseas descargarla ahora? La aplicación seguirá funcionando normalmente mientras se descarga.',
-        buttons: ['Sí, descargar', 'Más tarde'],
-        defaultId: 0,
-        cancelId: 1
-    });
-    return response === 0;
+function bloquearVentanas(bloquear) {
+    if (bloquear) Menu.setApplicationMenu(null);
+    for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed() && typeof win.setEnabled === 'function') {
+            win.setEnabled(!bloquear);
+        }
+    }
 }
 
-async function preguntarInstalar(info) {
-    const { response } = await dialog.showMessageBox({
-        type: 'info',
-        title: 'Actualización lista',
-        message: `La versión ${info.version} se ha descargado correctamente.`,
-        detail: 'La aplicación se reiniciará para aplicar la actualización. ¿Deseas reiniciar ahora?',
-        buttons: ['Reiniciar ahora', 'Más tarde'],
-        defaultId: 0,
-        cancelId: 1
-    });
-    return response === 0;
+function mostrarDialogoActualizacion(opciones) {
+    const ventana = BrowserWindow.getAllWindows().find(win => !win.isDestroyed());
+    return ventana
+        ? dialog.showMessageBox(ventana, opciones)
+        : dialog.showMessageBox(opciones);
+}
+
+async function descargarActualizacion() {
+    try {
+        await autoUpdater.downloadUpdate();
+    } catch (error) {
+        console.error('[Updater] No se pudo descargar la actualización:', error);
+    }
+}
+
+async function manejarErrorActualizacion(err) {
+    console.error('[Updater] Error:', err);
+    if (!actualizacionObligatoria) {
+        dialog.showErrorBox(
+            'Error de actualización',
+            'No se pudo comprobar o descargar la actualización.\n\n' + (err?.message || err)
+        );
+        return;
+    }
+    if (mostrandoErrorActualizacion) return;
+
+    mostrandoErrorActualizacion = true;
+    try {
+        const { response } = await mostrarDialogoActualizacion({
+            type: 'error',
+            title: 'No se pudo actualizar',
+            message: 'La actualización obligatoria no pudo descargarse.',
+            detail: `${err?.message || err}\n\nReintenta la descarga o cierra la aplicación. No podrás continuar hasta actualizar.`,
+            buttons: ['Reintentar descarga', 'Salir'],
+            defaultId: 0,
+            cancelId: 1,
+            noLink: true
+        });
+        if (response === 0) {
+            void descargarActualizacion();
+        } else {
+            app.quit();
+        }
+    } finally {
+        mostrandoErrorActualizacion = false;
+    }
 }
 
 autoUpdater.on('checking-for-update', () => console.log('[Updater] Buscando actualizaciones...'));
 
 autoUpdater.on('update-available', async (info) => {
+    if (actualizacionObligatoria) return;
     console.log('[Updater] Actualización disponible:', info.version);
-    const quiere = await preguntarDescargar(info);
-    if (quiere) autoUpdater.downloadUpdate();
+    actualizacionObligatoria = true;
+    bloquearVentanas(true);
+    const { response } = await mostrarDialogoActualizacion({
+        type: 'warning',
+        title: 'Actualización obligatoria',
+        message: `La versión ${info.version} es obligatoria.`,
+        detail: 'Debes instalarla para continuar usando el sistema. La aplicación se bloqueará durante la descarga.',
+        buttons: ['Descargar e instalar', 'Salir'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+    });
+    if (response === 0) {
+        void descargarActualizacion();
+    } else {
+        app.quit();
+    }
 });
 
 autoUpdater.on('update-not-available', (info) => {
@@ -135,17 +184,22 @@ autoUpdater.on('download-progress', (progress) => {
 
 autoUpdater.on('update-downloaded', async (info) => {
     console.log('[Updater] Actualización descargada:', info.version);
-    const reiniciar = await preguntarInstalar(info);
-    if (reiniciar) setImmediate(() => autoUpdater.quitAndInstall());
+    if (!actualizacionObligatoria) return;
+    const { response } = await mostrarDialogoActualizacion({
+        type: 'info',
+        title: 'Actualización lista',
+        message: `La versión ${info.version} se descargó correctamente.`,
+        detail: 'Reinicia la aplicación para aplicar la actualización.',
+        buttons: ['Reiniciar ahora', 'Salir'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+    });
+    if (response === 0) setImmediate(() => autoUpdater.quitAndInstall());
+    else app.quit();
 });
 
-autoUpdater.on('error', (err) => {
-    console.error('[Updater] Error:', err);
-    dialog.showErrorBox(
-        'Error de actualización',
-        'No se pudo comprobar o descargar la actualización.\n\n' + (err?.message || err)
-    );
-});
+autoUpdater.on('error', manejarErrorActualizacion);
 
 function verificarActualizaciones(manual = false) {
     if (!app.isPackaged) {
@@ -369,6 +423,9 @@ function crearVentana(nombre, archivo, opciones = {}) {
     });
 
     win.setMenuBarVisibility(true);
+    if (actualizacionObligatoria && typeof win.setEnabled === 'function') {
+        win.setEnabled(false);
+    }
     win.loadFile(path.join(basePath, archivo));
 
     if (opciones.maximizar !== false) {
@@ -489,7 +546,7 @@ ipcMain.handle('db-config:guardar', async (event, datos) => {
         }
         return {
             ok: false,
-            mensaje: 'No se pudo conectar o guardar. Verifica los datos y que el servidor permita la conexión desde esta computadora.'
+            mensaje: `No se pudo conectar o guardar (${error.code || error.name}): ${error.message}`
         };
     } finally {
         if (pool) {
@@ -1510,7 +1567,36 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
 /* =========================================================
    CICLO DE VIDA
    ========================================================= */
+function limpiarConexionAlCambiarVersion() {
+    const rutaVersion = path.join(app.getPath('userData'), 'app-version.txt');
+    let versionAnterior = null;
+    if (fs.existsSync(rutaVersion)) {
+        versionAnterior = fs.readFileSync(rutaVersion, 'utf8').trim();
+    }
+
+    const versionActual = app.getVersion();
+    if (versionAnterior !== versionActual) {
+        credencialesDB.eliminar();
+        fs.writeFileSync(rutaVersion, versionActual, 'utf8');
+        console.log(`[Migración] Configuración local de conexión limpiada (${versionAnterior || 'sin versión previa'} → ${versionActual}).`);
+    }
+}
+
 app.whenReady().then(() => {
+    if (app.isPackaged) {
+        try {
+            limpiarConexionAlCambiarVersion();
+        } catch (error) {
+            console.error('[Migración] No se pudo limpiar la configuración de conexión:', error);
+            dialog.showErrorBox(
+                'No se pudo preparar la actualización',
+                'No se pudo limpiar la configuración de conexión anterior. La aplicación se cerrará para evitar usar datos obsoletos.\n\n' + error.message
+            );
+            app.quit();
+            return;
+        }
+    }
+
     construirMenuApp();
     try {
         let configuracion = credencialesDB.cargar();

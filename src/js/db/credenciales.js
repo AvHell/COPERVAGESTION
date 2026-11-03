@@ -53,6 +53,13 @@ function guardar(datos) {
     }
 }
 
+function eliminar() {
+    const ruta = obtenerRuta();
+    if (fs.existsSync(ruta)) fs.unlinkSync(ruta);
+    const temporal = `${ruta}.tmp`;
+    if (fs.existsSync(temporal)) fs.unlinkSync(temporal);
+}
+
 function cargar() {
     const ruta = obtenerRuta();
     if (!fs.existsSync(ruta)) return null;
@@ -84,4 +91,4 @@ function desdeEntorno(env = process.env) {
     });
 }
 
-module.exports = { guardar, cargar, desdeEntorno, validar };
+module.exports = { guardar, cargar, eliminar, desdeEntorno, validar };

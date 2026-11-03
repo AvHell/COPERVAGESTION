@@ -198,6 +198,7 @@ function renderTabla() {
         const btnEditar = document.createElement('button');
         btnEditar.type = 'button';
         btnEditar.className = 'secundario';
+        btnEditar.dataset.permiso = 'catalogos:pisos:editar';
         btnEditar.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -209,6 +210,7 @@ function renderTabla() {
         const btnEliminar = document.createElement('button');
         btnEliminar.type = 'button';
         btnEliminar.className = 'peligro';
+        btnEliminar.dataset.permiso = 'catalogos:pisos:eliminar';
         btnEliminar.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>

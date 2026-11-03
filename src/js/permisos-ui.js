@@ -36,28 +36,33 @@
 
   const REGLAS_PAGINA = {
     'catalogos.html': {
+      '.tab-btn[data-tab="clientes"]': 'catalogos',
+      '.tab-btn[data-tab="pisos"]': 'catalogos',
+      '.tab-btn[data-tab="roles"]': 'catalogos',
+      '.tab-btn[data-tab="dominios"]': 'catalogos:dominios:gestionar',
+      '.tab-btn[data-tab="config"]': 'catalogos:config:gestionar',
+      '.tab-panel[data-tab-panel="dominios"]': 'catalogos:dominios:gestionar',
+      '.tab-panel[data-tab-panel="config"]': 'catalogos:config:gestionar',
       '#cli-btn-nuevo': 'catalogos:clientes:crear',
       '#cli-guardar': 'catalogos:clientes:crear|catalogos:clientes:editar',
       '#pis-btn-nuevo': 'catalogos:pisos:crear',
       '#pis-guardar': 'catalogos:pisos:crear|catalogos:pisos:editar',
-      '#rol-btn-nuevo': 'catalogos',
-      '#rol-guardar': 'catalogos',
+      '#rol-btn-nuevo': 'catalogos:roles:crear',
+      '#rol-guardar': 'catalogos:roles:crear|catalogos:roles:editar',
       '#dom-btn-nuevo': 'catalogos:dominios:gestionar',
       '#cfg-btn-nuevo': 'catalogos:config:gestionar',
       '#cli-tabla button.secundario': 'catalogos:clientes:editar',
       '#cli-tabla button.peligro': 'catalogos:clientes:eliminar',
       '#pis-contenedor-grupos button.secundario': 'catalogos:pisos:editar',
       '#pis-contenedor-grupos button.peligro': 'catalogos:pisos:eliminar',
-      '#rol-tabla button.secundario': 'catalogos',
-      '#rol-tabla button.peligro': 'catalogos',
+      '#rol-tabla button.secundario': 'catalogos:roles:editar',
+      '#rol-tabla button.peligro': 'catalogos:roles:eliminar',
       '#dom-tabla button.secundario': 'catalogos:dominios:gestionar',
       '#dom-tabla button.peligro': 'catalogos:dominios:gestionar',
       '#cfg-contenedor-grupos button.secundario': 'catalogos:config:gestionar',
       '#cfg-contenedor-grupos button.peligro': 'catalogos:config:gestionar',
-      '.tab-btn[data-tab="dominios"]': 'catalogos:dominios:gestionar',
-      '.tab-btn[data-tab="config"]': 'catalogos:config:gestionar',
-      '.tab-btn[data-tab="roles"]': 'catalogos',
-      '.tab-btn[data-tab="pisos"]': 'catalogos'
+      '#dom-tabla': 'catalogos:dominios:gestionar',
+      '#cfg-contenedor-grupos': 'catalogos:config:gestionar'
     },
     'equipos.html': {
       '#btn-nuevo': 'equipos:crear',
@@ -104,10 +109,10 @@
       '#tabla-usuarios button.peligro': 'usuarios:eliminar'
     },
     'roles.html': {
-      '#btn-nuevo': 'catalogos',
-      '#btn-guardar': 'catalogos',
-      '#tabla-roles button.secundario': 'catalogos',
-      '#tabla-roles button.peligro': 'catalogos'
+      '#btn-nuevo': 'catalogos:roles:crear',
+      '#btn-guardar': 'catalogos:roles:crear|catalogos:roles:editar',
+      '#tabla-roles button.secundario': 'catalogos:roles:editar',
+      '#tabla-roles button.peligro': 'catalogos:roles:eliminar'
     },
     'dominios.html': {
       '#btn-nuevo': 'catalogos:dominios:gestionar',
@@ -120,9 +125,10 @@
       'table button.peligro': 'catalogos:config:gestionar'
     },
     'lugares.html': {
-      '#btn-nuevo': 'catalogos',
-      'table button.secundario': 'catalogos',
-      'table button.peligro': 'catalogos'
+      '#btn-nuevo': 'catalogos:pisos:crear',
+      '#btn-guardar': 'catalogos:pisos:crear|catalogos:pisos:editar',
+      'table button.secundario': 'catalogos:pisos:editar',
+      'table button.peligro': 'catalogos:pisos:eliminar'
     },
     'mantenimientos.html': {
       '#btn-nuevo': 'mantenimientos:crear',
@@ -201,12 +207,12 @@
       editar: {
         'equipos.html': 'equipos:editar', 'usuarios.html': 'usuarios:editar',
         'clientes.html': 'catalogos:clientes:editar', 'catalogos.html': 'catalogos:clientes:editar',
-        'roles.html': 'catalogos', 'activos.html': 'af-act:editar', 'responsivas.html': 'af-resp:editar'
+        'roles.html': 'catalogos:roles:editar', 'activos.html': 'af-act:editar', 'responsivas.html': 'af-resp:editar'
       },
       eliminar: {
         'equipos.html': 'equipos:eliminar', 'usuarios.html': 'usuarios:eliminar',
         'clientes.html': 'catalogos:clientes:eliminar', 'catalogos.html': 'catalogos:clientes:eliminar',
-        'roles.html': 'catalogos',
+        'roles.html': 'catalogos:roles:eliminar',
         'activos.html': 'af-act:eliminar', 'responsivas.html': 'af-resp:eliminar'
       },
       restaurar: { 'activos.html': 'af-act:restaurar', 'catalogos.html': 'af-cat:restaurar' },

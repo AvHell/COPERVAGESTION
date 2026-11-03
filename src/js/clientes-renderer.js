@@ -249,6 +249,7 @@ function renderTabla() {
         const btnEditar = document.createElement('button');
         btnEditar.type = 'button';
         btnEditar.className = 'secundario';
+        btnEditar.dataset.permiso = 'catalogos:clientes:editar';
         btnEditar.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-linecap="round" stroke-linejoin="round">
@@ -262,6 +263,7 @@ function renderTabla() {
         const btnEliminar = document.createElement('button');
         btnEliminar.type = 'button';
         btnEliminar.className = 'peligro';
+        btnEliminar.dataset.permiso = 'catalogos:clientes:eliminar';
         btnEliminar.innerHTML = `
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-linecap="round" stroke-linejoin="round">

@@ -968,9 +968,9 @@ ipcMain.handle('clientes:actualizar', async (_e, id, codigo, nombre, color) => {
 ipcMain.handle('clientes:eliminar',   async (_e, id)              => { const err = requerirSesion('catalogos:clientes:eliminar'); if (err) return err; return await clientesDB.eliminar(id); });
 
 ipcMain.handle('roles:listar',     async ()                                       => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.listar(); });
-ipcMain.handle('roles:crear',      async (_e, codigo, nombre, descripcion, color)        => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.crear(codigo, nombre, descripcion, color); });
-ipcMain.handle('roles:actualizar', async (_e, id, codigo, nombre, descripcion, color)    => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.actualizar(id, codigo, nombre, descripcion, color); });
-ipcMain.handle('roles:eliminar',   async (_e, id)                                 => { const err = requerirSesion('catalogos'); if (err) return err; return await rolesDB.eliminar(id); });
+ipcMain.handle('roles:crear',      async (_e, codigo, nombre, descripcion, color)        => { const err = requerirSesion('catalogos:roles:crear'); if (err) return err; return await rolesDB.crear(codigo, nombre, descripcion, color); });
+ipcMain.handle('roles:actualizar', async (_e, id, codigo, nombre, descripcion, color)    => { const err = requerirSesion('catalogos:roles:editar'); if (err) return err; return await rolesDB.actualizar(id, codigo, nombre, descripcion, color); });
+ipcMain.handle('roles:eliminar',   async (_e, id)                                 => { const err = requerirSesion('catalogos:roles:eliminar'); if (err) return err; return await rolesDB.eliminar(id); });
 
 ipcMain.handle('catalogos:colores', async () => {
     const err = requerirSesion();

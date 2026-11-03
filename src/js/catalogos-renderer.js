@@ -229,6 +229,7 @@ const TabClientes = (() => {
             const btnEditar = document.createElement('button');
             btnEditar.type = 'button';
             btnEditar.className = 'secundario';
+            btnEditar.dataset.permiso = 'catalogos:clientes:editar';
             btnEditar.setAttribute('data-tooltip', 'Editar');
             btnEditar.innerHTML = iconoEditarSVG();
             btnEditar.addEventListener('click', () => abrirEdicion(c.IdCliente));
@@ -236,6 +237,7 @@ const TabClientes = (() => {
             const btnEliminar = document.createElement('button');
             btnEliminar.type = 'button';
             btnEliminar.className = 'peligro';
+            btnEliminar.dataset.permiso = 'catalogos:clientes:eliminar';
             btnEliminar.setAttribute('data-tooltip', 'Eliminar');
             btnEliminar.innerHTML = iconoEliminarSVG();
             btnEliminar.addEventListener('click', () => eliminar(c.IdCliente));
@@ -489,6 +491,7 @@ const TabPisos = (() => {
             const btnEditar = document.createElement('button');
             btnEditar.type = 'button';
             btnEditar.className = 'secundario';
+            btnEditar.dataset.permiso = 'catalogos:pisos:editar';
             btnEditar.setAttribute('data-tooltip', 'Editar');
             btnEditar.innerHTML = iconoEditarSVG();
             btnEditar.addEventListener('click', () => abrirEdicion(p.IdPiso));
@@ -496,6 +499,7 @@ const TabPisos = (() => {
             const btnEliminar = document.createElement('button');
             btnEliminar.type = 'button';
             btnEliminar.className = 'peligro';
+            btnEliminar.dataset.permiso = 'catalogos:pisos:eliminar';
             btnEliminar.setAttribute('data-tooltip', 'Eliminar');
             btnEliminar.innerHTML = iconoEliminarSVG();
             btnEliminar.addEventListener('click', () => eliminar(p.IdPiso, p.Nombre));
@@ -718,6 +722,7 @@ const TabRoles = (() => {
             const btnEditar = document.createElement('button');
             btnEditar.type = 'button';
             btnEditar.className = 'secundario';
+            btnEditar.dataset.permiso = 'catalogos:roles:editar';
             btnEditar.setAttribute('data-tooltip', 'Editar');
             btnEditar.innerHTML = iconoEditarSVG();
             btnEditar.addEventListener('click', () => abrirEdicion(r.IdRolEquipo));
@@ -725,6 +730,7 @@ const TabRoles = (() => {
             const btnEliminar = document.createElement('button');
             btnEliminar.type = 'button';
             btnEliminar.className = 'peligro';
+            btnEliminar.dataset.permiso = 'catalogos:roles:eliminar';
             btnEliminar.setAttribute('data-tooltip', 'Eliminar');
             btnEliminar.innerHTML = iconoEliminarSVG();
             btnEliminar.addEventListener('click', () => eliminar(r.IdRolEquipo));
@@ -913,6 +919,7 @@ const TabDominios = (() => {
             const btnEditar = document.createElement('button');
             btnEditar.type = 'button';
             btnEditar.className = 'secundario';
+            btnEditar.dataset.permiso = 'catalogos:dominios:gestionar';
             btnEditar.setAttribute('data-tooltip', 'Editar');
             btnEditar.innerHTML = iconoEditarSVG();
             btnEditar.addEventListener('click', () => abrirEditar(d));
@@ -920,6 +927,7 @@ const TabDominios = (() => {
             const btnEliminar = document.createElement('button');
             btnEliminar.type = 'button';
             btnEliminar.className = 'peligro';
+            btnEliminar.dataset.permiso = 'catalogos:dominios:gestionar';
             btnEliminar.setAttribute('data-tooltip', 'Eliminar');
             btnEliminar.innerHTML = iconoEliminarSVG();
             btnEliminar.addEventListener('click', () => eliminar(d));
@@ -1188,6 +1196,7 @@ const TabConfig = (() => {
                 const btnEditar = document.createElement('button');
                 btnEditar.type = 'button';
                 btnEditar.className = 'secundario';
+                btnEditar.dataset.permiso = 'catalogos:config:gestionar';
                 btnEditar.setAttribute('data-tooltip', 'Editar');
                 btnEditar.innerHTML = iconoEditarSVG();
                 btnEditar.addEventListener('click', () => abrirEditar(c));
@@ -1195,6 +1204,7 @@ const TabConfig = (() => {
                 const btnEliminar = document.createElement('button');
                 btnEliminar.type = 'button';
                 btnEliminar.className = 'peligro';
+                btnEliminar.dataset.permiso = 'catalogos:config:gestionar';
                 btnEliminar.setAttribute('data-tooltip', 'Eliminar');
                 btnEliminar.innerHTML = iconoEliminarSVG();
                 btnEliminar.addEventListener('click', () => eliminar(c));

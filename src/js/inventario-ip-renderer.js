@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
 const formIP = $('form-ip');
 const formCatalogo = $('form-catalogo');
+const modalIP = $('modal-ip');
+const modalCatalogo = $('modal-catalogo');
 const tipoCatalogo = $('tipo-catalogo');
 const textoCatalogo = $('nombre-catalogo');
 
@@ -189,23 +191,23 @@ function renderizarCatalogos() {
     const contenedor = $('lista-catalogos');
     contenedor.replaceChildren();
     const items = catalogos.filter(item => item.TipoCatalogo === tipoCatalogo.value);
+    $('sin-catalogos').hidden = items.length > 0;
     for (const item of items) {
-        const fila = document.createElement('div');
-        fila.className = 'catalog-item';
-        const nombre = document.createElement('span');
-        nombre.className = 'catalog-name';
-        nombre.textContent = item.Nombre;
+        const fila = document.createElement('tr');
+        const celdaNombre = document.createElement('td');
+        celdaNombre.textContent = item.Nombre;
+        const celdaEstado = document.createElement('td');
+        celdaEstado.className = `catalog-status${item.Activo ? '' : ' inactivo'}`;
+        celdaEstado.textContent = item.Activo ? 'Activo' : 'Inactivo';
+        const celdaAcciones = document.createElement('td');
+        const acciones = document.createElement('div');
+        acciones.className = 'catalog-actions';
         const editar = document.createElement('button');
         editar.type = 'button';
         editar.className = 'button secondary';
         editar.dataset.permiso = 'equipos:editar';
         editar.textContent = 'Editar';
-        editar.addEventListener('click', () => {
-            catalogoEditando = item.IdCatalogoIP;
-            textoCatalogo.value = item.Nombre;
-            $('btn-guardar-catalogo').textContent = 'Guardar cambio';
-            $('btn-cancelar-catalogo').hidden = false;
-        });
+        editar.addEventListener('click', () => abrirModalCatalogo(item));
         const eliminar = document.createElement('button');
         eliminar.type = 'button';
         eliminar.className = 'button danger';
@@ -229,10 +231,23 @@ function renderizarCatalogos() {
                 mostrarError(error.message);
             }
         });
-        fila.append(nombre, editar, eliminar);
+        acciones.append(editar, eliminar);
+        celdaAcciones.append(acciones);
+        fila.append(celdaNombre, celdaEstado, celdaAcciones);
         contenedor.append(fila);
     }
     window.PermisosUI?.aplicar(contenedor);
+}
+
+function abrirModalCatalogo(item = null) {
+    catalogoEditando = item?.IdCatalogoIP || null;
+    textoCatalogo.value = item?.Nombre || '';
+    $('modal-catalogo-titulo').textContent = item ? 'Editar opción' : 'Agregar opción';
+    $('btn-guardar-catalogo').textContent = item ? 'Guardar cambio' : 'Agregar opción';
+    $('btn-guardar-catalogo').dataset.permiso = item ? 'equipos:editar' : 'equipos:crear';
+    window.PermisosUI?.aplicar($('btn-guardar-catalogo'));
+    if (!modalCatalogo.open) modalCatalogo.showModal();
+    textoCatalogo.focus();
 }
 
 function editarRegistro(item) {
@@ -248,21 +263,33 @@ function editarRegistro(item) {
     llenarSelect('piso', 'Piso', item.IdPiso);
     llenarSelect('site', 'Site', item.IdSite);
     llenarSelect('tipoIP', 'TipoIP', item.IdTipoIP);
+    $('modal-ip-titulo').textContent = 'Editar registro general';
     $('btn-guardar').textContent = 'Guardar cambios';
     $('btn-guardar').dataset.permiso = 'equipos:editar';
-    $('btn-cancelar-edicion').hidden = false;
     window.PermisosUI?.aplicar($('btn-guardar'));
+    if (!modalIP.open) modalIP.showModal();
     $('ip').focus();
 }
 
 function limpiarFormulario() {
     formIP.reset();
     idEditando = null;
+    $('modal-ip-titulo').textContent = 'Registrar IP';
     $('btn-guardar').textContent = 'Registrar IP';
     $('btn-guardar').dataset.permiso = 'equipos:crear';
-    $('btn-cancelar-edicion').hidden = true;
     actualizarFormularioCatalogos();
     window.PermisosUI?.aplicar($('btn-guardar'));
+    if (modalIP.open) modalIP.close();
+}
+
+function limpiarFormularioCatalogo() {
+    formCatalogo.reset();
+    catalogoEditando = null;
+    $('modal-catalogo-titulo').textContent = 'Agregar opción';
+    $('btn-guardar-catalogo').textContent = 'Agregar opción';
+    $('btn-guardar-catalogo').dataset.permiso = 'equipos:crear';
+    window.PermisosUI?.aplicar($('btn-guardar-catalogo'));
+    if (modalCatalogo.open) modalCatalogo.close();
 }
 
 async function cargar() {
@@ -319,23 +346,23 @@ formCatalogo.addEventListener('submit', async event => {
             ? await window.api.inventarioIP.actualizarCatalogo(catalogoEditando, tipoCatalogo.value, textoCatalogo.value.trim())
             : await window.api.inventarioIP.crearCatalogo(tipoCatalogo.value, textoCatalogo.value.trim());
         if (!result?.ok) return mostrarError(result?.mensaje);
-        catalogoEditando = null;
-        textoCatalogo.value = '';
-        $('btn-guardar-catalogo').textContent = 'Agregar opción';
-        $('btn-cancelar-catalogo').hidden = true;
+        limpiarFormularioCatalogo();
         await cargar();
     } catch (error) {
         mostrarError(error.message);
     }
 });
 
-$('btn-cancelar-edicion').addEventListener('click', limpiarFormulario);
-$('btn-cancelar-catalogo').addEventListener('click', () => {
-    catalogoEditando = null;
-    textoCatalogo.value = '';
-    $('btn-guardar-catalogo').textContent = 'Agregar opción';
-    $('btn-cancelar-catalogo').hidden = true;
+$('btn-nuevo-registro').addEventListener('click', () => {
+    limpiarFormulario();
+    if (!modalIP.open) modalIP.showModal();
+    $('ip').focus();
 });
+$('btn-cerrar-ip').addEventListener('click', limpiarFormulario);
+$('btn-cancelar-edicion').addEventListener('click', limpiarFormulario);
+$('btn-nueva-opcion').addEventListener('click', () => abrirModalCatalogo());
+$('btn-cerrar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
+$('btn-cancelar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('busqueda').addEventListener('input', () => {
     paginaActual = 1;
     renderizarTabla();

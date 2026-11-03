@@ -62,11 +62,6 @@ let edPisosCliente = [];
 let edGuardando = false;
 let edEsModoCreacion = false; // por si en el futuro se reutiliza para crear
 
-/* =========================================================
-   REFERENCIA A LA VENTANA DE VISTA PREVIA
-   ========================================================= */
-let ventanaVistaPrevia = null;
-
 const COLORES_DISPONIBLES = [
     '#A99A63', '#6E7B5B', '#B5442E', '#C7BFA2',
     '#8A7353', '#78806B', '#5F6650', '#D6CBA8'
@@ -152,6 +147,24 @@ const CSS_PDF = `
     .encabezado .titulo .sub { font-size: 0.92rem; color: #64748b; }
     .encabezado .meta { text-align: right; font-size: 0.8rem; color: #64748b; line-height: 1.5; }
     .encabezado .meta strong { color: #1e293b; }
+    .marca-propuesta {
+        display: inline-flex;
+        flex-direction: column;
+        max-width: 250px;
+        margin-bottom: 5px;
+        padding: 4px 8px;
+        border: 1px solid #a99a63;
+        border-radius: 6px;
+        background: #f4f0e6;
+        color: #566348;
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        line-height: 1.25;
+        text-align: right;
+        overflow-wrap: anywhere;
+    }
+    .marca-propuesta small { color: #575347; font-size: 0.66rem; font-weight: 600; letter-spacing: 0; }
 
     .seccion-titulo {
         font-size: 0.82rem;
@@ -1608,7 +1621,6 @@ if (editarConfirmar) {
    NAVEGACIÓN
    ========================================================= */
 document.getElementById('btn-volver').addEventListener('click', () => {
-    cerrarVistaPrevia();
     window.api.volverMenu();
 });
 
@@ -3448,21 +3460,8 @@ function confirmarQuitar(equipo, panel) {
 /* =========================================================
    VISTA PREVIA
    ========================================================= */
-function cerrarVistaPrevia() {
-    if (ventanaVistaPrevia && !ventanaVistaPrevia.closed) {
-        try {
-            ventanaVistaPrevia.close();
-        } catch (e) {
-            console.warn('No se pudo cerrar la vista previa:', e);
-        }
-    }
-    ventanaVistaPrevia = null;
-}
-
 btnVistaPrevia.addEventListener('click', () => {
     if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
-
-    cerrarVistaPrevia();
 
     try {
         const opciones = generarHTMLVistaPrevia(panelActivo);
@@ -3471,23 +3470,12 @@ btnVistaPrevia.addEventListener('click', () => {
             alert('El navegador bloqueó la ventana emergente. Permite las ventanas emergentes para ver la vista previa.');
             return;
         }
-        ventanaVistaPrevia = ventana;
-
         ventana.document.open();
         ventana.document.write(opciones.html);
         ventana.document.close();
     } catch (err) {
         mostrarToast('Error al generar vista previa: ' + err.message, 'error', 4000);
-        ventanaVistaPrevia = null;
     }
-});
-
-window.addEventListener('beforeunload', () => {
-    cerrarVistaPrevia();
-});
-
-window.addEventListener('pagehide', () => {
-    cerrarVistaPrevia();
 });
 
 /* =========================================================
@@ -3851,6 +3839,7 @@ function generarHTMLVistaPrevia(panel) {
     const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
     const nombrePiso = piso ? piso.Nombre : '';
     const fecha = new Date().toLocaleString('es-MX');
+    const marcaPropuesta = obtenerMarcaPropuesta(panel, 'preview');
 
     const layout = calcularLayoutPlano(panel);
     const bloques = construirBloquesPlano(panel, layout);
@@ -3883,6 +3872,20 @@ function generarHTMLVistaPrevia(panel) {
                 }
                 .celda-hostname { font-size: ${FONT_HOST}rem; }
                 .celda-ip       { font-size: ${FONT_IP}rem; }
+                .marca-propuesta {
+                    display: inline-flex; flex-direction: column; max-width: 250px; margin-bottom: 5px;
+                    padding: 4px 8px; border: 1px solid var(--plano-oro); border-radius: 6px;
+                    background: var(--plano-superficie-suave); color: var(--plano-oliva-oscuro);
+                    font-size: .68rem; font-weight: 800; letter-spacing: .06em; line-height: 1.25;
+                    text-align: right; overflow-wrap: anywhere;
+                }
+                .marca-propuesta small { color: var(--plano-texto-secundario); font-size: .66rem; font-weight: 600; letter-spacing: 0; }
+                .marca-plano-actual {
+                    display: inline-block; margin-bottom: 5px; padding: 4px 8px;
+                    border: 1px solid var(--plano-borde-fuerte); border-radius: 6px;
+                    background: var(--plano-oliva-suave); color: var(--plano-oliva-oscuro);
+                    font-size: .68rem; font-weight: 800; letter-spacing: .06em;
+                }
             </style>
         </head>
         <body class="vista-previa-body">
@@ -3898,6 +3901,7 @@ function generarHTMLVistaPrevia(panel) {
                                     <div class="sub">${nombrePiso}</div>
                                 </div>
                                 <div class="meta">
+                                    ${marcaPropuesta}
                                     <div><strong>Fecha:</strong> ${fecha}</div>
                                     <div><strong>Total equipos:</strong> ${totalEquipos}</div>
                                     <div><strong>Dimensiones:</strong> ${cols} × ${filas}</div>
@@ -3922,6 +3926,7 @@ function generarHTMLVistaPrevia(panel) {
                                     <div class="sub">${nombrePiso} — ${totalEquipos} equipos</div>
                                 </div>
                                 <div class="meta">
+                                    ${marcaPropuesta}
                                     <div><strong>Fecha:</strong> ${fecha}</div>
                                 </div>
                             </div>
@@ -4038,6 +4043,7 @@ function generarHTMLParaPDF(panel) {
     const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
     const nombrePiso = piso ? piso.Nombre : '';
     const fecha = new Date().toLocaleString('es-MX');
+    const marcaPropuesta = obtenerMarcaPropuesta(panel, 'documento');
 
     const layout = calcularLayoutPlano(panel);
     const bloques = construirBloquesPlano(panel, layout);
@@ -4083,6 +4089,7 @@ function generarHTMLParaPDF(panel) {
                         <div class="sub">${nombrePiso}</div>
                     </div>
                     <div class="meta">
+                        ${marcaPropuesta}
                         <div><strong>Fecha:</strong> ${fecha}</div>
                         <div><strong>Total equipos:</strong> ${totalEquipos}</div>
                         <div><strong>Dimensiones:</strong> ${cols} × ${filas}</div>
@@ -4107,6 +4114,7 @@ function generarHTMLParaPDF(panel) {
                         <div class="sub">${nombrePiso} — ${totalEquipos} equipos</div>
                     </div>
                     <div class="meta">
+                        ${marcaPropuesta}
                         <div><strong>Fecha:</strong> ${fecha}</div>
                     </div>
                 </div>
@@ -4143,8 +4151,24 @@ function generarHTMLParaPDF(panel) {
         </html>
     `;
 
-    const nombreArchivo = `Plano-Documentado-${nombrePiso || 'Piso'}-${Date.now()}.pdf`;
+    const prefijoPropuesta = panel.escenarioFuturoId ? 'Propuesta-' : '';
+    const nombreArchivo = `${prefijoPropuesta}Plano-Documentado-${nombrePiso || 'Piso'}-${Date.now()}.pdf`;
     return { html, nombreArchivo, orientacion: orientacionPagina };
+}
+
+function obtenerMarcaPropuesta(panel, tipo) {
+    if (!panel?.escenarioFuturoId) {
+        return tipo === 'preview' ? '<div class="marca-plano-actual">PLANO ACTUAL</div>' : '';
+    }
+    const escenario = (panel.escenariosFuturos || []).find(
+        item => Number(item.IdEscenarioFuturo) === Number(panel.escenarioFuturoId)
+    );
+    const nombre = escenario?.Nombre || 'Escenario futuro';
+    const nombreSeguro = String(nombre).replace(/[&<>"']/g, caracter => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[caracter]);
+    const etiqueta = tipo === 'documento' ? 'DOCUMENTO · PROPUESTA FUTURA' : 'VISTA PREVIA · PROPUESTA FUTURA';
+    return `<div class="marca-propuesta">${etiqueta}<small>${nombreSeguro}</small></div>`;
 }
 
 /* =========================================================

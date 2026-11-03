@@ -25,7 +25,47 @@
                     <h2>Registro general</h2>
                     <p>Consulta IP del inventario general y equipos activos de clientes. En estos últimos puedes editar solo los datos complementarios.</p>
                 </div>
-                <input id="busqueda" type="search" placeholder="Filtrar por IP, hostname, MAC, site...">
+                <div class="section-actions">
+                    <input id="busqueda" type="search" placeholder="Filtrar por IP, hostname, MAC, site...">
+                    <button id="btn-nuevo-registro" type="button" class="button primary" data-permiso="equipos:crear">Registrar IP</button>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Origen</th><th>Estado</th><th>IP</th><th>Hostname</th><th>MAC</th>
+                            <th>Dispositivo</th><th>Tipo</th><th>Piso</th><th>Cliente</th><th>Site</th>
+                            <th>Puerto Fortinet</th><th>Descripción</th><th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-ip"></tbody>
+                </table>
+                <p id="sin-registros" class="empty" hidden>No hay registros de IP para mostrar.</p>
+                <nav class="paginacion" aria-label="Paginación del inventario IP">
+                    <label>Filas
+                        <select id="tamano-pagina">
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </label>
+                    <span id="resumen-paginacion" aria-live="polite"></span>
+                    <div class="paginacion-acciones">
+                        <button id="pagina-anterior" type="button" class="button secondary">Anterior</button>
+                        <button id="pagina-siguiente" type="button" class="button secondary">Siguiente</button>
+                    </div>
+                </nav>
+            </div>
+        </section>
+
+        <dialog id="modal-ip" class="form-modal" aria-labelledby="modal-ip-titulo">
+            <div class="modal-heading">
+                <div>
+                    <h2 id="modal-ip-titulo">Registrar IP</h2>
+                    <p>Completa los datos del registro general.</p>
+                </div>
+                <button id="btn-cerrar-ip" type="button" class="button secondary" aria-label="Cerrar">Cerrar</button>
             </div>
             <form id="form-ip" class="form-grid">
                 <label>IP
@@ -63,37 +103,10 @@
                 </label>
                 <div class="form-actions wide">
                     <button id="btn-guardar" type="submit" class="button primary" data-permiso="equipos:crear">Registrar IP</button>
-                    <button id="btn-cancelar-edicion" type="button" class="button secondary" hidden>Cancelar edición</button>
+                    <button id="btn-cancelar-edicion" type="button" class="button secondary">Cancelar</button>
                 </div>
             </form>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Origen</th><th>Estado</th><th>IP</th><th>Hostname</th><th>MAC</th>
-                            <th>Dispositivo</th><th>Tipo</th><th>Piso</th><th>Cliente</th><th>Site</th>
-                            <th>Puerto Fortinet</th><th>Descripción</th><th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabla-ip"></tbody>
-                </table>
-                <p id="sin-registros" class="empty" hidden>No hay registros de IP para mostrar.</p>
-                <nav class="paginacion" aria-label="Paginación del inventario IP">
-                    <label>Filas
-                        <select id="tamano-pagina">
-                            <option value="25">25</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                        </select>
-                    </label>
-                    <span id="resumen-paginacion" aria-live="polite"></span>
-                    <div class="paginacion-acciones">
-                        <button id="pagina-anterior" type="button" class="button secondary">Anterior</button>
-                        <button id="pagina-siguiente" type="button" class="button secondary">Siguiente</button>
-                    </div>
-                </nav>
-            </div>
-        </section>
+        </dialog>
 
         <section class="panel catalog-panel">
             <div class="section-heading">
@@ -101,24 +114,48 @@
                     <h2>Catálogos editables</h2>
                     <p>Agrega opciones de dispositivo, tipo, piso, site y asignación IP.</p>
                 </div>
-                <label class="catalog-selector">Catálogo
-                    <select id="tipo-catalogo">
-                        <option value="Estado">Estado</option>
-                        <option value="Dispositivo">Dispositivo</option>
-                        <option value="TipoEquipo">Tipo de equipo</option>
-                        <option value="Piso">Piso</option>
-                        <option value="Site">Site</option>
-                        <option value="TipoIP">Tipo de IP</option>
-                    </select>
-                </label>
+                <div class="section-actions">
+                    <label class="catalog-selector">Catálogo
+                        <select id="tipo-catalogo">
+                            <option value="Estado">Estado</option>
+                            <option value="Dispositivo">Dispositivo</option>
+                            <option value="TipoEquipo">Tipo de equipo</option>
+                            <option value="Piso">Piso</option>
+                            <option value="Site">Site</option>
+                            <option value="TipoIP">Tipo de IP</option>
+                        </select>
+                    </label>
+                    <button id="btn-nueva-opcion" type="button" class="button primary" data-permiso="equipos:crear">Agregar opción</button>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="catalog-table">
+                    <thead>
+                        <tr><th>Nombre</th><th>Estado</th><th>Acciones</th></tr>
+                    </thead>
+                    <tbody id="lista-catalogos"></tbody>
+                </table>
+                <p id="sin-catalogos" class="empty" hidden>No hay opciones en este catálogo.</p>
+            </div>
+        </section>
+
+        <dialog id="modal-catalogo" class="form-modal catalog-modal" aria-labelledby="modal-catalogo-titulo">
+            <div class="modal-heading">
+                <div>
+                    <h2 id="modal-catalogo-titulo">Agregar opción</h2>
+                    <p>La opción se guardará en el catálogo seleccionado.</p>
+                </div>
+                <button id="btn-cerrar-catalogo" type="button" class="button secondary" aria-label="Cerrar">Cerrar</button>
             </div>
             <form id="form-catalogo" class="catalog-form">
+                <label for="nombre-catalogo">Nombre</label>
                 <input id="nombre-catalogo" type="text" maxlength="100" required placeholder="Nombre de la opción">
-                <button id="btn-guardar-catalogo" type="submit" class="button primary" data-permiso="equipos:crear">Agregar opción</button>
-                <button id="btn-cancelar-catalogo" type="button" class="button secondary" hidden>Cancelar edición</button>
+                <div class="form-actions">
+                    <button id="btn-guardar-catalogo" type="submit" class="button primary" data-permiso="equipos:crear">Agregar opción</button>
+                    <button id="btn-cancelar-catalogo" type="button" class="button secondary">Cancelar</button>
+                </div>
             </form>
-            <div id="lista-catalogos" class="catalog-list"></div>
-        </section>
+        </dialog>
     </main>
     <script src="../js/permisos-ui.js"></script>
     <script src="../js/inventario-ip-renderer.js"></script>

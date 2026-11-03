@@ -30,6 +30,16 @@ Si una credencial se incluyó alguna vez en un commit o en un repositorio remoto
 
 ## Desarrollo y empaquetado
 
+### Migración de control general de IP y movimientos futuros
+
+Antes de usar **Control general de IP** o las propuestas del plano, ejecuta `scripts/control-general-ip.sql` en la base de datos configurada de la aplicación. El script crea los catálogos y tablas separados del inventario de clientes y del plano actual, e inserta opciones iniciales que después se pueden editar desde la aplicación. El control general muestra sus registros editables junto con las IP estáticas de equipos activos cuyo `IdCliente` corresponde a un cliente existente. En equipos de clientes, las acciones permiten editar únicamente los datos complementarios; las IP de ambas fuentes se consideran ocupadas y se bloquean al intentar registrar una IP duplicada. Al desactivar o eliminar un equipo de cliente, deja de aparecer en el control general y su IP deja de reservarse.
+
+Si ya ejecutaste la migración anterior, ejecuta también `scripts/plano-futuros-multi-piso.sql`. Esta actualización conserva las propuestas existentes y habilita propuestas que incluyan dos pisos en la vista dual, con movimientos entre ellos sin alterar las ubicaciones actuales.
+
+Para editar desde el control general los datos complementarios de las IP que pertenecen a clientes, ejecuta también `scripts/control-general-ip-datos-clientes.sql`. Esa tabla guarda MAC, dispositivo, tipo, site, puerto Fortinet y descripción sin cambiar la IP, hostname, cliente, piso o estado del equipo en `Equipos`.
+
+La fecha de mantenimiento queda fijada al día actual para los usuarios sin el permiso **Modificar fecha del mantenimiento**. Un administrador puede asignar ese permiso desde la gestión de roles.
+
 ```powershell
 npm ci
 npm start

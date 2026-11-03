@@ -15,6 +15,7 @@ const rolesDB      = require('./db/roles');
 const pisosDB      = require('./db/pisos');
 const rangosDB     = require('./db/rangos');
 const equiposDB    = require('./db/equipos');
+const inventarioIPDB = require('./db/inventario-ip');
 const planoDB      = require('./db/plano');
 const usuariosDB   = require('./db/usuarios');
 const historicosDB = require('./db/historicos');
@@ -307,6 +308,7 @@ function requerirSesion(clave = null) {
 const RUTAS_MODULOS = {
     catalogos: { basePath: HTML, archivo: 'catalogos.html', permiso: 'catalogos', titulo: 'Catálogos del Sistema' },
     equipos: { basePath: HTML, archivo: 'equipos.html', permiso: 'equipos', titulo: 'Equipos' },
+    inventario_ip: { basePath: HTML, archivo: 'inventario-ip.html', permiso: 'equipos', titulo: 'Control general de IP' },
     plano: { basePath: HTML, archivo: 'plano.html', permiso: 'plano', titulo: 'Plano Visual' },
     historico: { basePath: HTML, archivo: 'historico.html', permiso: 'historico', titulo: 'Histórico del Plano' },
     mantenimientos: { basePath: HTML, archivo: 'mantenimientos.html', permiso: 'mantenimientos', titulo: 'Mantenimientos' },
@@ -1008,36 +1010,40 @@ ipcMain.handle('rangos:eliminar',   async (_e, id) => { const err = requerirSesi
    IPC: EQUIPOS
    ========================================================= */
 ipcMain.handle('equipos:listar',               async ()          => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.listar(); });
-ipcMain.handle('equipos:exportarExcel', async () => {
+ipcMain.handle('equipos:exportarExcel', async (_e, opciones = {}) => {
     const err = requerirSesion('equipos:listado:exportar');
     if (err) return err;
     try {
         const equipos = await equiposDB.listar();
-        if (!equipos.length) return { ok: false, mensaje: 'No hay equipos para exportar.' };
+        const equipoFiltrados = opciones.idCliente
+            ? equipos.filter(equipo => Number(equipo.IdCliente) === Number(opciones.idCliente))
+            : equipos;
+        if (!equipoFiltrados.length) return { ok: false, mensaje: 'No hay equipos para exportar con ese cliente.' };
 
-        const encabezados = [
-            'Nombre del cliente', 'Código cliente', 'Nombre del rol', 'Código rol', 'Hostname', 'Tipo IP',
-            'IP', 'Piso', 'Máscara', 'Puerta de enlace', 'DNS 1', 'DNS 2',
-            'Usuario admin', 'Número host', 'Activo'
+        const columnasDisponibles = [
+            ['clienteNombre', 'Nombre del cliente', equipo => equipo.ClienteNombre || ''],
+            ['clienteCodigo', 'Código cliente', equipo => equipo.ClienteCodigo || ''],
+            ['rolNombre', 'Nombre del rol', equipo => equipo.RolNombre || ''],
+            ['rolCodigo', 'Código rol', equipo => equipo.RolCodigo || ''],
+            ['hostname', 'Hostname', equipo => equipo.Hostname || ''],
+            ['tipoIP', 'Tipo IP', equipo => equipo.TipoIP || ''],
+            ['ip', 'IP', equipo => equipo.IP || ''],
+            ['piso', 'Piso', equipo => equipo.PisoNombre || ''],
+            ['mascara', 'Máscara', equipo => equipo.Mascara || ''],
+            ['puertaEnlace', 'Puerta de enlace', equipo => equipo.PuertaEnlace || ''],
+            ['dns1', 'DNS 1', equipo => equipo.DNS1 || ''],
+            ['dns2', 'DNS 2', equipo => equipo.DNS2 || ''],
+            ['usuarioAdmin', 'Usuario admin', equipo => equipo.UsuarioAdmin || ''],
+            ['numeroHost', 'Número host', equipo => equipo.NumeroHost ?? ''],
+            ['activo', 'Activo', equipo => equipo.Activo ? 'Sí' : 'No']
         ];
-        const filas = equipos.map(equipo => [
-            equipo.ClienteNombre || '',
-            equipo.ClienteCodigo || '',
-            equipo.RolNombre || '',
-            equipo.RolCodigo || '',
-            equipo.Hostname || '',
-            equipo.TipoIP || '',
-            equipo.IP || '',
-            equipo.PisoNombre || '',
-            equipo.Mascara || '',
-            equipo.PuertaEnlace || '',
-            equipo.DNS1 || '',
-            equipo.DNS2 || '',
-            equipo.UsuarioAdmin || '',
-            equipo.NumeroHost ?? '',
-            equipo.Activo ? 'Sí' : 'No'
-        ]);
-        const hoy = new Date().toISOString().slice(0, 10);
+        const columnasSolicitadas = Array.isArray(opciones.columnas) ? opciones.columnas : [];
+        const columnas = columnasDisponibles.filter(([clave]) => columnasSolicitadas.includes(clave));
+        if (!columnas.length) return { ok: false, mensaje: 'Selecciona al menos una columna para exportar.' };
+        const encabezados = columnas.map(([, etiqueta]) => etiqueta);
+        const filas = equipoFiltrados.map(equipo => columnas.map(([, , valor]) => valor(equipo)));
+        const ahora = new Date();
+        const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
         const downloadsDir = path.join(os.homedir(), 'Downloads');
         const defaultPath = path.join(
             fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
@@ -1056,11 +1062,16 @@ ipcMain.handle('equipos:exportarExcel', async () => {
         const worksheet = workbook.addWorksheet('Equipos', {
             views: [{ state: 'frozen', ySplit: 1 }]
         });
-        const anchos = [30, 18, 24, 14, 24, 15, 18, 20, 18, 22, 18, 18, 24, 15, 12];
+        const anchosPorClave = {
+            clienteNombre: 30, clienteCodigo: 18, rolNombre: 24, rolCodigo: 14,
+            hostname: 24, tipoIP: 15, ip: 18, piso: 20, mascara: 18,
+            puertaEnlace: 22, dns1: 18, dns2: 18, usuarioAdmin: 24,
+            numeroHost: 15, activo: 12
+        };
         worksheet.columns = encabezados.map((header, index) => ({
             header,
             key: `columna${index + 1}`,
-            width: anchos[index]
+            width: anchosPorClave[columnas[index][0]]
         }));
         worksheet.addTable({
             name: 'TablaEquipos',
@@ -1093,6 +1104,46 @@ ipcMain.handle('equipos:actualizar',           async (_e, id, datos) => { const 
 ipcMain.handle('equipos:eliminar',             async (_e, id)    => { const err = requerirSesion('equipos:eliminar');    if (err) return err; return await equiposDB.eliminar(id); });
 ipcMain.handle('equipos:verificarIPDuplicada', async (_e, ip, idExcluir) => { const err = requerirSesion('equipos');      if (err) return err; return await equiposDB.verificarIPDuplicada(ip, idExcluir); });
 ipcMain.handle('equipos:listarIPsAsignadasEnSegmento', async (_e, segmento, idExcluir) => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.listarIPsAsignadasEnSegmento(segmento, idExcluir); });
+
+/* =========================================================
+   IPC: CONTROL GENERAL DE IP
+   ========================================================= */
+ipcMain.handle('inventario-ip:listar', async () => {
+    const err = requerirSesion('equipos:listado:ver'); if (err) return err;
+    return await inventarioIPDB.listar();
+});
+ipcMain.handle('inventario-ip:catalogos', async () => {
+    const err = requerirSesion('equipos:listado:ver'); if (err) return err;
+    return await inventarioIPDB.listarCatalogos();
+});
+ipcMain.handle('inventario-ip:catalogo:crear', async (_e, tipo, nombre) => {
+    const err = requerirSesion('equipos:crear'); if (err) return err;
+    return await inventarioIPDB.guardarCatalogo(tipo, nombre);
+});
+ipcMain.handle('inventario-ip:catalogo:actualizar', async (_e, id, tipo, nombre) => {
+    const err = requerirSesion('equipos:editar'); if (err) return err;
+    return await inventarioIPDB.guardarCatalogo(tipo, nombre, id);
+});
+ipcMain.handle('inventario-ip:catalogo:eliminar', async (_e, id) => {
+    const err = requerirSesion('equipos:eliminar'); if (err) return err;
+    return await inventarioIPDB.eliminarCatalogo(id);
+});
+ipcMain.handle('inventario-ip:crear', async (_e, datos) => {
+    const err = requerirSesion('equipos:crear'); if (err) return err;
+    return await inventarioIPDB.guardar(datos);
+});
+ipcMain.handle('inventario-ip:actualizar', async (_e, id, datos) => {
+    const err = requerirSesion('equipos:editar'); if (err) return err;
+    return await inventarioIPDB.guardar(datos, id);
+});
+ipcMain.handle('inventario-ip:cliente:actualizar', async (_e, idEquipo, datos) => {
+    const err = requerirSesion('equipos:editar'); if (err) return err;
+    return await inventarioIPDB.actualizarDatosEquipoCliente(idEquipo, datos);
+});
+ipcMain.handle('inventario-ip:eliminar', async (_e, id) => {
+    const err = requerirSesion('equipos:eliminar'); if (err) return err;
+    return await inventarioIPDB.eliminar(id);
+});
 
 /* =========================================================
    IPC: DOMINIOS
@@ -1145,7 +1196,12 @@ ipcMain.handle('mantenimientos:listarRegistros', async (_e, idPiso) => {
 ipcMain.handle('mantenimientos:crear', async (_e, datos) => {
     const err = requerirSesion('mantenimientos'); if (err) return err;
     const errCrear = requerirSesion('mantenimientos:crear'); if (errCrear) return errCrear;
-    return await mantenimientosDB.crear(datos);
+    const ahora = new Date();
+    const fechaHoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+    const payload = tienePermiso('mantenimientos:fecha:editar')
+        ? datos
+        : { ...datos, fechaMantenimiento: fechaHoy };
+    return await mantenimientosDB.crear(payload);
 });
 ipcMain.handle('mantenimientos:exportarExcel', async (_e, idPiso) => {
     const err = requerirSesion('mantenimientos'); if (err) return err;
@@ -1287,6 +1343,20 @@ ipcMain.handle('plano:actualizarDim', async (_e, idPiso, filas, columnas) => {
 
 ipcMain.handle('plano:listarPorLugar', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.listarPorLugar(idPiso); });
 ipcMain.handle('plano:sinUbicacion',   async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.equiposSinUbicacion(idPiso); });
+ipcMain.handle('plano:futuros:listar', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.listarEscenariosFuturos(idPiso); });
+ipcMain.handle('plano:futuros:ubicaciones', async (_e, idEscenario, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.obtenerUbicacionesFuturas(idEscenario, idPiso); });
+ipcMain.handle('plano:futuros:crear', async (_e, idPisos, nombre) => {
+    const err = requerirSesion('plano:mover'); if (err) return err;
+    return await planoDB.crearEscenarioFuturo(usuarioActual.IdUsuario, idPisos, nombre);
+});
+ipcMain.handle('plano:futuros:mover', async (_e, idEscenario, idEquipo, idPisoDestino, fila, columna) => {
+    const err = requerirSesion('plano:mover'); if (err) return err;
+    return await planoDB.moverEquipoEnEscenarioFuturo(idEscenario, idEquipo, idPisoDestino, fila, columna);
+});
+ipcMain.handle('plano:futuros:eliminar', async (_e, idEscenario, idPiso) => {
+    const err = requerirSesion('plano:mover'); if (err) return err;
+    return await planoDB.eliminarEscenarioFuturo(idEscenario, idPiso);
+});
 
 ipcMain.handle('plano:asignar', async (_e, idPiso, idEquipo, fila, col) => {
     const err = requerirSesion('plano:asignar'); if (err) return err;

@@ -11,6 +11,7 @@ let planoActual = null;
 let registrosActuales = [];
 let equipoSeleccionado = null;
 let puedeRegistrar = false;
+let puedeEditarFecha = false;
 let idUsuarioSesion = null;
 
 function mostrarMensaje(texto, error = false, detalle = '') {
@@ -216,12 +217,14 @@ function abrirEquipo(equipo, fila, columna) {
     }
 
     $('fecha-mantenimiento').value = fechaInputHoy();
+    $('fecha-mantenimiento').max = puedeEditarFecha ? '' : fechaInputHoy();
     for (const option of $('usuario-realizo').options) {
         option.selected = Number(option.value) === idUsuarioSesion;
     }
     $('observaciones').value = '';
     $('btn-guardar').hidden = !puedeRegistrar;
-    $('fecha-mantenimiento').disabled = !puedeRegistrar;
+    $('fecha-mantenimiento').disabled = !puedeEditarFecha;
+    $('fecha-mantenimiento').readOnly = !puedeEditarFecha;
     $('usuario-realizo').disabled = !puedeRegistrar;
     $('observaciones').disabled = !puedeRegistrar;
     dialogo.showModal();
@@ -350,12 +353,14 @@ async function inicializar() {
     });
 
     try {
-        const [permisoRegistro, usuarios, usuarioSesion] = await Promise.all([
+        const [permisoRegistro, permisoFecha, usuarios, usuarioSesion] = await Promise.all([
             window.api.permisos.puedo('mantenimientos:crear'),
+            window.api.permisos.puedo('mantenimientos:fecha:editar'),
             window.api.mantenimientos.listarUsuarios(),
             window.api.usuarioActual()
         ]);
         puedeRegistrar = permisoRegistro?.permitido === true;
+        puedeEditarFecha = permisoFecha?.permitido === true;
         if (usuarios?.ok === false) throw new Error(usuarios.mensaje || 'No se pudieron cargar los usuarios.');
         const selectorUsuarios = $('usuario-realizo');
         selectorUsuarios.replaceChildren();

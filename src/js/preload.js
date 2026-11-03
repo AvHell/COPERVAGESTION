@@ -105,13 +105,26 @@ contextBridge.exposeInMainWorld('api', {
        ========================================================= */
     equipos: {
         listar:               ()                => ipcRenderer.invoke('equipos:listar'),
-        exportarExcel:        ()                => ipcRenderer.invoke('equipos:exportarExcel'),
+        exportarExcel:        (opciones)        => ipcRenderer.invoke('equipos:exportarExcel', opciones),
         crear:                (datos)           => ipcRenderer.invoke('equipos:crear', datos),
         obtenerPorId:         (id)              => ipcRenderer.invoke('equipos:obtenerPorId', id),
         actualizar:           (id, datos)       => ipcRenderer.invoke('equipos:actualizar', id, datos),
         eliminar:             (id)              => ipcRenderer.invoke('equipos:eliminar', id),
         verificarIPDuplicada: (ip, idExcluir)   => ipcRenderer.invoke('equipos:verificarIPDuplicada', ip, idExcluir),
         listarIPsAsignadasEnSegmento: (segmento, idExcluir) => ipcRenderer.invoke('equipos:listarIPsAsignadasEnSegmento', segmento, idExcluir)
+    },
+
+    inventarioIP: {
+        listar: () => ipcRenderer.invoke('inventario-ip:listar'),
+        listarCatalogos: () => ipcRenderer.invoke('inventario-ip:catalogos'),
+        crearCatalogo: (tipo, nombre) => ipcRenderer.invoke('inventario-ip:catalogo:crear', tipo, nombre),
+        actualizarCatalogo: (id, tipo, nombre) => ipcRenderer.invoke('inventario-ip:catalogo:actualizar', id, tipo, nombre),
+        eliminarCatalogo: id => ipcRenderer.invoke('inventario-ip:catalogo:eliminar', id),
+        crear: datos => ipcRenderer.invoke('inventario-ip:crear', datos),
+        actualizar: (id, datos) => ipcRenderer.invoke('inventario-ip:actualizar', id, datos),
+        actualizarDatosEquipoCliente: (idEquipo, datos) =>
+            ipcRenderer.invoke('inventario-ip:cliente:actualizar', idEquipo, datos),
+        eliminar: id => ipcRenderer.invoke('inventario-ip:eliminar', id)
     },
 
     /* =========================================================
@@ -175,6 +188,11 @@ contextBridge.exposeInMainWorld('api', {
 
         listarPorLugar: (idPiso)                 => ipcRenderer.invoke('plano:listarPorLugar', idPiso),
         sinUbicacion:   (idPiso)                 => ipcRenderer.invoke('plano:sinUbicacion', idPiso),
+        listarFuturos: (idPiso) => ipcRenderer.invoke('plano:futuros:listar', idPiso),
+        ubicacionesFuturas: (idEscenario, idPiso) => ipcRenderer.invoke('plano:futuros:ubicaciones', idEscenario, idPiso),
+        crearFuturo: (idPisos, nombre) => ipcRenderer.invoke('plano:futuros:crear', idPisos, nombre),
+        moverFuturo: (idEscenario, idEquipo, idPisoDestino, fila, columna) => ipcRenderer.invoke('plano:futuros:mover', idEscenario, idEquipo, idPisoDestino, fila, columna),
+        eliminarFuturo: (idEscenario, idPiso) => ipcRenderer.invoke('plano:futuros:eliminar', idEscenario, idPiso),
 
         asignar:        (idPiso, idEquipo, fila, col)                              => ipcRenderer.invoke('plano:asignar', idPiso, idEquipo, fila, col),
         mover:          (idEquipo, fila, col, filaAnt, colAnt, idPiso)             => ipcRenderer.invoke('plano:mover', idEquipo, fila, col, filaAnt, colAnt, idPiso),

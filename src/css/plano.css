@@ -306,6 +306,25 @@ body.plano-body {
 
 .celda.ocupada:active { cursor: grabbing; }
 
+.celda.movimiento-futuro {
+    outline: 3px solid #d97706;
+    outline-offset: 2px;
+}
+
+.marca-futuro {
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    background: #d97706;
+    color: #fff;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .03em;
+    pointer-events: none;
+}
+
 .celda.destino {
     border-color: #10b981 !important;
     background: #ecfdf5 !important;

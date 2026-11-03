@@ -550,6 +550,274 @@ async function eliminarZonasPorNombre(idUsuario, idPiso, nombre, color) {
     return { ok: true, mensaje: `Se eliminaron ${r.rowsAffected[0]} zona(s)` };
 }
 
+async function listarEscenariosFuturos(idPiso) {
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('IdPiso', sql.Int, idPiso)
+        .query(`
+            SELECT E.IdEscenarioFuturo, E.Nombre, E.FechaCreacion
+            FROM dbo.EscenariosPlanoFuturo E
+            INNER JOIN dbo.EscenarioPlanoFuturoPisos EP
+                ON EP.IdEscenarioFuturo = E.IdEscenarioFuturo
+            WHERE EP.IdPiso = @IdPiso
+            ORDER BY E.FechaCreacion DESC, E.Nombre
+        `);
+    return result.recordset;
+}
+
+async function crearEscenarioFuturo(idUsuario, idPisos, nombre) {
+    const pisos = [...new Set((Array.isArray(idPisos) ? idPisos : [idPisos]).map(Number))];
+    const etiqueta = String(nombre || '').trim();
+    if (!pisos.length || pisos.some(piso => !Number.isInteger(piso) || piso <= 0) ||
+        !etiqueta || etiqueta.length > 100) {
+        return { ok: false, mensaje: 'Selecciona uno o más pisos y captura un nombre de hasta 100 caracteres.' };
+    }
+    const pisoBase = pisos[0];
+
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+    await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+        const pisoResult = await new sql.Request(tx)
+            .query('SELECT IdPiso FROM dbo.Pisos WHERE Activo = 1');
+        const pisosActivos = new Set(pisoResult.recordset.map(row => Number(row.IdPiso)));
+        if (pisos.some(piso => !pisosActivos.has(piso))) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'Uno o más pisos seleccionados no existen o están inactivos.' };
+        }
+
+        const escenarioResult = await new sql.Request(tx)
+            .input('IdPiso', sql.Int, pisoBase)
+            .input('Nombre', sql.NVarChar(100), etiqueta)
+            .input('IdUsuario', sql.Int, idUsuario || null)
+            .query(`
+                INSERT INTO dbo.EscenariosPlanoFuturo (IdPiso, Nombre, IdUsuarioCreador)
+                OUTPUT INSERTED.IdEscenarioFuturo
+                VALUES (@IdPiso, @Nombre, @IdUsuario)
+            `);
+        const idEscenario = escenarioResult.recordset[0].IdEscenarioFuturo;
+
+        for (const piso of pisos) {
+            await new sql.Request(tx)
+                .input('IdEscenarioFuturo', sql.Int, idEscenario)
+                .input('IdPiso', sql.Int, piso)
+                .query(`
+                    INSERT INTO dbo.EscenarioPlanoFuturoPisos (IdEscenarioFuturo, IdPiso)
+                    VALUES (@IdEscenarioFuturo, @IdPiso);
+
+                    INSERT INTO dbo.EscenarioPlanoFuturoOriginal
+                        (IdEscenarioFuturo, IdEquipo, IdPisoOriginal, FilaOriginal, ColumnaOriginal)
+                    SELECT @IdEscenarioFuturo, IdEquipo, IdPiso, Fila, Columna
+                    FROM dbo.PlanoUbicaciones
+                    WHERE IdPiso = @IdPiso;
+
+                    INSERT INTO dbo.EscenarioPlanoFuturoUbicaciones
+                        (IdEscenarioFuturo, IdEquipo, IdPiso, Fila, Columna)
+                    SELECT IdEscenarioFuturo, IdEquipo, IdPisoOriginal, FilaOriginal, ColumnaOriginal
+                    FROM dbo.EscenarioPlanoFuturoOriginal
+                    WHERE IdEscenarioFuturo = @IdEscenarioFuturo
+                      AND IdPisoOriginal = @IdPiso;
+                `);
+        }
+        await tx.commit();
+        return {
+            ok: true,
+            id: idEscenario,
+            mensaje: `Copia futura creada para ${pisos.length} piso(s) desde el plano actual.`
+        };
+    } catch (error) {
+        try {
+            await tx.rollback();
+        } catch (rollbackError) {
+            console.error('[Plano] Error al revertir la copia futura:', rollbackError);
+        }
+        if (error.number === 2627 || error.number === 2601) {
+            return { ok: false, mensaje: 'Ya existe una propuesta con ese nombre para el piso inicial seleccionado.' };
+        }
+        throw error;
+    }
+}
+
+async function obtenerUbicacionesFuturas(idEscenario, idPiso) {
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('IdEscenarioFuturo', sql.Int, idEscenario)
+        .input('IdPiso', sql.Int, idPiso)
+        .query(`
+            SELECT U.IdEquipo, O.FilaOriginal, O.ColumnaOriginal, U.Fila, U.Columna,
+                   O.IdPisoOriginal, U.IdPiso AS IdPisoPropuesto,
+                   Equipo.IdCliente, Equipo.IdPiso, Equipo.IdRolEquipo, Equipo.Hostname,
+                   Equipo.TipoIP, Equipo.IP, Equipo.Mascara, Equipo.PuertaEnlace,
+                   Equipo.DNS1, Equipo.DNS2, Equipo.UsuarioAdmin, Equipo.PasswordAdmin,
+                   C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
+                   R.Codigo AS RolCodigo, R.Nombre AS RolNombre,
+                   DA.Descripcion AS DescripcionAdmin
+            FROM dbo.EscenarioPlanoFuturoUbicaciones U
+            INNER JOIN dbo.EscenariosPlanoFuturo E
+                ON E.IdEscenarioFuturo = U.IdEscenarioFuturo
+            INNER JOIN dbo.EscenarioPlanoFuturoPisos EP
+                ON EP.IdEscenarioFuturo = U.IdEscenarioFuturo
+               AND EP.IdPiso = U.IdPiso
+            INNER JOIN dbo.EscenarioPlanoFuturoOriginal O
+                ON O.IdEscenarioFuturo = U.IdEscenarioFuturo
+               AND O.IdEquipo = U.IdEquipo
+            INNER JOIN dbo.Equipos Equipo ON Equipo.IdEquipo = U.IdEquipo
+            INNER JOIN dbo.Clientes C ON C.IdCliente = Equipo.IdCliente
+            INNER JOIN dbo.RolesEquipo R ON R.IdRolEquipo = Equipo.IdRolEquipo
+            LEFT JOIN dbo.DominiosAdmin DA
+                ON DA.IdCliente = Equipo.IdCliente
+               AND DA.Usuario = Equipo.UsuarioAdmin
+            WHERE U.IdEscenarioFuturo = @IdEscenarioFuturo
+              AND EP.IdPiso = @IdPiso
+            ORDER BY U.Fila, U.Columna
+        `);
+    return result.recordset;
+}
+
+async function moverEquipoEnEscenarioFuturo(idEscenario, idEquipo, idPisoDestino, fila, columna) {
+    const escenario = Number(idEscenario);
+    const equipo = Number(idEquipo);
+    const pisoDestino = Number(idPisoDestino);
+    const destinoFila = Number(fila);
+    const destinoColumna = Number(columna);
+    if (![escenario, equipo, pisoDestino, destinoFila, destinoColumna].every(Number.isInteger) ||
+        escenario <= 0 || equipo <= 0 || pisoDestino <= 0 || destinoFila <= 0 || destinoColumna <= 0) {
+        return { ok: false, mensaje: 'La propuesta o la posición seleccionada no son válidas.' };
+    }
+
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+    await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+        const validacion = await new sql.Request(tx)
+            .input('IdEscenarioFuturo', sql.Int, escenario)
+            .input('IdEquipo', sql.Int, equipo)
+            .input('IdPisoDestino', sql.Int, pisoDestino)
+            .query(`
+                SELECT U.IdPiso AS IdPisoOrigen, U.Fila AS FilaOrigen,
+                       U.Columna AS ColumnaOrigen, P.Filas, P.Columnas
+                FROM dbo.EscenariosPlanoFuturo E WITH (UPDLOCK, HOLDLOCK)
+                INNER JOIN dbo.EscenarioPlanoFuturoUbicaciones U
+                    ON U.IdEscenarioFuturo = E.IdEscenarioFuturo
+                INNER JOIN dbo.EscenarioPlanoFuturoPisos EP
+                    ON EP.IdEscenarioFuturo = E.IdEscenarioFuturo
+                   AND EP.IdPiso = @IdPisoDestino
+                INNER JOIN dbo.Pisos P ON P.IdPiso = EP.IdPiso
+                WHERE E.IdEscenarioFuturo = @IdEscenarioFuturo
+                  AND U.IdEquipo = @IdEquipo
+            `);
+        const actual = validacion.recordset[0];
+        if (!actual) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'El equipo no pertenece a esta propuesta futura.' };
+        }
+        if (destinoFila > actual.Filas || destinoColumna > actual.Columnas) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'La posición destino está fuera de las dimensiones del piso.' };
+        }
+
+        const pisoOrigen = Number(actual.IdPisoOrigen);
+        const destino = await new sql.Request(tx)
+            .input('IdEscenarioFuturo', sql.Int, escenario)
+            .input('IdPiso', sql.Int, pisoDestino)
+            .input('Fila', sql.Int, destinoFila)
+            .input('Columna', sql.Int, destinoColumna)
+            .query(`
+                SELECT IdEquipo
+                FROM dbo.EscenarioPlanoFuturoUbicaciones WITH (UPDLOCK, HOLDLOCK)
+                WHERE IdEscenarioFuturo = @IdEscenarioFuturo
+                  AND IdPiso = @IdPiso
+                  AND Fila = @Fila AND Columna = @Columna
+            `);
+        const equipoDestino = destino.recordset[0]?.IdEquipo;
+        if (Number(equipoDestino) === equipo && pisoOrigen === pisoDestino) {
+            await tx.commit();
+            return { ok: true, mensaje: 'El equipo ya está en esa posición.' };
+        }
+
+        const filaTemporal = await new sql.Request(tx)
+            .input('IdEscenarioFuturo', sql.Int, escenario)
+            .input('IdPiso', sql.Int, pisoOrigen)
+            .query(`
+                SELECT ISNULL(MAX(Fila), 0) + 1 AS FilaTemporal
+                FROM dbo.EscenarioPlanoFuturoUbicaciones
+                WHERE IdEscenarioFuturo = @IdEscenarioFuturo AND IdPiso = @IdPiso
+            `);
+        const temporal = filaTemporal.recordset[0].FilaTemporal;
+        await new sql.Request(tx)
+            .input('IdEscenarioFuturo', sql.Int, escenario)
+            .input('IdEquipo', sql.Int, equipo)
+            .input('IdPiso', sql.Int, pisoOrigen)
+            .input('Fila', sql.Int, temporal)
+            .query(`
+                UPDATE dbo.EscenarioPlanoFuturoUbicaciones
+                SET IdPiso = @IdPiso, Fila = @Fila, Columna = 1
+                WHERE IdEscenarioFuturo = @IdEscenarioFuturo AND IdEquipo = @IdEquipo
+            `);
+
+        if (equipoDestino) {
+            await new sql.Request(tx)
+                .input('IdEscenarioFuturo', sql.Int, escenario)
+                .input('IdEquipo', sql.Int, equipoDestino)
+                .input('IdPiso', sql.Int, pisoOrigen)
+                .input('Fila', sql.Int, actual.FilaOrigen)
+                .input('Columna', sql.Int, actual.ColumnaOrigen)
+                .query(`
+                    UPDATE dbo.EscenarioPlanoFuturoUbicaciones
+                    SET IdPiso = @IdPiso, Fila = @Fila, Columna = @Columna
+                    WHERE IdEscenarioFuturo = @IdEscenarioFuturo AND IdEquipo = @IdEquipo
+                `);
+        }
+
+        await new sql.Request(tx)
+            .input('IdEscenarioFuturo', sql.Int, escenario)
+            .input('IdEquipo', sql.Int, equipo)
+            .input('IdPiso', sql.Int, pisoDestino)
+            .input('Fila', sql.Int, destinoFila)
+            .input('Columna', sql.Int, destinoColumna)
+            .query(`
+                UPDATE dbo.EscenarioPlanoFuturoUbicaciones
+                SET IdPiso = @IdPiso, Fila = @Fila, Columna = @Columna
+                WHERE IdEscenarioFuturo = @IdEscenarioFuturo AND IdEquipo = @IdEquipo
+            `);
+
+        await tx.commit();
+        return {
+            ok: true,
+            mensaje: pisoOrigen === pisoDestino
+                ? 'Movimiento guardado en la propuesta futura.'
+                : 'Cambio de piso guardado en la propuesta futura.'
+        };
+    } catch (error) {
+        try {
+            await tx.rollback();
+        } catch (rollbackError) {
+            console.error('[Plano] Error al revertir el movimiento futuro:', rollbackError);
+        }
+        throw error;
+    }
+}
+
+async function eliminarEscenarioFuturo(idEscenario, idPiso) {
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('IdEscenarioFuturo', sql.Int, idEscenario)
+        .input('IdPiso', sql.Int, idPiso)
+        .query(`
+            DELETE FROM dbo.EscenariosPlanoFuturo
+            WHERE IdEscenarioFuturo = @IdEscenarioFuturo
+              AND EXISTS (
+                  SELECT 1
+                  FROM dbo.EscenarioPlanoFuturoPisos EP
+                  WHERE EP.IdEscenarioFuturo = @IdEscenarioFuturo
+                    AND EP.IdPiso = @IdPiso
+              )
+        `);
+    return result.rowsAffected[0]
+        ? { ok: true, mensaje: 'Propuesta futura eliminada.' }
+        : { ok: false, mensaje: 'La propuesta no existe para el piso seleccionado.' };
+}
+
 module.exports = {
     obtenerDimensiones, actualizarDimensiones,
     listarPorLugar, equiposSinUbicacion,
@@ -557,5 +825,7 @@ module.exports = {
     moverEntrePisos, swapEntrePisos,
     listarZonas, crearZona, actualizarZona, eliminarZona, eliminarZonasPorNombre,
     listarZonasLibres, guardarZonaLibre, actualizarZonaLibre, eliminarZonaLibre,
-    actualizarZonasPorNombre
+    actualizarZonasPorNombre,
+    listarEscenariosFuturos, crearEscenarioFuturo, obtenerUbicacionesFuturas,
+    moverEquipoEnEscenarioFuturo, eliminarEscenarioFuturo
 };

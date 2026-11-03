@@ -649,10 +649,8 @@ async function consultarIPsDisponibles() {
         }
 
         const filas = ipsLibres.map(ip => {
-            const host = ip.slice(ip.lastIndexOf('.') + 1);
-            return `<tr>
+            return `<tr data-ip="${ip}">
                 <td><code>${ip}</code></td>
-                <td>${host}</td>
                 <td><button type="button" class="btn-usar-ip" data-ip-disponible="${ip}">Usar IP</button></td>
             </tr>`;
         }).join('');
@@ -664,10 +662,13 @@ async function consultarIPsDisponibles() {
                     <strong>${ipsLibres.length}</strong> libres de 254 hosts utilizables
                     <span>Rango de hosts: ${segmento}.1 a ${segmento}.254</span>
                 </p>
+                <label for="buscar-ip-libre" class="ips-busqueda">Buscar IP libre</label>
+                <input id="buscar-ip-libre" type="search" class="swal2-input"
+                    placeholder="Ej. ${prefijo}67 o 67">
                 ${ipsLibres.length
                     ? `<div class="ips-disponibles-lista">
                         <table class="tabla-ips-disponibles">
-                            <thead><tr><th>Dirección IP</th><th>Host</th><th></th></tr></thead>
+                            <thead><tr><th>Dirección IP</th><th></th></tr></thead>
                             <tbody>${filas}</tbody>
                         </table>
                     </div>`
@@ -678,6 +679,13 @@ async function consultarIPsDisponibles() {
             width: 680,
             customClass: { popup: 'cl-confirm cl-modal-ips' },
             didOpen: popup => {
+                const buscarIP = popup.querySelector('#buscar-ip-libre');
+                buscarIP.addEventListener('input', () => {
+                    const termino = buscarIP.value.trim().toLowerCase();
+                    popup.querySelectorAll('tbody tr[data-ip]').forEach(fila => {
+                        fila.hidden = termino !== '' && !fila.dataset.ip.toLowerCase().includes(termino);
+                    });
+                });
                 popup.querySelectorAll('[data-ip-disponible]').forEach(btn => {
                     btn.addEventListener('click', () => {
                         inputIP.value = btn.dataset.ipDisponible;
@@ -740,7 +748,53 @@ inputBusqueda.addEventListener('input', () => {
 btnExportarExcel.addEventListener('click', async () => {
     btnExportarExcel.disabled = true;
     try {
-        const resultado = await window.api.equipos.exportarExcel();
+        const columnas = [
+            ['clienteNombre', 'Nombre del cliente'], ['clienteCodigo', 'Código cliente'],
+            ['rolNombre', 'Nombre del rol'], ['rolCodigo', 'Código rol'],
+            ['hostname', 'Hostname'], ['tipoIP', 'Tipo IP'], ['ip', 'IP'], ['piso', 'Piso'],
+            ['mascara', 'Máscara'], ['puertaEnlace', 'Puerta de enlace'], ['dns1', 'DNS 1'],
+            ['dns2', 'DNS 2'], ['usuarioAdmin', 'Usuario admin'],
+            ['numeroHost', 'Número host'], ['activo', 'Activo']
+        ];
+        const opcionesCliente = [
+            '<option value="">Todos los clientes</option>',
+            ...clientes.map(cliente =>
+                `<option value="${Number(cliente.IdCliente)}">${escaparHTML(cliente.Nombre || cliente.Codigo)} (${escaparHTML(cliente.Codigo)})</option>`
+            )
+        ].join('');
+        const checksColumnas = columnas.map(([clave, etiqueta]) => `
+            <label style="display:inline-flex;align-items:center;gap:6px;margin:5px 9px 5px 0;">
+                <input type="checkbox" class="swal-columna-exportar" value="${clave}" checked>
+                ${escaparHTML(etiqueta)}
+            </label>
+        `).join('');
+        const seleccion = await Swal.fire({
+            title: 'Configurar exportación',
+            html: `
+                <label for="swal-cliente-exportar" style="display:block;text-align:left;margin:12px 0 5px;">Cliente</label>
+                <select id="swal-cliente-exportar" class="swal2-select" style="width:100%;margin:0;">${opcionesCliente}</select>
+                <p style="text-align:left;margin:18px 0 5px;font-weight:600;">Columnas que incluir</p>
+                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));text-align:left;max-height:260px;overflow:auto;">${checksColumnas}</div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Exportar Excel',
+            cancelButtonText: 'Cancelar',
+            focusConfirm: false,
+            preConfirm: () => {
+                const seleccionadas = [...document.querySelectorAll('.swal-columna-exportar:checked')]
+                    .map(input => input.value);
+                if (!seleccionadas.length) {
+                    Swal.showValidationMessage('Selecciona al menos una columna.');
+                    return false;
+                }
+                return {
+                    idCliente: document.getElementById('swal-cliente-exportar').value || null,
+                    columnas: seleccionadas
+                };
+            }
+        });
+        if (!seleccion.isConfirmed) return;
+        const resultado = await window.api.equipos.exportarExcel(seleccion.value);
         if (resultado?.ok) {
             toastExito(`Excel exportado: ${resultado.ruta}`);
         } else if (!resultado?.cancelado) {
@@ -964,6 +1018,9 @@ document.getElementById('btn-nuevo').addEventListener('click', () => {
     abrirModal();
     actualizarCamposSegunTipo();
     selectCli.focus();
+});
+document.getElementById('btn-control-ip').addEventListener('click', () => {
+    window.api.navegarModulo('inventario_ip');
 });
 
 function limpiarFormulario() {

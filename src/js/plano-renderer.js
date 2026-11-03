@@ -23,7 +23,9 @@ function crearEstadoPanel(sufijo) {
         celdas: [],
         zonas: [],
         zonasLibres: [],
-        equiposSinUbicar: []
+        equiposSinUbicar: [],
+        escenarioFuturoId: null,
+        escenariosFuturos: []
     };
 }
 
@@ -534,6 +536,10 @@ const llavesDer        = document.getElementById('llaves-der');
 const panelDerDiv      = document.getElementById('panel-der');
 
 const selectModo       = document.getElementById('select-modo');
+const controlesFuturo = document.getElementById('controles-futuro');
+const selectEscenarioFuturo = document.getElementById('select-escenario-futuro');
+const btnCrearFuturo = document.getElementById('btn-crear-futuro');
+const btnEliminarFuturo = document.getElementById('btn-eliminar-futuro');
 
 const panelLateral     = document.getElementById('panel-lateral');
 const lateralBackdrop  = document.getElementById('lateral-backdrop');
@@ -1614,6 +1620,8 @@ selectModo.addEventListener('change', () => {
     panelDerDiv.style.display = doble ? 'flex' : 'none';
     wrapFiltroDer.style.display = doble ? 'flex' : 'none';
     contenedorPrincipal.classList.toggle('solo-simple', !doble);
+    if (!doble) panelActivo = panelIzq;
+    actualizarControlesFuturos(panelActivo);
 
     if (doble && !panelDer.idPiso) {
         cargarPisosPanel(panelDer, false);
@@ -1893,6 +1901,7 @@ function conectarEventosPanel(panel, selectLugar, inputFilas, inputColumnas, btn
 
         panel.idPiso = nuevoIdPiso;
         panelActivo = panel;
+        actualizarControlesFuturos(panel);
 
         if (panel.idPiso) {
             await cargarPanel(panel);
@@ -1980,14 +1989,23 @@ async function cargarPanel(panel) {
         ubicaciones,
         equiposSinUbicar,
         zonas,
-        zonasLibres
+        zonasLibres,
+        escenariosFuturos
     ] = await Promise.all([
         window.api.plano.dimensiones(panel.idPiso),
         window.api.plano.listarPorLugar(panel.idPiso),
         window.api.plano.sinUbicacion(panel.idPiso),
         window.api.plano.listarZonas(panel.idPiso),
-        window.api.plano.listarZonasLibres(panel.idPiso)
+        window.api.plano.listarZonasLibres(panel.idPiso),
+        window.api.plano.listarFuturos(panel.idPiso)
     ]);
+    if ([dimensiones, ubicaciones, equiposSinUbicar, zonas, zonasLibres, escenariosFuturos].some(respuesta =>
+        respuesta?.ok === false
+    )) {
+        const error = [dimensiones, ubicaciones, equiposSinUbicar, zonas, zonasLibres, escenariosFuturos]
+            .find(respuesta => respuesta?.ok === false);
+        throw new Error(error.mensaje || 'No se pudieron cargar los datos del plano.');
+    }
 
     panel.dimensiones = dimensiones;
 
@@ -2031,8 +2049,49 @@ async function cargarPanel(panel) {
     panel.equiposSinUbicar = equiposSinUbicar;
     panel.zonas = zonas;
     panel.zonasLibres = zonasLibres;
+    panel.escenariosFuturos = escenariosFuturos;
+    if (panel.escenarioFuturoId &&
+        !escenariosFuturos.some(escenario => Number(escenario.IdEscenarioFuturo) === Number(panel.escenarioFuturoId))) {
+        panel.escenarioFuturoId = null;
+    }
+    if (panel.escenarioFuturoId) {
+        const propuesta = await window.api.plano.ubicacionesFuturas(panel.escenarioFuturoId, panel.idPiso);
+        if (!Array.isArray(propuesta)) {
+            throw new Error(propuesta?.mensaje || 'No se pudo cargar la copia futura.');
+        }
+        const celdasPropuesta = Array.from({ length: panel.dimensiones.Filas }, () =>
+            Array.from({ length: panel.dimensiones.Columnas }, () => null)
+        );
+        for (const ubicacion of propuesta) {
+            const fila = Number(ubicacion.Fila) - 1;
+            const columna = Number(ubicacion.Columna) - 1;
+            if (!celdasPropuesta[fila] || celdasPropuesta[fila][columna] === undefined) continue;
+            const equipo = {
+                ...ubicacion,
+                Cliente: ubicacion.ClienteNombre,
+                Rol: ubicacion.RolNombre,
+                IdPiso: Number(ubicacion.IdPisoPropuesto),
+                _fila: Number(ubicacion.Fila),
+                _col: Number(ubicacion.Columna),
+                _movimientoFuturo:
+                    Number(ubicacion.IdPisoOriginal) !== Number(ubicacion.IdPisoPropuesto) ||
+                    Number(ubicacion.Fila) !== Number(ubicacion.FilaOriginal) ||
+                    Number(ubicacion.Columna) !== Number(ubicacion.ColumnaOriginal)
+            };
+            celdasPropuesta[fila][columna] = equipo;
+            const idCliente = Number(equipo.IdCliente);
+            if (!panel.clientesDelPiso.some(cliente => Number(cliente.IdCliente) === idCliente)) {
+                const cliente = clientes.find(item => Number(item.IdCliente) === idCliente);
+                if (cliente) panel.clientesDelPiso.push(cliente);
+            }
+            if (idCliente) setFiltro.add(idCliente);
+        }
+        panel.celdas = celdasPropuesta;
+        renderFiltroClientes(panel);
+    }
 
     renderGridPanel(panel);
+    if (panel === panelActivo) actualizarControlesFuturos(panel);
     if (panel === panelActivo) renderPanelLateral();
 }
 
@@ -2040,12 +2099,157 @@ async function recargarPanel(panel) {
     await cargarPanel(panel);
 }
 
+function actualizarControlesFuturos(panel) {
+    if (!controlesFuturo) return;
+    const visible = Boolean(panel?.idPiso);
+    controlesFuturo.hidden = !visible;
+    selectEscenarioFuturo.replaceChildren(new Option('Plano actual', ''));
+    const escenarios = new Map();
+    for (const fuente of [panelIzq, panelDer]) {
+        for (const escenario of fuente.escenariosFuturos || []) {
+            escenarios.set(Number(escenario.IdEscenarioFuturo), escenario);
+        }
+    }
+    for (const escenario of escenarios.values()) {
+        selectEscenarioFuturo.add(new Option(escenario.Nombre, String(escenario.IdEscenarioFuturo)));
+    }
+    const escenarioVisible = panel?.escenarioFuturoId ||
+        (panelIzq.escenarioFuturoId === panelDer.escenarioFuturoId ? panelIzq.escenarioFuturoId : null);
+    selectEscenarioFuturo.value = escenarioVisible ? String(escenarioVisible) : '';
+    const hayPropuesta = Boolean(panel?.escenarioFuturoId);
+    btnEliminarFuturo.hidden = !hayPropuesta;
+    const moverDeshabilitado = hayPropuesta;
+    for (const control of [btnModoZona, btnModoZonaLibre, btnModoEdicion]) {
+        if (control) control.disabled = moverDeshabilitado;
+    }
+    const botonDimensiones = document.getElementById(`btn-aplicar-dim-${panel?.sufijo || 'izq'}`);
+    if (botonDimensiones) botonDimensiones.disabled = moverDeshabilitado;
+}
+
+selectEscenarioFuturo.addEventListener('change', async () => {
+    if (!panelActivo?.idPiso) return;
+    const escenarioId = selectEscenarioFuturo.value ? Number(selectEscenarioFuturo.value) : null;
+    const paneles = selectModo.value === 'doble' ? [panelIzq, panelDer] : [panelActivo];
+    for (const panel of paneles) {
+        const participa = escenarioId && panel.escenariosFuturos.some(
+            escenario => Number(escenario.IdEscenarioFuturo) === escenarioId
+        );
+        panel.escenarioFuturoId = participa ? escenarioId : null;
+    }
+    if (escenarioId && paneles.some(panel => panel.escenarioFuturoId)) {
+        modoZona = false;
+        modoZonaLibre = false;
+        modoEdicion = false;
+        celdasZonaSeleccionadas = [];
+        celdasLibresSeleccionadas = [];
+        btnModoZona.classList.remove('activo');
+        btnModoZonaLibre.classList.remove('activo');
+        btnModoEdicion.classList.remove('activo');
+        [gridIzq, gridDer].forEach(grid => grid?.classList.remove('modo-zona-libre'));
+        actualizarBotonesModo();
+    }
+    try {
+        await Promise.all(paneles.filter(panel => panel.idPiso).map(cargarPanel));
+    } catch (error) {
+        mostrarToast(error.message, 'error', 4500);
+    }
+});
+
+btnCrearFuturo.addEventListener('click', async () => {
+    if (!panelActivo?.idPiso) return;
+    const pisosEscenario = selectModo.value === 'doble'
+        ? [panelIzq.idPiso, panelDer.idPiso]
+        : [panelActivo.idPiso];
+    if (pisosEscenario.some(piso => !piso) ||
+        (pisosEscenario.length > 1 && Number(pisosEscenario[0]) === Number(pisosEscenario[1]))) {
+        mostrarToast('Selecciona dos pisos distintos para crear una propuesta entre pisos.', 'warn', 4000);
+        return;
+    }
+    const respuesta = await window.Swal.fire({
+        title: 'Crear copia futura',
+        text: pisosEscenario.length > 1
+            ? 'La propuesta copiará ambos pisos y permitirá mover equipos entre ellos sin cambiar el plano actual.'
+            : 'La propuesta parte de una copia independiente del plano actual.',
+        input: 'text',
+        inputLabel: 'Nombre de la propuesta',
+        inputPlaceholder: 'Ej. Reubicación de switches - diciembre',
+        inputAttributes: { maxlength: 100 },
+        showCancelButton: true,
+        confirmButtonText: 'Crear copia',
+        cancelButtonText: 'Cancelar',
+        inputValidator: valor => String(valor || '').trim() ? undefined : 'Captura un nombre.'
+    });
+    if (!respuesta.isConfirmed) return;
+    try {
+        const resultado = await window.api.plano.crearFuturo(pisosEscenario, respuesta.value.trim());
+        if (!resultado?.ok) {
+            mostrarToast(resultado?.mensaje || 'No se pudo crear la copia.', 'error', 4500);
+            return;
+        }
+        for (const panel of [panelIzq, panelDer]) {
+            panel.escenarioFuturoId = pisosEscenario.some(piso => Number(piso) === Number(panel.idPiso))
+                ? resultado.id
+                : null;
+        }
+        modoZona = false;
+        modoZonaLibre = false;
+        modoEdicion = false;
+        [gridIzq, gridDer].forEach(grid => grid?.classList.remove('modo-zona-libre'));
+        actualizarBotonesModo();
+        mostrarToast(resultado.mensaje, 'exito');
+        await Promise.all(pisosEscenario.map(piso =>
+            cargarPanel(Number(panelIzq.idPiso) === Number(piso) ? panelIzq : panelDer)
+        ));
+    } catch (error) {
+        mostrarToast(error.message, 'error', 4500);
+    }
+});
+
+btnEliminarFuturo.addEventListener('click', async () => {
+    if (!panelActivo?.escenarioFuturoId) return;
+    const idEscenario = panelActivo.escenarioFuturoId;
+    const confirmacion = await window.Swal.fire({
+        icon: 'warning',
+        title: '¿Eliminar propuesta futura?',
+        text: 'Se eliminarán la propuesta y sus movimientos; el plano actual no cambiará.',
+        showCancelButton: true,
+        confirmButtonText: 'Eliminar propuesta',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!confirmacion.isConfirmed) return;
+    try {
+        const resultado = await window.api.plano.eliminarFuturo(
+            idEscenario,
+            panelActivo.idPiso
+        );
+        if (!resultado?.ok) {
+            mostrarToast(resultado?.mensaje || 'No se pudo eliminar la propuesta.', 'error', 4500);
+            return;
+        }
+        for (const panel of [panelIzq, panelDer]) {
+            if (Number(panel.escenarioFuturoId) === Number(idEscenario)) {
+                panel.escenarioFuturoId = null;
+            }
+        }
+        const panelesARecargar = selectModo.value === 'doble'
+            ? [panelIzq, panelDer]
+            : [panelActivo];
+        await Promise.all(panelesARecargar.filter(panel => panel.idPiso).map(cargarPanel));
+        mostrarToast(resultado.mensaje, 'exito');
+    } catch (error) {
+        mostrarToast(error.message, 'error', 4500);
+    }
+});
+
 function limpiarPanel(panel) {
     panel.celdas = [];
     panel.zonas = [];
     panel.zonasLibres = [];
     panel.equiposSinUbicar = [];
     panel.clientesDelPiso = [];
+    panel.escenarioFuturoId = null;
+    panel.escenariosFuturos = [];
+    if (panel === panelActivo) actualizarControlesFuturos(panel);
 
     limpiarRenderPanel(panel);
 
@@ -2111,6 +2315,10 @@ function renderGridPanel(panel) {
             if (contenido && contenido.RolCodigo) {
                 celda.dataset.rol = contenido.RolCodigo;
             }
+            if (contenido?._movimientoFuturo) {
+                celda.classList.add('movimiento-futuro');
+                celda.title = 'Movimiento propuesto; no modifica el plano actual.';
+            }
 
             if (zl && !contenido) {
                 celda.classList.add('celda-libre');
@@ -2144,10 +2352,9 @@ function renderGridPanel(panel) {
             }
 
             if (contenido) {
-                celda.innerHTML = `
-                    <button class="cerrar" data-id="${contenido.IdEquipo}">✕</button>
+                celda.innerHTML = `${panel.escenarioFuturoId ? '' : `<button class="cerrar" data-id="${contenido.IdEquipo}">✕</button>`}
                     ${SVG_PC}
-                `;
+                    ${contenido._movimientoFuturo ? '<span class="marca-futuro">FUTURO</span>' : ''}`;
 
                 celda.addEventListener('mouseenter', (ev) => {
                     if (modoZona || modoZonaLibre || modoEdicion) return;
@@ -2203,7 +2410,7 @@ function renderGridPanel(panel) {
                     });
                 }
 
-                if (modoEdicion && panel === panelActivo) {
+                if (modoEdicion && panel === panelActivo && !panel.escenarioFuturoId) {
                     celda.style.cursor = 'pointer';
                     celda.addEventListener('click', (ev) => {
                         ev.preventDefault();
@@ -2811,6 +3018,45 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
     const panelOrigen = dragOrigen.panelSufijo === 'izq' ? panelIzq : panelDer;
     const mismoPanel = panelOrigen === panelDestino;
     const contenidoDestino = panelDestino.celdas[filaDestino - 1][columnaDestino - 1];
+    if (panelOrigen.escenarioFuturoId || panelDestino.escenarioFuturoId) {
+        const origen = { ...dragOrigen };
+        dragOrigen = null;
+        const mismaPropuesta = panelOrigen.escenarioFuturoId &&
+            Number(panelOrigen.escenarioFuturoId) === Number(panelDestino.escenarioFuturoId);
+        const vistaPermitida = mismoPanel || selectModo.value === 'doble';
+        const pisosDistintos = Number(panelOrigen.idPiso) !== Number(panelDestino.idPiso);
+        if (origen.tipo !== 'celda' || !mismaPropuesta || !vistaPermitida ||
+            (!mismoPanel && !pisosDistintos)) {
+            mostrarToast('Para mover entre pisos, ambos paneles deben pertenecer a la misma propuesta futura.', 'warn', 4000);
+            return;
+        }
+        const permiso = contenidoDestino ? 'plano:mover|plano:intercambiar' : 'plano:mover';
+        if (window.PermisosUI && !window.PermisosUI.puede(permiso)) {
+            mostrarToast('No tienes permiso para modificar la propuesta.', 'error');
+            return;
+        }
+        if (origen.fila === filaDestino && origen.columna === columnaDestino) return;
+        try {
+            const resultado = await window.api.plano.moverFuturo(
+                panelDestino.escenarioFuturoId,
+                origen.idEquipo,
+                panelDestino.idPiso,
+                filaDestino,
+                columnaDestino
+            );
+            if (!resultado?.ok) {
+                mostrarToast(resultado?.mensaje || 'No se pudo guardar el movimiento futuro.', 'error', 4500);
+                return;
+            }
+            await Promise.all((selectModo.value === 'doble' ? [panelIzq, panelDer] : [panelDestino])
+                .filter(panel => panel.idPiso)
+                .map(recargarPanel));
+            mostrarToast(resultado.mensaje, 'exito');
+        } catch (error) {
+            mostrarToast(error.message, 'error', 4500);
+        }
+        return;
+    }
     const permisoDrop = dragOrigen.tipo === 'lista'
         ? `plano:asignar${contenidoDestino ? '&plano:quitar' : ''}`
         : (contenidoDestino ? 'plano:intercambiar' : 'plano:mover');

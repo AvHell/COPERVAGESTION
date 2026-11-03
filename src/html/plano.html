@@ -24,8 +24,16 @@
             <label for="select-modo">Vista:</label>
             <select id="select-modo">
                 <option value="simple">Un piso</option>
-                <option value="doble">Dos pisos (comparar)</option>
+                <option value="doble">Dos pisos</option>
             </select>
+        </div>
+        <div id="controles-futuro" class="grupo-modo" data-permiso="plano:ver" hidden>
+            <label for="select-escenario-futuro">Propuesta:</label>
+            <select id="select-escenario-futuro">
+                <option value="">Plano actual</option>
+            </select>
+            <button id="btn-crear-futuro" class="secundario" data-permiso="plano:mover" type="button">Crear copia futura</button>
+            <button id="btn-eliminar-futuro" class="secundario" data-permiso="plano:mover" type="button" hidden>Eliminar propuesta</button>
         </div>
 
         <button id="btn-modo-zona" class="btn-modo" data-permiso="plano:zonas:gestionar">

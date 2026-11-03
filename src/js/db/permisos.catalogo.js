@@ -44,6 +44,7 @@ const CATALOGO = {
   'equipos:editar':                { grupo: 'Equipos',      etiqueta: 'Editar equipo' },
   'equipos:eliminar':              { grupo: 'Equipos',      etiqueta: 'Eliminar equipo' },
   'mantenimientos:crear':          { grupo: 'Mantenimientos', etiqueta: 'Registrar mantenimiento' },
+  'mantenimientos:fecha:editar':   { grupo: 'Mantenimientos', etiqueta: 'Modificar fecha del mantenimiento' },
 
   /* ---------- PLANO ---------- */
   'plano:ver':                     { grupo: 'Plano',        etiqueta: 'Ver plano' },

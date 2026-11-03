@@ -28,18 +28,47 @@ async function listar() {
    ========================================================= */
 async function verificarIPDuplicada(ip, idEquipoExcluir = null) {
     if (!ip) return null;
+    const partes = String(ip).trim().split('.');
+    if (partes.length !== 4 || partes.some(octeto =>
+        !/^\d{1,3}$/.test(octeto) || Number(octeto) < 0 || Number(octeto) > 255
+    )) {
+        return null;
+    }
+    const octetos = partes.map(Number);
     const pool = await getPool();
-    const req = pool.request().input('IP', sql.VarChar(45), ip);
+    const req = pool.request()
+        .input('IP1', sql.Int, octetos[0])
+        .input('IP2', sql.Int, octetos[1])
+        .input('IP3', sql.Int, octetos[2])
+        .input('IP4', sql.Int, octetos[3]);
 
     let query = `
-        SELECT E.IdEquipo, E.Hostname, C.Codigo AS ClienteCodigo, P.Nombre AS PisoNombre
-        FROM Equipos E
-        INNER JOIN Clientes C ON C.IdCliente = E.IdCliente
-        LEFT JOIN  Pisos P    ON P.IdPiso = E.IdPiso
-        WHERE E.TipoIP = 'Estatica' AND E.IP = @IP
+        SELECT TOP 1 Conflicto.IdEquipo, Conflicto.Hostname,
+               Conflicto.ClienteCodigo, Conflicto.PisoNombre
+        FROM (
+            SELECT E.IdEquipo, E.Hostname, C.Codigo AS ClienteCodigo, P.Nombre AS PisoNombre
+            FROM Equipos E
+            INNER JOIN Clientes C ON C.IdCliente = E.IdCliente
+            LEFT JOIN Pisos P ON P.IdPiso = E.IdPiso
+            WHERE E.Activo = 1
+              AND E.TipoIP = 'Estatica'
+              AND TRY_CONVERT(int, PARSENAME(E.IP, 4)) = @IP1
+              AND TRY_CONVERT(int, PARSENAME(E.IP, 3)) = @IP2
+              AND TRY_CONVERT(int, PARSENAME(E.IP, 2)) = @IP3
+              AND TRY_CONVERT(int, PARSENAME(E.IP, 1)) = @IP4
+            UNION ALL
+            SELECT NULL AS IdEquipo, COALESCE(I.Hostname, N'Dispositivo general') AS Hostname,
+                   N'Control general' AS ClienteCodigo, Site.Nombre AS PisoNombre
+            FROM dbo.InventarioGeneralIP I
+            LEFT JOIN dbo.CatalogosInventarioIP Site ON Site.IdCatalogoIP = I.IdSite
+            WHERE TRY_CONVERT(int, PARSENAME(I.IP, 4)) = @IP1
+              AND TRY_CONVERT(int, PARSENAME(I.IP, 3)) = @IP2
+              AND TRY_CONVERT(int, PARSENAME(I.IP, 2)) = @IP3
+              AND TRY_CONVERT(int, PARSENAME(I.IP, 1)) = @IP4
+        ) Conflicto
     `;
     if (idEquipoExcluir) {
-        query += ' AND E.IdEquipo <> @IdExcluir';
+        query += ' WHERE Conflicto.IdEquipo IS NULL OR Conflicto.IdEquipo <> @IdExcluir';
         req.input('IdExcluir', sql.Int, idEquipoExcluir);
     }
 
@@ -65,11 +94,22 @@ async function listarIPsAsignadasEnSegmento(segmento, idEquipoExcluir = null) {
     if (excluir) request.input('IdEquipoExcluir', sql.Int, Number(idEquipoExcluir));
 
     const resultado = await request.query(`
-            SELECT DISTINCT LTRIM(RTRIM(IP)) AS IP
-            FROM Equipos
-            WHERE TipoIP = 'Estatica' AND IP IS NOT NULL
-            ${excluir ? 'AND IdEquipo <> @IdEquipoExcluir' : ''}
-        `);
+        SELECT DISTINCT LTRIM(RTRIM(IP)) AS IP
+        FROM (
+            SELECT E.IP, E.IdEquipo
+            FROM dbo.Equipos E
+            INNER JOIN dbo.Clientes C ON C.IdCliente = E.IdCliente
+            WHERE E.Activo = 1
+              AND E.TipoIP = 'Estatica'
+              AND E.IP IS NOT NULL
+            UNION ALL
+            SELECT IP, NULL AS IdEquipo
+            FROM dbo.InventarioGeneralIP
+            WHERE IP IS NOT NULL
+        ) Direcciones
+        WHERE 1 = 1
+        ${excluir ? 'AND (IdEquipo IS NULL OR IdEquipo <> @IdEquipoExcluir)' : ''}
+    `);
     const prefijo = octetos.map(Number).join('.');
     return resultado.recordset.map(registro => String(registro.IP ?? '').trim())
         .filter(ip => {
@@ -339,6 +379,12 @@ async function eliminar(id) {
     const tx = new sql.Transaction(pool);
     await tx.begin();
     try {
+        await new sql.Request(tx)
+            .input('IdEquipo', sql.Int, id)
+            .query('DELETE FROM dbo.EscenarioPlanoFuturoUbicaciones WHERE IdEquipo = @IdEquipo');
+        await new sql.Request(tx)
+            .input('IdEquipo', sql.Int, id)
+            .query('DELETE FROM dbo.EscenarioPlanoFuturoOriginal WHERE IdEquipo = @IdEquipo');
         await new sql.Request(tx)
             .input('IdEquipo', sql.Int, id)
             .query('DELETE FROM PlanoUbicaciones WHERE IdEquipo = @IdEquipo');

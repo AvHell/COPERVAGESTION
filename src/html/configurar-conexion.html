@@ -15,10 +15,13 @@
 
         <form id="form-conexion">
             <label for="server">Servidor</label>
-            <input id="server" name="server" type="text" autocomplete="off" placeholder="servidor.database.windows.net" required>
+            <input id="server" name="server" type="text" autocomplete="off" placeholder="sql.bsite.net" required>
 
-            <label for="instanceName">Instancia <span>(opcional)</span></label>
-            <input id="instanceName" name="instanceName" type="text" autocomplete="off" placeholder="Nombre de instancia">
+            <label for="port">Puerto <span>(recomendado: 1433)</span></label>
+            <input id="port" name="port" type="number" inputmode="numeric" min="1" max="65535" autocomplete="off" placeholder="1433">
+
+            <label for="instanceName">Instancia <span>(opcional, requiere puerto)</span></label>
+            <input id="instanceName" name="instanceName" type="text" autocomplete="off" placeholder="Dejar vacío en hosting compartido">
 
             <label for="database">Base de datos</label>
             <input id="database" name="database" type="text" autocomplete="off" required>
@@ -33,7 +36,7 @@
             <button id="guardar" type="submit">Probar y guardar conexión</button>
         </form>
 
-        <p class="security-note">Usa una cuenta SQL de mínimo privilegio. La app debe ejecutarse bajo el mismo usuario de Windows que configuró la conexión.</p>
+        <p class="security-note">Usa una cuenta SQL de mínimo privilegio. La app debe ejecutarse bajo el mismo usuario de Windows que configuró la conexión. Si usas <code>sql.bsite.net</code>, deja la instancia vacía y pon el puerto <code>1433</code>.</p>
     </main>
     <script src="../js/configurar-conexion-renderer.js"></script>
 </body>

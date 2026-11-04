@@ -5,14 +5,32 @@ function crearConfig(credencial = credenciales.cargar()) {
     if (!credencial) {
         throw new Error('Falta configurar la conexión a la base de datos. Ejecuta la aplicación para iniciar la configuración.');
     }
-    const { instanceName, ...datosConexion } = credencial;
+
+    const {
+        instanceName,
+        port,
+        encrypt,
+        trustServerCertificate,
+        ...datosConexion
+    } = credencial;
+
+    // Encrypt: prioridad -> credencial.encrypt -> env DB_ENCRYPT -> false (bsite.net)
+    const encryptFinal = typeof encrypt === 'boolean'
+        ? encrypt
+        : String(process.env.DB_ENCRYPT || 'false').toLowerCase() === 'true';
+
+    // trustServerCertificate: por defecto true (hosting compartido suele tener cert no válido)
+    const trustFinal = typeof trustServerCertificate === 'boolean'
+        ? trustServerCertificate
+        : true;
 
     return {
-        ...datosConexion,
+        ...datosConexion,                       // server, database, user, password
+        ...(port ? { port: Number(port) } : {}), // 👈 puerto explícito → sin SQL Browser
         options: {
             ...(instanceName ? { instanceName } : {}),
-            trustServerCertificate: true,
-            encrypt: true,
+            trustServerCertificate: trustFinal,
+            encrypt: encryptFinal,
             enableArithAbort: true,
             connectionTimeout: 30000,
             requestTimeout: 30000,
@@ -36,10 +54,11 @@ let poolPromise = null;
 function getPool() {
     if (!poolPromise) {
         const config = crearConfig();
+        const destino = config.port ? `${config.server}:${config.port}` : config.server;
         poolPromise = new sql.ConnectionPool(config)
             .connect()
             .then(pool => {
-                console.log('✅ Conectado a SQL Server remoto (' + config.server + ')');
+                console.log(`✅ Conectado a SQL Server remoto (${destino})`);
                 return pool;
             })
             .catch(err => {
@@ -51,12 +70,26 @@ function getPool() {
     return poolPromise;
 }
 
-process.on('SIGINT', async () => {
+async function cerrarPool() {
+    if (!poolPromise) return;
     try {
         const pool = await poolPromise;
         if (pool) await pool.close();
-    } catch (_) {}
+    } catch (_) {
+        /* ignorar */
+    } finally {
+        poolPromise = null;
+    }
+}
+
+process.on('SIGINT', async () => {
+    await cerrarPool();
     process.exit(0);
 });
 
-module.exports = { getPool, sql, crearConfig };
+process.on('SIGTERM', async () => {
+    await cerrarPool();
+    process.exit(0);
+});
+
+module.exports = { getPool, cerrarPool, sql, crearConfig };

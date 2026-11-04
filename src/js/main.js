@@ -560,6 +560,42 @@ ipcMain.handle('db-config:guardar', async (event, datos) => {
 });
 
 /* =========================================================
+   IPC: REABRIR CONFIGURACIÓN DE BASE DE DATOS
+   ========================================================= */
+ipcMain.handle('db-config:abrir', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) {
+        return { ok: false, mensaje: 'Ventana no disponible.' };
+    }
+
+    // Seguridad: solo permitir abrir el formulario si NO hay sesión activa
+    // (evita que un usuario logueado fuerce reconfiguración de la BD).
+    if (haySesion()) {
+        return {
+            ok: false,
+            mensaje: 'Cierra sesión antes de reconfigurar la conexión a la base de datos.'
+        };
+    }
+
+    // Si ya hay una ventana de configuración abierta, solo enfócala
+    const existente = ventanas['configuracion-db'];
+    if (existente && !existente.isDestroyed()) {
+        if (existente.isMinimized()) existente.restore();
+        if (!existente.isVisible()) existente.show();
+        existente.focus();
+        return { ok: true };
+    }
+
+    crearConfiguracionDBWindow();
+
+    // Opcional: cierra la ventana desde la que se pidió (normalmente el login)
+    // para que no queden dos ventanas abiertas.
+    try { win.close(); } catch (_) {}
+
+    return { ok: true };
+});
+
+/* =========================================================
    IPC: PERMISOS
    ========================================================= */
 ipcMain.handle('permisos:mios', () => {

@@ -10,6 +10,22 @@ form.addEventListener('submit', async event => {
     mensaje.textContent = '';
 
     const datos = Object.fromEntries(new FormData(form).entries());
+
+    // Normalizar: port vacío -> undefined; si viene, a número
+    const portRaw = String(datos.port ?? '').trim();
+    datos.port = portRaw === '' ? undefined : Number(portRaw);
+    if (datos.port !== undefined && (!Number.isInteger(datos.port) || datos.port < 1 || datos.port > 65535)) {
+        mensaje.textContent = 'El puerto debe ser un número entre 1 y 65535.';
+        mensaje.className = 'message error visible';
+        boton.disabled = false;
+        boton.textContent = 'Probar y guardar conexión';
+        return;
+    }
+
+    // Normalizar: instanceName vacío -> undefined (no enviar cadena vacía)
+    const inst = String(datos.instanceName ?? '').trim();
+    datos.instanceName = inst === '' ? undefined : inst;
+
     try {
         const resultado = await window.api.configurarConexion(datos);
         if (!resultado?.ok) {

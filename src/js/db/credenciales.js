@@ -12,6 +12,9 @@ function obtenerRuta() {
 function validar(datos) {
     const config = {
         server: String(datos?.server || '').trim(),
+        port: datos?.port !== undefined && datos?.port !== null && datos?.port !== ''
+            ? Number(datos.port)
+            : undefined,
         instanceName: String(datos?.instanceName || '').trim(),
         database: String(datos?.database || '').trim(),
         user: String(datos?.user || '').trim(),
@@ -29,6 +32,26 @@ function validar(datos) {
         config.instanceName.length > 128) {
         throw new Error('Uno o más campos exceden el tamaño permitido.');
     }
+
+    // Validar puerto (si viene)
+    if (config.port !== undefined) {
+        if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
+            throw new Error('El puerto debe ser un número entre 1 y 65535.');
+        }
+    }
+
+    // Regla para hosting compartido (sql.bsite.net, etc.):
+    // si hay instanceName pero no port, tedious intentará SQL Browser (UDP 1434)
+    // y fallará con EINSTLOOKUP. Forzamos a que el usuario ponga el puerto.
+    if (config.instanceName && !config.port) {
+        throw new Error(
+            'Si indicas un nombre de instancia, también debes indicar el puerto TCP ' +
+            '(por ejemplo 1433). En hosting compartido el SQL Browser no está accesible.'
+        );
+    }
+
+    // Si NO hay instanceName y NO hay port, dejamos que tedious use el 1433 por defecto.
+    // No es un error, pero lo dejamos documentado.
 
     return config;
 }
@@ -84,6 +107,7 @@ function desdeEntorno(env = process.env) {
     if (!requeridas.every(nombre => env[nombre])) return null;
     return validar({
         server: env.DB_SERVER,
+        port: env.DB_PORT,
         instanceName: env.DB_INSTANCE,
         database: env.DB_DATABASE,
         user: env.DB_USER,

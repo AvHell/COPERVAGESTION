@@ -163,6 +163,43 @@ inputUsuario.addEventListener('keydown', (e) => {
 });
 
 /* =========================================================
+   RECONFIGURAR CONEXIÓN A LA BASE DE DATOS
+   ========================================================= */
+const btnReconfigurar = document.getElementById('btn-reconfigurar');
+
+if (btnReconfigurar) {
+    btnReconfigurar.addEventListener('click', async () => {
+        try {
+            const r = await window.api.abrirConfiguracionDB();
+            if (r?.ok === false) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No se puede reconfigurar',
+                    text: r?.mensaje || 'No se pudo abrir la configuración.',
+                    buttonsStyling: false,
+                    customClass: {
+                        popup: 'cl-confirm',
+                        confirmButton: 'swal2-confirm swal2-styled'
+                    }
+                });
+            }
+        } catch (err) {
+            console.error('[Login] Error abriendo configuración de BD:', err);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Ocurrió un error al abrir la configuración de la base de datos.',
+                buttonsStyling: false,
+                customClass: {
+                    popup: 'cl-confirm',
+                    confirmButton: 'swal2-confirm swal2-styled'
+                }
+            });
+        }
+    });
+}
+
+/* =========================================================
    INICIO: mostrar aviso si venimos de logout / expiración
    ========================================================= */
 (async () => {

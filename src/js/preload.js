@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('api', {
     onSesionCerrada:     (cb) => ipcRenderer.on('sesion:cerrada', (_e, data) => cb(data)),
 
     /* =========================================================
+       CONFIGURACIÓN DE BASE DE DATOS
+       ========================================================= */
+    abrirConfiguracionDB: () => ipcRenderer.invoke('db-config:abrir'),
+
+    /* =========================================================
        PERMISOS
        ========================================================= */
     permisos: {

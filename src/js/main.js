@@ -1351,15 +1351,12 @@ async function exportarMantenimientosExcel(idPiso) {
         key: `columna${index + 1}`,
         width: widths[index]
     }));
-    worksheet.addTable({
-        name: 'TablaMantenimientos',
-        ref: 'A1',
-        headerRow: true,
-        totalsRow: false,
-        style: { theme: 'TableStyleMedium4', showRowStripes: true },
-        columns: headers.map(name => ({ name })),
-        rows: filas
-    });
+    worksheet.addRow(headers);
+    worksheet.addRows(filas);
+    worksheet.autoFilter = {
+        from: 'A1',
+        to: `H${filas.length + 1}`
+    };
     worksheet.getRow(1).eachCell(cell => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF55744F' } };
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -1369,57 +1366,6 @@ async function exportarMantenimientosExcel(idPiso) {
         row.height = rowNumber === 1 ? 30 : 36;
         row.alignment = { vertical: 'top', wrapText: true };
     });
-
-    const resumenMap = new Map();
-    for (const registro of registros) {
-        const key = [
-            registro.Cliente || '',
-            registro.Rol || '',
-            registro.PisoNombre || '',
-            registro.Hostname || '',
-            registro.RealizadoPor || ''
-        ].join('|');
-        const resumen = resumenMap.get(key) || {
-            cliente: registro.Cliente || '',
-            rol: registro.Rol || '',
-            ubicacion: registro.PisoNombre || '',
-            equipo: registro.Hostname || '',
-            responsable: registro.RealizadoPor || '',
-            cantidad: 0
-        };
-        resumen.cantidad += 1;
-        resumenMap.set(key, resumen);
-    }
-
-    const resumenHeaders = ['Cliente', 'Rol', 'Ubicación', 'Equipo', 'Realizado por', 'Mantenimientos'];
-    const resumenFilas = [...resumenMap.values()].map(item => [
-        item.cliente, item.rol, item.ubicacion, item.equipo, item.responsable, item.cantidad
-    ]);
-    const resumenSheet = workbook.addWorksheet('Resumen');
-    const resumenWidths = [30, 24, 20, 23, 38, 20];
-    resumenSheet.columns = resumenHeaders.map((_, index) => ({
-        key: `resumen${index + 1}`,
-        width: resumenWidths[index]
-    }));
-    resumenSheet.addTable({
-        name: 'ResumenMantenimientos',
-        ref: 'A1',
-        headerRow: true,
-        totalsRow: false,
-        style: { theme: 'TableStyleMedium4', showRowStripes: true },
-        columns: resumenHeaders.map(name => ({ name })),
-        rows: resumenFilas
-    });
-    resumenSheet.eachRow((row, rowNumber) => {
-        row.height = rowNumber === 1 ? 30 : 36;
-        row.alignment = { vertical: 'top', wrapText: true };
-        if (rowNumber === 1) row.eachCell(cell => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF55744F' } };
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            cell.alignment = { vertical: 'middle', wrapText: true };
-        });
-    });
-    resumenSheet.views = [{ state: 'frozen', ySplit: 1 }];
     await workbook.xlsx.writeFile(filePath);
     return { ok: true, ruta: filePath };
 }

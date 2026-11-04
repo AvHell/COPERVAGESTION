@@ -57,6 +57,12 @@
                 </div>
                 <button id="btn-cerrar-historial" class="btn btn-secundario" type="button">Cerrar</button>
             </div>
+            <div class="historial-filtros">
+                <label for="filtro-historial">Filtrar por equipo, IP, cliente, rol, ubicación o fecha</label>
+                <input id="filtro-historial" type="search"
+                    placeholder="Escribe un dato para filtrar el historial" autocomplete="off">
+                <span id="historial-resultados" aria-live="polite"></span>
+            </div>
             <div class="tabla-scroll">
                 <table>
                     <thead>

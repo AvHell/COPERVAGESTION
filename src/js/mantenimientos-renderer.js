@@ -83,7 +83,7 @@ function crearCelda(fila, columna, equipo) {
     if (equipo?.UltimoMantenimiento) celda.classList.add('con-mantenimiento');
     if (equipo?.UltimoMantenimiento && equipo.UltimoFueClonacion) celda.classList.add('ultimo-clonacion');
     celda.setAttribute('aria-label', equipo
-        ? `${equipo.Hostname}, ${equipo.Rol || 'sin rol'}${equipo.UltimoMantenimiento ? ', mantenimiento registrado' : ''}${equipo.UltimoFueClonacion ? ', clonación realizada en el último mantenimiento' : ''}`
+        ? `${equipo.Hostname}, cliente ${equipo.ClienteCodigo || 'sin código'}, IP ${equipo.IP || 'DHCP'}${equipo.UltimoMantenimiento ? ', mantenimiento registrado' : ''}${equipo.UltimoFueClonacion ? ', clonación realizada en el último mantenimiento' : ''}`
         : `Celda vacía, fila ${fila}, columna ${columna}`);
     celda.title = equipo
         ? `${equipo.Hostname} · ${equipo.IP || 'DHCP'}${equipo.UltimoMantenimiento ? ` · Último mantenimiento: ${fechaLocal(equipo.UltimoMantenimiento)}` : ''}`
@@ -97,14 +97,11 @@ function crearCelda(fila, columna, equipo) {
         cliente.className = 'cliente badge-mantenimiento badge-cliente';
         cliente.dataset.color = String(equipo.ClienteCodigo || '').toUpperCase();
         cliente.dataset.colorKind = 'client';
-        cliente.textContent = equipo.Cliente || 'Cliente no disponible';
-        const rol = document.createElement('span');
-        rol.className = 'rol';
-        rol.textContent = equipo.Rol || 'Rol no disponible';
+        cliente.textContent = equipo.ClienteCodigo || 'Código no disponible';
         const ip = document.createElement('span');
         ip.className = 'ip';
         ip.textContent = equipo.IP || 'DHCP';
-        celda.append(hostname, cliente, rol, ip);
+        celda.append(hostname, cliente, ip);
 
         if (equipo.UltimoMantenimiento) {
             const marca = document.createElement('span');
@@ -140,7 +137,7 @@ function renderizarPlano() {
 
     $('mapa-vacio').hidden = true;
     $('titulo-piso').textContent = `${planoActual.Nombre} · ${planoActual.Filas} × ${planoActual.Columnas}`;
-    mapa.style.gridTemplateColumns = `repeat(${planoActual.Columnas}, 132px)`;
+    mapa.style.gridTemplateColumns = `repeat(${planoActual.Columnas}, 96px)`;
     const equiposPorUbicacion = new Map(
         planoActual.equipos.map(e => [`${e.Fila}:${e.Columna}`, e])
     );
@@ -160,9 +157,33 @@ function renderizarHistorial() {
         'aria-label',
         `Abrir historial de ${registrosActuales.length} ${registrosActuales.length === 1 ? 'registro' : 'registros'}`
     );
-    $('historial-vacio').hidden = registrosActuales.length > 0;
+    const consulta = normalizarTexto($('filtro-historial').value);
+    const registrosFiltrados = registrosActuales.filter(registro => {
+        if (!consulta) return true;
+        const fechaCruda = registro.FechaMantenimiento instanceof Date
+            ? registro.FechaMantenimiento.toISOString().slice(0, 10)
+            : String(registro.FechaMantenimiento || '');
+        const campos = [
+            registro.Hostname,
+            registro.IP,
+            registro.Cliente,
+            registro.ClienteCodigo,
+            registro.Rol,
+            registro.RolCodigo,
+            registro.PisoNombre,
+            fechaLocal(registro.FechaMantenimiento),
+            fechaCruda
+        ];
+        return campos.some(valor => normalizarTexto(valor).includes(consulta));
+    });
+    $('historial-resultados').textContent = `Mostrando ${registrosFiltrados.length} de ${registrosActuales.length} registros`;
+    const historialVacio = $('historial-vacio');
+    historialVacio.hidden = registrosFiltrados.length > 0;
+    historialVacio.textContent = registrosActuales.length && consulta
+        ? 'No hay resultados que coincidan con el filtro.'
+        : 'No hay mantenimientos registrados para este piso.';
 
-    for (const registro of registrosActuales) {
+    for (const registro of registrosFiltrados) {
         const row = document.createElement('tr');
         const values = [
             { value: fechaLocal(registro.FechaMantenimiento) || '—', badge: 'badge-fecha', color: 'FECHA' },
@@ -193,6 +214,14 @@ function renderizarHistorial() {
         row.append(observaciones);
         body.append(row);
     }
+}
+
+function normalizarTexto(valor) {
+    return String(valor ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
 }
 
 function abrirEquipo(equipo, fila, columna) {
@@ -278,6 +307,7 @@ async function inicializar() {
     $('btn-actualizar').addEventListener('click', () => cargarPiso(pisoActual));
     $('btn-ver-historial').addEventListener('click', () => $('dialog-historial').showModal());
     $('btn-cerrar-historial').addEventListener('click', () => $('dialog-historial').close());
+    $('filtro-historial').addEventListener('input', renderizarHistorial);
     $('dialog-historial').addEventListener('click', event => {
         if (event.target === $('dialog-historial')) $('dialog-historial').close();
     });

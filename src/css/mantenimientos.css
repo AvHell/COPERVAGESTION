@@ -144,14 +144,15 @@ main { width: 100%; max-width: none; margin: 0; padding: 24px 28px 40px; }
 .celda {
     position: relative;
     display: flex;
-    width: 132px;
-    min-height: 112px;
+    width: 96px;
+    min-height: 72px;
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    gap: 3px;
+    gap: 2px;
     overflow: hidden;
-    padding: 8px;
+    padding: 5px;
+    line-height: 1.15;
     border: 1px solid #c9c5ba;
     border-radius: 7px;
     background: #fffefa;
@@ -161,14 +162,14 @@ main { width: 100%; max-width: none; margin: 0; padding: 24px 28px 40px; }
 .celda:hover { border-color: var(--tierra); background: #f7f0e2; }
 .celda.vacia { border-style: dashed; background: rgba(255,255,255,.55); }
 .celda.con-mantenimiento {
-    padding-top: 22px;
+    padding-top: 12px;
     outline: 1.5px solid var(--verde);
     outline-offset: -3px;
 }
 .celda.ultimo-clonacion { outline-color: var(--rojo); }
-.celda .hostname { max-width: 100%; overflow: hidden; font-size: .98rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
-.celda .cliente { max-width: 100%; overflow: hidden; color: var(--texto-suave); font-size: .86rem; text-overflow: ellipsis; white-space: nowrap; }
-.celda .rol, .celda .ip { max-width: 100%; overflow: hidden; color: var(--texto-suave); font-size: .84rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.celda .hostname { max-width: 100%; overflow: hidden; font-size: .78rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.celda .cliente { min-height: 0; max-width: 100%; overflow: hidden; padding: 1px 4px; color: var(--texto-suave); font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+.celda .ip { max-width: 100%; overflow: hidden; color: var(--texto-suave); font-size: .7rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .celda[data-rol="AGT"] { border-color: var(--agt); background: #eaf0f8; }
 .celda[data-rol="CRD"] { border-color: var(--crd); background: #fbf4df; }
 .celda[data-rol="CLD"] { border-color: var(--cld); background: #f8eaf0; }
@@ -186,7 +187,7 @@ main { width: 100%; max-width: none; margin: 0; padding: 24px 28px 40px; }
     letter-spacing: .03em;
 }
 .celda .marca-mantenimiento.clonado { color: var(--rojo); }
-.celda .fecha-marca { color: #49483f; font-size: .76rem; font-weight: 700; }
+.celda .fecha-marca { color: #49483f; font-size: .64rem; font-weight: 700; }
 .celda .coordenada { position: absolute; bottom: 3px; right: 5px; color: #928f84; font-size: .58rem; }
 .ayuda { padding: 10px 3px 0; color: var(--texto-suave); font-size: .77rem; }
 
@@ -232,6 +233,11 @@ td { max-width: 260px; overflow-wrap: anywhere; }
 .dialog-historial::backdrop { background: rgba(35, 33, 27, .48); }
 .dialog-historial .historial-panel { margin: 0; padding: 22px; box-shadow: none; }
 .dialog-historial .section-heading { align-items: center; }
+.historial-filtros { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 5px 12px; align-items: center; margin: 0 0 14px; }
+.historial-filtros label { color: var(--texto-suave); font-size: .78rem; font-weight: 700; }
+.historial-filtros input { grid-column: 1; width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--borde); border-radius: 8px; background: #fff; color: var(--texto); }
+.historial-filtros input:focus { outline: 2px solid rgba(89, 98, 71, .28); border-color: var(--oliva); }
+.historial-filtros span { grid-column: 2; grid-row: 2; color: var(--texto-suave); font-size: .76rem; }
 .dialog-historial .tabla-scroll { max-height: 68vh; overflow: auto; }
 .dialog-historial table { min-width: 900px; table-layout: auto; font-size: .86rem; }
 .dialog-historial th, .dialog-historial td { padding: 12px 11px; line-height: 1.5; }
@@ -359,8 +365,9 @@ td { max-width: 260px; overflow-wrap: anywhere; }
     .mapa-panel { padding: 0; }
     .historial-panel { padding: 14px; }
     .section-heading { align-items: flex-start; flex-direction: column; }
-    .celda { width: 132px; min-height: 112px; }
     .topbar-actions { flex-wrap: wrap; }
     .dialog-historial .historial-panel { padding: 14px; }
     .equipo-detalle { grid-template-columns: 1fr 1fr; }
+    .historial-filtros { grid-template-columns: 1fr; }
+    .historial-filtros span { grid-column: 1; grid-row: auto; }
 }

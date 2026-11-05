@@ -1,6 +1,6 @@
 /*
   Ejecutar una vez en la base de datos de la aplicación para habilitar
-  propuestas futuras que incluyan y muevan equipos entre varios pisos.
+  propuestas futuras entre pisos y ediciones temporales de sus equipos.
 */
 
 IF OBJECT_ID(N'dbo.EscenarioPlanoFuturoPisos', N'U') IS NULL
@@ -18,6 +18,10 @@ BEGIN
             FOREIGN KEY (IdPiso) REFERENCES dbo.Pisos (IdPiso)
     );
 END;
+GO
+
+IF COL_LENGTH(N'dbo.EscenarioPlanoFuturoUbicaciones', N'DatosEquipoJson') IS NULL
+    ALTER TABLE dbo.EscenarioPlanoFuturoUbicaciones ADD DatosEquipoJson NVARCHAR(MAX) NULL;
 GO
 
 IF COL_LENGTH(N'dbo.EscenarioPlanoFuturoOriginal', N'IdPisoOriginal') IS NULL

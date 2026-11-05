@@ -141,6 +141,7 @@ BEGIN
         IdPiso INT NOT NULL,
         Fila INT NOT NULL,
         Columna INT NOT NULL,
+        DatosEquipoJson NVARCHAR(MAX) NULL,
         CONSTRAINT PK_EscenarioPlanoFuturoUbicaciones
             PRIMARY KEY (IdEscenarioFuturo, IdEquipo),
         CONSTRAINT FK_EscenarioPlanoFuturoUbicaciones_Original

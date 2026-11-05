@@ -1360,7 +1360,9 @@ async function abrirModalEditarEquipo(equipo, panel) {
         <div><b>Cliente actual:</b> ${equipo.ClienteCodigo || '—'}</div>
         <div><b>Rol actual:</b> ${equipo.RolCodigo || '—'}</div>
         <div><b>Piso:</b> ${pisos.find(p => Number(p.IdPiso) === Number(idPisoReal))?.Nombre || ''}</div>
+        ${panel.escenarioFuturoId ? '<div><b>Propuesta temporal:</b> los cambios no modifican el equipo original.</div>' : ''}
     `;
+    editarConfirmar.textContent = panel.escenarioFuturoId ? 'Guardar en copia futura' : 'Guardar cambios';
 
     if (editarMensaje) { editarMensaje.style.display = 'none'; editarMensaje.textContent = ''; }
 
@@ -1587,12 +1589,20 @@ if (editarConfirmar) {
         editarConfirmar.textContent = 'Guardando...';
 
         try {
-            const res = await window.api.equipos.actualizar(equipo.IdEquipo, datos);
+            const res = panel.escenarioFuturoId
+                ? await window.api.plano.editarEquipoFuturo(panel.escenarioFuturoId, equipo.IdEquipo, datos)
+                : await window.api.equipos.actualizar(equipo.IdEquipo, datos);
 
             if (res && res.ok) {
                 modalEditarEquipo.style.display = 'none';
                 equipoEditando = null;
-                mostrarToast(`Equipo "${datos.hostname}" actualizado correctamente`, 'exito', 3200);
+                mostrarToast(
+                    panel.escenarioFuturoId
+                        ? `Equipo "${datos.hostname}" actualizado solo en la copia futura`
+                        : `Equipo "${datos.hostname}" actualizado correctamente`,
+                    'exito',
+                    3200
+                );
                 await recargarPanel(panel);
                 return;
             }
@@ -1612,7 +1622,7 @@ if (editarConfirmar) {
         } finally {
             edGuardando = false;
             editarConfirmar.disabled = false;
-            editarConfirmar.textContent = 'Guardar cambios';
+            editarConfirmar.textContent = panel.escenarioFuturoId ? 'Guardar en copia futura' : 'Guardar cambios';
         }
     });
 }
@@ -2090,6 +2100,33 @@ async function cargarPanel(panel) {
                     Number(ubicacion.Fila) !== Number(ubicacion.FilaOriginal) ||
                     Number(ubicacion.Columna) !== Number(ubicacion.ColumnaOriginal)
             };
+            if (ubicacion.DatosEquipoJson) {
+                const cambios = JSON.parse(ubicacion.DatosEquipoJson);
+                const clienteCambio = clientes.find(item => Number(item.IdCliente) === Number(cambios.idCliente));
+                const rolCambio = roles.find(item => Number(item.IdRolEquipo) === Number(cambios.idRolEquipo));
+                Object.assign(equipo, {
+                    IdCliente: cambios.idCliente,
+                    IdPiso: cambios.idPiso,
+                    IdRolEquipo: cambios.idRolEquipo,
+                    IdRangoIP: cambios.idRangoIP,
+                    TipoIP: cambios.tipoIP,
+                    Hostname: cambios.hostname,
+                    NumeroHost: cambios.numeroHost,
+                    IP: cambios.ip,
+                    Mascara: cambios.mascara,
+                    PuertaEnlace: cambios.puertaEnlace,
+                    DNS1: cambios.dns1,
+                    DNS2: cambios.dns2,
+                    UsuarioAdmin: cambios.usuarioAdmin,
+                    PasswordAdmin: cambios.passwordAdmin,
+                    ClienteCodigo: clienteCambio?.Codigo || equipo.ClienteCodigo,
+                    ClienteNombre: clienteCambio?.Nombre || equipo.ClienteNombre,
+                    Cliente: clienteCambio?.Nombre || equipo.Cliente,
+                    RolCodigo: rolCambio?.Codigo || equipo.RolCodigo,
+                    RolNombre: rolCambio?.Nombre || equipo.RolNombre,
+                    Rol: rolCambio?.Nombre || equipo.Rol
+                });
+            }
             celdasPropuesta[fila][columna] = equipo;
             const idCliente = Number(equipo.IdCliente);
             if (!panel.clientesDelPiso.some(cliente => Number(cliente.IdCliente) === idCliente)) {
@@ -2131,7 +2168,7 @@ function actualizarControlesFuturos(panel) {
     const hayPropuesta = Boolean(panel?.escenarioFuturoId);
     btnEliminarFuturo.hidden = !hayPropuesta;
     const moverDeshabilitado = hayPropuesta;
-    for (const control of [btnModoZona, btnModoZonaLibre, btnModoEdicion]) {
+    for (const control of [btnModoZona, btnModoZonaLibre]) {
         if (control) control.disabled = moverDeshabilitado;
     }
     const botonDimensiones = document.getElementById(`btn-aplicar-dim-${panel?.sufijo || 'izq'}`);
@@ -2422,7 +2459,7 @@ function renderGridPanel(panel) {
                     });
                 }
 
-                if (modoEdicion && panel === panelActivo && !panel.escenarioFuturoId) {
+                if (modoEdicion && panel === panelActivo) {
                     celda.style.cursor = 'pointer';
                     celda.addEventListener('click', (ev) => {
                         ev.preventDefault();

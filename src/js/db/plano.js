@@ -649,6 +649,7 @@ async function obtenerUbicacionesFuturas(idEscenario, idPiso) {
                    Equipo.IdCliente, Equipo.IdPiso, Equipo.IdRolEquipo, Equipo.Hostname,
                    Equipo.TipoIP, Equipo.IP, Equipo.Mascara, Equipo.PuertaEnlace,
                    Equipo.DNS1, Equipo.DNS2, Equipo.UsuarioAdmin, Equipo.PasswordAdmin,
+                   U.DatosEquipoJson,
                    C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
                    R.Codigo AS RolCodigo, R.Nombre AS RolNombre,
                    DA.Descripcion AS DescripcionAdmin
@@ -672,6 +673,108 @@ async function obtenerUbicacionesFuturas(idEscenario, idPiso) {
             ORDER BY U.Fila, U.Columna
         `);
     return result.recordset;
+}
+
+async function actualizarEquipoEnEscenarioFuturo(idEscenario, idEquipo, datos) {
+    const escenario = Number(idEscenario);
+    const equipo = Number(idEquipo);
+    const idCliente = Number(datos?.idCliente);
+    const idRolEquipo = Number(datos?.idRolEquipo);
+    const idPiso = datos?.idPiso == null ? null : Number(datos.idPiso);
+    const tipoIP = String(datos?.tipoIP || '').trim();
+    const hostname = String(datos?.hostname || '').trim();
+
+    if (![escenario, equipo, idCliente, idRolEquipo].every(Number.isInteger) ||
+        escenario <= 0 || equipo <= 0 || idCliente <= 0 || idRolEquipo <= 0 ||
+        (idPiso !== null && (!Number.isInteger(idPiso) || idPiso <= 0)) ||
+        !['Estatica', 'DHCP'].includes(tipoIP) || !hostname || hostname.length > 50) {
+        return { ok: false, mensaje: 'Los datos del equipo o de la propuesta no son válidos.' };
+    }
+
+    const normalizarCampo = (valor, nombre, maximo, requerido = false) => {
+        const texto = String(valor ?? '').trim();
+        if (requerido && !texto) throw new Error(`El campo ${nombre} es obligatorio.`);
+        if (texto.length > maximo) throw new Error(`El campo ${nombre} supera el máximo de ${maximo} caracteres.`);
+        return texto || null;
+    };
+
+    let cambios;
+    try {
+        const esEstatica = tipoIP === 'Estatica';
+        const numeroHost = datos.numeroHost == null || datos.numeroHost === ''
+            ? null
+            : Number(datos.numeroHost);
+        const idRangoIP = datos.idRangoIP == null || datos.idRangoIP === ''
+            ? null
+            : Number(datos.idRangoIP);
+        if (numeroHost !== null && (!Number.isInteger(numeroHost) || numeroHost < 0)) {
+            return { ok: false, mensaje: 'El número de host no es válido.' };
+        }
+        if (idRangoIP !== null && (!Number.isInteger(idRangoIP) || idRangoIP <= 0)) {
+            return { ok: false, mensaje: 'El rango de IP no es válido.' };
+        }
+        cambios = {
+            idCliente,
+            idPiso,
+            idRolEquipo,
+            tipoIP,
+            hostname,
+            numeroHost,
+            ip: esEstatica ? normalizarCampo(datos.ip, 'IP', 45, true) : null,
+            idRangoIP,
+            mascara: esEstatica ? normalizarCampo(datos.mascara, 'máscara', 45, true) : null,
+            puertaEnlace: esEstatica ? normalizarCampo(datos.puertaEnlace, 'puerta de enlace', 45, true) : null,
+            dns1: esEstatica ? normalizarCampo(datos.dns1, 'DNS 1', 45, true) : null,
+            dns2: esEstatica ? normalizarCampo(datos.dns2, 'DNS 2', 45) : null,
+            usuarioAdmin: normalizarCampo(datos.usuarioAdmin, 'usuario admin', 100, true),
+            passwordAdmin: normalizarCampo(datos.passwordAdmin, 'password admin', 255, true),
+            activo: datos.activo !== false
+        };
+    } catch (error) {
+        return { ok: false, mensaje: error.message };
+    }
+
+    const pool = await getPool();
+    const validacion = await pool.request()
+        .input('IdCliente', sql.Int, idCliente)
+        .input('IdRolEquipo', sql.Int, idRolEquipo)
+        .input('IdPiso', sql.Int, idPiso)
+        .query(`
+            SELECT
+                CASE WHEN EXISTS (SELECT 1 FROM dbo.Clientes WHERE IdCliente = @IdCliente)
+                    THEN 1 ELSE 0 END AS ClienteValido,
+                CASE WHEN EXISTS (SELECT 1 FROM dbo.RolesEquipo WHERE IdRolEquipo = @IdRolEquipo)
+                    THEN 1 ELSE 0 END AS RolValido,
+                CASE WHEN @IdPiso IS NULL OR EXISTS (SELECT 1 FROM dbo.Pisos WHERE IdPiso = @IdPiso AND Activo = 1)
+                    THEN 1 ELSE 0 END AS PisoValido
+        `);
+    const referencias = validacion.recordset[0];
+    if (!referencias.ClienteValido || !referencias.RolValido ||
+        !referencias.PisoValido) {
+        return { ok: false, mensaje: 'El cliente, rol o piso seleccionado no es válido para este equipo.' };
+    }
+
+    const result = await pool.request()
+        .input('IdEscenarioFuturo', sql.Int, escenario)
+        .input('IdEquipo', sql.Int, equipo)
+        .input('DatosEquipoJson', sql.NVarChar(sql.MAX), JSON.stringify(cambios))
+        .query(`
+            UPDATE U
+            SET DatosEquipoJson = @DatosEquipoJson
+            FROM dbo.EscenarioPlanoFuturoUbicaciones U
+            WHERE U.IdEscenarioFuturo = @IdEscenarioFuturo
+              AND U.IdEquipo = @IdEquipo
+              AND EXISTS (
+                  SELECT 1
+                  FROM dbo.EscenarioPlanoFuturoOriginal O
+                  WHERE O.IdEscenarioFuturo = U.IdEscenarioFuturo
+                    AND O.IdEquipo = U.IdEquipo
+              )
+        `);
+    if (result.rowsAffected[0] !== 1) {
+        return { ok: false, mensaje: 'El equipo ya no forma parte de esta propuesta.' };
+    }
+    return { ok: true, mensaje: 'Cambios guardados únicamente en la copia futura.' };
 }
 
 async function moverEquipoEnEscenarioFuturo(idEscenario, idEquipo, idPisoDestino, fila, columna) {
@@ -827,5 +930,5 @@ module.exports = {
     listarZonasLibres, guardarZonaLibre, actualizarZonaLibre, eliminarZonaLibre,
     actualizarZonasPorNombre,
     listarEscenariosFuturos, crearEscenarioFuturo, obtenerUbicacionesFuturas,
-    moverEquipoEnEscenarioFuturo, eliminarEscenarioFuturo
+    moverEquipoEnEscenarioFuturo, actualizarEquipoEnEscenarioFuturo, eliminarEscenarioFuturo
 };

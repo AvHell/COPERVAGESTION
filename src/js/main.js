@@ -1392,6 +1392,10 @@ ipcMain.handle('plano:futuros:mover', async (_e, idEscenario, idEquipo, idPisoDe
     const err = requerirSesion('plano:mover'); if (err) return err;
     return await planoDB.moverEquipoEnEscenarioFuturo(idEscenario, idEquipo, idPisoDestino, fila, columna);
 });
+ipcMain.handle('plano:futuros:editar-equipo', async (_e, idEscenario, idEquipo, datos) => {
+    const err = requerirSesion('equipos:editar'); if (err) return err;
+    return await planoDB.actualizarEquipoEnEscenarioFuturo(idEscenario, idEquipo, datos);
+});
 ipcMain.handle('plano:futuros:eliminar', async (_e, idEscenario, idPiso) => {
     const err = requerirSesion('plano:mover'); if (err) return err;
     return await planoDB.eliminarEscenarioFuturo(idEscenario, idPiso);

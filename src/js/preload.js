@@ -197,6 +197,7 @@ contextBridge.exposeInMainWorld('api', {
         ubicacionesFuturas: (idEscenario, idPiso) => ipcRenderer.invoke('plano:futuros:ubicaciones', idEscenario, idPiso),
         crearFuturo: (idPisos, nombre) => ipcRenderer.invoke('plano:futuros:crear', idPisos, nombre),
         moverFuturo: (idEscenario, idEquipo, idPisoDestino, fila, columna) => ipcRenderer.invoke('plano:futuros:mover', idEscenario, idEquipo, idPisoDestino, fila, columna),
+        editarEquipoFuturo: (idEscenario, idEquipo, datos) => ipcRenderer.invoke('plano:futuros:editar-equipo', idEscenario, idEquipo, datos),
         eliminarFuturo: (idEscenario, idPiso) => ipcRenderer.invoke('plano:futuros:eliminar', idEscenario, idPiso),
 
         asignar:        (idPiso, idEquipo, fila, col)                              => ipcRenderer.invoke('plano:asignar', idPiso, idEquipo, fila, col),

@@ -274,6 +274,26 @@ async function asegurarCatalogosExtendidos() {
                 `);
             }
 
+            // Coherencia con responsivas: quién recibe se administra desde el
+            // catálogo "Usuarios asignados", así que los nombres históricos
+            // de las responsivas se integran a ese catálogo.
+            await pool.request().query(`
+                IF OBJECT_ID(N'dbo.ActivoFijoResponsivas', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'dbo.ActivoFijoUsuariosAsignados', N'U') IS NOT NULL
+                BEGIN
+                    INSERT INTO dbo.ActivoFijoUsuariosAsignados (Nombre)
+                    SELECT DISTINCT LTRIM(RTRIM(r.NombreRecibe))
+                    FROM dbo.ActivoFijoResponsivas r
+                    WHERE r.NombreRecibe IS NOT NULL
+                      AND LTRIM(RTRIM(r.NombreRecibe)) <> ''
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM dbo.ActivoFijoUsuariosAsignados c
+                          WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(r.NombreRecibe)))
+                      );
+                END;
+            `);
+
             await pool.request().query(`
                 INSERT INTO dbo.ActivoFijoPuestos (Nombre)
                 SELECT DISTINCT LTRIM(RTRIM(p.Puesto))

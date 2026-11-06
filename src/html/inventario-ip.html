@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#2E3228">
     <title>Control general de IP</title>
     <link rel="stylesheet" href="../css/inventario-ip.css">
@@ -15,7 +15,11 @@
             <p class="eyebrow">Vista general de IP; inventarios conservados por origen</p>
             <h1>Control general de IP</h1>
         </div>
-        <button id="btn-recargar" type="button" class="button secondary">Actualizar</button>
+        <div class="header-actions">
+            <button id="btn-catalogos" type="button" class="button secondary" data-permiso="equipos:listado:ver">Catálogos</button>
+            <button id="btn-exportar" type="button" class="button secondary" data-permiso="equipos:listado:exportar">Exportar a Excel</button>
+            <button id="btn-recargar" type="button" class="button secondary">Actualizar</button>
+        </div>
     </header>
 
     <main>
@@ -23,31 +27,79 @@
             <div class="section-heading">
                 <div>
                     <h2>Registro general</h2>
-                    <p>Consulta IP del inventario general y equipos activos de clientes. En estos últimos puedes editar solo los datos complementarios.</p>
+                    <p>Consulta IP del inventario general y equipos activos de clientes, agrupadas por segmento /24.</p>
                 </div>
                 <div class="section-actions">
-                    <input id="busqueda" type="search" placeholder="Filtrar por IP, hostname, MAC, site...">
+                    <input id="busqueda" type="search" placeholder="Buscar IP, hostname, MAC, cliente...">
                     <button id="btn-nuevo-registro" type="button" class="button primary" data-permiso="equipos:crear">Registrar IP</button>
                 </div>
             </div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Origen</th><th>Estado</th><th>IP</th><th>Hostname</th><th>MAC</th>
-                            <th>Dispositivo</th><th>Tipo</th><th>Piso</th><th>Cliente</th><th>Site</th>
-                            <th>Puerto Fortinet</th><th>Descripción</th><th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabla-ip"></tbody>
-                </table>
-                <p id="sin-registros" class="empty" hidden>No hay registros de IP para mostrar.</p>
+
+            <!-- SECCIÓN 1: SEGMENTOS (independiente de la tabla) -->
+            <section class="segmentos-panel" aria-label="Segmentos de red">
+                <div class="segmentos-cabecera">
+                    <h3>Segmentos</h3>
+                    <span id="segmentos-resumen" class="segmentos-resumen"></span>
+                </div>
+                <ul id="lista-segmentos" class="segmentos-lista"></ul>
+            </section>
+
+            <!-- SECCIÓN 2: TABLA DE IP (a todo el ancho) -->
+            <div class="segmento-contenido">
+                <div class="segmento-barra">
+                    <div class="segmento-titulo">
+                        <h3 id="segmento-titulo">Todos los segmentos</h3>
+                        <p id="segmento-detalle">Selecciona un segmento para revisar su ocupación.</p>
+                    </div>
+                    <div id="segmento-estado" class="segmento-estado"></div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="tabla-ip">
+                        <thead>
+                            <tr>
+                                <th>Origen</th>
+                                <th>Estado</th>
+                                <th>IP</th>
+                                <th>Hostname</th>
+                                <th>MAC</th>
+                                <th>Dispositivo</th>
+                                <th>Tipo</th>
+                                <th>Piso</th>
+                                <th>Cliente</th>
+                                <th>Switch</th>
+                                <th>Puerto Fortinet</th>
+                                <th>Descripción</th>
+                                <th>Acciones</th>
+                            </tr>
+                            <tr class="fila-filtros">
+                                <th><select data-filtro="Origen" aria-label="Filtrar por origen"><option value="">Todos</option></select></th>
+                                <th><select data-filtro="Estado" aria-label="Filtrar por estado"><option value="">Todos</option></select></th>
+                                <th><input data-filtro="IP" type="search" placeholder="Filtrar IP"></th>
+                                <th><input data-filtro="Hostname" type="search" placeholder="Filtrar hostname"></th>
+                                <th><input data-filtro="MAC" type="search" placeholder="Filtrar MAC"></th>
+                                <th><select data-filtro="Dispositivo" aria-label="Filtrar por dispositivo"><option value="">Todos</option></select></th>
+                                <th><select data-filtro="TipoEquipo" aria-label="Filtrar por tipo"><option value="">Todos</option></select></th>
+                                <th><select data-filtro="Piso" aria-label="Filtrar por piso"><option value="">Todos</option></select></th>
+                                <th><select data-filtro="ClienteCodigo" aria-label="Filtrar por cliente"><option value="">Todos</option></select></th>
+                                <th><select data-filtro="Site" aria-label="Filtrar por switch"><option value="">Todos</option></select></th>
+                                <th><input data-filtro="PuertoFortinet" type="search" placeholder="Filtrar puerto"></th>
+                                <th><input data-filtro="Descripcion" type="search" placeholder="Filtrar descripción"></th>
+                                <th><button id="btn-limpiar-filtros" type="button" class="button secondary btn-limpiar-filtros" title="Limpiar filtros">Limpiar</button></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-ip"></tbody>
+                    </table>
+                    <p id="sin-registros" class="empty" hidden>No hay registros de IP para mostrar.</p>
+                </div>
+
                 <nav class="paginacion" aria-label="Paginación del inventario IP">
                     <label>Filas
                         <select id="tamano-pagina">
                             <option value="25">25</option>
                             <option value="50">50</option>
                             <option value="100">100</option>
+                            <option value="250">250</option>
                         </select>
                     </label>
                     <span id="resumen-paginacion" aria-live="polite"></span>
@@ -92,8 +144,8 @@
                 <label>Piso
                     <select id="piso" name="piso" required></select>
                 </label>
-                <label>Site
-                    <select id="site" name="site" required></select>
+                <label>Switch
+                    <select id="switchRed" name="switchRed" required></select>
                 </label>
                 <label>Puerto Fortinet
                     <input id="puertoFortinet" name="puertoFortinet" type="text" maxlength="100">
@@ -108,27 +160,29 @@
             </form>
         </dialog>
 
-        <section class="panel catalog-panel">
-            <div class="section-heading">
+        <!-- CATÁLOGOS EDITABLES (ahora en modal) -->
+        <dialog id="modal-catalogos" class="form-modal catalog-modal" aria-labelledby="modal-catalogos-titulo">
+            <div class="modal-heading">
                 <div>
-                    <h2>Catálogos editables</h2>
-                    <p>Agrega opciones de dispositivo, tipo, piso, site y asignación IP.</p>
+                    <h2 id="modal-catalogos-titulo">Catálogos editables</h2>
+                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP.</p>
                 </div>
-                <div class="section-actions">
-                    <label class="catalog-selector">Catálogo
-                        <select id="tipo-catalogo">
-                            <option value="Estado">Estado</option>
-                            <option value="Dispositivo">Dispositivo</option>
-                            <option value="TipoEquipo">Tipo de equipo</option>
-                            <option value="Piso">Piso</option>
-                            <option value="Site">Site</option>
-                            <option value="TipoIP">Tipo de IP</option>
-                        </select>
-                    </label>
-                    <button id="btn-nueva-opcion" type="button" class="button primary" data-permiso="equipos:crear">Agregar opción</button>
-                </div>
+                <button id="btn-cerrar-catalogos" type="button" class="button secondary" aria-label="Cerrar">Cerrar</button>
             </div>
-            <div class="table-wrap">
+            <div class="catalog-toolbar">
+                <label class="catalog-selector">Catálogo
+                    <select id="tipo-catalogo">
+                        <option value="Estado">Estado</option>
+                        <option value="Dispositivo">Dispositivo</option>
+                        <option value="TipoEquipo">Tipo de equipo</option>
+                        <option value="Piso">Piso</option>
+                        <option value="Site">Switch</option>
+                        <option value="TipoIP">Tipo de IP</option>
+                    </select>
+                </label>
+                <button id="btn-nueva-opcion" type="button" class="button primary" data-permiso="equipos:crear">Agregar opción</button>
+            </div>
+            <div class="table-wrap catalog-table-wrap">
                 <table class="catalog-table">
                     <thead>
                         <tr><th>Nombre</th><th>Estado</th><th>Acciones</th></tr>
@@ -137,7 +191,7 @@
                 </table>
                 <p id="sin-catalogos" class="empty" hidden>No hay opciones en este catálogo.</p>
             </div>
-        </section>
+        </dialog>
 
         <dialog id="modal-catalogo" class="form-modal catalog-modal" aria-labelledby="modal-catalogo-titulo">
             <div class="modal-heading">

@@ -169,6 +169,24 @@ async function crear(datos) {
         }
 
         const equipo = equipoResult.recordset[0];
+
+        const duplicadoResult = await new sql.Request(tx)
+            .input('IdEquipo', sql.Int, idEquipo)
+            .input('FechaMantenimiento', sql.VarChar(10), fecha)
+            .query(`
+                SELECT TOP 1 IdMantenimiento
+                FROM Mantenimientos WITH (UPDLOCK, HOLDLOCK)
+                WHERE IdEquipo = @IdEquipo
+                  AND FechaMantenimiento = CONVERT(date, @FechaMantenimiento, 23)
+            `);
+        if (duplicadoResult.recordset.length > 0) {
+            await tx.rollback();
+            return {
+                ok: false,
+                mensaje: `Ya existe un mantenimiento registrado para ${equipo.Hostname} en esa fecha. Solo se permite uno por equipo al día.`
+            };
+        }
+
         const usuariosPorId = new Map(usuariosResult.recordset.map(usuario => [usuario.IdUsuario, usuario]));
         const responsables = idUsuarios.map(id => {
             const usuario = usuariosPorId.get(id);

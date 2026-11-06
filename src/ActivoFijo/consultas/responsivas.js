@@ -313,6 +313,28 @@ async function obtenerDatosEntrega(idUsuario, idPuesto, idArea) {
     return { ok: true, nombre: usuario.recordset[0].Nombre, puesto, area };
 }
 
+/* Mantiene sincronizado el catálogo "Usuarios asignados":
+   todo nombre que se use como quién recibe queda registrado ahí. */
+async function registrarUsuarioAsignado(nombre) {
+    const valor = String(nombre ?? '').trim();
+    if (!valor) return;
+    try {
+        await catalogosDB.asegurarCatalogosExtendidos();
+        const pool = await getPool();
+        await pool.request()
+            .input('Nombre', sql.NVarChar(200), valor)
+            .query(`
+                IF NOT EXISTS (
+                    SELECT 1 FROM dbo.ActivoFijoUsuariosAsignados
+                    WHERE UPPER(Nombre) = UPPER(@Nombre)
+                )
+                    INSERT INTO dbo.ActivoFijoUsuariosAsignados (Nombre) VALUES (@Nombre);
+            `);
+    } catch (err) {
+        console.error('[Responsivas] No se pudo registrar el usuario asignado en el catálogo:', err);
+    }
+}
+
 async function listarCatalogoResponsiva(clave) {
     return catalogosDB.listar(validarCatalogoResponsiva(clave));
 }
@@ -326,7 +348,8 @@ function validarCatalogoResponsiva(clave) {
         'motivosResponsiva',
         'proyectosResponsiva',
         'descripcionesResponsiva',
-        'areasEntregaResponsiva'
+        'areasEntregaResponsiva',
+        'usuariosAsignados'
     ]);
     if (!permitidos.has(claveNormalizada) || !catalogosDB.CATALOGOS[claveNormalizada]) {
         throw new Error(`Catálogo de responsivas no válido: ${clave}`);
@@ -380,6 +403,8 @@ async function crear(datos, idUsuario) {
         if (!await validarCarteraActiva(datos.IdCartera)) {
             return { ok: false, mensaje: 'Selecciona una cartera activa del catálogo.' };
         }
+
+        await registrarUsuarioAsignado(datos.NombreRecibe);
 
         tx = new sql.Transaction(pool);
         await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
@@ -517,6 +542,7 @@ async function actualizar(id, datos, idUsuario) {
         if (!await validarCarteraActiva(datos.IdCartera)) {
             return { ok: false, mensaje: 'Selecciona una cartera activa del catálogo.' };
         }
+        await registrarUsuarioAsignado(datos.NombreRecibe);
         if (!datos.IdUsuarioEntrega) return { ok: false, mensaje: 'Selecciona quién entrega el activo.' };
 
         const entrega = await obtenerDatosEntrega(datos.IdUsuarioEntrega, datos.IdPuestoEntrega, datos.IdAreaEntregaResponsiva);

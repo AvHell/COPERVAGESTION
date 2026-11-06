@@ -208,7 +208,10 @@
 
                     <div class="campo-full">
                         <label for="nombre-recibe">Nombre completo <span class="req">*</span></label>
-                        <input type="text" id="nombre-recibe" maxlength="200" required>
+                        <select id="nombre-recibe" required>
+                            <option value="">— Seleccionar usuario —</option>
+                        </select>
+                        <small class="campo-ayuda">Se alimenta del catálogo <b>Usuarios asignados</b> de Activo Fijo.</small>
                     </div>
                     <div class="campo-item">
                         <label for="puesto-recibe">Puesto</label>

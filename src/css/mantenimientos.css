@@ -144,14 +144,14 @@ main { width: 100%; max-width: none; margin: 0; padding: 24px 28px 40px; }
 .celda {
     position: relative;
     display: flex;
-    width: 96px;
-    min-height: 72px;
+    width: 112px;
+    min-height: 80px;
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
     gap: 2px;
     overflow: hidden;
-    padding: 5px;
+    padding: 6px;
     line-height: 1.15;
     border: 1px solid #c9c5ba;
     border-radius: 7px;
@@ -167,7 +167,7 @@ main { width: 100%; max-width: none; margin: 0; padding: 24px 28px 40px; }
     outline-offset: -3px;
 }
 .celda.ultimo-clonacion { outline-color: var(--rojo); }
-.celda .hostname { max-width: 100%; overflow: hidden; font-size: .78rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.celda .hostname { max-width: 100%; font-size: .78rem; font-weight: 750; line-height: 1.12; overflow-wrap: anywhere; white-space: normal; }
 .celda .cliente { min-height: 0; max-width: 100%; overflow: hidden; padding: 1px 4px; color: var(--texto-suave); font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
 .celda .ip { max-width: 100%; overflow: hidden; color: var(--texto-suave); font-size: .7rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .celda[data-rol="AGT"] { border-color: var(--agt); background: #eaf0f8; }
@@ -186,7 +186,7 @@ main { width: 100%; max-width: none; margin: 0; padding: 24px 28px 40px; }
     font-weight: 800;
     letter-spacing: .03em;
 }
-.celda .marca-mantenimiento.clonado { color: var(--rojo); }
+/* La marca REALIZADO es la misma para mantenimiento y clonación. */
 .celda .fecha-marca { color: #49483f; font-size: .64rem; font-weight: 700; }
 .celda .coordenada { position: absolute; bottom: 3px; right: 5px; color: #928f84; font-size: .58rem; }
 .ayuda { padding: 10px 3px 0; color: var(--texto-suave); font-size: .77rem; }
@@ -356,6 +356,21 @@ td { max-width: 260px; overflow-wrap: anywhere; }
     line-height: 1.4 !important;
     text-align: left !important;
 }
+
+/* Capa <dialog> donde se monta el SweetAlert para que quede por ENCIMA del
+   modal abierto (ambos viven en la capa superior del navegador). */
+.mt-swal-layer {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+}
+.mt-swal-layer::backdrop { background: transparent; }
+.mt-swal-layer .swal2-container { z-index: 0; }
 
 @media (max-width: 760px) {
     .topbar { flex-wrap: wrap; padding: 14px 16px; }

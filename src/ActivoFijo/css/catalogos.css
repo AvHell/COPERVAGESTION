@@ -195,20 +195,18 @@ body {
    ========================================================= */
 .tabs-nav {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
     padding: 14px 32px;
     background: var(--tierra-crema);
     border-bottom: 1px solid var(--gray-200);
     box-shadow: 0 4px 16px -10px rgba(46,50,40,0.08);
-    overflow-x: auto;
-    scrollbar-width: none;
+    overflow: visible;
     position: sticky;
     top: 0;
     z-index: 40;
-    -webkit-overflow-scrolling: touch;
 }
-
-.tabs-nav::-webkit-scrollbar { display: none; }
 
 .tab {
     display: inline-flex;

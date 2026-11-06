@@ -13,6 +13,7 @@ let carteras         = [];
 let puestos          = [];
 let puestosEntrega   = [];
 let usuariosEntrega  = [];
+let usuariosAsignados = [];
 let catalogosResponsiva = {};
 let modoEdicion      = false;
 let idEditando       = null;
@@ -212,6 +213,21 @@ function aplicarReglasActivo(activo) {
 /* =========================================================
    CARGAR CATÁLOGOS AUXILIARES
    ========================================================= */
+/* Llena el DDL de "quién recibe" con el catálogo Usuarios asignados.
+   Si el valor guardado ya no está activo en el catálogo se conserva como
+   opción histórica para no perder el dato al editar. */
+function poblarUsuariosAsignados(valorSeleccionado = '') {
+    const valor = String(valorSeleccionado ?? '');
+    const opciones = usuariosAsignados.map(x => `<option value="${escaparHTML(x.Nombre)}">${escaparHTML(x.Nombre)}</option>`).join('');
+    const faltaHistorico = valor && !usuariosAsignados.some(x => String(x.Nombre) === valor);
+    inpNombreRecibe.innerHTML = '<option value="">— Seleccionar usuario —</option>' +
+        opciones +
+        (faltaHistorico
+            ? `<option value="${escaparHTML(valor)}" selected>${escaparHTML(valor)} (no está en el catálogo)</option>`
+            : '');
+    inpNombreRecibe.value = valor;
+}
+
 async function cargarCatalogos() {
     try {
         const seleccionActual = {
@@ -222,9 +238,10 @@ async function cargarCatalogos() {
             descripcion: selDescripcion.value,
             usuarioEntrega: selNombreEntrega.value,
             puestoEntrega: selPuestoEntrega.value,
-            areaEntrega: selAreaEntrega.value
+            areaEntrega: selAreaEntrega.value,
+            nombreRecibe: inpNombreRecibe.value
         };
-        const [c, motivos, proyectos, descripciones, areas, usuarios, puestosLista, puestosEntregaLista] = await Promise.all([
+        const [c, motivos, proyectos, descripciones, areas, usuarios, puestosLista, puestosEntregaLista, usuariosAsignadosLista] = await Promise.all([
             window.api.activoFijo.responsivas.listarCarteras(),
             window.api.activoFijo.responsivas.listarCatalogo('motivosResponsiva'),
             window.api.activoFijo.responsivas.listarCatalogo('proyectosResponsiva'),
@@ -232,20 +249,23 @@ async function cargarCatalogos() {
             window.api.activoFijo.responsivas.listarCatalogo('areasEntregaResponsiva'),
             window.api.activoFijo.responsivas.listarUsuariosEntrega(),
             window.api.activoFijo.responsivas.listarCatalogo('puestos'),
-            window.api.activoFijo.responsivas.listarCatalogo('puestosEntregaResponsiva')
+            window.api.activoFijo.responsivas.listarCatalogo('puestosEntregaResponsiva'),
+            window.api.activoFijo.responsivas.listarCatalogo('usuariosAsignados')
         ]);
-        const listas = [c, motivos, proyectos, descripciones, areas, usuarios, puestosLista, puestosEntregaLista];
+        const listas = [c, motivos, proyectos, descripciones, areas, usuarios, puestosLista, puestosEntregaLista, usuariosAsignadosLista];
         const errorCarga = listas.find(lista => !Array.isArray(lista));
         if (errorCarga) throw new Error(errorCarga?.mensaje || 'El servidor devolvió datos inválidos para los catálogos.');
         carteras = c;
         puestos = puestosLista;
         puestosEntrega = puestosEntregaLista;
         usuariosEntrega = usuarios;
+        usuariosAsignados = usuariosAsignadosLista;
         catalogosResponsiva = {
             motivosResponsiva: motivos,
             proyectosResponsiva: proyectos,
             descripcionesResponsiva: descripciones,
             areasEntregaResponsiva: areas,
+            usuariosAsignados,
             puestos,
             puestosEntregaResponsiva: puestosEntrega
         };
@@ -278,6 +298,7 @@ async function cargarCatalogos() {
         selNombreEntrega.value = seleccionActual.usuarioEntrega;
         selPuestoEntrega.value = seleccionActual.puestoEntrega;
         selAreaEntrega.value = seleccionActual.areaEntrega;
+        poblarUsuariosAsignados(seleccionActual.nombreRecibe);
     } catch (err) {
         alertaError('No se pudieron cargar los catálogos', err.message);
     }
@@ -290,7 +311,8 @@ const CONFIG_CATALOGOS_RESPONSIVA = {
     descripcionesResponsiva: { titulo: 'Descripciones de solicitud', max: 300, pk: 'IdDescripcionResponsiva' },
     puestos: { titulo: 'Puestos de quien recibe', max: 100, pk: 'IdPuesto' },
     puestosEntregaResponsiva: { titulo: 'Puestos de quien entrega', max: 100, pk: 'IdPuestoEntregaResponsiva' },
-    areasEntregaResponsiva: { titulo: 'Áreas de quien entrega', max: 100, pk: 'IdAreaEntregaResponsiva' }
+    areasEntregaResponsiva: { titulo: 'Áreas de quien entrega', max: 100, pk: 'IdAreaEntregaResponsiva' },
+    usuariosAsignados: { titulo: 'Usuarios asignados (quién recibe)', max: 200, pk: 'IdUsuarioAsignado' }
 };
 
 async function administrarCatalogosResponsiva() {
@@ -733,7 +755,7 @@ function limpiarFormulario() {
     selMotivo.value = '';
     selProyecto.value = '';
     selDescripcion.value = '';
-    inpNombreRecibe.value = '';
+    poblarUsuariosAsignados('');
     selPuestoRecibe.value = '';
     inpCorreoRecibe.value = '';
     selCartera.value = '';
@@ -807,7 +829,7 @@ async function abrirEdicion(id) {
     selMotivo.value        = r.MotivoSalida ?? '';
     selProyecto.value      = r.NombreProyecto ?? '';
     selDescripcion.value   = r.DescripcionSolicitud ?? '';
-    inpNombreRecibe.value  = r.NombreRecibe ?? '';
+    poblarUsuariosAsignados(r.NombreRecibe ?? '');
     selPuestoRecibe.value  = r.IdPuesto != null ? String(r.IdPuesto) : '';
     inpCorreoRecibe.value  = r.CorreoRecibe ?? '';
     selCartera.value       = r.IdCartera != null ? String(r.IdCartera) : '';

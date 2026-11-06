@@ -226,3 +226,24 @@ body.app-shell .menu-main { display: none !important; }
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-user,
     body.app-shell:not(.app-sidebar-collapsed) .app-sidebar-brand-text { display: flex; }
 }
+
+/* Pantallas pequeñas (ancho reducido o poca altura): el menú se compacta para
+   que todas las opciones entren sin necesidad de scroll vertical. */
+@media (max-width: 760px), (max-height: 820px) {
+    body.app-shell .app-sidebar { padding-block: 12px 8px; }
+    body.app-shell .app-sidebar-brand { min-height: 40px; padding-bottom: 10px; }
+    body.app-shell .app-sidebar-nav {
+        gap: 4px;
+        padding: 8px 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: none;
+    }
+    body.app-shell .app-sidebar-nav::-webkit-scrollbar { width: 0; height: 0; }
+    body.app-shell .app-sidebar-section { gap: 2px; }
+    body.app-shell .app-sidebar-section-title { margin: 2px 8px; font-size: .58rem; }
+    body.app-shell .app-sidebar-link { min-height: 34px; padding-block: 5px; font-size: .78rem; }
+    body.app-shell .app-sidebar-icon { flex-basis: 22px; width: 22px; height: 22px; font-size: .92rem; }
+    body.app-shell .app-sidebar-footer { gap: 6px; padding-top: 8px; }
+    body.app-shell .app-sidebar-logout { min-height: 32px; }
+}

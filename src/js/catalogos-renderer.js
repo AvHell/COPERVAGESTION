@@ -1401,6 +1401,60 @@ const TabsConfig = {
 
 let tabActivo = 'clientes';
 
+const menuToggle = document.getElementById('menu-toggle');
+const menuDropdown = document.getElementById('menu-dropdown');
+const menuAcciones = document.getElementById('menu-acciones');
+const accionesPorPanel = new Map();
+
+/**
+ * Guarda el buscador y el botón "Nuevo" de cada sección para poder
+ * moverlos al menú superior y devolverlos a su panel original.
+ */
+function capturarAcciones() {
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        const contenedor = panel.querySelector('.panel-actions');
+        if (!contenedor) return;
+        const elementos = [...contenedor.querySelectorAll(':scope > .buscador, :scope > .btn-primary')];
+        if (elementos.length) accionesPorPanel.set(contenedor, elementos);
+    });
+}
+
+function devolverAcciones() {
+    accionesPorPanel.forEach((elementos, contenedor) => {
+        elementos.forEach(el => contenedor.appendChild(el));
+    });
+}
+
+function moverAcciones(nombre) {
+    devolverAcciones();
+    const panel = document.querySelector(`.tab-panel[data-tab-panel="${nombre}"]`);
+    const contenedor = panel ? panel.querySelector('.panel-actions') : null;
+    const elementos = contenedor ? accionesPorPanel.get(contenedor) : null;
+    if (elementos) elementos.forEach(el => menuAcciones.appendChild(el));
+}
+
+function abrirMenu(abrir) {
+    if (!menuToggle || !menuDropdown) return;
+    const visible = typeof abrir === 'boolean' ? abrir : menuDropdown.hidden;
+    menuDropdown.hidden = !visible;
+    menuToggle.setAttribute('aria-expanded', String(visible));
+}
+
+/** Refresca el botón del menú (icono + título) y sus acciones rápidas. */
+function actualizarMenu(nombre) {
+    const btn = menuDropdown ? menuDropdown.querySelector(`.tab-btn[data-tab="${nombre}"]`) : null;
+    if (btn) {
+        const icono = document.getElementById('menu-icon');
+        const titulo = document.getElementById('menu-titulo');
+        const sub = document.getElementById('menu-sub');
+        const iconoOrigen = btn.querySelector('.tab-icon');
+        if (icono && iconoOrigen) icono.innerHTML = iconoOrigen.innerHTML;
+        if (titulo) titulo.textContent = btn.querySelector('.tab-title')?.textContent || '';
+        if (sub) sub.textContent = btn.querySelector('.tab-sub')?.textContent || '';
+    }
+    moverAcciones(nombre);
+}
+
 function activarTab(nombre) {
     if (!TabsConfig[nombre]) return;
     tabActivo = nombre;
@@ -1410,6 +1464,7 @@ function activarTab(nombre) {
     document.querySelectorAll('.tab-panel').forEach(p => {
         p.classList.toggle('activo', p.dataset.tabPanel === nombre);
     });
+    actualizarMenu(nombre);
     TabsConfig[nombre].cargar();
 }
 
@@ -1419,10 +1474,22 @@ function activarTab(nombre) {
 (async () => {
     document.getElementById('btn-volver').addEventListener('click', () => window.api.volverMenu());
 
+    capturarAcciones();
+
+    if (menuToggle) {
+        menuToggle.addEventListener('click', () => abrirMenu());
+    }
     document.getElementById('tabs-nav').addEventListener('click', (e) => {
         const btn = e.target.closest('.tab-btn');
         if (!btn) return;
         activarTab(btn.dataset.tab);
+        abrirMenu(false);
+    });
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.menu-seccion')) abrirMenu(false);
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') abrirMenu(false);
     });
 
     TabClientes.init();
@@ -1430,6 +1497,8 @@ function activarTab(nombre) {
     TabRoles.init();
     TabDominios.init();
     TabConfig.init();
+
+    actualizarMenu(tabActivo);
 
     await Cache.cargarClientes();
     await TabClientes.cargar();

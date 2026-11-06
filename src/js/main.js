@@ -1237,6 +1237,138 @@ ipcMain.handle('inventario-ip:eliminar', async (_e, id) => {
     const err = requerirSesion('equipos:eliminar'); if (err) return err;
     return await inventarioIPDB.eliminar(id);
 });
+ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
+    const err = requerirSesion('equipos:listado:exportar');
+    if (err) return err;
+    try {
+        const segmentoDe = ip => {
+            const partes = String(ip || '').trim().split('.');
+            const valido = partes.length === 4 &&
+                partes.every(parte => /^\d{1,3}$/.test(parte) && Number(parte) <= 255);
+            return valido ? partes.slice(0, 3).map(parte => String(Number(parte))).join('.') : 'Sin IP';
+        };
+        const ipComoNumero = ip => {
+            const partes = String(ip || '').trim().split('.');
+            if (partes.length !== 4 || !partes.every(parte => /^\d{1,3}$/.test(parte))) return Number.MAX_SAFE_INTEGER;
+            return partes.reduce((total, parte) => total * 256 + Number(parte), 0);
+        };
+        const registros = await inventarioIPDB.listar();
+        let filtrados = registros;
+        if (opciones.cliente) {
+            filtrados = filtrados.filter(registro =>
+                String(registro.ClienteCodigo || '').toUpperCase() === String(opciones.cliente).toUpperCase());
+        }
+        if (opciones.segmento) {
+            filtrados = filtrados.filter(registro => segmentoDe(registro.IP) === String(opciones.segmento));
+        }
+        if (!filtrados.length) return { ok: false, mensaje: 'No hay registros de IP para exportar con ese filtro.' };
+
+        /* La tabla del control general muestra el segmento completo: las IP
+           registradas más las libres (1-254), que NO existen en la base de
+           datos. El Excel refleja lo mismo salvo cuando se exporta un cliente
+           (esas direcciones libres no pertenecen a ningún cliente). */
+        if (!opciones.cliente) {
+            const HOST_INICIAL = 1;
+            const HOST_FINAL = 254;
+            const ocupadas = new Set();
+            const segmentos = new Set();
+            for (const registro of filtrados) {
+                const segmento = segmentoDe(registro.IP);
+                if (segmento === 'Sin IP') continue;
+                ocupadas.add(String(registro.IP || '').trim());
+                segmentos.add(segmento);
+            }
+            const adicionales = [];
+            for (const segmento of segmentos) {
+                for (let host = HOST_INICIAL; host <= HOST_FINAL; host += 1) {
+                    const ip = `${segmento}.${host}`;
+                    if (ocupadas.has(ip)) continue;
+                    adicionales.push({ Origen: '', IP: ip, Estado: 'Libre', Libre: true });
+                }
+            }
+            filtrados = filtrados.concat(adicionales);
+        }
+        filtrados = filtrados.slice().sort((a, b) => {
+            const porSegmento = segmentoDe(a.IP).localeCompare(segmentoDe(b.IP));
+            if (porSegmento !== 0) return porSegmento;
+            const porIP = ipComoNumero(a.IP) - ipComoNumero(b.IP);
+            if (porIP !== 0) return porIP;
+            return String(a.Origen || '').localeCompare(String(b.Origen || ''), 'es');
+        });
+
+        const columnas = [];
+        const agregar = (clave, etiqueta, valor, ancho) => columnas.push({ clave, etiqueta, valor, ancho });
+        const estadoVisible = registro =>
+            String(registro.Estado || '').trim().toLowerCase() === 'activo' ? 'Ocupado' : 'Libre';
+        agregar('origen', 'Origen', registro => registro.Origen || '', 14);
+        agregar('estado', 'Estado', estadoVisible, 14);
+        agregar('ip', 'IP', registro => registro.IP || 'DHCP', 18);
+        agregar('hostname', 'Hostname', registro => registro.Hostname || '', 26);
+        agregar('mac', 'MAC', registro => registro.MAC || '', 20);
+        agregar('dispositivo', 'Dispositivo', registro => registro.Dispositivo || '', 18);
+        agregar('tipo', 'Tipo', registro => registro.TipoEquipo || '', 18);
+        agregar('piso', 'Piso', registro => registro.Piso || '', 18);
+        agregar('clienteCodigo', 'Código cliente', registro => registro.ClienteCodigo || '', 16);
+        agregar('clienteNombre', 'Cliente', registro => registro.ClienteNombre || '', 28);
+        agregar('switch', 'Switch', registro => registro.Site || '', 20);
+        agregar('puerto', 'Puerto Fortinet', registro => registro.PuertoFortinet || '', 20);
+        agregar('descripcion', 'Descripción', registro => registro.Descripcion || '', 40);
+
+        const ahora = new Date();
+        const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+        const sufijo = opciones.segmento
+            ? `Segmento_${String(opciones.segmento).replace(/\./g, '-')}`
+            : opciones.cliente
+                ? `Cliente_${opciones.cliente}`
+                : 'General';
+        const downloadsDir = path.join(os.homedir(), 'Downloads');
+        const defaultPath = path.join(
+            fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
+            `ControlIP_${sufijo}_${hoy}.xlsx`
+        );
+        const { canceled, filePath } = await dialog.showSaveDialog({
+            title: 'Exportar control general de IP a Excel',
+            defaultPath,
+            filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (canceled || !filePath) return { ok: false, cancelado: true };
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Coperva';
+        workbook.created = new Date();
+        const worksheet = workbook.addWorksheet('Control IP', {
+            views: [{ state: 'frozen', ySplit: 1 }]
+        });
+        worksheet.columns = columnas.map(columna => ({
+            header: columna.etiqueta,
+            key: columna.clave,
+            width: columna.ancho
+        }));
+        worksheet.addTable({
+            name: 'TablaControlIP',
+            ref: 'A1',
+            headerRow: true,
+            totalsRow: false,
+            style: { theme: 'TableStyleMedium4', showRowStripes: true },
+            columns: columnas.map(columna => ({ name: columna.etiqueta })),
+            rows: filtrados.map(registro => columnas.map(columna => columna.valor(registro)))
+        });
+        worksheet.getRow(1).eachCell(celda => {
+            celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF55744F' } };
+            celda.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            celda.alignment = { vertical: 'middle', wrapText: true };
+        });
+        worksheet.eachRow((fila, numero) => {
+            fila.height = numero === 1 ? 30 : 22;
+            fila.alignment = { vertical: 'middle', wrapText: true };
+        });
+        await workbook.xlsx.writeFile(filePath);
+        return { ok: true, ruta: filePath, total: filtrados.length };
+    } catch (error) {
+        console.error('[InventarioIP] Error exportando Excel:', error);
+        return { ok: false, mensaje: `No se pudo exportar a Excel: ${error.message}` };
+    }
+});
 
 /* =========================================================
    IPC: DOMINIOS

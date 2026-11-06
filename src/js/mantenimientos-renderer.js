@@ -14,8 +14,34 @@ let puedeRegistrar = false;
 let puedeEditarFecha = false;
 let idUsuarioSesion = null;
 
+/* Los <dialog> abiertos con showModal() viven en la capa superior del navegador,
+   así que un SweetAlert insertado en <body> queda SIEMPRE detrás de ellos.
+   Para que el aviso se vea por encima del modal, se crea una capa <dialog>
+   temporal (también en la capa superior) y ahí se monta el SweetAlert. */
+let capaSwal = null;
+
+function abrirCapaSwal() {
+    if (!document.querySelector('dialog[open]')) return null;
+    if (!capaSwal) {
+        capaSwal = document.createElement('dialog');
+        capaSwal.className = 'mt-swal-layer';
+        capaSwal.setAttribute('aria-label', 'Aviso de mantenimientos');
+        document.body.append(capaSwal);
+    }
+    if (!capaSwal.open) capaSwal.showModal();
+    return capaSwal;
+}
+
+function cerrarCapaSwal() {
+    if (!capaSwal) return;
+    if (capaSwal.open) capaSwal.close();
+    capaSwal.remove();
+    capaSwal = null;
+}
+
 function mostrarMensaje(texto, error = false, detalle = '') {
     if (!texto) return;
+    const capa = abrirCapaSwal();
     Swal.fire({
         toast: !error,
         position: error ? 'center' : 'bottom-end',
@@ -29,7 +55,9 @@ function mostrarMensaje(texto, error = false, detalle = '') {
         customClass: {
             popup: error ? 'mt-swal-popup' : 'mt-toast',
             confirmButton: 'mt-swal-confirm'
-        }
+        },
+        ...(capa ? { target: capa } : {}),
+        didClose: () => cerrarCapaSwal()
     });
 }
 
@@ -105,8 +133,7 @@ function crearCelda(fila, columna, equipo) {
 
         if (equipo.UltimoMantenimiento) {
             const marca = document.createElement('span');
-            const clonado = Boolean(equipo.UltimoFueClonacion);
-            marca.className = `marca-mantenimiento${clonado ? ' clonado' : ''}`;
+            marca.className = 'marca-mantenimiento';
             marca.textContent = 'REALIZADO';
             celda.append(marca);
         }
@@ -137,7 +164,7 @@ function renderizarPlano() {
 
     $('mapa-vacio').hidden = true;
     $('titulo-piso').textContent = `${planoActual.Nombre} · ${planoActual.Filas} × ${planoActual.Columnas}`;
-    mapa.style.gridTemplateColumns = `repeat(${planoActual.Columnas}, 96px)`;
+    mapa.style.gridTemplateColumns = `repeat(${planoActual.Columnas}, 112px)`;
     const equiposPorUbicacion = new Map(
         planoActual.equipos.map(e => [`${e.Fila}:${e.Columna}`, e])
     );

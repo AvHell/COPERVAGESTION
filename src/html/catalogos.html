@@ -34,75 +34,102 @@
         </div>
     </header>
 
-    <!-- TABS -->
-    <nav class="tabs-nav" id="tabs-nav" role="tablist">
-        <button class="tab-btn activo" data-tab="clientes" role="tab">
-            <span class="tab-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                    <circle cx="9" cy="7" r="4"/>
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-            </span>
-            <span class="tab-label">
-                <span class="tab-title">Clientes</span>
-                <span class="tab-sub">Cuentas maestras</span>
-            </span>
-        </button>
+    <!-- MENÚ DE SECCIONES -->
+    <nav class="catalogos-menu" id="tabs-nav" aria-label="Secciones de catálogos">
+        <div class="menu-bar">
+            <div class="menu-seccion">
+                <button type="button" class="menu-toggle" id="menu-toggle"
+                        aria-haspopup="true" aria-expanded="false" aria-controls="menu-dropdown">
+                    <span class="tab-icon" id="menu-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </span>
+                    <span class="tab-label">
+                        <span class="tab-title" id="menu-titulo">Clientes</span>
+                        <span class="tab-sub" id="menu-sub">Cuentas maestras</span>
+                    </span>
+                    <svg class="menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                </button>
 
-        <button class="tab-btn" data-tab="pisos" role="tab">
-            <span class="tab-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 21h18"/>
-                    <path d="M5 21V7l8-4v18"/>
-                    <path d="M19 21V11l-6-4"/>
-                </svg>
-            </span>
-            <span class="tab-label">
-                <span class="tab-title">Pisos</span>
-                <span class="tab-sub">Ubicaciones físicas</span>
-            </span>
-        </button>
+                <div class="menu-dropdown" id="menu-dropdown" role="menu" hidden>
+                    <button type="button" class="tab-btn activo" data-tab="clientes" role="menuitem">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                        </span>
+                        <span class="tab-label">
+                            <span class="tab-title">Clientes</span>
+                            <span class="tab-sub">Cuentas maestras</span>
+                        </span>
+                    </button>
 
-        <button class="tab-btn" data-tab="roles" role="tab">
-            <span class="tab-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-            </span>
-            <span class="tab-label">
-                <span class="tab-title">Roles</span>
-                <span class="tab-sub">Tipos de equipo</span>
-            </span>
-        </button>
+                    <button type="button" class="tab-btn" data-tab="pisos" role="menuitem">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 21h18"/>
+                                <path d="M5 21V7l8-4v18"/>
+                                <path d="M19 21V11l-6-4"/>
+                            </svg>
+                        </span>
+                        <span class="tab-label">
+                            <span class="tab-title">Pisos</span>
+                            <span class="tab-sub">Ubicaciones físicas</span>
+                        </span>
+                    </button>
 
-        <button class="tab-btn" data-tab="dominios" role="tab">
-            <span class="tab-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                    <circle cx="12" cy="7" r="4"/>
-                </svg>
-            </span>
-            <span class="tab-label">
-                <span class="tab-title">Dominios</span>
-                <span class="tab-sub">Credenciales admin</span>
-            </span>
-        </button>
+                    <button type="button" class="tab-btn" data-tab="roles" role="menuitem">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                            </svg>
+                        </span>
+                        <span class="tab-label">
+                            <span class="tab-title">Roles</span>
+                            <span class="tab-sub">Tipos de equipo</span>
+                        </span>
+                    </button>
 
-        <button class="tab-btn" data-tab="config" role="tab">
-            <span class="tab-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="3" width="20" height="14" rx="2"/>
-                    <line x1="8" y1="21" x2="16" y2="21"/>
-                    <line x1="12" y1="17" x2="12" y2="21"/>
-                </svg>
-            </span>
-            <span class="tab-label">
-                <span class="tab-title">Config. de Red</span>
-                <span class="tab-sub">Parámetros técnicos</span>
-            </span>
-        </button>
+                    <button type="button" class="tab-btn" data-tab="dominios" role="menuitem">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </span>
+                        <span class="tab-label">
+                            <span class="tab-title">Dominios</span>
+                            <span class="tab-sub">Credenciales admin</span>
+                        </span>
+                    </button>
+
+                    <button type="button" class="tab-btn" data-tab="config" role="menuitem">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                                <line x1="8" y1="21" x2="16" y2="21"/>
+                                <line x1="12" y1="17" x2="12" y2="21"/>
+                            </svg>
+                        </span>
+                        <span class="tab-label">
+                            <span class="tab-title">Config. de Red</span>
+                            <span class="tab-sub">Parámetros técnicos</span>
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Buscador y botón de la sección activa se inyectan aquí -->
+            <div class="menu-acciones" id="menu-acciones"></div>
+        </div>
     </nav>
 
     <main class="tabs-main">

@@ -129,7 +129,8 @@ contextBridge.exposeInMainWorld('api', {
         actualizar: (id, datos) => ipcRenderer.invoke('inventario-ip:actualizar', id, datos),
         actualizarDatosEquipoCliente: (idEquipo, datos) =>
             ipcRenderer.invoke('inventario-ip:cliente:actualizar', idEquipo, datos),
-        eliminar: id => ipcRenderer.invoke('inventario-ip:eliminar', id)
+        eliminar: id => ipcRenderer.invoke('inventario-ip:eliminar', id),
+        exportarExcel: opciones => ipcRenderer.invoke('inventario-ip:exportarExcel', opciones)
     },
 
     /* =========================================================

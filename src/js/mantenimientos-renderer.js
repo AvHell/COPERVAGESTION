@@ -104,18 +104,28 @@ function appendBadgeDetail(dl, label, value, badgeClass, color = 'BOTON', nested
     dl.append(item);
 }
 
-function crearCelda(fila, columna, equipo) {
+function crearCelda(fila, columna, equipo, zonaLibre = null) {
     const celda = document.createElement('button');
     celda.type = 'button';
     celda.className = `celda${equipo ? '' : ' vacia'}`;
+    celda.dataset.fila = String(fila);
+    celda.dataset.columna = String(columna);
     if (equipo?.UltimoMantenimiento) celda.classList.add('con-mantenimiento');
     if (equipo?.UltimoMantenimiento && equipo.UltimoFueClonacion) celda.classList.add('ultimo-clonacion');
+    /* Igual que el plano visual: la zona libre solo colorea celdas sin equipo. */
+    const zonaLibreVisible = zonaLibre && !equipo ? zonaLibre : null;
+    if (zonaLibreVisible) {
+        celda.classList.add('celda-libre');
+        if (/^#[0-9a-f]{6}$/i.test(String(zonaLibreVisible.Color || ''))) {
+            celda.style.backgroundColor = zonaLibreVisible.Color;
+        }
+    }
     celda.setAttribute('aria-label', equipo
         ? `${equipo.Hostname}, cliente ${equipo.ClienteCodigo || 'sin código'}, IP ${equipo.IP || 'DHCP'}${equipo.UltimoMantenimiento ? ', mantenimiento registrado' : ''}${equipo.UltimoFueClonacion ? ', clonación realizada en el último mantenimiento' : ''}`
-        : `Celda vacía, fila ${fila}, columna ${columna}`);
+        : `${zonaLibreVisible ? `Zona libre ${zonaLibreVisible.Nombre}, ` : 'Celda vacía, '}fila ${fila}, columna ${columna}`);
     celda.title = equipo
         ? `${equipo.Hostname} · ${equipo.IP || 'DHCP'}${equipo.UltimoMantenimiento ? ` · Último mantenimiento: ${fechaLocal(equipo.UltimoMantenimiento)}` : ''}`
-        : `Fila ${fila}, columna ${columna}`;
+        : `${zonaLibreVisible ? `${zonaLibreVisible.Nombre} · ` : ''}Fila ${fila}, columna ${columna}`;
     if (equipo) {
         celda.dataset.rol = String(equipo.RolCodigo || '').toUpperCase();
         const hostname = document.createElement('span');
@@ -146,13 +156,65 @@ function crearCelda(fila, columna, equipo) {
 
         celda.addEventListener('click', () => abrirEquipo(equipo, fila, columna));
     } else {
-        const coordenada = document.createElement('span');
-        coordenada.className = 'coordenada';
-        coordenada.textContent = `${fila},${columna}`;
-        celda.append(coordenada);
+        if (!zonaLibreVisible) {
+            const coordenada = document.createElement('span');
+            coordenada.className = 'coordenada';
+            coordenada.textContent = `${fila},${columna}`;
+            celda.append(coordenada);
+        }
         celda.disabled = true;
     }
     return celda;
+}
+
+/* Las zonas libres del plano visual se pintan como una etiqueta centrada sobre
+   el bloque de celdas que abarcan. La posición se calcula midiendo las celdas
+   reales del mapa (no con medidas fijas) para que siempre cuadre con la
+   cuadrícula, sin importar el tamaño de la ventana. */
+function dibujarZonasLibres() {
+    const contenedor = $('mapa-scroll');
+    if (!contenedor) return;
+    contenedor.querySelectorAll('.texto-zona-libre').forEach(elemento => elemento.remove());
+    const zonas = planoActual?.zonasLibres || [];
+    if (!zonas.length) return;
+
+    const grupos = new Map();
+    for (const zona of zonas) {
+        const clave = `${zona.Nombre}||${zona.Color || ''}`;
+        if (!grupos.has(clave)) {
+            grupos.set(clave, { nombre: zona.Nombre || '', color: zona.Color, celdas: [] });
+        }
+        grupos.get(clave).celdas.push({ fila: Number(zona.Fila), columna: Number(zona.Columna) });
+    }
+
+    const contenedorRect = contenedor.getBoundingClientRect();
+    for (const grupo of grupos.values()) {
+        const filas = grupo.celdas.map(celda => celda.fila);
+        const columnas = grupo.celdas.map(celda => celda.columna);
+        const filaMin = Math.min(...filas);
+        const filaMax = Math.max(...filas);
+        const columnaMin = Math.min(...columnas);
+        const columnaMax = Math.max(...columnas);
+        const celdaInicio = mapa.querySelector(`.celda[data-fila="${filaMin}"][data-columna="${columnaMin}"]`);
+        const celdaFin = mapa.querySelector(`.celda[data-fila="${filaMax}"][data-columna="${columnaMax}"]`);
+        if (!celdaInicio || !celdaFin) continue;
+
+        const inicio = celdaInicio.getBoundingClientRect();
+        const fin = celdaFin.getBoundingClientRect();
+        const filasBloque = filaMax - filaMin + 1;
+        const columnasBloque = columnaMax - columnaMin + 1;
+
+        const etiqueta = document.createElement('div');
+        etiqueta.className = 'texto-zona-libre';
+        etiqueta.textContent = grupo.nombre;
+        etiqueta.dataset.zona = grupo.nombre;
+        etiqueta.style.left = `${inicio.left - contenedorRect.left - contenedor.clientLeft + contenedor.scrollLeft}px`;
+        etiqueta.style.top = `${inicio.top - contenedorRect.top - contenedor.clientTop + contenedor.scrollTop}px`;
+        etiqueta.style.width = `${fin.right - inicio.left}px`;
+        etiqueta.style.height = `${fin.bottom - inicio.top}px`;
+        etiqueta.style.fontSize = `${Math.max(0.62, Math.min(1.3, 0.66 + Math.min(filasBloque, columnasBloque) * 0.08))}rem`;
+        contenedor.append(etiqueta);
+    }
 }
 
 function renderizarPlano() {
@@ -168,12 +230,22 @@ function renderizarPlano() {
     const equiposPorUbicacion = new Map(
         planoActual.equipos.map(e => [`${e.Fila}:${e.Columna}`, e])
     );
+    const zonasPorCelda = new Map(
+        (planoActual.zonasLibres || []).map(zl => [`${Number(zl.Fila)}:${Number(zl.Columna)}`, zl])
+    );
 
     for (let fila = 1; fila <= planoActual.Filas; fila += 1) {
         for (let columna = 1; columna <= planoActual.Columnas; columna += 1) {
-            mapa.append(crearCelda(fila, columna, equiposPorUbicacion.get(`${fila}:${columna}`)));
+            mapa.append(crearCelda(
+                fila,
+                columna,
+                equiposPorUbicacion.get(`${fila}:${columna}`),
+                zonasPorCelda.get(`${fila}:${columna}`)
+            ));
         }
     }
+
+    dibujarZonasLibres();
 }
 
 function renderizarHistorial() {
@@ -332,6 +404,9 @@ async function inicializar() {
         }
     }, { passive: false });
     $('btn-actualizar').addEventListener('click', () => cargarPiso(pisoActual));
+    window.addEventListener('resize', () => {
+        if (planoActual) dibujarZonasLibres();
+    });
     $('btn-ver-historial').addEventListener('click', () => $('dialog-historial').showModal());
     $('btn-cerrar-historial').addEventListener('click', () => $('dialog-historial').close());
     $('filtro-historial').addEventListener('input', renderizarHistorial);

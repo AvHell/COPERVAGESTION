@@ -29,15 +29,18 @@ function crearEstadoPanel(sufijo) {
     };
 }
 
+/* Colores por defecto de las zonas. Ya no hay paleta fija: el usuario elige
+   el color con un <input type="color"> igual que en Catálogos del sistema. */
+const COLOR_ZONA_DEFECTO = '#A99A63';
+const COLOR_ZONA_LIBRE_DEFECTO = '#B5442E';
+
 /* Zona Libre: marcar celdas vacías */
 let modoZonaLibre = false;
 let celdasLibresSeleccionadas = [];
-let colorSeleccionadoLibre = '#B5442E';
 
 /* Zona Normal: manual 1×1 acumulativo (permite celdas con o sin equipo) */
 let modoZona = false;
 let celdasZonaSeleccionadas = [];  // [{fila, columna}, ...]
-let colorSeleccionado = '#B5442E';
 
 /* Edición */
 let modoEdicion = false;
@@ -62,10 +65,24 @@ let edPisosCliente = [];
 let edGuardando = false;
 let edEsModoCreacion = false; // por si en el futuro se reutiliza para crear
 
-const COLORES_DISPONIBLES = [
-    '#A99A63', '#6E7B5B', '#B5442E', '#C7BFA2',
-    '#8A7353', '#78806B', '#5F6650', '#D6CBA8'
-];
+/* Normaliza un color almacenado a un valor CSS seguro (hex/rgb/hsl). */
+function normalizarColor(c, fallback = '#e2e8f0') {
+    if (!c || typeof c !== 'string') return fallback;
+    const s = c.trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s)) return s;
+    if (/^(rgb|rgba|hsl|hsla)\(/i.test(s)) return s;
+    return fallback;
+}
+
+/* <input type="color"> solo acepta #rrggbb: convierte o cae al valor por defecto. */
+function colorParaInput(c, fallback = COLOR_ZONA_DEFECTO) {
+    const color = normalizarColor(c, fallback);
+    if (/^#[0-9a-f]{6}$/i.test(color)) return color.toLowerCase();
+    if (/^#[0-9a-f]{3}$/i.test(color)) {
+        return '#' + color.slice(1).split('').map(x => x + x).join('').toLowerCase();
+    }
+    return fallback;
+}
 
 const COLORES_CLIENTE_POR_CODIGO = Object.freeze({
     MEGA: '#217a4b',
@@ -589,7 +606,8 @@ const modalZonaNombre   = document.getElementById('zona-nombre');
 const modalZonaRango    = document.getElementById('zona-rango');
 const modalZonaAceptar  = document.getElementById('modal-zona-aceptar');
 const modalZonaCancelar = document.getElementById('modal-zona-cancelar');
-const coloresZonaDiv    = document.getElementById('colores-zona');
+const modalZonaEliminar = document.getElementById('modal-zona-eliminar');
+const inputColorZona    = document.getElementById('zona-color');
 
 const modalMover        = document.getElementById('modal-mover-piso');
 const moverTitulo       = document.getElementById('mover-titulo');
@@ -618,7 +636,8 @@ const modalZonaLibreNombre    = document.getElementById('zona-libre-nombre');
 const modalZonaLibreCeldas    = document.getElementById('zona-libre-celdas');
 const modalZonaLibreAceptar   = document.getElementById('modal-zona-libre-aceptar');
 const modalZonaLibreCancelar  = document.getElementById('modal-zona-libre-cancelar');
-const coloresZonaLibreDiv     = document.getElementById('colores-zona-libre');
+const modalZonaLibreEliminar  = document.getElementById('modal-zona-libre-eliminar');
+const inputColorZonaLibre     = document.getElementById('zona-libre-color');
 
 /* ===== Modal Editar Equipo ===== */
 const modalEditarEquipo    = document.getElementById('modal-editar-equipo');
@@ -794,26 +813,23 @@ modalAceptar.addEventListener('click', async () => {
 /* =========================================================
    MODAL DE ZONA (acumulativo — múltiples celdas 1×1)
    ========================================================= */
-function renderColoresZona() {
-    coloresZonaDiv.innerHTML = '';
-    COLORES_DISPONIBLES.forEach(c => {
-        const d = document.createElement('div');
-        d.className = 'color-opcion' + (c === colorSeleccionado ? ' seleccionado' : '');
-        d.style.background = c;
-        d.addEventListener('click', () => { colorSeleccionado = c; renderColoresZona(); });
-        coloresZonaDiv.appendChild(d);
-    });
-}
-
 function abrirModalZona(zona = null, grupo = null) {
     zonaEditando = zona;
     zonaGrupoEditando = grupo;
 
     if (zona) {
+        /* Edición: se trabaja sobre el grupo completo (mismo Nombre+Color) para
+           que renombrar, recolorear y mover celdas sea una sola operación. */
+        const celdasGrupo = (grupo?.zonas?.length ? grupo.zonas : [zona])
+            .map(z => ({ fila: Number(z.FilaInicio), columna: Number(z.ColumnaInicio) }));
+
+        celdasZonaSeleccionadas = celdasGrupo;
         modalZonaTitulo.textContent = 'Editar zona';
         modalZonaNombre.value = zona.Nombre;
-        colorSeleccionado = zona.Color || COLORES_DISPONIBLES[0];
-        modalZonaRango.textContent = `Celda: fila ${zona.FilaInicio}, columna ${zona.ColumnaInicio}`;
+        inputColorZona.value = colorParaInput(zona.Color || grupo?.color, COLOR_ZONA_DEFECTO);
+        modalZonaRango.textContent = celdasGrupo.length > 1
+            ? `${celdasGrupo.length} celdas en la zona`
+            : `Celda: fila ${celdasGrupo[0].fila}, columna ${celdasGrupo[0].columna}`;
     } else {
         if (celdasZonaSeleccionadas.length === 0) {
             alert('Primero selecciona al menos una celda.');
@@ -823,12 +839,17 @@ function abrirModalZona(zona = null, grupo = null) {
             ? `Nueva zona (${celdasZonaSeleccionadas.length} celdas)`
             : 'Nueva zona';
         modalZonaNombre.value = '';
-        colorSeleccionado = COLORES_DISPONIBLES[0];
+        inputColorZona.value = COLOR_ZONA_DEFECTO;
         modalZonaRango.textContent = celdasZonaSeleccionadas.length === 1
             ? `Celda seleccionada: fila ${celdasZonaSeleccionadas[0].fila}, columna ${celdasZonaSeleccionadas[0].columna}`
             : `${celdasZonaSeleccionadas.length} celdas seleccionadas`;
     }
-    renderColoresZona();
+
+    if (modalZonaEliminar) {
+        /* Solo se ofrece eliminar al editar y si el rol tiene el permiso. */
+        const puedeEliminar = !window.PermisosUI || window.PermisosUI.puede('plano:zonas:eliminar');
+        modalZonaEliminar.hidden = !zona || !puedeEliminar;
+    }
     modalZona.style.display = 'flex';
 
     setTimeout(() => {
@@ -846,66 +867,93 @@ modalZonaCancelar.addEventListener('click', () => {
     renderGridPanel(panelDer);
 });
 
+/* Eliminar desde el propio modal: misma operación que la lista lateral,
+   así el CRUD queda coherente en los dos puntos de entrada. */
+function eliminarZonaDelModal() {
+    const grupo = zonaGrupoEditando;
+    if (!grupo) return;
+
+    modalZona.style.display = 'none';
+    mostrarConfirmacion(
+        'Eliminar zona',
+        `¿Eliminar la zona <b>"${grupo.nombre}"</b> (${grupo.zonas.length} celda(s))?<br>
+         <span style="color:#64748b;font-size:0.85rem;">Los equipos permanecerán en sus posiciones.</span>`,
+        async () => {
+            try {
+                const res = await window.api.plano.eliminarZonasPorNombre(
+                    panelActivo.idPiso, grupo.nombre, grupo.color
+                );
+                if (!res || res.ok === false) {
+                    mostrarToast(res?.mensaje || 'No se pudo eliminar la zona', 'error', 4000);
+                    return;
+                }
+                mostrarToast(res.mensaje || `Zona "${grupo.nombre}" eliminada`, 'exito');
+            } catch (err) {
+                mostrarToast('Error al eliminar: ' + err.message, 'error', 4000);
+                return;
+            }
+            zonaEditando = null;
+            zonaGrupoEditando = null;
+            celdasZonaSeleccionadas = [];
+            await recargarPanel(panelActivo);
+        },
+        'plano:zonas:eliminar'
+    );
+}
+
+if (modalZonaEliminar) {
+    modalZonaEliminar.addEventListener('click', eliminarZonaDelModal);
+}
+
 modalZonaAceptar.addEventListener('click', async () => {
     const nombre = modalZonaNombre.value.trim();
+    const color = inputColorZona.value || COLOR_ZONA_DEFECTO;
+
     if (!nombre) { alert('El nombre es obligatorio.'); modalZonaNombre.focus(); return; }
     if (!panelActivo.idPiso) { alert('Selecciona un piso en el panel activo.'); return; }
 
+    const celdas = celdasZonaSeleccionadas.map(c => ({
+        fila: Number(c.fila),
+        columna: Number(c.columna)
+    }));
+    if (celdas.length === 0) { alert('No hay celdas seleccionadas.'); return; }
+
+    modalZonaAceptar.disabled = true;
     try {
-        if (zonaGrupoEditando) {
-            const res = await window.api.plano.actualizarZonasPorNombre(
+        /* Siempre se envían las celdas: crear, renombrar, recolorear y recolocar
+           son la misma operación en la capa de datos. */
+        const res = zonaGrupoEditando
+            ? await window.api.plano.actualizarZonasPorNombre(
                 panelActivo.idPiso,
                 zonaGrupoEditando.nombre,
                 zonaGrupoEditando.color,
                 nombre,
-                colorSeleccionado
-            );
-            if (!res || res.ok === false) {
-                mostrarToast(res?.mensaje || 'No se pudo actualizar la zona', 'error', 4000);
-                return;
-            }
-            mostrarToast(`Zonas "${zonaGrupoEditando.nombre}" actualizadas`, 'exito');
-        } else if (zonaEditando) {
-            await window.api.plano.actualizarZona(
-                zonaEditando.IdZona, nombre, colorSeleccionado,
-                zonaEditando.FilaInicio, zonaEditando.FilaFin,
-                zonaEditando.ColumnaInicio, zonaEditando.ColumnaFin,
-                panelActivo.idPiso
-            );
-            mostrarToast(`Zona "${nombre}" actualizada`, 'exito');
-        } else {
-            if (celdasZonaSeleccionadas.length === 0) {
-                alert('No hay celdas seleccionadas.');
-                return;
-            }
+                color,
+                celdas
+            )
+            : await window.api.plano.crearZona(panelActivo.idPiso, nombre, color, celdas);
 
-            const filas = celdasZonaSeleccionadas.map(c => c.fila);
-            const cols  = celdasZonaSeleccionadas.map(c => c.columna);
-
-            const filaMin = Math.min(...filas);
-            const filaMax = Math.max(...filas);
-            const colMin  = Math.min(...cols);
-            const colMax  = Math.max(...cols);
-
-            await window.api.plano.crearZona(
-                panelActivo.idPiso, nombre, colorSeleccionado,
-                filaMin, filaMax, colMin, colMax
-            );
-
-            if (celdasZonaSeleccionadas.length === 1) {
-                mostrarToast(`Zona "${nombre}" creada en (${filaMin}, ${colMin})`, 'exito');
-            } else {
-                mostrarToast(
-                    `Zona "${nombre}" creada (${filaMin}-${filaMax} × ${colMin}-${colMax})`,
-                    'exito'
-                );
-            }
+        if (!res || res.ok === false) {
+            mostrarToast(res?.mensaje || 'No se pudo guardar la zona', 'error', 4000);
+            modalZonaAceptar.disabled = false;
+            return;
         }
+
+        mostrarToast(
+            zonaGrupoEditando
+                ? (res.mensaje || `Zona "${nombre}" actualizada`)
+                : (celdas.length === 1
+                    ? `Zona "${nombre}" creada en (${celdas[0].fila}, ${celdas[0].columna})`
+                    : `Zona "${nombre}" creada (${celdas.length} celdas)`),
+            'exito'
+        );
     } catch (err) {
         mostrarToast('Error al guardar zona: ' + err.message, 'error', 4000);
+        modalZonaAceptar.disabled = false;
         return;
     }
 
+    modalZonaAceptar.disabled = false;
     modalZona.style.display = 'none';
     zonaEditando = null;
     zonaGrupoEditando = null;
@@ -916,17 +964,6 @@ modalZonaAceptar.addEventListener('click', async () => {
 /* =========================================================
    MODAL ZONA LIBRE
    ========================================================= */
-function renderColoresZonaLibre() {
-    coloresZonaLibreDiv.innerHTML = '';
-    COLORES_DISPONIBLES.forEach(c => {
-        const d = document.createElement('div');
-        d.className = 'color-opcion' + (c === colorSeleccionadoLibre ? ' seleccionado' : '');
-        d.style.background = c;
-        d.addEventListener('click', () => { colorSeleccionadoLibre = c; renderColoresZonaLibre(); });
-        coloresZonaLibreDiv.appendChild(d);
-    });
-}
-
 function abrirModalZonaLibre(grupo = null) {
     if (guardandoZonaLibre) return;
     if (!grupo && celdasLibresSeleccionadas.length === 0) {
@@ -938,15 +975,18 @@ function abrirModalZonaLibre(grupo = null) {
     zonaLibreEditando = grupo;
     modalZonaLibreTitulo.textContent = grupo ? 'Editar zona libre' : 'Nueva zona libre';
     modalZonaLibreNombre.value = grupo?.nombre || '';
-    colorSeleccionadoLibre = grupo?.color || COLORES_DISPONIBLES[0];
+    inputColorZonaLibre.value = colorParaInput(grupo?.color, COLOR_ZONA_LIBRE_DEFECTO);
     if (grupo) {
         celdasLibresSeleccionadas = grupo.celdas.map(celda => ({
             fila: celda.Fila,
             columna: celda.Columna
         }));
     }
+    if (modalZonaLibreEliminar) {
+        const puedeEliminar = !window.PermisosUI || window.PermisosUI.puede('plano:zonas:eliminar');
+        modalZonaLibreEliminar.hidden = !grupo || !puedeEliminar;
+    }
     modalZonaLibreCeldas.textContent = `Celdas seleccionadas: ${celdasLibresSeleccionadas.length}`;
-    renderColoresZonaLibre();
     modalZonaLibre.style.display = 'flex';
 
     setTimeout(() => {
@@ -964,33 +1004,76 @@ modalZonaLibreCancelar.addEventListener('click', () => {
     renderGridPanel(panelDer);
 });
 
+function eliminarZonaLibreDelModal() {
+    const grupo = zonaLibreEditando;
+    if (!grupo) return;
+
+    modalZonaLibre.style.display = 'none';
+    guardandoZonaLibre = false;
+
+    mostrarConfirmacion(
+        'Eliminar zona libre',
+        `¿Eliminar la zona libre <b>"${grupo.nombre}"</b> (${grupo.celdas.length} celda(s))?`,
+        async () => {
+            try {
+                const res = await window.api.plano.eliminarZonaLibre(
+                    panelActivo.idPiso, grupo.nombre, grupo.color
+                );
+                if (!res || res.ok === false) {
+                    mostrarToast(res?.mensaje || 'No se pudo eliminar la zona libre', 'error', 4000);
+                    return;
+                }
+                mostrarToast(res.mensaje || `Zona libre "${grupo.nombre}" eliminada`, 'exito');
+            } catch (err) {
+                mostrarToast('Error al eliminar: ' + err.message, 'error', 4000);
+                return;
+            }
+            zonaLibreEditando = null;
+            celdasLibresSeleccionadas = [];
+            await recargarPanel(panelActivo);
+        },
+        'plano:zonas:eliminar'
+    );
+}
+
+if (modalZonaLibreEliminar) {
+    modalZonaLibreEliminar.addEventListener('click', eliminarZonaLibreDelModal);
+}
+
 modalZonaLibreAceptar.addEventListener('click', async () => {
     if (!guardandoZonaLibre) return;
 
     const nombre = modalZonaLibreNombre.value.trim();
+    const color = inputColorZonaLibre.value || COLOR_ZONA_LIBRE_DEFECTO;
     if (!nombre) { alert('El texto es obligatorio.'); modalZonaLibreNombre.focus(); return; }
     if (!panelActivo.idPiso) { alert('Selecciona un piso primero.'); return; }
     if (celdasLibresSeleccionadas.length === 0) { alert('No hay celdas seleccionadas.'); return; }
 
     modalZonaLibreAceptar.disabled = true;
 
+    const celdas = celdasLibresSeleccionadas.map(c => ({
+        fila: Number(c.fila),
+        columna: Number(c.columna)
+    }));
+
     try {
+        /* Las celdas se envían siempre: editar también puede mover el bloque. */
         const res = zonaLibreEditando
             ? await window.api.plano.actualizarZonaLibre(
                 panelActivo.idPiso,
                 zonaLibreEditando.nombre,
                 zonaLibreEditando.color,
                 nombre,
-                colorSeleccionadoLibre
+                color,
+                celdas
             )
             : await window.api.plano.guardarZonaLibre(
-                panelActivo.idPiso, nombre, colorSeleccionadoLibre,
-                celdasLibresSeleccionadas.slice()
+                panelActivo.idPiso, nombre, color, celdas
             );
         if (!res || res.ok === false) {
             throw new Error(res?.mensaje || 'No se pudo guardar la zona libre');
         }
-        mostrarToast(`Zona libre "${nombre}" guardada`, 'exito');
+        mostrarToast(res.mensaje || `Zona libre "${nombre}" guardada`, 'exito');
     } catch (err) {
         mostrarToast('Error al guardar: ' + err.message, 'error', 4000);
         modalZonaLibreAceptar.disabled = false;
@@ -2371,8 +2454,17 @@ function renderGridPanel(panel) {
 
             if (zl && !contenido) {
                 celda.classList.add('celda-libre');
-                celda.style.backgroundColor = zl.Color;
+                celda.style.backgroundColor = normalizarColor(zl.Color, COLOR_ZONA_LIBRE_DEFECTO);
             }
+
+            /* Zona normal: marca visual de las celdas que pertenecen a una zona.
+               Se usa un anillo interior (CSS) para no tapar el color del rol. */
+            const zona = zonaEnCelda(panel, fila, columna);
+            if (zona) {
+                celda.classList.add('celda-zona');
+                celda.style.setProperty('--zona-color', normalizarColor(zona.Color, COLOR_ZONA_DEFECTO));
+            }
+
 
             if (contenido) {
                 const idCli = Number(contenido.IdCliente);
@@ -2551,15 +2643,16 @@ function renderGridPanel(panel) {
    RENDERIZAR TEXTOS DE ZONAS LIBRES
    ========================================================= */
 function renderizarTextosZonasLibres(panel) {
-    if (!panel.zonasLibres || panel.zonasLibres.length === 0) return;
-
     const gridEl = panel.sufijo === 'izq' ? gridIzq : gridDer;
     if (!gridEl) return;
 
     const wrapper = gridEl.closest('.grid-plano-wrapper');
     if (!wrapper) return;
 
+    /* Se limpian siempre para no dejar textos de una selección anterior. */
     wrapper.querySelectorAll('.texto-zona-libre-overlay').forEach(el => el.remove());
+
+    if (!panel.zonasLibres || panel.zonasLibres.length === 0) return;
 
     const grupos = {};
     panel.zonasLibres.forEach(zl => {
@@ -2629,79 +2722,109 @@ function renderizarTextosZonasLibres(panel) {
 /* =========================================================
    RENDERIZAR LLAVES DE ZONA
    ========================================================= */
-function renderizarLlavesZonas(panel) {
-    const llaves = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
-    if (!llaves || !panel.zonas || panel.zonas.length === 0) return;
+/* Agrupa las zonas por Nombre+Color y calcula el bloque que abarcan.
+   Así un grupo creado celda por celda se dibuja como UN solo bloque cuadrado
+   en lugar de una llave por cada celda. */
+function agruparZonas(panel) {
+    const grupos = new Map();
+    for (const zona of panel.zonas || []) {
+        const clave = `${zona.Nombre}||${zona.Color || ''}`;
+        if (!grupos.has(clave)) {
+            grupos.set(clave, {
+                nombre: zona.Nombre,
+                color: normalizarColor(zona.Color, COLOR_ZONA_DEFECTO),
+                zonas: [],
+                filaInicio: Number(zona.FilaInicio),
+                filaFin: Number(zona.FilaFin),
+                columnaInicio: Number(zona.ColumnaInicio),
+                columnaFin: Number(zona.ColumnaFin)
+            });
+        }
+        const grupo = grupos.get(clave);
+        grupo.zonas.push(zona);
+        grupo.filaInicio = Math.min(grupo.filaInicio, Number(zona.FilaInicio));
+        grupo.filaFin = Math.max(grupo.filaFin, Number(zona.FilaFin));
+        grupo.columnaInicio = Math.min(grupo.columnaInicio, Number(zona.ColumnaInicio));
+        grupo.columnaFin = Math.max(grupo.columnaFin, Number(zona.ColumnaFin));
+    }
+    return [...grupos.values()];
+}
 
-    llaves.innerHTML = '';
+function renderizarLlavesZonas(panel) {
+    const contenedor = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
+    if (!contenedor) return;
+
+    /* Se limpia siempre: si ya no quedan zonas no deben quedar llaves viejas. */
+    contenedor.innerHTML = '';
 
     const gridEl = panel.sufijo === 'izq' ? gridIzq : gridDer;
-    const wrapper = gridEl.closest('.grid-plano-wrapper');
-    if (!wrapper) return;
+    if (!gridEl) return;
 
-    const wrapperRect = wrapper.getBoundingClientRect();
+    const grupos = agruparZonas(panel)
+        .sort((a, b) => a.filaInicio - b.filaInicio || a.columnaInicio - b.columnaInicio);
+    if (!grupos.length) return;
+
+    const contenedorRect = contenedor.getBoundingClientRect();
     const gridRect = gridEl.getBoundingClientRect();
+    if (!gridRect.width) return;
 
-    const offsetX = gridRect.left - wrapperRect.left;
-    const offsetY = gridRect.top - wrapperRect.top;
-
-    const gridAnchoPx = gridRect.width;
-    const mitadGrid = offsetX + gridAnchoPx / 2;
-
-    const espacioDerecha = wrapperRect.width - (offsetX + gridRect.width);
-    const espacioIzquierda = offsetX;
-
-    const forzarIzquierda = espacioDerecha < 30 && espacioIzquierda >= 30;
-
-    const zonasOrdenadas = [...panel.zonas].sort((a, b) => a.FilaInicio - b.FilaInicio);
+    const offsetX = gridRect.left - contenedorRect.left;
+    const mitadGrid = offsetX + gridRect.width / 2;
+    const espacioDerecha = contenedorRect.width - (offsetX + gridRect.width);
+    const forzarIzquierda = espacioDerecha < 30 && offsetX >= 30;
 
     const ocupacionDerecha = [];
     const ocupacionIzquierda = [];
 
-    zonasOrdenadas.forEach(zona => {
-        const startFila = zona.FilaInicio - 1;
-        const endFila = zona.FilaFin - 1;
-        const endCol = zona.ColumnaFin - 1;
+    for (const grupo of grupos) {
+        /* Posición tomada de las celdas reales del canvas (getBoundingClientRect):
+           la llave queda pegada a la cuadrícula aunque las columnas sean fluidas
+           y respeta el tamaño real de cada celda. */
+        const celdaInicio = gridEl.querySelector(
+            `.celda[data-fila="${grupo.filaInicio}"][data-columna="${grupo.columnaInicio}"]`
+        );
+        const celdaFin = gridEl.querySelector(
+            `.celda[data-fila="${grupo.filaFin}"][data-columna="${grupo.columnaFin}"]`
+        );
+        if (!celdaInicio) continue;
 
-        const zonaY = offsetY + GRID_PADDING + startFila * (CELL_H + CELL_GAP);
-        const zonaH = (endFila - startFila) * (CELL_H + CELL_GAP) + CELL_H;
+        const inicio = celdaInicio.getBoundingClientRect();
+        const fin = (celdaFin || celdaInicio).getBoundingClientRect();
 
-        const zonaXRight = offsetX + GRID_PADDING + (endCol + 1) * (CELL_W + CELL_GAP) - CELL_GAP;
-        const zonaXLeft = offsetX + GRID_PADDING + (zona.ColumnaInicio - 1) * (CELL_W + CELL_GAP);
+        const bloqueIzquierda = inicio.left - contenedorRect.left;
+        const bloqueDerecha = fin.right - contenedorRect.left;
+        const bloqueArriba = inicio.top - contenedorRect.top;
+        const bloqueAlto = Math.max(fin.bottom - inicio.top, 30);
 
-        const centroBloque = (zonaXLeft + zonaXRight) / 2;
-
-        let lado;
-        if (forzarIzquierda) lado = 'izquierda';
-        else if (centroBloque >= mitadGrid) lado = 'derecha';
-        else lado = 'izquierda';
+        const centroBloque = (bloqueIzquierda + bloqueDerecha) / 2;
+        const lado = forzarIzquierda
+            ? 'izquierda'
+            : (centroBloque >= mitadGrid ? 'derecha' : 'izquierda');
 
         const ocupacion = lado === 'derecha' ? ocupacionDerecha : ocupacionIzquierda;
-        let yFinal = zonaY;
-        const alturaMinLlave = 22;
+        let yFinal = bloqueArriba;
 
-        for (const oc of ocupacion) {
-            if (yFinal < oc.bottom && (yFinal + zonaH) > oc.top) {
-                yFinal = oc.bottom + 4;
+        for (const tramo of ocupacion) {
+            if (yFinal < tramo.bottom && (yFinal + bloqueAlto) > tramo.top) {
+                yFinal = tramo.bottom + 4;
             }
         }
+        ocupacion.push({ top: yFinal, bottom: yFinal + bloqueAlto });
 
-        ocupacion.push({ top: yFinal, bottom: yFinal + Math.max(zonaH, alturaMinLlave) });
-
-        dibujarLlave(llaves, {
+        dibujarLlave(contenedor, {
             lado,
-            x: lado === 'derecha' ? zonaXRight : zonaXLeft,
+            x: lado === 'derecha' ? bloqueDerecha : bloqueIzquierda,
             y: yFinal,
-            h: Math.max(zonaH, 30),
-            color: zona.Color || '#A99A63',
-            nombre: zona.Nombre,
-            zona
+            h: bloqueAlto,
+            color: grupo.color,
+            nombre: grupo.nombre,
+            grupo
         });
-    });
+    }
 }
 
 function dibujarLlave(contenedor, opciones) {
-    const { lado, x, y, h, color, nombre, zona } = opciones;
+    const { lado, x, y, h, color, nombre, grupo } = opciones;
 
     const cont = document.createElement('div');
     cont.className = 'llave-zona';
@@ -2743,12 +2866,24 @@ function dibujarLlave(contenedor, opciones) {
     if (lado === 'derecha') etiqueta.style.left = (svgW + 4) + 'px';
     else etiqueta.style.right = (svgW + 4) + 'px';
 
-    etiqueta.innerHTML = `
-        <span class="punto-color" style="background:${color};"></span>
-        ${nombre}
-    `;
+    const totalCeldas = grupo?.zonas?.length || 0;
+    const punto = document.createElement('span');
+    punto.className = 'punto-color';
+    punto.style.background = color;
+    etiqueta.append(punto, document.createTextNode(` ${nombre || ''}`));
+    if (totalCeldas > 1) {
+        const contador = document.createElement('span');
+        contador.className = 'cant-zonas';
+        contador.textContent = String(totalCeldas);
+        etiqueta.append(document.createTextNode(' '), contador);
+    }
 
-    etiqueta.addEventListener('click', () => abrirModalZona(zona));
+    /* Al hacer clic se edita el grupo completo (todas las celdas de esa zona),
+       no solo una, para que el CRUD quede coherente con lo que se ve. */
+    etiqueta.addEventListener('click', () => {
+        if (!grupo?.zonas?.length) return;
+        abrirModalZona(grupo.zonas[0], { nombre: grupo.nombre, color: grupo.color });
+    });
 
     cont.appendChild(etiqueta);
     contenedor.appendChild(cont);
@@ -3645,13 +3780,6 @@ function construirBloquesPlano(panel, layout) {
         return `#${canales.map(canal => Math.round(canal + (255 - canal) * .78).toString(16).padStart(2, '0')).join('')}`;
     };
 
-    function normalizarColor(c, fallback = '#e2e8f0') {
-        if (!c || typeof c !== 'string') return fallback;
-        const s = c.trim();
-        if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s)) return s;
-        if (/^(rgb|rgba|hsl|hsla)\(/i.test(s)) return s;
-        return fallback;
-    }
     function colorTextoContraste(hexColor) {
         try {
             const hex = String(hexColor).replace('#', '');

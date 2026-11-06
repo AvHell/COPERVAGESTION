@@ -246,13 +246,17 @@
                 <input type="text" id="zona-nombre" maxlength="100" placeholder="Mesa 1">
             </div>
             <div class="campo-zona">
-                <label>Color</label>
-                <div class="colores-zona" id="colores-zona"></div>
+                <label for="zona-color">Color</label>
+                <div class="color-picker-field">
+                    <input type="color" id="zona-color" value="#A99A63" aria-label="Color de la zona">
+                    <span>Color de la llave y del marco de la zona en el plano.</span>
+                </div>
             </div>
             <p id="zona-rango" style="font-size:0.85rem;color:#7f8c8d;margin-top:8px;"></p>
             <div class="modal-acciones">
-                <button id="modal-zona-cancelar" class="secundario">Cancelar</button>
-                <button id="modal-zona-aceptar">Guardar</button>
+                <button id="modal-zona-eliminar" class="peligro btn-eliminar-modal" type="button" hidden>Eliminar</button>
+                <button id="modal-zona-cancelar" class="secundario" type="button">Cancelar</button>
+                <button id="modal-zona-aceptar" type="button">Guardar</button>
             </div>
         </div>
     </div>
@@ -266,13 +270,17 @@
                 <input type="text" id="zona-libre-nombre" maxlength="100" placeholder="ENTRADA">
             </div>
             <div class="campo-zona">
-                <label>Color</label>
-                <div class="colores-zona" id="colores-zona-libre"></div>
+                <label for="zona-libre-color">Color</label>
+                <div class="color-picker-field">
+                    <input type="color" id="zona-libre-color" value="#B5442E" aria-label="Color de la zona libre">
+                    <span>Rellena las celdas libres del plano con este color.</span>
+                </div>
             </div>
             <p id="zona-libre-celdas" style="font-size:0.85rem;color:#7f8c8d;margin-top:8px;"></p>
             <div class="modal-acciones">
-                <button id="modal-zona-libre-cancelar" class="secundario">Cancelar</button>
-                <button id="modal-zona-libre-aceptar">Guardar</button>
+                <button id="modal-zona-libre-eliminar" class="peligro btn-eliminar-modal" type="button" hidden>Eliminar</button>
+                <button id="modal-zona-libre-cancelar" class="secundario" type="button">Cancelar</button>
+                <button id="modal-zona-libre-aceptar" type="button">Guardar</button>
             </div>
         </div>
     </div>

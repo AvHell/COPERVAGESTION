@@ -1555,9 +1555,14 @@ ipcMain.handle('plano:intercambiar', async (_e, idA, idB, idPiso, hostA, hostB, 
 
 ipcMain.handle('plano:listarZonas', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.listarZonas(idPiso); });
 
-ipcMain.handle('plano:crearZona', async (_e, idPiso, nombre, color, fi, ff, ci, cf) => {
+ipcMain.handle('plano:guardarZona', async (_e, idPiso, anterior, nombre, color, celdas) => {
     const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
-    return await planoDB.crearZona(usuarioActual.IdUsuario, idPiso, nombre, color, fi, ff, ci, cf);
+    return await planoDB.guardarZona(usuarioActual.IdUsuario, idPiso, anterior, nombre, color, celdas);
+});
+
+ipcMain.handle('plano:crearZona', async (_e, idPiso, nombre, color, celdas) => {
+    const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
+    return await planoDB.crearZona(usuarioActual.IdUsuario, idPiso, nombre, color, celdas);
 });
 
 ipcMain.handle('plano:actualizarZona', async (_e, idZona, nombre, color, fi, ff, ci, cf, idPiso) => {
@@ -1565,10 +1570,10 @@ ipcMain.handle('plano:actualizarZona', async (_e, idZona, nombre, color, fi, ff,
     return await planoDB.actualizarZona(usuarioActual.IdUsuario, idPiso, idZona, nombre, color, fi, ff, ci, cf);
 });
 
-ipcMain.handle('plano:actualizarZonasPorNombre', async (_e, idPiso, nombreActual, colorActual, nombre, color) => {
+ipcMain.handle('plano:actualizarZonasPorNombre', async (_e, idPiso, nombreActual, colorActual, nombre, color, celdas) => {
     const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
     return await planoDB.actualizarZonasPorNombre(
-        usuarioActual.IdUsuario, idPiso, nombreActual, colorActual, nombre, color
+        usuarioActual.IdUsuario, idPiso, nombreActual, colorActual, nombre, color, celdas
     );
 });
 
@@ -1607,10 +1612,10 @@ ipcMain.handle('plano:guardarZonaLibre', async (_e, idPiso, nombre, color, celda
     return await planoDB.guardarZonaLibre(usuarioActual.IdUsuario, idPiso, nombre, color, celdas);
 });
 
-ipcMain.handle('plano:actualizarZonaLibre', async (_e, idPiso, nombreActual, colorActual, nombre, color) => {
+ipcMain.handle('plano:actualizarZonaLibre', async (_e, idPiso, nombreActual, colorActual, nombre, color, celdas) => {
     const err = requerirSesion('plano:zonas:gestionar'); if (err) return err;
     return await planoDB.actualizarZonaLibre(
-        usuarioActual.IdUsuario, idPiso, nombreActual, colorActual, nombre, color
+        usuarioActual.IdUsuario, idPiso, nombreActual, colorActual, nombre, color, celdas
     );
 });
 

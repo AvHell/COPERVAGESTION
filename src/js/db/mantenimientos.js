@@ -59,7 +59,23 @@ async function obtenerPlano(idPiso) {
               AND E.Activo = 1
         `);
 
-    return { ...piso, equipos: equiposResult.recordset };
+    /* Zonas libres: son las marcas de color/texto que se pintan en el plano
+       visual (PlanoZonasLibres, una fila por celda). Se envían al renderer
+       para que el mapa de mantenimientos se vea igual que el plano. */
+    const zonasLibresResult = await pool.request()
+        .input('IdPiso', sql.Int, idPiso)
+        .query(`
+            SELECT Nombre, Color, Fila, Columna
+            FROM PlanoZonasLibres
+            WHERE IdPiso = @IdPiso
+            ORDER BY Fila, Columna
+        `);
+
+    return {
+        ...piso,
+        equipos: equiposResult.recordset,
+        zonasLibres: zonasLibresResult.recordset
+    };
 }
 
 async function listarRegistros(idPiso) {

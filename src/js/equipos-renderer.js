@@ -1043,6 +1043,7 @@ function limpiarFormulario() {
     inputIP.value = '';
     inputNumHost.value = '';
     inputPassword.value = '';
+    actualizarHintRango();
 }
 
 async function abrirEdicion(id) {
@@ -1088,6 +1089,7 @@ async function abrirEdicion(id) {
 
     abrirModal();
     ocultarMensaje();
+    actualizarHintRango();
 }
 
 function setSelectValorConHuerfano(select, valor) {
@@ -1134,7 +1136,6 @@ btnGuardar.addEventListener('click', async () => {
         hostname:       hostnameFinal,
         numeroHost:     esEstatica ? parseInt(inputNumHost.value, 10) : null,
         ip:             esEstatica ? inputIP.value.trim() : null,
-        idRangoIP:      null,
         mascara:        esEstatica ? (selectMascara.value || null) : null,
         puertaEnlace:   esEstatica ? (selectPuerta.value  || null) : null,
         dns1:           esEstatica ? (selectDNS1.value    || null) : null,
@@ -1172,6 +1173,27 @@ btnGuardar.addEventListener('click', async () => {
             cerrarModal();
             await recargarEquipos();
             toastExito(res.mensaje || '¡Guardado!');
+        } else if (res && res.tipo === 'ip-fuera-de-rango') {
+            const permitidos = (res.detalle?.aplicables || [])
+                .map(r => `${r.IPInicio} – ${r.IPFin}`)
+                .join(', ');
+            await Swal.fire({
+                icon: 'warning',
+                title: 'IP fuera de rango',
+                html: `<div style="text-align:left;font-size:0.9rem;">
+                    ${escaparHTML(res.mensaje || 'La IP no está dentro del rango autorizado.')}<br><br>
+                    <div style="background:#FFF7E8;padding:10px;border-radius:6px;border-left:3px solid #A99A63;">
+                        <b>IP capturada:</b> ${escaparHTML(datos.ip || '')}<br>
+                        <b>Rangos permitidos:</b> ${escaparHTML(permitidos || 'Sin rangos para este perfil')}
+                    </div>
+                    <p style="margin-top:10px;color:#7a7563;">
+                        Ajusta la IP o configura el rango en <b>Rangos IP</b>.
+                    </p></div>`,
+                confirmButtonText: 'Entendido',
+                buttonsStyling: false,
+                customClass: { popup: 'cl-confirm', confirmButton: 'swal2-confirm swal2-styled' }
+            });
+            actualizarHintRango();
         } else if (res && res.tipo === 'ip-duplicada') {
             await Swal.fire({
                 icon: 'warning',
@@ -1243,6 +1265,698 @@ async function eliminarEquipo(id, hostname) {
         toastError('Error al eliminar', err.message);
     }
 }
+
+/* =========================================================
+   RANGOS IP POR CLIENTE
+   ========================================================= */
+
+const modalRangos        = document.getElementById('modal-rangos');
+const rangosFiltroCliente = document.getElementById('rangos-filtro-cliente');
+const rangosLista        = document.getElementById('rangos-lista');
+const rangosResumen      = document.getElementById('rangos-resumen');
+
+const modalRango        = document.getElementById('modal-rango');
+const modalRangoTitulo  = document.getElementById('modal-rango-titulo');
+const rangoCliente      = document.getElementById('rango-cliente');
+const rangoPerfil       = document.getElementById('rango-perfil');
+const rangoSegmento     = document.getElementById('rango-segmento');
+const rangoInicio       = document.getElementById('rango-inicio');
+const rangoFin          = document.getElementById('rango-fin');
+const rangoDescripcion  = document.getElementById('rango-descripcion');
+const rangoMensaje      = document.getElementById('rango-mensaje');
+const btnRangoGuardar   = document.getElementById('rango-guardar');
+
+const modalRangosLote = document.getElementById('modal-rangos-lote');
+const loteCliente     = document.getElementById('lote-cliente');
+const loteSegmento    = document.getElementById('lote-segmento');
+const loteTexto       = document.getElementById('lote-texto');
+const lotePreview     = document.getElementById('lote-preview');
+const loteMensaje     = document.getElementById('lote-mensaje');
+const btnLoteProcesar = document.getElementById('lote-procesar');
+
+const hintRangoIP     = document.getElementById('hint-rango-ip');
+
+let rangos = [];
+let rangoEditando = null;
+let guardandoRango = false;
+let procesandoLote = false;
+let loteFilas = [];
+let tokenValidacionRango = 0;
+
+function actualizarBloqueoScroll() {
+    const abierto = [modalEquipo, modalRangos, modalRango, modalRangosLote]
+        .some(modal => modal && modal.style.display === 'flex');
+    document.body.style.overflow = abierto ? 'hidden' : '';
+}
+
+function segmentoDeIP(ip) {
+    const partes = String(ip || '').trim().split('.');
+    return partes.length === 4 ? partes.slice(0, 3).join('.') : '';
+}
+
+function llenarSelectClientes(select, valorSeleccionado = '') {
+    select.innerHTML = '<option value="">-- Selecciona --</option>';
+    clientes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = String(c.IdCliente);
+        opt.textContent = c.Nombre ? `${c.Nombre} (${c.Codigo})` : c.Codigo;
+        select.appendChild(opt);
+    });
+    if (valorSeleccionado) select.value = String(valorSeleccionado);
+}
+
+function llenarSelectPerfiles(select, valorSeleccionado = '') {
+    select.innerHTML = '<option value="">Todos los perfiles (heredado)</option>';
+    roles.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = String(r.IdRolEquipo);
+        opt.textContent = r.Nombre ? `${r.Nombre} (${r.Codigo})` : r.Codigo;
+        select.appendChild(opt);
+    });
+    select.value = valorSeleccionado ? String(valorSeleccionado) : '';
+}
+
+/* ---------- Listado ---------- */
+
+function abrirModalRangos() {
+    llenarSelectClientes(rangosFiltroCliente, selectCli.value || '');
+    rangosResumen.classList.add('oculto');
+    rangosResumen.innerHTML = '';
+    rangosLista.innerHTML = '<p class="rangos-vacio">Cargando rangos...</p>';
+    modalRangos.style.display = 'flex';
+    actualizarBloqueoScroll();
+    cargarRangos();
+}
+
+function cerrarModalRangos() {
+    modalRangos.style.display = 'none';
+    actualizarBloqueoScroll();
+}
+
+async function cargarRangos() {
+    const idCliente = parseInt(rangosFiltroCliente.value, 10) || null;
+    try {
+        const resultado = await window.api.rangos.listar(idCliente);
+        if (!Array.isArray(resultado)) {
+            throw new Error(resultado?.mensaje || 'No se pudieron consultar los rangos.');
+        }
+        rangos = resultado;
+        renderRangos();
+    } catch (err) {
+        rangos = [];
+        rangosLista.innerHTML = `<p class="rangos-vacio error">${escaparHTML(err.message)}</p>`;
+    }
+}
+
+function renderRangos() {
+    if (!rangos.length) {
+        rangosLista.innerHTML = `<p class="rangos-vacio">
+            Este cliente todavía no tiene rangos configurados. Mientras no existan rangos,
+            el control de IP no restringe sus equipos.
+        </p>`;
+        return;
+    }
+
+    const grupos = new Map();
+    rangos.forEach(r => {
+        const clave = String(r.ClienteCodigo || r.IdCliente);
+        if (!grupos.has(clave)) {
+            grupos.set(clave, { codigo: r.ClienteCodigo, nombre: r.ClienteNombre, filas: [] });
+        }
+        grupos.get(clave).filas.push(r);
+    });
+
+    const fragmento = document.createDocumentFragment();
+
+    [...grupos.values()].forEach(grupo => {
+        const bloque = document.createElement('section');
+        bloque.className = 'rangos-grupo';
+
+        const encabezado = document.createElement('div');
+        encabezado.className = 'rangos-grupo-header';
+        encabezado.innerHTML = `
+            ${renderBadgeCliente(grupo.codigo, grupo.nombre)}
+            <span class="grupo-count">${grupo.filas.length} ${grupo.filas.length === 1 ? 'rango' : 'rangos'}</span>
+        `;
+        bloque.appendChild(encabezado);
+
+        const tabla = document.createElement('table');
+        tabla.className = 'rangos-tabla';
+        tabla.innerHTML = `
+            <thead>
+                <tr>
+                    <th style="width:26%;">Perfil</th>
+                    <th style="width:34%;">Rango autorizado</th>
+                    <th style="width:32%;">Descripción</th>
+                    <th style="width:8%; text-align:right;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        `;
+        const tbody = tabla.querySelector('tbody');
+
+        grupo.filas.forEach(r => {
+            const fila = document.createElement('tr');
+
+            const perfilHTML = r.RolNombre
+                ? renderRolPill(r.RolCodigo, r.RolNombre)
+                : '<span class="rango-general">Todos los perfiles</span>';
+            const inicio = escaparHTML(r.IPInicio);
+            const fin = escaparHTML(r.IPFin);
+            const rangoHTML = r.IPInicio === r.IPFin
+                ? `<code class="rango-ip">${inicio}</code>`
+                : `<code class="rango-ip">${inicio}</code><span class="rango-sep">–</span><code class="rango-ip">${fin}</code>`;
+            const descripcionHTML = r.Descripcion
+                ? escaparHTML(r.Descripcion)
+                : '<span class="rango-sin-desc">—</span>';
+
+            fila.innerHTML = `
+                <td data-label="Perfil">${perfilHTML}</td>
+                <td data-label="Rango">${rangoHTML}</td>
+                <td data-label="Descripción">${descripcionHTML}</td>
+                <td class="acciones-tabla"></td>
+            `;
+
+            const celda = fila.querySelector('.acciones-tabla');
+
+            const btnEditar = document.createElement('button');
+            btnEditar.type = 'button';
+            btnEditar.className = 'secundario';
+            btnEditar.setAttribute('data-tooltip', 'Editar rango');
+            btnEditar.innerHTML = iconoEditarSVG();
+            btnEditar.addEventListener('click', () => abrirModalRango(r));
+
+            const btnEliminar = document.createElement('button');
+            btnEliminar.type = 'button';
+            btnEliminar.className = 'peligro';
+            btnEliminar.setAttribute('data-tooltip', 'Eliminar rango');
+            btnEliminar.innerHTML = iconoEliminarSVG();
+            btnEliminar.addEventListener('click', () => eliminarRango(r));
+
+            celda.appendChild(btnEditar);
+            celda.appendChild(btnEliminar);
+            tbody.appendChild(fila);
+        });
+
+        bloque.appendChild(tabla);
+        fragmento.appendChild(bloque);
+    });
+
+    rangosLista.innerHTML = '';
+    rangosLista.appendChild(fragmento);
+}
+
+/* ---------- Alta / edición ---------- */
+
+function abrirModalRango(rango = null) {
+    rangoEditando = rango ? Number(rango.IdRangoIP) : null;
+    modalRangoTitulo.textContent = rango ? 'Editar rango IP' : 'Nuevo rango IP';
+
+    llenarSelectClientes(rangoCliente, rango?.IdCliente || rangosFiltroCliente.value || selectCli.value || '');
+    llenarSelectPerfiles(rangoPerfil, rango?.IdRolEquipo || '');
+
+    const segmento = rango ? segmentoDeIP(rango.IPInicio) : (rangoSegmento.value || '192.168.2');
+    rangoSegmento.value = segmento;
+    rangoInicio.value = rango?.IPInicio || '';
+    rangoFin.value = (rango?.IPFin && rango.IPFin !== rango.IPInicio) ? rango.IPFin : '';
+    rangoDescripcion.value = rango?.Descripcion || '';
+
+    ocultarRangoMensaje();
+    modalRango.style.display = 'flex';
+    actualizarBloqueoScroll();
+    rangoInicio.focus();
+}
+
+function cerrarModalRango() {
+    modalRango.style.display = 'none';
+    rangoEditando = null;
+    ocultarRangoMensaje();
+    actualizarBloqueoScroll();
+}
+
+function mostrarRangoMensaje(texto, tipo) {
+    rangoMensaje.textContent = texto;
+    rangoMensaje.className = 'alert ' + tipo;
+}
+function ocultarRangoMensaje() { rangoMensaje.className = 'alert oculto'; }
+
+function setGuardandoRango(valor) {
+    guardandoRango = valor;
+    btnRangoGuardar.disabled = valor;
+    const txt = btnRangoGuardar.querySelector('.btn-text');
+    const spin = btnRangoGuardar.querySelector('.btn-spinner');
+    if (txt) txt.textContent = valor ? 'Guardando...' : 'Guardar';
+    if (spin) spin.classList.toggle('oculto', !valor);
+}
+
+async function guardarRango() {
+    if (guardandoRango) return;
+
+    const idCliente = parseInt(rangoCliente.value, 10);
+    const datos = {
+        idCliente,
+        idRolEquipo: rangoPerfil.value ? parseInt(rangoPerfil.value, 10) : null,
+        segmento: rangoSegmento.value.trim(),
+        ipInicio: rangoInicio.value.trim(),
+        ipFin: rangoFin.value.trim(),
+        descripcion: rangoDescripcion.value.trim()
+    };
+
+    if (!idCliente)  { mostrarRangoMensaje('Selecciona el cliente al que pertenece el rango.', 'error'); return; }
+    if (!datos.ipInicio) { mostrarRangoMensaje('Captura la IP inicial del rango.', 'error'); return; }
+
+    setGuardandoRango(true);
+    try {
+        const res = rangoEditando
+            ? await window.api.rangos.actualizar(rangoEditando, datos)
+            : await window.api.rangos.crear(datos);
+
+        if (res && res.ok) {
+            cerrarModalRango();
+            if (rangosFiltroCliente.querySelector(`option[value="${idCliente}"]`)) {
+                rangosFiltroCliente.value = String(idCliente);
+            }
+            await cargarRangos();
+            toastExito(res.mensaje || 'Rango guardado');
+        } else {
+            mostrarRangoMensaje(res?.mensaje || 'No se pudo guardar el rango.', 'error');
+        }
+    } catch (err) {
+        mostrarRangoMensaje('Error: ' + err.message, 'error');
+    } finally {
+        setGuardandoRango(false);
+    }
+}
+
+async function eliminarRango(rango) {
+    const etiqueta = rango.RolNombre ? `${rango.RolNombre} · ${rango.IPInicio} – ${rango.IPFin}` : `${rango.IPInicio} – ${rango.IPFin}`;
+    const confirmacion = await Swal.fire({
+        icon: 'warning',
+        title: '¿Eliminar rango IP?',
+        html: `Se eliminará el rango <strong>${escaparHTML(etiqueta)}</strong> de
+               <strong>${escaparHTML(rango.ClienteCodigo || '')}</strong>.<br>
+               Los equipos que lo tengan asignado quedarán sin rango.`,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        focusCancel: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+        const res = await window.api.rangos.eliminar(rango.IdRangoIP);
+        if (res && res.ok) {
+            await cargarRangos();
+            toastExito(res.mensaje || 'Rango eliminado');
+        } else {
+            toastError('No se pudo eliminar el rango', res?.mensaje || 'Error desconocido');
+        }
+    } catch (err) {
+        toastError('Error al eliminar el rango', err.message);
+    }
+}
+
+/* ---------- Auditoría ---------- */
+
+async function auditarRangos() {
+    const idCliente = parseInt(rangosFiltroCliente.value, 10) || null;
+    try {
+        const res = await window.api.rangos.auditar(idCliente);
+        if (!res || res.ok === false || !Array.isArray(res.violaciones)) {
+            throw new Error(res?.mensaje || 'No se pudo auditar el cumplimiento de rangos.');
+        }
+        renderResumenAuditoria(res);
+    } catch (err) {
+        toastError('No se pudo auditar', err.message);
+    }
+}
+
+function renderResumenAuditoria(res) {
+    const violaciones = res.violaciones || [];
+    const sinNorma = res.sinNorma || [];
+
+    const detalleViolaciones = violaciones.map(v => `
+        <li>
+            <strong>${escaparHTML(v.Hostname || '')}</strong>
+            <code class="rango-ip">${escaparHTML(v.IP || '')}</code>
+            <span class="rango-motivo">${escaparHTML(v.mensaje || '')}</span>
+        </li>`).join('');
+
+    const detalleSinNorma = sinNorma.map(v => `
+        <li>
+            <strong>${escaparHTML(v.Hostname || '')}</strong>
+            <code class="rango-ip">${escaparHTML(v.IP || '')}</code>
+            <span class="rango-motivo">El cliente ${escaparHTML(v.ClienteCodigo || '')} no tiene rangos configurados.</span>
+        </li>`).join('');
+
+    rangosResumen.classList.remove('oculto');
+    rangosResumen.innerHTML = `
+        <div class="rangos-resumen-titulo">
+            <span class="${violaciones.length ? 'contador-alerta' : 'contador-ok'}">${violaciones.length}</span>
+            ${violaciones.length === 1 ? 'equipo fuera de norma' : 'equipos fuera de norma'}
+            <span class="rangos-resumen-sep">·</span>
+            <span class="${sinNorma.length ? 'contador-alerta' : 'contador-ok'}">${sinNorma.length}</span>
+            sin rangos configurados
+            <span class="rangos-resumen-sep">·</span>
+            ${Number(res.totalEquipos) || 0} estáticos revisados
+        </div>
+        ${violaciones.length
+            ? `<ul class="rangos-resumen-lista">${detalleViolaciones}</ul>`
+            : '<p class="rangos-resumen-ok">Todos los equipos con rango definido cumplen su rango autorizado.</p>'}
+        ${sinNorma.length
+            ? `<details class="rangos-resumen-detalle">
+                   <summary>Ver equipos sin norma (${sinNorma.length})</summary>
+                   <ul class="rangos-resumen-lista">${detalleSinNorma}</ul>
+               </details>`
+            : ''}
+    `;
+}
+
+/* ---------- Carga por lote ---------- */
+
+function normalizarTexto(valor) {
+    return String(valor ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+}
+
+function distanciaLevenshtein(a, b) {
+    const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+        let anterior = fila[0];
+        fila[0] = i;
+        for (let j = 1; j <= b.length; j++) {
+            const actual = fila[j];
+            fila[j] = Math.min(
+                fila[j] + 1,
+                fila[j - 1] + 1,
+                anterior + (a[i - 1] === b[j - 1] ? 0 : 1)
+            );
+            anterior = actual;
+        }
+    }
+    return fila[b.length];
+}
+
+function buscarRolPorNombre(perfil) {
+    const clave = normalizarTexto(perfil);
+    if (!clave) return null;
+    const exacto = roles.find(r =>
+        normalizarTexto(r.Nombre) === clave || normalizarTexto(r.Codigo) === clave);
+    if (exacto) return exacto;
+    return roles.find(r => {
+        const nombre = normalizarTexto(r.Nombre);
+        const codigo = normalizarTexto(r.Codigo);
+        return (nombre.length >= 5 && distanciaLevenshtein(nombre, clave) <= 2)
+            || (codigo.length >= 5 && distanciaLevenshtein(codigo, clave) <= 2);
+    }) || null;
+}
+
+function pareceIPv4(valor) {
+    const texto = String(valor ?? '').trim();
+    return /^\d{1,3}(\.\d{1,3}){1,3}$/.test(texto);
+}
+
+function abrirModalLote() {
+    llenarSelectClientes(loteCliente, rangosFiltroCliente.value || selectCli.value || '');
+    if (!loteSegmento.value.trim()) loteSegmento.value = '192.168.2';
+    lotePreview.classList.add('oculto');
+    lotePreview.innerHTML = '';
+    ocultarLoteMensaje();
+    loteFilas = [];
+    modalRangosLote.style.display = 'flex';
+    actualizarBloqueoScroll();
+    loteTexto.focus();
+}
+
+function cerrarModalLote() {
+    modalRangosLote.style.display = 'none';
+    ocultarLoteMensaje();
+    actualizarBloqueoScroll();
+}
+
+function mostrarLoteMensaje(texto, tipo) {
+    loteMensaje.textContent = texto;
+    loteMensaje.className = 'alert ' + tipo;
+}
+function ocultarLoteMensaje() { loteMensaje.className = 'alert oculto'; }
+
+function setProcesandoLote(valor) {
+    procesandoLote = valor;
+    btnLoteProcesar.disabled = valor;
+    const txt = btnLoteProcesar.querySelector('.btn-text');
+    const spin = btnLoteProcesar.querySelector('.btn-spinner');
+    if (txt) txt.textContent = valor ? 'Cargando...' : 'Cargar rangos';
+    if (spin) spin.classList.toggle('oculto', !valor);
+}
+
+function parsearLote(texto) {
+    const filas = [];
+    const ignoradas = [];
+    const lineas = String(texto || '').split(/\r?\n/);
+
+    lineas.forEach((linea, indice) => {
+        const crudo = linea.trim();
+        if (!crudo) return;
+
+        const columnas = crudo.split(/\t|;|,/).map(c => c.trim());
+        while (columnas.length && columnas[columnas.length - 1] === '') columnas.pop();
+        if (!columnas.length) return;
+
+        const encabezado = normalizarTexto(columnas[0]) === 'perfil'
+            || normalizarTexto(columnas[0]) === 'nombre'
+            || normalizarTexto(columnas[0]) === 'usuario';
+        if (encabezado) { ignoradas.push(indice + 1); return; }
+
+        let perfil = '';
+        let inicio = '';
+        let fin = '';
+
+        if (columnas.length >= 3) {
+            [perfil, inicio, fin] = columnas;
+        } else if (columnas.length === 2) {
+            if (pareceIPv4(columnas[0]) && pareceIPv4(columnas[1])) {
+                inicio = columnas[0];
+                fin = columnas[1];
+            } else {
+                perfil = columnas[0];
+                inicio = columnas[1];
+            }
+        } else {
+            ignoradas.push(indice + 1);
+            return;
+        }
+
+        if (!inicio || normalizarTexto(inicio) === 'na') { ignoradas.push(indice + 1); return; }
+        if (normalizarTexto(perfil) === 'na') perfil = '';
+        if (normalizarTexto(fin) === 'na') fin = '';
+
+        const fila = {
+            linea: indice + 1,
+            perfil: perfil || '',
+            inicio,
+            fin: fin || '',
+            idRolEquipo: null,
+            error: ''
+        };
+
+        if (fila.perfil) {
+            const rol = buscarRolPorNombre(fila.perfil);
+            if (rol) fila.idRolEquipo = rol.IdRolEquipo;
+            else fila.error = `Perfil "${fila.perfil}" no encontrado`;
+        }
+
+        filas.push(fila);
+    });
+
+    return { filas, ignoradas };
+}
+
+function renderPreviewLote() {
+    if (!loteFilas.length) {
+        lotePreview.classList.add('oculto');
+        lotePreview.innerHTML = '';
+        return;
+    }
+
+    const validas = loteFilas.filter(f => !f.error).length;
+    const filasHTML = loteFilas.map(f => {
+        const rango = f.fin
+            ? `<code class="rango-ip">${escaparHTML(f.inicio)}</code> – <code class="rango-ip">${escaparHTML(f.fin)}</code>`
+            : `<code class="rango-ip">${escaparHTML(f.inicio)}</code>`;
+        const perfil = f.perfil
+            ? escaparHTML(f.perfil)
+            : '<span class="rango-general">Todos los perfiles</span>';
+        return `<tr class="${f.error ? 'fila-invalida' : ''}">
+            <td>${f.linea}</td>
+            <td>${perfil}</td>
+            <td>${rango}</td>
+            <td>${f.error ? escaparHTML(f.error) : '<span class="estado-ok">Listo</span>'}</td>
+        </tr>`;
+    }).join('');
+
+    lotePreview.classList.remove('oculto');
+    lotePreview.innerHTML = `
+        <p class="lote-preview-titulo">
+            ${validas} de ${loteFilas.length} renglón(es) válidos
+        </p>
+        <div class="lote-preview-lista">
+            <table class="rangos-tabla">
+                <thead><tr><th>Línea</th><th>Perfil</th><th>Rango</th><th>Estado</th></tr></thead>
+                <tbody>${filasHTML}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+async function procesarLote() {
+    if (procesandoLote) return;
+
+    const idCliente = parseInt(loteCliente.value, 10);
+    const segmento = loteSegmento.value.trim();
+    if (!idCliente) {
+        mostrarLoteMensaje('Selecciona el cliente al que pertenecen los rangos.', 'error');
+        return;
+    }
+
+    const { filas } = parsearLote(loteTexto.value);
+    loteFilas = filas;
+    renderPreviewLote();
+
+    if (!filas.length) {
+        mostrarLoteMensaje('No se detectaron rangos en el texto. Revisa el formato de la tabla.', 'error');
+        return;
+    }
+
+    const validas = filas.filter(f => !f.error);
+    if (!validas.length) {
+        mostrarLoteMensaje('Ningún renglón es válido. Corrige los perfiles marcados antes de continuar.', 'error');
+        return;
+    }
+
+    setProcesandoLote(true);
+    const errores = [];
+    let creados = 0;
+
+    try {
+        for (const fila of validas) {
+            const res = await window.api.rangos.crear({
+                idCliente,
+                idRolEquipo: fila.idRolEquipo,
+                segmento,
+                ipInicio: fila.inicio,
+                ipFin: fila.fin,
+                descripcion: 'Carga por lote'
+            });
+            if (res && res.ok) creados += 1;
+            else errores.push(`Línea ${fila.linea}: ${res?.mensaje || 'Error desconocido'}`);
+        }
+
+        if (rangosFiltroCliente.querySelector(`option[value="${idCliente}"]`)) {
+            rangosFiltroCliente.value = String(idCliente);
+        }
+        await cargarRangos();
+
+        if (errores.length) {
+            mostrarLoteMensaje(
+                `${creados} rango(s) agregados. ${errores.length} con error: ${errores.join(' | ')}`,
+                'warning'
+            );
+        } else {
+            cerrarModalLote();
+            toastExito(`${creados} rango(s) agregados correctamente`);
+        }
+    } catch (err) {
+        mostrarLoteMensaje('Error: ' + err.message, 'error');
+    } finally {
+        setProcesandoLote(false);
+    }
+}
+
+/* ---------- Aviso en el formulario de equipo ---------- */
+
+async function actualizarHintRango() {
+    if (!hintRangoIP) return;
+
+    const idCliente = parseInt(selectCli.value, 10);
+    const idRol = parseInt(selectRol.value, 10) || null;
+    const ip = inputIP.value.trim();
+    const esEstatica = selectTipoIP.value === 'Estatica';
+
+    const limpiar = () => {
+        hintRangoIP.className = 'ayuda-rango oculto';
+        hintRangoIP.textContent = '';
+    };
+
+    if (!esEstatica || !idCliente || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) { limpiar(); return; }
+
+    const token = ++tokenValidacionRango;
+    try {
+        const res = await window.api.rangos.validarIP(idCliente, idRol, ip);
+        if (token !== tokenValidacionRango) return;
+
+        if (res && res.ok === false && res.aplica) {
+            hintRangoIP.textContent = res.mensaje || 'La IP está fuera del rango autorizado.';
+            hintRangoIP.className = 'ayuda-rango alerta';
+            return;
+        }
+        if (res && res.rango) {
+            hintRangoIP.textContent = `Dentro del rango permitido (${res.rango.IPInicio} – ${res.rango.IPFin}).`;
+            hintRangoIP.className = 'ayuda-rango ok';
+            return;
+        }
+        hintRangoIP.textContent = 'Este cliente no tiene rangos configurados: la IP no se restringe.';
+        hintRangoIP.className = 'ayuda-rango neutra';
+    } catch (_) {
+        if (token === tokenValidacionRango) limpiar();
+    }
+}
+
+/* ---------- Eventos ---------- */
+
+document.getElementById('btn-rangos-ip').addEventListener('click', abrirModalRangos);
+document.getElementById('modal-rangos-cerrar').addEventListener('click', cerrarModalRangos);
+document.getElementById('btn-rangos-cerrar-pie').addEventListener('click', cerrarModalRangos);
+modalRangos.addEventListener('click', (e) => { if (e.target === modalRangos) cerrarModalRangos(); });
+
+rangosFiltroCliente.addEventListener('change', () => {
+    rangosResumen.classList.add('oculto');
+    rangosResumen.innerHTML = '';
+    cargarRangos();
+});
+
+document.getElementById('btn-rangos-auditar').addEventListener('click', auditarRangos);
+document.getElementById('btn-rango-nuevo').addEventListener('click', () => abrirModalRango(null));
+document.getElementById('btn-rangos-lote').addEventListener('click', abrirModalLote);
+
+document.getElementById('modal-rango-cerrar').addEventListener('click', cerrarModalRango);
+document.getElementById('rango-cancelar').addEventListener('click', cerrarModalRango);
+modalRango.addEventListener('click', (e) => { if (e.target === modalRango) cerrarModalRango(); });
+btnRangoGuardar.addEventListener('click', guardarRango);
+
+document.getElementById('modal-rangos-lote-cerrar').addEventListener('click', cerrarModalLote);
+document.getElementById('lote-cancelar').addEventListener('click', cerrarModalLote);
+modalRangosLote.addEventListener('click', (e) => { if (e.target === modalRangosLote) cerrarModalLote(); });
+btnLoteProcesar.addEventListener('click', procesarLote);
+loteTexto.addEventListener('input', () => {
+    const { filas } = parsearLote(loteTexto.value);
+    loteFilas = filas;
+    renderPreviewLote();
+});
+
+inputIP.addEventListener('input', actualizarHintRango);
+inputIP.addEventListener('blur', actualizarHintRango);
+selectCli.addEventListener('change', actualizarHintRango);
+selectRol.addEventListener('change', actualizarHintRango);
 
 /* =========================================================
    INICIO

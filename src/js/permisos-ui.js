@@ -74,7 +74,15 @@
       '.btn-usar-ip': 'equipos:listado:ver',
       '#contenedor-grupos': 'equipos:listado:ver',
       '.data-table button.secundario': 'equipos:editar',
-      '.data-table button.peligro': 'equipos:eliminar'
+      '.data-table button.peligro': 'equipos:eliminar',
+      '#btn-rangos-ip': 'equipos',
+      '#rangos-filtro-cliente': 'equipos',
+      '#btn-rangos-auditar': 'equipos:rangos:auditar|equipos',
+      '#btn-rangos-lote': 'equipos:rangos:crear',
+      '#btn-rango-nuevo': 'equipos:rangos:crear',
+      '#rango-guardar': 'equipos:rangos:crear|equipos:rangos:editar',
+      '#rangos-lista button.secundario': 'equipos:rangos:editar',
+      '#rangos-lista button.peligro': 'equipos:rangos:eliminar'
     },
     'plano.html': {
       '#contenedor-principal': 'plano:ver',

@@ -1,4 +1,5 @@
 const { getPool, sql } = require('./conexion');
+const rangosDB = require('./rangos');
 
 const TIPOS_CATALOGO = Object.freeze([
     'Estado',
@@ -23,6 +24,21 @@ function validarIPv4(ip) {
 
 function normalizarIPv4(ip) {
     return String(ip).trim().split('.').map(octeto => String(Number(octeto))).join('.');
+}
+
+/**
+ * ¿Hay que validar la IP contra los rangos de los clientes?
+ * Al editar solo se valida si la IP cambia: así un registro histórico no
+ * queda bloqueado por una norma posterior.
+ */
+async function requiereValidarRangos(pool, idInventario, ip) {
+    if (!idInventario) return true;
+    const actual = await pool.request()
+        .input('IdInventarioIP', sql.Int, idInventario)
+        .query('SELECT IP FROM dbo.InventarioGeneralIP WHERE IdInventarioIP = @IdInventarioIP');
+    const anterior = actual.recordset?.[0]?.IP;
+    if (!anterior) return true;
+    return normalizarIPv4(anterior) !== normalizarIPv4(ip);
 }
 
 async function listarCatalogos() {
@@ -307,6 +323,23 @@ async function guardar(datos, id = null) {
                 tipo: 'ip-duplicada',
                 mensaje: `La IP ya está asignada al equipo ${equipoCliente.recordset[0].Hostname} del cliente ${equipoCliente.recordset[0].ClienteCodigo}.`
             };
+        }
+    }
+
+    /* Una misma línea para clientes y general: la IP que un cliente ya
+       reservó en sus rangos no puede ocuparla un dispositivo general. */
+    if (ip) {
+        const validar = await requiereValidarRangos(pool, idInventario, ip);
+        if (validar) {
+            const reservada = await rangosDB.rangoReservadoParaIP(ip);
+            if (reservada.reservada) {
+                return {
+                    ok: false,
+                    tipo: 'ip-en-rango-cliente',
+                    mensaje: reservada.mensaje,
+                    detalle: reservada
+                };
+            }
         }
     }
 

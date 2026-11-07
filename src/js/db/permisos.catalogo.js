@@ -34,9 +34,6 @@ const CATALOGO = {
   'catalogos:roles:crear':         { grupo: 'Catálogos',    etiqueta: 'Crear rol de equipo' },
   'catalogos:roles:editar':        { grupo: 'Catálogos',    etiqueta: 'Editar rol de equipo' },
   'catalogos:roles:eliminar':      { grupo: 'Catálogos',    etiqueta: 'Eliminar rol de equipo' },
-  'catalogos:rangos:crear':        { grupo: 'Catálogos',    etiqueta: 'Crear rango IP' },
-  'catalogos:rangos:editar':       { grupo: 'Catálogos',    etiqueta: 'Editar rango IP' },
-  'catalogos:rangos:eliminar':     { grupo: 'Catálogos',    etiqueta: 'Eliminar rango IP' },
   'catalogos:dominios:gestionar':  { grupo: 'Catálogos',    etiqueta: 'Gestionar dominios' },
   'catalogos:config:gestionar':    { grupo: 'Catálogos',    etiqueta: 'Gestionar config. de red' },
 
@@ -46,6 +43,10 @@ const CATALOGO = {
   'equipos:crear':                 { grupo: 'Equipos',      etiqueta: 'Crear equipo' },
   'equipos:editar':                { grupo: 'Equipos',      etiqueta: 'Editar equipo' },
   'equipos:eliminar':              { grupo: 'Equipos',      etiqueta: 'Eliminar equipo' },
+  'equipos:rangos:crear':          { grupo: 'Equipos',      etiqueta: 'Crear rango IP por cliente' },
+  'equipos:rangos:editar':         { grupo: 'Equipos',      etiqueta: 'Editar rango IP por cliente' },
+  'equipos:rangos:eliminar':       { grupo: 'Equipos',      etiqueta: 'Eliminar rango IP por cliente' },
+  'equipos:rangos:auditar':        { grupo: 'Equipos',      etiqueta: 'Auditar cumplimiento de rangos IP' },
   'mantenimientos:crear':          { grupo: 'Mantenimientos', etiqueta: 'Registrar mantenimiento' },
   'mantenimientos:fecha:editar':   { grupo: 'Mantenimientos', etiqueta: 'Modificar fecha del mantenimiento' },
 

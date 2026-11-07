@@ -1532,6 +1532,8 @@ async function abrirModalEditarEquipo(equipo, panel) {
     if (edPassword) edPassword.value = equipo.PasswordAdmin ?? '';
 
     if (modalEditarEquipo) modalEditarEquipo.style.display = 'flex';
+    /* El aviso de rango se calcula con los valores ya cargados del equipo. */
+    edActualizarHintRango();
     setTimeout(() => { if (edCliente) edCliente.focus(); }, 60);
 }
 
@@ -1594,6 +1596,128 @@ function edMostrarError(texto) {
     editarMensaje.style.display = 'block';
 }
 
+/* =========================================================
+   RANGOS IP EN EL PLANO
+
+   La edición de equipos desde el Plano (modal Editar Equipo y modal
+   Mover entre pisos → "Editar datos del equipo") aplica exactamente la
+   misma norma que la página de Equipos: si el cliente tiene rangos
+   declarados, la IP estática debe caer dentro del rango del perfil.
+   El backend ya la bloquea; aquí se avisa en línea y se explica el
+   motivo para que no haya incoherencias entre pantallas.
+   ========================================================= */
+const edIPHint = document.getElementById('ed-ip-hint');
+const mvIPHint = document.getElementById('mv-ip-hint');
+const RE_IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
+
+let tokenHintRangoEd = 0;
+let tokenHintRangoMv = 0;
+
+function limpiarHintRango(hint) {
+    if (!hint) return;
+    hint.textContent = '';
+    hint.className = 'ayuda-rango oculto';
+}
+
+function aplicarHintRango(hint, info) {
+    if (!hint) return;
+    if (!info) { limpiarHintRango(hint); return; }
+    hint.textContent = info.texto;
+    hint.className = 'ayuda-rango ' + info.clase;
+}
+
+/* Consulta el rango autorizado. Devuelve null cuando no aplica (DHCP, sin
+   cliente, IP incompleta o error de comunicación) para no mostrar ruido. */
+async function resolverHintRango(idCliente, idRol, tipoIP, ip) {
+    if (tipoIP !== 'Estatica' || !idCliente || !RE_IPV4.test(ip)) return null;
+    try {
+        const res = await window.api.rangos.validarIP(idCliente, idRol || null, ip);
+        if (res && res.ok === false && res.aplica) {
+            return { clase: 'alerta', texto: res.mensaje || 'La IP está fuera del rango autorizado.' };
+        }
+        if (res && res.rango) {
+            return {
+                clase: 'ok',
+                texto: `Dentro del rango permitido (${res.rango.IPInicio} – ${res.rango.IPFin}).`
+            };
+        }
+        return {
+            clase: 'neutra',
+            texto: 'Este cliente no tiene rangos configurados: la IP no se restringe.'
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+async function edActualizarHintRango() {
+    const token = ++tokenHintRangoEd;
+    const info = await resolverHintRango(
+        parseInt(edCliente.value, 10),
+        parseInt(edRol.value, 10),
+        edTipoIP.value,
+        edIP.value.trim()
+    );
+    if (token !== tokenHintRangoEd) return;
+    aplicarHintRango(edIPHint, info);
+}
+
+async function mvActualizarHintRango() {
+    const token = ++tokenHintRangoMv;
+    const info = await resolverHintRango(
+        parseInt(mvCliente.value, 10),
+        parseInt(mvRol.value, 10),
+        mvTipoIP.value,
+        mvIP.value.trim()
+    );
+    if (token !== tokenHintRangoMv) return;
+    aplicarHintRango(mvIPHint, info);
+}
+
+/* Aviso explícito cuando el backend rechaza la IP por rango (mismo mensaje
+   que ve el usuario en la página de Equipos). */
+async function alertaRangoIP(res, ip) {
+    const permitidos = (res?.detalle?.aplicables || [])
+        .map(r => `${r.IPInicio} – ${r.IPFin}`)
+        .join(', ');
+    const escapar = (valor) => String(valor ?? '').replace(/[&<>"']/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+
+    await window.Swal.fire({
+        icon: 'warning',
+        title: 'IP fuera de rango',
+        html: `<div style="text-align:left;font-size:0.9rem;">
+            ${escapar(res?.mensaje || 'La IP no está dentro del rango autorizado.')}<br><br>
+            <div style="background:#FFF7E8;padding:10px;border-radius:6px;border-left:3px solid #A99A63;">
+                <b>IP capturada:</b> ${escapar(ip || '')}<br>
+                <b>Rangos permitidos:</b> ${escapar(permitidos || 'Sin rangos para este perfil')}
+            </div>
+            <p style="margin-top:10px;color:#7a7563;">
+                Ajusta la IP o configura el rango en <b>Equipos → Rangos IP</b>.
+            </p></div>`,
+        confirmButtonText: 'Entendido',
+        buttonsStyling: false,
+        customClass: { popup: 'cl-confirm', confirmButton: 'swal2-confirm swal2-styled' }
+    });
+}
+
+if (edIP) {
+    edIP.addEventListener('input', edActualizarHintRango);
+    edIP.addEventListener('blur', edActualizarHintRango);
+}
+if (edCliente) edCliente.addEventListener('change', edActualizarHintRango);
+if (edRol) edRol.addEventListener('change', edActualizarHintRango);
+if (edTipoIP) edTipoIP.addEventListener('change', edActualizarHintRango);
+
+if (mvIP) {
+    mvIP.addEventListener('input', mvActualizarHintRango);
+    mvIP.addEventListener('blur', mvActualizarHintRango);
+}
+if (mvCliente) mvCliente.addEventListener('change', mvActualizarHintRango);
+if (mvRol) mvRol.addEventListener('change', mvActualizarHintRango);
+if (mvTipoIP) mvTipoIP.addEventListener('change', mvActualizarHintRango);
+
 if (editarConfirmar) {
     editarConfirmar.addEventListener('click', async () => {
         if (!equipoEditando || edGuardando) return;
@@ -1638,7 +1762,8 @@ if (editarConfirmar) {
             hostname:       hostnameFinal,
             numeroHost:     esEstatica ? parseInt(edNumeroHost.value, 10) : null,
             ip:             esEstatica ? (edIP.value.trim() || null) : null,
-            idRangoIP:      null,
+            /* El rango se resuelve en el backend a partir del cliente, el
+               perfil y la IP: nunca se confía en lo que mande la pantalla. */
             mascara:        esEstatica ? (edMascara.value || null) : null,
             puertaEnlace:   esEstatica ? (edPuerta.value  || null) : null,
             dns1:           esEstatica ? (edDns1.value    || null) : null,
@@ -1690,6 +1815,12 @@ if (editarConfirmar) {
                 return;
             }
 
+            if (res && res.tipo === 'ip-fuera-de-rango') {
+                edMostrarError(res.mensaje || 'La IP está fuera del rango autorizado para este cliente y perfil.');
+                await alertaRangoIP(res, datos.ip);
+                edActualizarHintRango();
+                return;
+            }
             if (res && res.tipo === 'ip-duplicada') {
                 edMostrarError(`IP duplicada: ${res.mensaje || ''}`);
                 return;
@@ -3424,12 +3555,15 @@ async function abrirModalMoverEntrePisos(datos) {
         mvLugar.value = panelDestino.idPiso;
     }
 
+    limpiarHintRango(mvIPHint);
     modalMover.style.display = 'flex';
 }
 
 chkMantener.addEventListener('change', () => {
     formEditarMover.style.display = chkMantener.checked ? 'none' : 'block';
     actualizarPermisoMover();
+    /* Al abrir la edición se muestra el aviso de rango con los datos cargados. */
+    if (!chkMantener.checked) mvActualizarHintRango();
 });
 
 function actualizarPermisoMover() {
@@ -3515,11 +3649,9 @@ moverConfirmar.addEventListener('click', async () => {
             }
 
             if (datos.desdeLista) {
-                if (equipoDestino) {
-                    await window.api.plano.quitar(equipoDestino.IdEquipo, panelDestino.idPiso, equipoDestino.Hostname);
-                }
-                const res = await window.api.plano.asignar(panelDestino.idPiso, idEquipo, fila, columna);
-
+                /* La actualización de datos (y por tanto la validación de rango
+                   IP) va PRIMERO: si la IP no está autorizada, el equipo no se
+                   quita ni se asigna y el plano queda intacto. */
                 if (nuevosDatos) {
                     const resUpd = await window.api.equipos.actualizar(idEquipo, {
                         ...nuevosDatos,
@@ -3527,10 +3659,21 @@ moverConfirmar.addEventListener('click', async () => {
                         activo: true
                     });
                     if (resUpd && resUpd.ok === false) {
+                        if (resUpd.tipo === 'ip-fuera-de-rango') {
+                            mostrarMensajeMover(resUpd.mensaje || 'La IP está fuera del rango autorizado.', 'error');
+                            await alertaRangoIP(resUpd, nuevosDatos.ip);
+                            mvActualizarHintRango();
+                            return;
+                        }
                         mostrarMensajeMover(resUpd.mensaje || 'No se pudo actualizar.', 'error');
                         return;
                     }
                 }
+
+                if (equipoDestino) {
+                    await window.api.plano.quitar(equipoDestino.IdEquipo, panelDestino.idPiso, equipoDestino.Hostname);
+                }
+                const res = await window.api.plano.asignar(panelDestino.idPiso, idEquipo, fila, columna);
 
                 if (!res || !res.ok) {
                     mostrarMensajeMover(res?.mensaje || 'No se pudo asignar.', 'error');
@@ -3543,6 +3686,12 @@ moverConfirmar.addEventListener('click', async () => {
                 );
 
                 if (!res || !res.ok) {
+                    if (res && res.tipo === 'ip-fuera-de-rango') {
+                        mostrarMensajeMover(res.mensaje || 'La IP está fuera del rango autorizado.', 'error');
+                        await alertaRangoIP(res, nuevosDatos?.ip);
+                        mvActualizarHintRango();
+                        return;
+                    }
                     mostrarMensajeMover(res?.mensaje || 'No se pudo mover.', 'error');
                     return;
                 }

@@ -96,13 +96,16 @@ contextBridge.exposeInMainWorld('api', {
     },
 
     /* =========================================================
-       RANGOS
+       RANGOS IP POR CLIENTE (módulo Equipos)
        ========================================================= */
     rangos: {
-        listar:     ()                                                          => ipcRenderer.invoke('rangos:listar'),
-        crear:      (idCliente, idPiso, nombre, ipInicio, ipFin, desc)          => ipcRenderer.invoke('rangos:crear', idCliente, idPiso, nombre, ipInicio, ipFin, desc),
-        actualizar: (id, idCliente, idPiso, nombre, ipInicio, ipFin, desc)      => ipcRenderer.invoke('rangos:actualizar', id, idCliente, idPiso, nombre, ipInicio, ipFin, desc),
-        eliminar:   (id)                                                        => ipcRenderer.invoke('rangos:eliminar', id)
+        listar:     (idCliente = null)      => ipcRenderer.invoke('rangos:listar', idCliente),
+        crear:      (datos)                 => ipcRenderer.invoke('rangos:crear', datos),
+        actualizar: (id, datos)             => ipcRenderer.invoke('rangos:actualizar', id, datos),
+        eliminar:   (id)                    => ipcRenderer.invoke('rangos:eliminar', id),
+        auditar:    (idCliente = null)      => ipcRenderer.invoke('rangos:auditar', idCliente),
+        validarIP:  (idCliente, idRol, ip)  => ipcRenderer.invoke('rangos:validarIP', idCliente, idRol, ip),
+        reservadoIP: (ip)                   => ipcRenderer.invoke('rangos:reservadoIP', ip)
     },
 
     /* =========================================================

@@ -1,4 +1,5 @@
 const { getPool, sql } = require('./conexion');
+const rangosDB = require('./rangos');
 
 /* =========================================================
    LISTAR
@@ -166,7 +167,7 @@ async function crear(datos) {
         const pool = await getPool();
         const {
             idCliente, idPiso, idRolEquipo, tipoIP, hostname,
-            numeroHost, ip, idRangoIP,
+            numeroHost, ip,
             mascara, puertaEnlace, dns1, dns2, usuarioAdmin, passwordAdmin
         } = datos;
 
@@ -191,6 +192,21 @@ async function crear(datos) {
             }
         }
 
+        // Control por rango IP del cliente y perfil (heredado del catálogo de rangos)
+        let rangoAsignado = null;
+        if (esEstatica && ip) {
+            const control = await rangosDB.validarIPEnRango(idCliente, idRolEquipo, ip);
+            if (!control.ok) {
+                return {
+                    ok: false,
+                    mensaje: control.mensaje,
+                    tipo: 'ip-fuera-de-rango',
+                    detalle: control
+                };
+            }
+            rangoAsignado = control.rango ? control.rango.IdRangoIP : null;
+        }
+
         // Hostname duplicado siempre
         const dupHost = await verificarHostnameDuplicado(hostname);
         if (dupHost) {
@@ -211,7 +227,7 @@ async function crear(datos) {
             hostname,
             numeroHost:    esEstatica ? (numeroHost ?? null) : null,
             ip:            esEstatica ? (ip || null) : null,
-            idRangoIP:     esEstatica ? (idRangoIP || null) : null,
+            idRangoIP:     esEstatica ? (rangoAsignado || null) : null,
             mascara:       esEstatica ? (mascara || null) : null,
             puertaEnlace:  esEstatica ? (puertaEnlace || null) : null,
             dns1:          esEstatica ? (dns1 || null) : null,
@@ -259,7 +275,7 @@ async function actualizar(id, datos) {
         const pool = await getPool();
         const {
             idCliente, idPiso, idRolEquipo, tipoIP, hostname,
-            numeroHost, ip, idRangoIP,
+            numeroHost, ip,
             mascara, puertaEnlace, dns1, dns2, usuarioAdmin, passwordAdmin, activo
         } = datos;
 
@@ -282,6 +298,21 @@ async function actualizar(id, datos) {
             }
         }
 
+        // Control por rango IP del cliente y perfil (heredado del catálogo de rangos)
+        let rangoAsignado = null;
+        if (esEstatica && ip) {
+            const control = await rangosDB.validarIPEnRango(idCliente, idRolEquipo, ip);
+            if (!control.ok) {
+                return {
+                    ok: false,
+                    mensaje: control.mensaje,
+                    tipo: 'ip-fuera-de-rango',
+                    detalle: control
+                };
+            }
+            rangoAsignado = control.rango ? control.rango.IdRangoIP : null;
+        }
+
         const dupHost = await verificarHostnameDuplicado(hostname, id);
         if (dupHost) {
             return {
@@ -300,7 +331,7 @@ async function actualizar(id, datos) {
             hostname,
             numeroHost:    esEstatica ? (numeroHost ?? null) : null,
             ip:            esEstatica ? (ip || null) : null,
-            idRangoIP:     esEstatica ? (idRangoIP || null) : null,
+            idRangoIP:     esEstatica ? (rangoAsignado || null) : null,
             mascara:       esEstatica ? (mascara || null) : null,
             puertaEnlace:  esEstatica ? (puertaEnlace || null) : null,
             dns1:          esEstatica ? (dns1 || null) : null,

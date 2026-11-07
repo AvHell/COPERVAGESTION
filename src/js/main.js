@@ -359,6 +359,18 @@ function requerirSesion(clave = null) {
     return null;
 }
 
+/**
+ * Igual que requerirSesion pero acepta varias claves equivalentes
+ * (se usa para no romper permisos heredados de versiones anteriores).
+ */
+function requerirPermiso(claves, etiqueta = null) {
+    const err = requerirSesion();
+    if (err) return err;
+    const lista = Array.isArray(claves) ? claves : [claves];
+    if (lista.some(tienePermiso)) return null;
+    return negarAcceso(etiqueta || lista[0]);
+}
+
 const RUTAS_MODULOS = {
     catalogos: { basePath: HTML, archivo: 'catalogos.html', permiso: 'catalogos', titulo: 'Catálogos del Sistema' },
     equipos: { basePath: HTML, archivo: 'equipos.html', permiso: 'equipos', titulo: 'Equipos' },
@@ -1092,12 +1104,45 @@ ipcMain.handle('pisos:actualizarConClientes', async (_e, id, nombre, filas, cols
 ipcMain.handle('pisos:eliminar',              async (_e, id)                        => { const err = requerirSesion('catalogos:pisos:eliminar'); if (err) return err; return await pisosDB.eliminar(id); });
 
 /* =========================================================
-   IPC: RANGOS
+   IPC: RANGOS IP POR CLIENTE (módulo Equipos)
    ========================================================= */
-ipcMain.handle('rangos:listar',     async ()  => { const err = requerirSesion('catalogos'); if (err) return err; return await rangosDB.listar(); });
-ipcMain.handle('rangos:crear',      async (_e, idCliente, idPiso, nombre, ipInicio, ipFin, desc) => { const err = requerirSesion('catalogos:rangos:crear');    if (err) return err; return await rangosDB.crear(idCliente, idPiso, nombre, ipInicio, ipFin, desc); });
-ipcMain.handle('rangos:actualizar', async (_e, id, idCliente, idPiso, nombre, ipInicio, ipFin, desc) => { const err = requerirSesion('catalogos:rangos:editar');   if (err) return err; return await rangosDB.actualizar(id, idCliente, idPiso, nombre, ipInicio, ipFin, desc); });
-ipcMain.handle('rangos:eliminar',   async (_e, id) => { const err = requerirSesion('catalogos:rangos:eliminar'); if (err) return err; return await rangosDB.eliminar(id); });
+ipcMain.handle('rangos:listar', async (_e, idCliente = null) => {
+    const err = requerirSesion('equipos');
+    if (err) return err;
+    return await rangosDB.listar(idCliente);
+});
+ipcMain.handle('rangos:crear', async (_e, datos) => {
+    const err = requerirPermiso(['equipos:rangos:crear', 'catalogos:rangos:crear']);
+    if (err) return err;
+    return await rangosDB.crear(datos);
+});
+ipcMain.handle('rangos:actualizar', async (_e, id, datos) => {
+    const err = requerirPermiso(['equipos:rangos:editar', 'catalogos:rangos:editar']);
+    if (err) return err;
+    return await rangosDB.actualizar(id, datos);
+});
+ipcMain.handle('rangos:eliminar', async (_e, id) => {
+    const err = requerirPermiso(['equipos:rangos:eliminar', 'catalogos:rangos:eliminar']);
+    if (err) return err;
+    return await rangosDB.eliminar(id);
+});
+ipcMain.handle('rangos:auditar', async (_e, idCliente = null) => {
+    const err = requerirPermiso(['equipos:rangos:auditar', 'equipos']);
+    if (err) return err;
+    return await rangosDB.auditar(idCliente);
+});
+ipcMain.handle('rangos:validarIP', async (_e, idCliente, idRolEquipo, ip) => {
+    const err = requerirSesion('equipos');
+    if (err) return err;
+    return await rangosDB.validarIPEnRango(idCliente, idRolEquipo, ip);
+});
+/* Reserva global: ¿la IP pertenece a un rango declarado por algún cliente?
+   Lo consulta el control general de IP antes de dar de alta un dispositivo. */
+ipcMain.handle('rangos:reservadoIP', async (_e, ip) => {
+    const err = requerirSesion('equipos');
+    if (err) return err;
+    return await rangosDB.rangoReservadoParaIP(ip);
+});
 
 /* =========================================================
    IPC: EQUIPOS
@@ -1267,6 +1312,38 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
            registradas más las libres (1-254), que NO existen en la base de
            datos. El Excel refleja lo mismo salvo cuando se exporta un cliente
            (esas direcciones libres no pertenecen a ningún cliente). */
+        /* Misma norma que la pantalla y que la validación al guardar: la IP
+           incluida en los rangos declarados por un cliente se exporta como
+           reservada, nunca como libre. Si el esquema de rangos no existe
+           todavía, el control general exporta como siempre. */
+        let rangosCliente = [];
+        try {
+            rangosCliente = await rangosDB.listar();
+        } catch (_) {
+            rangosCliente = [];
+        }
+        const rangoDeIP = ip => {
+            const valor = ipComoNumero(ip);
+            if (!rangosCliente.length || valor === Number.MAX_SAFE_INTEGER) return null;
+            return rangosCliente.find(rango => {
+                const inicio = ipComoNumero(rango.IPInicio);
+                const fin = ipComoNumero(rango.IPFin);
+                if (inicio === Number.MAX_SAFE_INTEGER || fin === Number.MAX_SAFE_INTEGER) return false;
+                return valor >= inicio && valor <= fin;
+            }) || null;
+        };
+        const conReserva = registro => {
+            if (String(registro.Origen || '') === 'Cliente') return registro;
+            const rango = rangoDeIP(registro.IP);
+            if (!rango) return registro;
+            return {
+                ...registro,
+                Reservado: true,
+                Libre: false,
+                Estado: registro.Origen ? registro.Estado : 'Reservado',
+                Reserva: `${rango.ClienteCodigo || 'Cliente'} · ${rango.RolNombre || 'cualquier perfil'} (${rango.IPInicio} – ${rango.IPFin})`
+            };
+        };
         if (!opciones.cliente) {
             const HOST_INICIAL = 1;
             const HOST_FINAL = 254;
@@ -1283,11 +1360,12 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
                 for (let host = HOST_INICIAL; host <= HOST_FINAL; host += 1) {
                     const ip = `${segmento}.${host}`;
                     if (ocupadas.has(ip)) continue;
-                    adicionales.push({ Origen: '', IP: ip, Estado: 'Libre', Libre: true });
+                    adicionales.push(conReserva({ Origen: '', IP: ip, Estado: 'Libre', Libre: true }));
                 }
             }
             filtrados = filtrados.concat(adicionales);
         }
+        filtrados = filtrados.map(conReserva);
         filtrados = filtrados.slice().sort((a, b) => {
             const porSegmento = segmentoDe(a.IP).localeCompare(segmentoDe(b.IP));
             if (porSegmento !== 0) return porSegmento;
@@ -1298,10 +1376,14 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
 
         const columnas = [];
         const agregar = (clave, etiqueta, valor, ancho) => columnas.push({ clave, etiqueta, valor, ancho });
-        const estadoVisible = registro =>
-            String(registro.Estado || '').trim().toLowerCase() === 'activo' ? 'Ocupado' : 'Libre';
+        const estadoVisible = registro => {
+            const activo = String(registro.Estado || '').trim().toLowerCase() === 'activo';
+            if (registro.Reservado) return activo ? 'Ocupada (reservada)' : 'Reservado';
+            return activo ? 'Ocupado' : 'Libre';
+        };
         agregar('origen', 'Origen', registro => registro.Origen || '', 14);
         agregar('estado', 'Estado', estadoVisible, 14);
+        agregar('reserva', 'Reserva de cliente', registro => registro.Reserva || '', 34);
         agregar('ip', 'IP', registro => registro.IP || 'DHCP', 18);
         agregar('hostname', 'Hostname', registro => registro.Hostname || '', 26);
         agregar('mac', 'MAC', registro => registro.MAC || '', 20);

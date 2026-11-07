@@ -15,6 +15,9 @@ let catalogoEditando = null;
 let paginaActual = 1;
 let tamanoPagina = 25;
 let segmentoActual = '';
+let rangosCliente = [];
+let ipOriginalRegistro = '';
+let tokenHintRango = 0;
 const filtrosColumna = {};
 
 const HOST_INICIAL = 1;
@@ -166,6 +169,44 @@ function ipComoNumero(ip) {
     return partes.reduce((total, parte) => total * 256 + Number(parte), 0);
 }
 
+/* =========================================================
+   RANGOS DE CLIENTE (reserva de IP)
+   Una misma línea para clientes y general: la IP que un cliente
+   declaró en sus rangos queda reservada y el control general no
+   puede ocuparla con un dispositivo que no pertenece a ese cliente.
+   ========================================================= */
+
+function rangoDeIP(ip) {
+    const valor = ipComoNumero(ip);
+    if (!rangosCliente.length || valor === Number.MAX_SAFE_INTEGER) return null;
+    return rangosCliente.find(rango => {
+        const inicio = ipComoNumero(rango.IPInicio);
+        const fin = ipComoNumero(rango.IPFin);
+        if (inicio === Number.MAX_SAFE_INTEGER || fin === Number.MAX_SAFE_INTEGER) return false;
+        return valor >= inicio && valor <= fin;
+    }) || null;
+}
+
+function etiquetaRangoCliente(rango) {
+    if (!rango) return '';
+    const cliente = rango.ClienteCodigo || 'Cliente';
+    const perfil = rango.RolNombre || 'cualquier perfil';
+    return `${cliente} · ${perfil} (${rango.IPInicio} – ${rango.IPFin})`;
+}
+
+/* Carga los rangos declarados por los clientes (todos los clientes).
+   Si la tabla dbo.RangosIP todavía no existe, el control general sigue
+   operando sin reservas en lugar de romper la pantalla. */
+async function cargarRangosCliente() {
+    try {
+        const lista = await window.api?.rangos?.listar?.();
+        rangosCliente = Array.isArray(lista) ? lista : [];
+    } catch (error) {
+        rangosCliente = [];
+        console.warn('No se pudieron cargar los rangos de cliente:', error?.message || error);
+    }
+}
+
 /* La tabla muestra el segmento completo: los registros existentes más
    todas las IP del /24 (1-254) que todavía están libres, porque esas
    direcciones no viven en la base de datos. */
@@ -181,15 +222,29 @@ function construirFilas(lista) {
             ocupadas.add(ip);
             segmentos.add(segmento);
         }
-        resultado.push({ ...registro, Estado: estadoVisible(registro.Estado), Libre: false });
+        /* Un registro del inventario general que cae en un rango de cliente
+           ya no cumple la norma: se marca en la tabla para poder corregirlo. */
+        const rangoReservado = String(registro.Origen || '') === 'General' ? rangoDeIP(ip) : null;
+        resultado.push({
+            ...registro,
+            Estado: estadoVisible(registro.Estado),
+            Libre: false,
+            Reservado: Boolean(rangoReservado),
+            RangoReservado: rangoReservado
+        });
     }
 
     for (const segmento of [...segmentos].sort(compararSegmentos)) {
         for (let host = HOST_INICIAL; host <= HOST_FINAL; host += 1) {
             const ip = `${segmento}.${host}`;
             if (ocupadas.has(ip)) continue;
+            const rangoReservado = rangoDeIP(ip);
             resultado.push({
-                Origen: '', IP: ip, Estado: 'Libre', Libre: true,
+                Origen: '', IP: ip,
+                Estado: rangoReservado ? 'Reservado' : 'Libre',
+                Libre: !rangoReservado,
+                Reservado: Boolean(rangoReservado),
+                RangoReservado: rangoReservado,
                 Hostname: '', MAC: '', Descripcion: '', PuertoFortinet: '',
                 ClienteCodigo: '', ClienteNombre: '', Dispositivo: '', TipoEquipo: '',
                 Piso: '', Site: '', IdSite: null, IdEstado: null
@@ -212,13 +267,14 @@ function calcularSegmentos(lista) {
     for (const fila of lista) {
         const segmento = segmentoDe(fila.IP);
         if (!mapa.has(segmento)) {
-            mapa.set(segmento, { segmento, total: 0, ocupadas: 0, libres: 0, ips: new Set() });
+            mapa.set(segmento, { segmento, total: 0, ocupadas: 0, reservadas: 0, libres: 0, ips: new Set() });
         }
         const item = mapa.get(segmento);
         if (item.ips.has(fila.IP)) continue;
         item.ips.add(fila.IP);
         item.total += 1;
-        if (fila.Libre) item.libres += 1;
+        if (fila.Reservado) item.reservadas += 1;
+        else if (fila.Libre) item.libres += 1;
         else item.ocupadas += 1;
     }
     return [...mapa.values()]
@@ -229,7 +285,8 @@ function calcularSegmentos(lista) {
 function detalleSegmento(datos) {
     if (!datos?.total) return 'Este segmento no tiene direcciones registradas.';
     if (datos.segmento === 'Sin IP') return `${datos.total} registros sin IP`;
-    return `${datos.total} IP · ${datos.ocupadas} ocupadas · ${datos.libres} libres`;
+    const reservadas = datos.reservadas ? ` · ${datos.reservadas} reservadas` : '';
+    return `${datos.total} IP · ${datos.ocupadas} ocupadas${reservadas} · ${datos.libres} libres`;
 }
 
 function crearItemSegmento(datos, esTodos = false) {
@@ -263,13 +320,15 @@ function sumarSegmentos(segmentos) {
         segmento: '',
         total: acumulado.total + item.total,
         ocupadas: acumulado.ocupadas + item.ocupadas,
+        reservadas: acumulado.reservadas + item.reservadas,
         libres: acumulado.libres + item.libres
-    }), { segmento: '', total: 0, ocupadas: 0, libres: 0 });
+    }), { segmento: '', total: 0, ocupadas: 0, reservadas: 0, libres: 0 });
 }
 
 function detalleTotales(datos) {
     if (!datos.total) return 'Sin direcciones registradas.';
-    return `${datos.total} IP · ${datos.ocupadas} ocupadas · ${datos.libres} libres`;
+    const reservadas = datos.reservadas ? ` · ${datos.reservadas} reservadas` : '';
+    return `${datos.total} IP · ${datos.ocupadas} ocupadas${reservadas} · ${datos.libres} libres`;
 }
 
 function renderizarSegmentos() {
@@ -433,10 +492,20 @@ function renderizarTabla() {
     $('sin-registros').hidden = lista.length > 0;
     for (const item of pagina) {
         const fila = document.createElement('tr');
-        if (item.Libre) fila.classList.add('fila-libre');
+        if (item.Reservado) {
+            fila.classList.add('fila-reservada');
+            fila.title = item.RangoReservado
+                ? `IP reservada para ${etiquetaRangoCliente(item.RangoReservado)}`
+                : '';
+        } else if (item.Libre) {
+            fila.classList.add('fila-libre');
+        }
+        const claseEstado = item.Reservado
+            ? 'estado-reservado'
+            : (item.Estado === 'Ocupado' ? 'estado-ocupado' : 'estado-libre');
         fila.innerHTML = `
             <td>${badge(item.Origen, item.Origen === 'Cliente' ? 'origen-cliente' : 'origen-general')}</td>
-            <td>${badge(item.Estado, item.Estado === 'Ocupado' ? 'estado-ocupado' : 'estado-libre')}</td>
+            <td>${badge(item.Estado, claseEstado)}</td>
             <td>${badge(item.IP || 'DHCP', 'ip')}</td>
             <td>${badge(item.Hostname, 'hostname')}</td>
             <td>${badge(item.MAC, 'dato')}</td>
@@ -454,7 +523,15 @@ function renderizarTabla() {
 
         const acciones = document.createElement('td');
         acciones.className = 'actions';
-        if (item.Libre) {
+        if (item.Reservado && !item.Origen) {
+            /* IP libre del segmento que un cliente ya reservó: no se puede
+               asignar desde el control general. */
+            const nota = document.createElement('span');
+            nota.className = 'reservado-nota';
+            nota.textContent = 'Reservada al cliente';
+            nota.title = etiquetaRangoCliente(item.RangoReservado);
+            acciones.append(nota);
+        } else if (item.Libre) {
             const asignar = document.createElement('button');
             asignar.type = 'button';
             asignar.className = 'button primary';
@@ -692,6 +769,7 @@ function abrirModalCatalogos() {
 
 function editarRegistro(item) {
     idEditando = item.IdInventarioIP;
+    ipOriginalRegistro = String(item.IP || '').trim();
     $('ip').value = item.IP || '';
     $('hostname').value = item.Hostname || '';
     $('mac').value = item.MAC || '';
@@ -708,17 +786,20 @@ function editarRegistro(item) {
     $('btn-guardar').dataset.permiso = 'equipos:editar';
     window.PermisosUI?.aplicar($('btn-guardar'));
     if (!modalIP.open) modalIP.showModal();
+    actualizarHintRangoIP();
     $('ip').focus();
 }
 
 function limpiarFormulario() {
     formIP.reset();
     idEditando = null;
+    ipOriginalRegistro = '';
     $('modal-ip-titulo').textContent = 'Registrar IP';
     $('btn-guardar').textContent = 'Registrar IP';
     $('btn-guardar').dataset.permiso = 'equipos:crear';
     actualizarFormularioCatalogos();
     window.PermisosUI?.aplicar($('btn-guardar'));
+    limpiarHintRangoIP();
     if (modalIP.open) modalIP.close();
 }
 
@@ -728,7 +809,81 @@ function abrirRegistroLibre(fila) {
     limpiarFormulario();
     $('ip').value = fila.IP || '';
     if (!modalIP.open) modalIP.showModal();
+    actualizarHintRangoIP();
     $('hostname').focus();
+}
+
+/* =========================================================
+   AVISO DE RANGO DE CLIENTE EN EL FORMULARIO
+   ========================================================= */
+
+function limpiarHintRangoIP() {
+    const hint = $('hint-rango-ip');
+    if (!hint) return;
+    hint.textContent = '';
+    hint.className = 'ayuda-rango oculto';
+}
+
+function actualizarHintRangoIP() {
+    const hint = $('hint-rango-ip');
+    if (!hint) return;
+    const ip = $('ip').value.trim();
+
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || !rangosCliente.length) {
+        limpiarHintRangoIP();
+        return;
+    }
+
+    const rango = rangoDeIP(ip);
+
+    if (!rango) {
+        hint.textContent = 'IP fuera de los rangos declarados por los clientes: disponible para el control general.';
+        hint.className = 'ayuda-rango ok';
+        return;
+    }
+
+    if (ipOriginalRegistro && ipOriginalRegistro === ip) {
+        hint.textContent = `Esta IP pertenece a ${etiquetaRangoCliente(rango)} y es la que ya tiene el registro. Se conserva mientras no la cambies.`;
+        hint.className = 'ayuda-rango neutra';
+        return;
+    }
+
+    hint.textContent = `Reservada para ${etiquetaRangoCliente(rango)}. Un dispositivo general no puede usar esta IP.`;
+    hint.className = 'ayuda-rango alerta';
+}
+
+let debounceHintRango = null;
+function programarHintRangoIP() {
+    const token = ++tokenHintRango;
+    clearTimeout(debounceHintRango);
+    debounceHintRango = setTimeout(() => {
+        if (token !== tokenHintRango) return;
+        actualizarHintRangoIP();
+    }, 180);
+}
+
+/* Aviso explícito cuando la base de datos rechaza la IP por estar reservada. */
+async function mostrarAvisoRangoCliente(detalle, ip) {
+    const rango = detalle?.rango || null;
+    await fireSwal({
+        icon: 'warning',
+        title: 'IP reservada a un cliente',
+        html: `<div style="text-align:left;font-size:.9rem;">
+            ${escaparHTML(detalle?.mensaje || 'La IP pertenece a un rango declarado por un cliente.')}<br><br>
+            <div style="background:#FFF7E8;padding:10px;border-radius:6px;border-left:3px solid #A99A63;">
+                <b>IP capturada:</b> ${escaparHTML(ip || '')}<br>
+                <b>Cliente:</b> ${escaparHTML(rango?.ClienteCodigo || '—')}<br>
+                <b>Perfil:</b> ${escaparHTML(rango?.RolNombre || 'Cualquier perfil')}<br>
+                <b>Rango reservado:</b> ${escaparHTML(rango ? `${rango.IPInicio} – ${rango.IPFin}` : '—')}
+            </div>
+            <p style="margin-top:10px;color:#7a7563;">
+                Los rangos se administran en <b>Equipos → Rangos IP</b>. Usa una IP libre
+                fuera de los rangos de clientes.
+            </p></div>`,
+        confirmButtonText: 'Entendido',
+        buttonsStyling: false,
+        customClass: { popup: 'cl-confirm', confirmButton: 'swal2-confirm swal2-styled' }
+    });
 }
 
 function limpiarFormularioCatalogo() {
@@ -824,6 +979,9 @@ async function cargar() {
     if (!Array.isArray(listaRegistros)) throw new Error(listaRegistros?.mensaje || 'No se pudieron cargar las IP.');
     catalogos = listaCatalogos;
     registros = listaRegistros;
+    /* Misma norma que Equipos: las IP que un cliente declaró en sus rangos
+       quedan reservadas también para el control general. */
+    await cargarRangosCliente();
     /* La tabla también muestra las IP libres del segmento, que no viven
        en la base de datos: se calculan aquí. */
     filas = construirFilas(registros);
@@ -859,7 +1017,14 @@ formIP.addEventListener('submit', async event => {
         const result = idEditando
             ? await window.api.inventarioIP.actualizar(idEditando, datos)
             : await window.api.inventarioIP.crear(datos);
-        if (!result?.ok) return mostrarError(result?.mensaje);
+        if (!result?.ok) {
+            /* La IP cae dentro de un rango declarado por un cliente:
+               se avisa con el detalle en lugar de un error genérico. */
+            if (result?.tipo === 'ip-en-rango-cliente') {
+                return await mostrarAvisoRangoCliente(result.detalle, datos.ip);
+            }
+            return mostrarError(result?.mensaje);
+        }
         limpiarFormulario();
         await cargar();
         mostrarToast(result.mensaje);
@@ -905,6 +1070,10 @@ $('busqueda').addEventListener('input', () => {
     paginaActual = 1;
     renderizarTabla();
 });
+
+/* Aviso en línea: mientras se captura la IP, indica si está reservada
+   a un cliente o si queda libre para el control general. */
+$('ip').addEventListener('input', programarHintRangoIP);
 
 let debounceFiltros = null;
 document.querySelectorAll('[data-filtro]').forEach(control => {

@@ -149,6 +149,24 @@ input:focus, select:focus { outline: 2px solid #a99a6380; border-color: var(--ip
 .wide { grid-column: 1 / -1; }
 .form-actions { display: flex; gap: 10px; }
 
+/* Aviso de rango de cliente dentro del formulario de registro general */
+.ayuda-rango {
+    grid-column: 1 / -1;
+    margin: -6px 0 0;
+    padding: 8px 11px;
+    border-left: 3px solid var(--ip-borde-fuerte);
+    border-radius: 6px;
+    background: #f2f1ea;
+    color: var(--ip-texto-secundario);
+    font-size: .8rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+.ayuda-rango.oculto { display: none; }
+.ayuda-rango.ok { border-left-color: #7aa87f; background: #e8f2e9; color: #25643a; }
+.ayuda-rango.alerta { border-left-color: var(--ip-rojo); background: var(--ip-rojo-suave); color: #8a3122; }
+.ayuda-rango.neutra { border-left-color: var(--ip-oro); background: var(--ip-oro-suave); color: #5f5433; }
+
 .button {
     min-height: 38px;
     padding: 8px 13px;
@@ -248,6 +266,23 @@ td { font-size: .84rem; }
 .ip-badge.origen-general { border-color: #c9c7bc; background: #eeede7; color: #515247; }
 .ip-badge.estado-ocupado { border-color: #a7d6b1; background: #e5f5e8; color: #25643a; }
 .ip-badge.estado-libre { border-color: #d8d6cb; background: #f2f1ea; color: #6f7066; }
+.ip-badge.estado-reservado { border-color: #d8b49a; background: var(--ip-oro-suave); color: #6b4b25; }
+.fila-reservada { background: #fdfaf1; }
+.fila-reservada td { color: var(--ip-texto-secundario); }
+.reservado-nota {
+    display: inline-flex;
+    align-items: center;
+    min-height: 27px;
+    padding: 4px 9px;
+    border: 1px dashed #d8b49a;
+    border-radius: 7px;
+    background: #fbf6e8;
+    color: #6b4b25;
+    font-size: .75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: help;
+}
 .ip-badge.ip { border-color: #c7d5e8; background: var(--ip-azul-suave); color: #25486d; font-family: var(--ip-font-mono); }
 .ip-badge.hostname { border-color: #d3c8ad; background: var(--ip-oro-suave); color: #54482d; }
 .ip-badge.dato { font-weight: 500; }

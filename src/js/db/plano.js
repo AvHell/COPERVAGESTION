@@ -1,5 +1,23 @@
 const { getPool, sql } = require('./conexion');
 const historicos = require('./historicos');
+const rangosDB = require('./rangos');
+
+/* Aplica la misma norma de rangos IP que la página de Equipos: una IP estática
+   debe caer dentro de un rango declarado por el cliente para ese perfil (o en
+   un rango general del cliente). Devuelve { ok, rango } o { ok:false, ... }
+   con el detalle necesario para avisar al usuario desde el plano. */
+async function validarRangoEquipo(idCliente, idRolEquipo, ip) {
+    const control = await rangosDB.validarIPEnRango(idCliente, idRolEquipo, ip);
+    if (!control.ok) {
+        return {
+            ok: false,
+            mensaje: control.mensaje || 'La IP está fuera del rango autorizado para el cliente y perfil.',
+            tipo: 'ip-fuera-de-rango',
+            detalle: control
+        };
+    }
+    return { ok: true, rango: control.rango || null };
+}
 
 /* Normaliza la lista de celdas {fila, columna} que manda el renderer:
    descarta valores inválidos y duplicados para que una zona nunca guarde
@@ -227,6 +245,19 @@ async function intercambiar(idUsuario, idEquipoA, idEquipoB, idPiso, hostA, host
    ========================================================= */
 
 async function moverEntrePisos(idUsuario, idEquipo, idPisoOrigen, idPisoDestino, fila, columna, nuevosDatos = null) {
+    /* La edición de equipo desde el plano sigue la misma línea que la página de
+       Equipos: la IP estática debe estar dentro de un rango declarado por el
+       cliente. Se valida ANTES de abrir la transacción para no mover el equipo
+       ni dejar cambios a medias cuando la IP no está autorizada. */
+    let rangoAsignado = null;
+    if (nuevosDatos && nuevosDatos.tipoIP === 'Estatica' && nuevosDatos.ip) {
+        const controlRango = await validarRangoEquipo(
+            nuevosDatos.idCliente, nuevosDatos.idRolEquipo, nuevosDatos.ip
+        );
+        if (!controlRango.ok) return controlRango;
+        rangoAsignado = controlRango.rango ? controlRango.rango.IdRangoIP : null;
+    }
+
     const pool = await getPool();
     const tx = new sql.Transaction(pool);
     await tx.begin();
@@ -273,10 +304,12 @@ async function moverEntrePisos(idUsuario, idEquipo, idPisoOrigen, idPisoDestino,
                 .input('DNS2', sql.VarChar(45), nuevosDatos.dns2)
                 .input('UsuarioAdmin', sql.NVarChar(100), nuevosDatos.usuarioAdmin)
                 .input('PasswordAdmin', sql.NVarChar(255), nuevosDatos.passwordAdmin)
+                .input('IdRangoIP', sql.Int, rangoAsignado)
                 .query(`UPDATE Equipos SET
                         IdCliente = @IdCliente, IdPiso = @IdPiso, IdRolEquipo = @IdRolEquipo,
                         TipoIP = @TipoIP, Hostname = @Hostname, NumeroHost = @NumeroHost,
-                        IP = @IP, Mascara = @Mascara, PuertaEnlace = @PuertaEnlace,
+                        IP = @IP, IdRangoIP = @IdRangoIP,
+                        Mascara = @Mascara, PuertaEnlace = @PuertaEnlace,
                         DNS1 = @DNS1, DNS2 = @DNS2,
                         UsuarioAdmin = @UsuarioAdmin, PasswordAdmin = @PasswordAdmin
                         WHERE IdEquipo = @IdEquipo`);
@@ -925,6 +958,17 @@ async function actualizarEquipoEnEscenarioFuturo(idEscenario, idEquipo, datos) {
         };
     } catch (error) {
         return { ok: false, mensaje: error.message };
+    }
+
+    /* La propuesta futura se aplicará más adelante sobre Equipos, así que
+       también debe respetar los rangos IP declarados: es mejor avisar aquí
+       que descubrir la incoherencia al aplicar el escenario. */
+    if (cambios.tipoIP === 'Estatica' && cambios.ip) {
+        const controlRango = await validarRangoEquipo(cambios.idCliente, cambios.idRolEquipo, cambios.ip);
+        if (!controlRango.ok) return controlRango;
+        cambios.idRangoIP = controlRango.rango ? controlRango.rango.IdRangoIP : null;
+    } else {
+        cambios.idRangoIP = null;
     }
 
     const pool = await getPool();

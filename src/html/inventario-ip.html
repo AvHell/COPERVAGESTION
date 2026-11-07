@@ -166,7 +166,7 @@
             <div class="modal-heading">
                 <div>
                     <h2 id="modal-catalogos-titulo">Catálogos editables</h2>
-                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP.</p>
+                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP. En <b>Cliente (color)</b> se ajusta el color con el que se pintan las etiquetas del cliente y el hostname de sus equipos.</p>
                 </div>
                 <button id="btn-cerrar-catalogos" type="button" class="button secondary" aria-label="Cerrar">Cerrar</button>
             </div>
@@ -179,6 +179,7 @@
                         <option value="Piso">Piso</option>
                         <option value="Site">Switch</option>
                         <option value="TipoIP">Tipo de IP</option>
+                        <option value="Cliente">Cliente (color)</option>
                     </select>
                 </label>
                 <button id="btn-nueva-opcion" type="button" class="button primary" data-permiso="equipos:crear">Agregar opción</button>
@@ -186,7 +187,11 @@
             <div class="table-wrap catalog-table-wrap">
                 <table class="catalog-table">
                     <thead>
-                        <tr><th>Nombre</th><th>Estado</th><th>Acciones</th></tr>
+                        <tr>
+                            <th id="catalogo-th-nombre">Nombre</th>
+                            <th id="catalogo-th-estado">Estado</th>
+                            <th>Acciones</th>
+                        </tr>
                     </thead>
                     <tbody id="lista-catalogos"></tbody>
                 </table>

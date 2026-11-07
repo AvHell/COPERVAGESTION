@@ -1281,6 +1281,32 @@ body {
     background: var(--gray-50);
     color: var(--gray-600);
 }
+.ips-rangos-nota {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border-left: 3px solid var(--gray-300);
+    background: var(--gray-50);
+    color: var(--gray-600);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    text-align: left;
+}
+.ips-rangos-nota.ok {
+    border-left-color: var(--tierra-oliva);
+    background: rgba(107, 122, 88, 0.08);
+    color: var(--gray-700);
+}
+.ips-rangos-nota.aviso {
+    border-left-color: #d99a2b;
+    background: rgba(217, 154, 43, 0.1);
+    color: var(--gray-700);
+}
+.ips-rangos-nota.alerta {
+    border-left-color: var(--rojo);
+    background: rgba(178, 60, 50, 0.08);
+    color: var(--gray-700);
+}
 
 /* =========================================================
    RESPONSIVE

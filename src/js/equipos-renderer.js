@@ -614,6 +614,104 @@ function obtenerSegmentoIPv4(valor) {
     return segmento.map(Number).join('.');
 }
 
+/* ---------- Lupa de IPs libres: sólo dentro de los rangos autorizados ---------- */
+
+/** Devuelve el último octeto de `ip` si pertenece al segmento /24 indicado. */
+function hostEnSegmento(ip, segmento) {
+    const partes = String(ip ?? '').trim().split('.');
+    if (partes.length !== 4) return null;
+    if (partes.slice(0, 3).map(Number).join('.') !== segmento) return null;
+    const host = Number(partes[3]);
+    return Number.isInteger(host) && host >= 1 && host <= 254 ? host : null;
+}
+
+function ipValorEntero(ip) {
+    const partes = String(ip ?? '').trim().split('.');
+    if (partes.length !== 4) return null;
+    if (!partes.every(octeto => /^\d{1,3}$/.test(octeto) && Number(octeto) <= 255)) return null;
+    const [a, b, c, d] = partes.map(Number);
+    return ((a * 256 + b) * 256 + c) * 256 + d;
+}
+
+/**
+ * Rangos del cliente que aplican al perfil elegido, con la misma regla del
+ * backend (db/rangos.js): un rango sin perfil aplica a cualquier perfil.
+ */
+async function rangosDeLaLupa(idCliente, idRol) {
+    if (!idCliente) return { estado: 'sin-cliente', rangos: [], delCliente: [] };
+
+    let delCliente;
+    try {
+        delCliente = await window.api.rangos.listar(idCliente);
+    } catch (err) {
+        return { estado: 'error', mensaje: err?.message || '', rangos: [], delCliente: [] };
+    }
+    if (!Array.isArray(delCliente)) {
+        return { estado: 'error', mensaje: delCliente?.mensaje || '', rangos: [], delCliente: [] };
+    }
+    if (!delCliente.length) return { estado: 'sin-rangos', rangos: [], delCliente };
+
+    if (!idRol) return { estado: 'sin-perfil', rangos: delCliente, delCliente };
+
+    const aplicables = delCliente.filter(r => !r.IdRolEquipo || Number(r.IdRolEquipo) === idRol);
+    if (!aplicables.length) return { estado: 'perfil-sin-rango', rangos: [], delCliente };
+    return { estado: 'ok', rangos: aplicables, delCliente };
+}
+
+/** Hosts (1–254) del segmento que caen dentro de alguno de los rangos. */
+function hostsDentroDeRangos(rangos, segmento) {
+    const hosts = new Set();
+    for (let host = 1; host <= 254; host++) {
+        const valor = ipValorEntero(`${segmento}.${host}`);
+        if (valor === null) continue;
+        const dentro = (rangos || []).some(r => {
+            const inicio = ipValorEntero(r.IPInicio);
+            const fin = ipValorEntero(r.IPFin);
+            return inicio !== null && fin !== null && valor >= inicio && valor <= fin;
+        });
+        if (dentro) hosts.add(host);
+    }
+    return hosts;
+}
+
+function textoRangos(rangos) {
+    const lista = (rangos || []).map(r => `${r.IPInicio} – ${r.IPFin}`);
+    return escaparHTML(lista.join(', '));
+}
+
+/** Nota explicativa que acompaña al listado de IPs libres. */
+function notaRangosLupa(info, segmento, hostsPermitidos, nombrePerfil) {
+    if (info.estado === 'sin-cliente') {
+        return { clase: 'neutra', html: 'Sin cliente seleccionado: se muestran los 254 hosts del segmento. Elige un cliente para respetar sus rangos autorizados.' };
+    }
+    if (info.estado === 'error') {
+        const detalle = info.mensaje ? `: ${escaparHTML(info.mensaje)}` : '';
+        return { clase: 'aviso', html: `No se pudieron leer los rangos del cliente${detalle}. Se muestran los 254 hosts del segmento.` };
+    }
+    if (info.estado === 'sin-rangos') {
+        const codigo = escaparHTML(info.delCliente[0]?.ClienteCodigo || '');
+        return { clase: 'neutra', html: `El cliente ${codigo} todavía no tiene rangos configurados: se muestran los 254 hosts del segmento.` };
+    }
+    if (info.estado === 'sin-perfil') {
+        return { clase: 'ok', html: `Selecciona un perfil para afinar la búsqueda. Por ahora se muestran las IPs dentro de estos rangos: ${textoRangos(info.rangos)}.` };
+    }
+    if (info.estado === 'perfil-sin-rango') {
+        const codigo = escaparHTML(info.delCliente[0]?.ClienteCodigo || '');
+        const perfil = escaparHTML(nombrePerfil || 'sin perfil');
+        return { clase: 'alerta', html: `El perfil ${perfil} no tiene rango IP definido para el cliente ${codigo}. Registra un rango en «Rangos IP» antes de asignar direcciones.` };
+    }
+    if (!hostsPermitidos || !hostsPermitidos.size) {
+        const segmentos = [...new Set((info.rangos || []).map(r =>
+            String(r.IPInicio || '').split('.').slice(0, 3).join('.')
+        ).filter(Boolean))];
+        return {
+            clase: 'alerta',
+            html: `Ningún rango autorizado cubre el segmento ${escaparHTML(segmento)}. Rangos del perfil: ${textoRangos(info.rangos)}${segmentos.length ? ` (segmentos: ${escaparHTML(segmentos.join(', '))})` : ''}.`
+        };
+    }
+    return { clase: 'ok', html: `Sólo IPs dentro de los rangos autorizados: ${textoRangos(info.rangos)}.` };
+}
+
 async function consultarIPsDisponibles() {
     const segmento = obtenerSegmentoIPv4(inputIP.value);
     if (!segmento) {
@@ -636,17 +734,33 @@ async function consultarIPsDisponibles() {
             selectDNS1.value,
             selectDNS2.value
         ];
-        const hostsOcupados = new Set(ipsReservadas.map(ip => {
-            const partes = String(ip ?? '').trim().split('.');
-            if (partes.length !== 4 || partes.slice(0, 3).map(Number).join('.') !== segmento) return null;
-            const host = Number(partes[3]);
-            return Number.isInteger(host) && host >= 1 && host <= 254 ? host : null;
-        }).filter(host => host !== null));
+        const hostsOcupados = new Set(
+            ipsReservadas.map(ip => hostEnSegmento(ip, segmento)).filter(host => host !== null)
+        );
+
+        /* Rangos autorizados del cliente/perfil seleccionados en el formulario */
+        const idCliente = parseInt(selectCli.value, 10) || null;
+        const idRol = parseInt(selectRol.value, 10) || null;
+        const opcionPerfil = selectRol.options[selectRol.selectedIndex];
+        const nombrePerfil = opcionPerfil ? opcionPerfil.textContent.trim() : '';
+
+        const infoRangos = await rangosDeLaLupa(idCliente, idRol);
+        let hostsPermitidos = null; // null = sin restricción de rango
+        if (infoRangos.estado === 'ok' || infoRangos.estado === 'sin-perfil') {
+            hostsPermitidos = hostsDentroDeRangos(infoRangos.rangos, segmento);
+        } else if (infoRangos.estado === 'perfil-sin-rango') {
+            hostsPermitidos = new Set();
+        }
 
         const ipsLibres = [];
         for (let host = 1; host <= 254; host++) {
-            if (!hostsOcupados.has(host)) ipsLibres.push(`${prefijo}${host}`);
+            if (hostsPermitidos && !hostsPermitidos.has(host)) continue;
+            if (hostsOcupados.has(host)) continue;
+            ipsLibres.push(`${prefijo}${host}`);
         }
+
+        const totalConsiderados = hostsPermitidos ? hostsPermitidos.size : 254;
+        const nota = notaRangosLupa(infoRangos, segmento, hostsPermitidos, nombrePerfil);
 
         const filas = ipsLibres.map(ip => {
             return `<tr data-ip="${ip}">
@@ -659,9 +773,10 @@ async function consultarIPsDisponibles() {
             title: `IPs disponibles — ${segmento}.0/24`,
             html: `
                 <p class="ips-disponibles-resumen">
-                    <strong>${ipsLibres.length}</strong> libres de 254 hosts utilizables
-                    <span>Rango de hosts: ${segmento}.1 a ${segmento}.254</span>
+                    <strong>${ipsLibres.length}</strong> libres de ${totalConsiderados} hosts ${hostsPermitidos ? 'autorizados' : 'utilizables'}
+                    <span>${hostsPermitidos ? 'Rangos autorizados y ocupación ya aplicados' : `Rango de hosts: ${segmento}.1 a ${segmento}.254`}</span>
                 </p>
+                <p class="ips-rangos-nota ${nota.clase}">${nota.html}</p>
                 <label for="buscar-ip-libre" class="ips-busqueda">Buscar IP libre</label>
                 <input id="buscar-ip-libre" type="search" class="swal2-input"
                     placeholder="Ej. ${prefijo}67 o 67">
@@ -672,7 +787,9 @@ async function consultarIPsDisponibles() {
                             <tbody>${filas}</tbody>
                         </table>
                     </div>`
-                    : '<p class="ips-disponibles-vacias">No hay direcciones disponibles en este segmento.</p>'}
+                    : `<p class="ips-disponibles-vacias">${hostsPermitidos && !ipsLibres.length
+                        ? 'No hay IPs libres dentro de los rangos autorizados para este segmento.'
+                        : 'No hay direcciones disponibles en este segmento.'}</p>`}
             `,
             showConfirmButton: false,
             showCloseButton: true,

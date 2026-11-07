@@ -16,6 +16,7 @@ let paginaActual = 1;
 let tamanoPagina = 25;
 let segmentoActual = '';
 let rangosCliente = [];
+let clientesCatalogo = [];
 let ipOriginalRegistro = '';
 let tokenHintRango = 0;
 const filtrosColumna = {};
@@ -63,6 +64,70 @@ function badgeCliente(registro) {
         + (nombre ? `<span class="nombre">${escaparHTML(nombre)}</span>` : '')
         + '</span>';
 }
+
+/* =========================================================
+   COLOR DEL CLIENTE
+   El color se define en Catálogos del Sistema y también se puede
+   ajustar desde aquí (Control general de IP) para no obligar a
+   cambiar de módulo cuando sólo se quiere corregir el tono.
+   ========================================================= */
+
+const COLOR_CLIENTE_DEFECTO = '#6E7B5B';
+
+/* Devuelve "#RRGGBB" en mayúsculas o el color por defecto si no es válido. */
+function normalizarColorHex(valor, defecto = COLOR_CLIENTE_DEFECTO) {
+    const texto = String(valor || '').trim();
+    if (/^#[0-9A-F]{6}$/i.test(texto)) return texto.toUpperCase();
+    if (/^#[0-9A-F]{3}$/i.test(texto)) {
+        return `#${texto.slice(1).split('').map(canal => canal + canal).join('')}`.toUpperCase();
+    }
+    return defecto;
+}
+
+function canalesColor(valor) {
+    const hex = normalizarColorHex(valor, '');
+    return hex ? hex.slice(1).match(/.{2}/g).map(canal => parseInt(canal, 16)) : null;
+}
+
+/* Tono tenue: fondo y borde del color del cliente con el texto oscurecido,
+   así el hostname se distingue por cliente sin perder legibilidad. */
+function estiloColorTenue(valor) {
+    const canales = canalesColor(valor);
+    if (!canales) return '';
+    const [rojo, verde, azul] = canales;
+    const texto = canales.map(canal => Math.round(canal * 0.55)).join(', ');
+    return ` style="background-color:rgba(${rojo}, ${verde}, ${azul}, .16);`
+        + `border-color:rgba(${rojo}, ${verde}, ${azul}, .55);color:rgb(${texto})"`;
+}
+
+/* Color del cliente: primero el mapa de PermisosUI (Catálogos del Sistema)
+   y, como respaldo, el ColorHex de la lista de clientes de esta pantalla. */
+function colorDeCliente(codigo) {
+    const clave = String(codigo || '').trim().toUpperCase();
+    if (!clave) return '';
+    const guardado = window.PermisosUI?.colorCliente?.(clave);
+    if (guardado) return normalizarColorHex(guardado, '');
+    const cliente = clientesCatalogo.find(item =>
+        String(item.Codigo || '').trim().toUpperCase() === clave
+    );
+    return normalizarColorHex(cliente?.ColorHex, '');
+}
+
+/* El color del cliente se aplica SOLO al hostname de los equipos que
+   pertenecen a un cliente; los registros del inventario general y las IP
+   libres conservan la etiqueta neutra. */
+function badgeHostname(registro) {
+    const hostname = String(registro?.Hostname || '').trim();
+    const esCliente = registro?.Origen === 'Cliente' &&
+        Boolean(String(registro?.ClienteCodigo || '').trim());
+    if (!esCliente || !hostname) return badge(hostname, 'hostname');
+    const color = colorDeCliente(registro.ClienteCodigo);
+    if (!color) return badge(hostname, 'hostname hostname-cliente');
+    return `<span class="ip-badge hostname hostname-cliente"${estiloColorTenue(color)}`
+        + ` title="Hostname del cliente ${escaparHTML(String(registro.ClienteCodigo).trim())}"`
+        + `>${escaparHTML(hostname)}</span>`;
+}
+
 
 /* Los <dialog> abiertos con showModal() viven en la capa superior del navegador,
    así que un SweetAlert insertado en <body> queda SIEMPRE detrás de ellos.
@@ -289,19 +354,50 @@ function detalleSegmento(datos) {
     return `${datos.total} IP · ${datos.ocupadas} ocupadas${reservadas} · ${datos.libres} libres`;
 }
 
+/* Porcentajes del segmento: ocupadas + reservadas sobre el total de IP. */
+function porcentajesSegmento(datos) {
+    const total = Number(datos?.total) || 0;
+    if (!total) return { ocupado: 0, acumulado: 0 };
+    const ocupadas = Number(datos.ocupadas) || 0;
+    const reservadas = Number(datos.reservadas) || 0;
+    const ocupado = Math.round((ocupadas / total) * 100);
+    const reservado = Math.min(100 - ocupado, Math.round((reservadas / total) * 100));
+    return { ocupado, acumulado: ocupado + reservado };
+}
+
 function crearItemSegmento(datos, esTodos = false) {
     const boton = document.createElement('button');
     boton.type = 'button';
     boton.className = 'segmento-item';
     const seleccionado = esTodos ? !segmentoActual : segmentoActual === datos.segmento;
     boton.classList.toggle('activo', seleccionado);
+    boton.setAttribute('aria-pressed', seleccionado ? 'true' : 'false');
+
     const ocupado = datos.ocupadas > 0;
+    const { ocupado: pctOcupado, acumulado: pctAcumulado } = porcentajesSegmento(datos);
+    const detalle = esTodos ? detalleTotales(datos) : detalleSegmento(datos);
+    boton.title = detalle;
+
+    const meta = datos.segmento === 'Sin IP'
+        ? `${datos.total} registros sin IP`
+        : `${datos.total} IP en el segmento`;
+
     boton.innerHTML = `
         <span class="segmento-cabecera">
             <span class="segmento-nombre">${escaparHTML(esTodos ? 'Todos los segmentos' : etiquetaSegmento(datos.segmento))}</span>
             <span class="segmento-pill ${ocupado ? 'ocupado' : 'libre'}">${ocupado ? 'Ocupado' : 'Libre'}</span>
         </span>
-        <span class="segmento-meta">${escaparHTML(esTodos ? detalleTotales(datos) : detalleSegmento(datos))}</span>`;
+        <span class="kpi-cifras">
+            <span class="kpi-cifra ocupada"><strong>${datos.ocupadas}</strong><small>ocupadas</small></span>
+            <span class="kpi-cifra libre"><strong>${datos.libres}</strong><small>libres</small></span>
+            ${datos.reservadas ? `<span class="kpi-cifra reservada"><strong>${datos.reservadas}</strong><small>reservadas</small></span>` : ''}
+            <span class="kpi-porcentaje">${pctAcumulado}%</span>
+        </span>
+        <span class="kpi-progreso" role="img" aria-label="Ocupación del ${pctAcumulado}%">
+            <span class="kpi-progreso-relleno"
+                style="--pct-ocupado:${pctOcupado}%; --pct-acumulado:${pctAcumulado}%"></span>
+        </span>
+        <span class="segmento-meta">${escaparHTML(meta)}</span>`;
     boton.addEventListener('click', () => {
         segmentoActual = esTodos ? '' : datos.segmento;
         paginaActual = 1;
@@ -342,7 +438,17 @@ function renderizarSegmentos() {
 
     const resumen = $('segmentos-resumen');
     if (resumen) {
-        resumen.textContent = `${segmentos.length} ${segmentos.length === 1 ? 'segmento' : 'segmentos'}`;
+        const totales = sumarSegmentos(segmentos);
+        const piezas = [
+            `<span>${segmentos.length} ${segmentos.length === 1 ? 'segmento' : 'segmentos'}</span>`,
+            `<span><b>${totales.total}</b> IP</span>`,
+            `<span class="dato-ocupado"><b>${totales.ocupadas}</b> ocupadas</span>`,
+            `<span class="dato-libre"><b>${totales.libres}</b> libres</span>`
+        ];
+        if (totales.reservadas) {
+            piezas.push(`<span class="dato-reservado"><b>${totales.reservadas}</b> reservadas</span>`);
+        }
+        resumen.innerHTML = piezas.join('');
     }
 }
 
@@ -356,7 +462,12 @@ function actualizarCabeceraSegmento() {
     $('segmento-detalle').textContent = detalleSegmento(datos);
 
     const ocupado = datos.ocupadas > 0;
-    $('segmento-estado').innerHTML = `<span class="segmento-pill ${ocupado ? 'ocupado' : 'libre'}">${ocupado ? 'Ocupado' : 'Libre'}</span>`;
+    const { acumulado } = porcentajesSegmento(datos);
+    $('segmento-estado').innerHTML = `
+        <span class="barra-kpi"><strong>${datos.ocupadas}</strong> ocupadas</span>
+        <span class="barra-kpi libre"><strong>${datos.libres}</strong> libres</span>
+        <span class="barra-kpi porcentaje">${acumulado}% usado</span>
+        <span class="segmento-pill ${ocupado ? 'ocupado' : 'libre'}">${ocupado ? 'Ocupado' : 'Libre'}</span>`;
 }
 
 /* =========================================================
@@ -507,7 +618,7 @@ function renderizarTabla() {
             <td>${badge(item.Origen, item.Origen === 'Cliente' ? 'origen-cliente' : 'origen-general')}</td>
             <td>${badge(item.Estado, claseEstado)}</td>
             <td>${badge(item.IP || 'DHCP', 'ip')}</td>
-            <td>${badge(item.Hostname, 'hostname')}</td>
+            <td>${badgeHostname(item)}</td>
             <td>${badge(item.MAC, 'dato')}</td>
             <td>${badge(item.Dispositivo, 'dato')}</td>
             <td>${badge(item.TipoEquipo, 'dato')}</td>
@@ -699,9 +810,144 @@ async function editarDatosCliente(item) {
     }
 }
 
+/* Cabeceras de la tabla de catálogos: la vista de clientes muestra el
+   color en lugar del estado activo/inactivo. */
+function ajustarCabeceraCatalogos(esClientes) {
+    const thNombre = $('catalogo-th-nombre');
+    const thEstado = $('catalogo-th-estado');
+    if (thNombre) thNombre.textContent = esClientes ? 'Cliente' : 'Nombre';
+    if (thEstado) thEstado.textContent = esClientes ? 'Color' : 'Estado';
+}
+
+/* Catálogo de clientes: aquí se ajusta el color con el que se pintan las
+   etiquetas del cliente y el hostname de sus equipos. Incluye a los
+   clientes que todavía no tienen equipos registrados. */
+function renderizarClientesCatalogo(contenedor) {
+    const lista = [...clientesCatalogo].sort((a, b) =>
+        String(a.Codigo || '').localeCompare(String(b.Codigo || ''), 'es')
+    );
+    const vacio = $('sin-catalogos');
+    vacio.hidden = lista.length > 0;
+    vacio.textContent = lista.length
+        ? vacio.textContent
+        : 'No hay clientes registrados en Catálogos del Sistema.';
+
+    for (const cliente of lista) {
+        const fila = document.createElement('tr');
+
+        const celdaNombre = document.createElement('td');
+        celdaNombre.className = 'cliente-catalogo-nombre';
+        const codigo = document.createElement('span');
+        codigo.className = 'cliente-catalogo-codigo';
+        codigo.textContent = String(cliente.Codigo || '').trim() || '—';
+        const nombre = document.createElement('span');
+        nombre.className = 'cliente-catalogo-nombre-texto';
+        nombre.textContent = String(cliente.Nombre || '').trim();
+        celdaNombre.append(codigo, nombre);
+
+        const celdaColor = document.createElement('td');
+        celdaColor.className = 'cliente-catalogo-color';
+        const muestra = document.createElement('span');
+        muestra.className = 'muestra-color';
+        const color = normalizarColorHex(cliente.ColorHex);
+        muestra.style.backgroundColor = color;
+        const valorColor = document.createElement('span');
+        valorColor.className = 'cliente-catalogo-hex';
+        valorColor.textContent = color;
+        celdaColor.append(muestra, valorColor);
+
+        const celdaAcciones = document.createElement('td');
+        const acciones = document.createElement('div');
+        acciones.className = 'catalog-actions';
+        const editar = document.createElement('button');
+        editar.type = 'button';
+        editar.className = 'button secondary';
+        editar.dataset.permiso = 'catalogos:clientes:editar';
+        editar.textContent = 'Cambiar color';
+        editar.addEventListener('click', () => editarColorCliente(cliente.IdCliente));
+        acciones.append(editar);
+        celdaAcciones.append(acciones);
+
+        fila.append(celdaNombre, celdaColor, celdaAcciones);
+        contenedor.append(fila);
+    }
+    window.PermisosUI?.aplicar(contenedor);
+}
+
+/* Selector de color del cliente (mismo patrón que Catálogos del Sistema). */
+async function editarColorCliente(idCliente) {
+    const cliente = clientesCatalogo.find(item => Number(item.IdCliente) === Number(idCliente));
+    if (!cliente) return mostrarError('El cliente ya no está disponible. Actualiza la vista.');
+
+    const colorActual = normalizarColorHex(cliente.ColorHex);
+    const codigo = String(cliente.Codigo || '').trim();
+    const resultado = await fireSwal({
+        title: 'Color del cliente',
+        html: `
+            <div class="color-cliente-form">
+                <p class="color-cliente-titulo">
+                    <b>${escaparHTML(codigo || 'Cliente')}</b> ${escaparHTML(String(cliente.Nombre || '').trim())}
+                </p>
+                <label class="color-cliente-campo">Color
+                    <span class="color-picker-field">
+                        <input id="color-cliente-input" type="color" value="${escaparHTML(colorActual)}"
+                            aria-label="Color hexadecimal del cliente">
+                        <span id="color-cliente-valor">${escaparHTML(colorActual)}</span>
+                    </span>
+                </label>
+                <p class="color-cliente-ayuda">
+                    Se aplica a la etiqueta del cliente y al hostname de sus equipos.
+                    Los registros del inventario general conservan su color neutro.
+                </p>
+            </div>`,
+        showCancelButton: true,
+        confirmButtonText: 'Guardar color',
+        cancelButtonText: 'Cancelar',
+        didOpen: () => {
+            const input = document.getElementById('color-cliente-input');
+            const valor = document.getElementById('color-cliente-valor');
+            input?.addEventListener('input', () => {
+                if (valor) valor.textContent = normalizarColorHex(input.value);
+            });
+        },
+        preConfirm: () => ({
+            color: normalizarColorHex(document.getElementById('color-cliente-input')?.value, '')
+        })
+    });
+    if (!resultado.isConfirmed) return;
+    const color = resultado.value?.color;
+    if (!color) return mostrarError('El color seleccionado no es válido.');
+    if (color === colorActual) {
+        mostrarToast('El color no cambió.');
+        return;
+    }
+
+    try {
+        const guardado = await window.api.clientes.actualizar(
+            cliente.IdCliente, cliente.Codigo, cliente.Nombre, color
+        );
+        if (!guardado?.ok) return mostrarError(guardado?.mensaje);
+        await window.PermisosUI?.refrescarColores?.();
+        await cargar();
+        mostrarToast('Color del cliente actualizado.');
+    } catch (error) {
+        mostrarError(error.message);
+    }
+}
+
 function renderizarCatalogos() {
     const contenedor = $('lista-catalogos');
     contenedor.replaceChildren();
+    const esClientes = tipoCatalogo.value === 'Cliente';
+    ajustarCabeceraCatalogos(esClientes);
+    const botonNueva = $('btn-nueva-opcion');
+    if (botonNueva) botonNueva.hidden = esClientes;
+    if (esClientes) {
+        renderizarClientesCatalogo(contenedor);
+        return;
+    }
+    const vacio = $('sin-catalogos');
+    vacio.textContent = 'No hay opciones en este catálogo.';
     const items = catalogos.filter(item => item.TipoCatalogo === tipoCatalogo.value);
     $('sin-catalogos').hidden = items.length > 0;
     for (const item of items) {
@@ -970,10 +1216,23 @@ async function exportarExcel() {
    CARGA
    ========================================================= */
 
+/* Carga los clientes del catálogo (incluye a los que aún no tienen
+   equipos) para poder ajustar su color desde esta pantalla. */
+async function cargarClientesCatalogo() {
+    try {
+        const lista = await window.api?.clientes?.listar?.();
+        clientesCatalogo = Array.isArray(lista) ? lista : [];
+    } catch (error) {
+        clientesCatalogo = [];
+        console.warn('No se pudieron cargar los clientes:', error?.message || error);
+    }
+}
+
 async function cargar() {
     const [listaCatalogos, listaRegistros] = await Promise.all([
         window.api.inventarioIP.listarCatalogos(),
-        window.api.inventarioIP.listar()
+        window.api.inventarioIP.listar(),
+        cargarClientesCatalogo()
     ]);
     if (!Array.isArray(listaCatalogos)) throw new Error(listaCatalogos?.mensaje || 'No se pudieron cargar los catálogos.');
     if (!Array.isArray(listaRegistros)) throw new Error(listaRegistros?.mensaje || 'No se pudieron cargar las IP.');
@@ -1037,6 +1296,9 @@ formIP.addEventListener('submit', async event => {
 
 formCatalogo.addEventListener('submit', async event => {
     event.preventDefault();
+    /* Los clientes no se crean desde aquí: sólo se ajusta su color. */
+    if (tipoCatalogo.value === 'Cliente') return;
+    if (!textoCatalogo.value.trim()) return mostrarError('Escribe el nombre de la opción.');
     try {
         const result = catalogoEditando
             ? await window.api.inventarioIP.actualizarCatalogo(catalogoEditando, tipoCatalogo.value, textoCatalogo.value.trim())

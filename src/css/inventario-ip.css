@@ -285,6 +285,18 @@ td { font-size: .84rem; }
 }
 .ip-badge.ip { border-color: #c7d5e8; background: var(--ip-azul-suave); color: #25486d; font-family: var(--ip-font-mono); }
 .ip-badge.hostname { border-color: #d3c8ad; background: var(--ip-oro-suave); color: #54482d; }
+/* Hostname de un equipo que SÍ pertenece a un cliente: el color de fondo,
+   borde y texto llega inline desde el renderer (estiloColorTenue) usando el
+   ColorHex del catálogo. Aquí solo se fija el comportamiento del texto para
+   que un hostname largo no rompa el ancho de la columna. */
+.ip-badge.hostname.hostname-cliente {
+    max-width: 220px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: help;
+    transition: background-color .15s ease, border-color .15s ease;
+}
 .ip-badge.dato { font-weight: 500; }
 .descripcion-celda { min-width: 180px; max-width: 300px; white-space: normal; }
 .descripcion-celda .ip-badge { white-space: normal; }
@@ -409,6 +421,91 @@ td { font-size: .84rem; }
 .catalog-status { color: var(--ip-oliva-oscuro); font-weight: 600; }
 .catalog-status.inactivo { color: var(--ip-rojo); }
 
+/* Clientes dentro del catálogo: nombre + muestra del color editable */
+.cliente-catalogo-nombre {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.cliente-catalogo-codigo {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    border: 1px solid var(--ip-borde);
+    border-radius: 6px;
+    background: var(--ip-superficie-suave);
+    color: var(--ip-texto-suave);
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+}
+.cliente-catalogo-nombre-texto {
+    overflow: hidden;
+    color: var(--ip-texto);
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cliente-catalogo-color {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+.muestra-color {
+    width: 26px;
+    height: 20px;
+    border: 1px solid var(--ip-borde-fuerte, #cfc7b2);
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .55);
+}
+.cliente-catalogo-hex {
+    color: var(--ip-texto-suave);
+    font-family: var(--ip-font-mono, monospace);
+    font-size: .74rem;
+    text-transform: uppercase;
+}
+
+/* =========================================================
+   SELECTOR DE COLOR DEL CLIENTE (aviso SweetAlert)
+   Mismo patrón que Catálogos del Sistema y Plano visual.
+   ========================================================= */
+.color-cliente-form { display: grid; gap: 12px; text-align: left; }
+.color-cliente-titulo {
+    margin: 0;
+    color: var(--ip-texto);
+    font-size: .92rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+.color-cliente-campo { display: grid; gap: 6px; font-size: .82rem; font-weight: 600; }
+.color-cliente-ayuda {
+    margin: 0;
+    color: var(--ip-texto-suave);
+    font-size: .76rem;
+    line-height: 1.4;
+}
+.color-picker-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+}
+.color-picker-field input[type="color"] {
+    width: 52px;
+    height: 38px;
+    padding: 3px;
+    border: 1px solid var(--ip-borde-fuerte, #cfc7b2);
+    border-radius: 9px;
+    background: #fff;
+    cursor: pointer;
+}
+.color-picker-field > span:not([id]) {
+    color: var(--ip-texto-suave);
+    font-size: .78rem;
+    font-weight: 500;
+}
+
 /* =========================================================
    SEGMENTOS (SECCIÓN INDEPENDIENTE, ARRIBA DE LA TABLA)
    ========================================================= */
@@ -437,11 +534,34 @@ td { font-size: .84rem; }
     color: var(--ip-texto);
     letter-spacing: -.01em;
 }
-.segmentos-resumen { color: var(--ip-texto-suave); font-size: .76rem; font-weight: 600; }
+.segmentos-resumen {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    color: var(--ip-texto-suave);
+    font-size: .76rem;
+    font-weight: 600;
+}
+.segmentos-resumen span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid var(--ip-borde);
+}
+.segmentos-resumen b { color: var(--ip-texto); font-weight: 800; }
+.segmentos-resumen .dato-ocupado { border-color: #b6c7a9; background: var(--ip-oliva-suave); color: var(--ip-oliva-oscuro); }
+.segmentos-resumen .dato-ocupado b { color: var(--ip-oliva-oscuro); }
+.segmentos-resumen .dato-libre b { color: var(--ip-texto-secundario); }
+.segmentos-resumen .dato-reservado { border-color: #dcc99a; background: var(--ip-oro-suave); color: #8a7a42; }
+.segmentos-resumen .dato-reservado b { color: #8a7a42; }
 
 .segmentos-lista {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
     gap: 8px;
     min-width: 0;
     max-height: min(268px, 34vh);
@@ -456,24 +576,34 @@ td { font-size: .84rem; }
 
 .segmento-item {
     display: grid;
-    gap: 4px;
+    gap: 7px;
     width: 100%;
     height: 100%;
-    padding: 9px 11px;
+    padding: 11px 13px 12px;
     border: 1px solid var(--ip-borde);
-    border-radius: 10px;
+    border-radius: 12px;
     background: #fff;
     color: var(--ip-texto-secundario);
     cursor: pointer;
     font: inherit;
     text-align: left;
-    transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+    box-shadow: var(--ip-sombra);
+    transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
 }
-.segmento-item:hover { border-color: var(--ip-borde-fuerte); background: var(--ip-oro-suave); }
+.segmento-item:hover {
+    border-color: var(--ip-borde-fuerte);
+    background: var(--ip-oro-suave);
+    box-shadow: 0 6px 18px #24271914;
+    transform: translateY(-1px);
+}
+.segmento-item:focus-visible {
+    outline: 2px solid var(--ip-oliva);
+    outline-offset: 2px;
+}
 .segmento-item.activo {
     border-color: var(--ip-oliva);
-    background: var(--ip-oliva-suave);
-    box-shadow: inset 3px 0 0 var(--ip-oliva);
+    background: linear-gradient(180deg, #fff, var(--ip-oliva-suave));
+    box-shadow: inset 3px 0 0 var(--ip-oliva), 0 6px 18px #24271914;
 }
 .segmento-cabecera {
     display: flex;
@@ -494,6 +624,71 @@ td { font-size: .84rem; }
     white-space: nowrap;
 }
 .segmento-item.activo .segmento-nombre { color: var(--ip-oliva-oscuro); }
+
+/* Cifras tipo KPI dentro de la tarjeta */
+.kpi-cifras {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    min-width: 0;
+}
+.kpi-cifra {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    line-height: 1.05;
+}
+.kpi-cifra strong {
+    font-size: 1.16rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    color: var(--ip-texto);
+    font-variant-numeric: tabular-nums;
+}
+.kpi-cifra small {
+    font-size: .63rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--ip-texto-suave);
+}
+.kpi-cifra.ocupada strong { color: var(--ip-oliva-oscuro); }
+.kpi-cifra.libre strong { color: var(--ip-texto-secundario); }
+.kpi-cifra.reservada strong { color: #a08c46; }
+.kpi-porcentaje {
+    margin-left: auto;
+    align-self: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--ip-oliva-suave);
+    border: 1px solid #b6c7a9;
+    color: var(--ip-oliva-oscuro);
+    font-size: .72rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Barra de ocupación: ocupadas (oliva) + reservadas (oro) + libres (gris) */
+.kpi-progreso {
+    display: block;
+    height: 7px;
+    border-radius: 999px;
+    background: #eceade;
+    overflow: hidden;
+}
+.kpi-progreso-relleno {
+    display: block;
+    height: 100%;
+    width: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg,
+        var(--ip-oliva) 0 var(--pct-ocupado, 0%),
+        var(--ip-oro) var(--pct-ocupado, 0%) var(--pct-acumulado, 0%),
+        #e4e1d3 var(--pct-acumulado, 0%) 100%);
+    transition: width .18s ease;
+}
+
 .segmento-meta {
     min-width: 0;
     overflow: hidden;
@@ -534,7 +729,33 @@ td { font-size: .84rem; }
 }
 .segmento-titulo h3 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--ip-texto); }
 .segmento-titulo p { margin: 4px 0 0; color: var(--ip-texto-suave); font-size: .82rem; }
-.segmento-estado { display: flex; align-items: center; gap: 8px; }
+.segmento-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.barra-kpi {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 3px 10px;
+    border: 1px solid var(--ip-borde);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ip-texto-suave);
+    font-size: .74rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.barra-kpi strong {
+    color: var(--ip-texto);
+    font-size: .92rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+.barra-kpi.libre strong { color: var(--ip-texto-secundario); }
+.barra-kpi.porcentaje {
+    border-color: #b6c7a9;
+    background: var(--ip-oliva-suave);
+    color: var(--ip-oliva-oscuro);
+    font-weight: 700;
+}
 
 /* =========================================================
    TABLA DE IP

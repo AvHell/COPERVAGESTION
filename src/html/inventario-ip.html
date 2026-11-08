@@ -18,7 +18,7 @@
         <div class="header-actions">
             <button id="btn-catalogos" type="button" class="button secondary" data-permiso="equipos:listado:ver">Catálogos</button>
             <button id="btn-exportar" type="button" class="button secondary" data-permiso="equipos:listado:exportar">Exportar a Excel</button>
-            <button id="btn-recargar" type="button" class="button secondary">Actualizar</button>
+            <button id="btn-recargar" type="button" class="button secondary" data-permiso="equipos:listado:ver">Actualizar</button>
         </div>
     </header>
 
@@ -71,21 +71,6 @@
                                 <th>Puerto Fortinet</th>
                                 <th>Descripción</th>
                                 <th>Acciones</th>
-                            </tr>
-                            <tr class="fila-filtros">
-                                <th><select data-filtro="Origen" aria-label="Filtrar por origen"><option value="">Todos</option></select></th>
-                                <th><select data-filtro="Estado" aria-label="Filtrar por estado"><option value="">Todos</option></select></th>
-                                <th><input data-filtro="IP" type="search" placeholder="Filtrar IP"></th>
-                                <th><input data-filtro="Hostname" type="search" placeholder="Filtrar hostname"></th>
-                                <th><input data-filtro="MAC" type="search" placeholder="Filtrar MAC"></th>
-                                <th><select data-filtro="Dispositivo" aria-label="Filtrar por dispositivo"><option value="">Todos</option></select></th>
-                                <th><select data-filtro="TipoEquipo" aria-label="Filtrar por tipo"><option value="">Todos</option></select></th>
-                                <th><select data-filtro="Piso" aria-label="Filtrar por piso"><option value="">Todos</option></select></th>
-                                <th><select data-filtro="ClienteCodigo" aria-label="Filtrar por cliente"><option value="">Todos</option></select></th>
-                                <th><select data-filtro="Site" aria-label="Filtrar por switch"><option value="">Todos</option></select></th>
-                                <th><input data-filtro="PuertoFortinet" type="search" placeholder="Filtrar puerto"></th>
-                                <th><input data-filtro="Descripcion" type="search" placeholder="Filtrar descripción"></th>
-                                <th><button id="btn-limpiar-filtros" type="button" class="button secondary btn-limpiar-filtros" title="Limpiar filtros">Limpiar</button></th>
                             </tr>
                         </thead>
                         <tbody id="tabla-ip"></tbody>

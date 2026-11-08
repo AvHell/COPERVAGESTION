@@ -29,13 +29,18 @@
       label: 'Administrador',
       modulos: [
         { key: 'usuarios', label: 'Usuarios', permiso: 'usuarios', icon: '♙' }
-     
       ]
     }
   ];
 
+  /* =========================================================
+     REGLAS EXPLÍCITAS POR PÁGINA
+     Se aplican primero: cualquier `data-permiso` declarado aquí
+     gana sobre la inferencia automática.
+     ========================================================= */
   const REGLAS_PAGINA = {
     'catalogos.html': {
+      '#menu-toggle': 'catalogos',
       '.tab-btn[data-tab="clientes"]': 'catalogos',
       '.tab-btn[data-tab="pisos"]': 'catalogos',
       '.tab-btn[data-tab="roles"]': 'catalogos',
@@ -68,6 +73,7 @@
       '#btn-nuevo': 'equipos:crear',
       '#btn-guardar': 'equipos:crear|equipos:editar',
       '#btn-exportar-excel': 'equipos:listado:exportar',
+      '#btn-control-ip': 'equipos:listado:ver',
       '#btn-nuevo-dominio': 'catalogos:dominios:gestionar',
       '.btn-agregar-mini[data-tipo]': 'catalogos:config:gestionar',
       '#btn-ips-disponibles': 'equipos:listado:ver',
@@ -78,8 +84,8 @@
       '#btn-rangos-ip': 'equipos',
       '#rangos-filtro-cliente': 'equipos',
       '#btn-rangos-auditar': 'equipos:rangos:auditar|equipos',
-      '#btn-rangos-lote': 'equipos:rangos:crear',
       '#btn-rango-nuevo': 'equipos:rangos:crear',
+      '#btn-sugerir-rango': 'equipos:rangos:crear|equipos:rangos:editar',
       '#rango-guardar': 'equipos:rangos:crear|equipos:rangos:editar',
       '#rangos-lista button.secundario': 'equipos:rangos:editar',
       '#rangos-lista button.peligro': 'equipos:rangos:eliminar'
@@ -91,10 +97,17 @@
       '#btn-aplicar-dim-der': 'plano:editar-dim',
       '#btn-modo-zona': 'plano:zonas:gestionar',
       '#btn-modo-zona-libre': 'plano:zonas:gestionar',
+      '#btn-modo-edicion': 'equipos:editar',
       '#modal-zona-aceptar': 'plano:zonas:gestionar',
+      '#modal-zona-eliminar': 'plano:zonas:eliminar',
       '#modal-zona-libre-aceptar': 'plano:zonas:gestionar',
+      '#modal-zona-libre-eliminar': 'plano:zonas:eliminar',
+      '#mover-confirmar': 'plano:mover|plano:asignar',
+      '#modal-aceptar': 'plano:mover|plano:asignar',
+      '#btn-limpiar-seleccion': 'plano:mover|plano:asignar',
       '#editar-confirmar': 'equipos:editar',
-      '.btn-editar-equipo': 'equipos:editar'
+      '.btn-editar-equipo': 'equipos:editar',
+      '.tabla-equipos button.secundario': 'equipos:editar'
     },
     'clientes.html': {
       '#btn-nuevo': 'catalogos:clientes:crear',
@@ -102,19 +115,9 @@
       '#tabla-clientes button.secundario': 'catalogos:clientes:editar',
       '#tabla-clientes button.peligro': 'catalogos:clientes:eliminar'
     },
-    'usuarios.html': {
-      '#btn-nuevo': 'usuarios:crear',
-      '#btn-guardar': 'usuarios:crear|usuarios:editar',
-      '#btn-nuevo-rol': 'usuarios',
-      '#btn-permisos': 'usuarios',
-      '#btn-guardar-rol': 'usuarios',
-      '#btn-editar-rol': 'usuarios',
-      '#btn-toggle-rol': 'usuarios',
-      '#btn-eliminar-rol': 'usuarios',
-      '.card-tabla': 'usuarios:listado:ver',
-      '#tabla-usuarios': 'usuarios:listado:ver',
-      '#tabla-usuarios button.secundario': 'usuarios:editar',
-      '#tabla-usuarios button.peligro': 'usuarios:eliminar'
+    'lugares.html': {
+      '#btn-nuevo': 'catalogos:pisos:crear',
+      '#btn-guardar': 'catalogos:pisos:crear|catalogos:pisos:editar'
     },
     'roles.html': {
       '#btn-nuevo': 'catalogos:roles:crear',
@@ -132,28 +135,272 @@
       'table button.secundario': 'catalogos:config:gestionar',
       'table button.peligro': 'catalogos:config:gestionar'
     },
-    'lugares.html': {
-      '#btn-nuevo': 'catalogos:pisos:crear',
-      '#btn-guardar': 'catalogos:pisos:crear|catalogos:pisos:editar',
-      'table button.secundario': 'catalogos:pisos:editar',
-      'table button.peligro': 'catalogos:pisos:eliminar'
+    'usuarios.html': {
+      '#btn-nuevo': 'usuarios:crear',
+      '#btn-guardar': 'usuarios:crear|usuarios:editar',
+      '#btn-nuevo-rol': 'usuarios',
+      '#btn-permisos': 'usuarios',
+      '#btn-guardar-rol': 'usuarios',
+      '#btn-editar-rol': 'usuarios',
+      '#btn-toggle-rol': 'usuarios',
+      '#btn-eliminar-rol': 'usuarios',
+      '.card-tabla': 'usuarios:listado:ver',
+      '#tabla-usuarios': 'usuarios:listado:ver',
+      '#tabla-usuarios button.secundario': 'usuarios:editar',
+      '#tabla-usuarios button.peligro': 'usuarios:eliminar'
+    },
+    'inventario-ip.html': {
+      '#btn-recargar': 'equipos:listado:ver',
+      '#btn-catalogos': 'equipos:listado:ver',
+      '#btn-exportar': 'equipos:listado:exportar',
+      '#lista-segmentos': 'equipos:listado:ver',
+      '#tabla-ip': 'equipos:listado:ver',
+      '#btn-nuevo-registro': 'equipos:crear',
+      '#btn-guardar': 'equipos:crear|equipos:editar',
+      '#btn-nueva-opcion': 'equipos:crear',
+      '#btn-guardar-catalogo': 'equipos:crear',
+      '#tabla-ip .actions button.secondary': 'equipos:editar',
+      '#tabla-ip .actions button.danger': 'equipos:eliminar'
     },
     'mantenimientos.html': {
-      '#btn-nuevo': 'mantenimientos:crear',
+      '#mapa': 'mantenimientos',
       '#btn-guardar': 'mantenimientos:crear',
       '#btn-exportar-excel': 'mantenimientos',
-      '#btn-ver-historial': 'mantenimientos'
+      '#btn-ver-historial': 'mantenimientos',
+      '#btn-actualizar': 'mantenimientos',
+      '#btn-cerrar-historial': 'mantenimientos'
     },
     'historico.html': {
       '.main-content': 'historico'
-    },
+    }
   };
+
+  const REGLAS_ACTIVOFIJO = {
+    'catalogos.html': {
+      '#btn-nuevo': 'af-cat:crear',
+      '#btn-guardar': 'af-cat:crear|af-cat:editar',
+      '#card-tabla': 'af-cat:listado:ver'
+    },
+    'activos.html': {
+      '#btn-nuevo': 'af-act:crear',
+      '#btn-guardar': 'af-act:crear|af-act:editar',
+      '#btn-exportar': 'af-act:listado:ver',
+      '#card-tabla': 'af-act:listado:ver'
+    },
+    'responsivas.html': {
+      '#btn-nuevo': 'af-resp:crear',
+      '#btn-guardar': 'af-resp:crear|af-resp:editar',
+      '#btn-catalogos-responsiva': 'activofijo_responsivas',
+      '#card-tabla': 'af-resp:listado:ver',
+      '[data-agregar]': 'activofijo_responsivas',
+      '[data-editar]': 'activofijo_responsivas',
+      '[data-guardar]': 'activofijo_responsivas',
+      '[data-eliminar]': 'activofijo_responsivas'
+    },
+    'reportes.html': {
+      '#btn-exportar': 'af-rep:exportar',
+      '#btn-recargar': 'af-rep:ver',
+      '#card-tabla': 'af-rep:ver'
+    },
+    'importar.html': {
+      '#btn-importar': 'af-imp:ejecutar',
+      '#btn-descargar-plantilla': 'af-imp:ejecutar'
+    }
+  };
+
+  /* =========================================================
+     CONTEXTO POR PÁGINA (base de la inferencia automática)
+     Cada acción del DOM se traduce a la clave real del catálogo.
+     ========================================================= */
+  const CONTEXTOS = {
+    'equipos.html': {
+      ver: 'equipos:listado:ver',
+      crear: 'equipos:crear',
+      editar: 'equipos:editar',
+      eliminar: 'equipos:eliminar',
+      guardar: 'equipos:crear|equipos:editar',
+      exportar: 'equipos:listado:exportar',
+      importar: 'equipos:listado:exportar',
+      gestionar: 'equipos',
+      asignar: 'equipos:editar'
+    },
+    'inventario-ip.html': {
+      ver: 'equipos:listado:ver',
+      crear: 'equipos:crear',
+      editar: 'equipos:editar',
+      eliminar: 'equipos:eliminar',
+      guardar: 'equipos:crear|equipos:editar',
+      exportar: 'equipos:listado:exportar',
+      importar: 'equipos:listado:exportar',
+      gestionar: 'equipos',
+      asignar: 'equipos:editar'
+    },
+    'plano.html': {
+      ver: 'plano:ver',
+      crear: 'plano:asignar',
+      editar: 'equipos:editar',
+      eliminar: 'plano:zonas:eliminar|plano:quitar',
+      guardar: 'plano:asignar|plano:mover',
+      exportar: 'plano:exportar',
+      gestionar: 'plano:zonas:gestionar',
+      asignar: 'plano:asignar'
+    },
+    'mantenimientos.html': {
+      ver: 'mantenimientos',
+      crear: 'mantenimientos:crear',
+      editar: 'mantenimientos:fecha:editar',
+      eliminar: 'mantenimientos',
+      guardar: 'mantenimientos:crear',
+      exportar: 'mantenimientos',
+      gestionar: 'mantenimientos'
+    },
+    'usuarios.html': {
+      ver: 'usuarios:listado:ver',
+      crear: 'usuarios:crear',
+      editar: 'usuarios:editar',
+      eliminar: 'usuarios:eliminar',
+      guardar: 'usuarios:crear|usuarios:editar',
+      exportar: 'usuarios:listado:ver',
+      gestionar: 'usuarios',
+      asignar: 'usuarios:asignar-rol'
+    },
+    'roles.html': {
+      ver: 'catalogos',
+      crear: 'catalogos:roles:crear',
+      editar: 'catalogos:roles:editar',
+      eliminar: 'catalogos:roles:eliminar',
+      guardar: 'catalogos:roles:crear|catalogos:roles:editar',
+      gestionar: 'catalogos'
+    },
+    'clientes.html': {
+      ver: 'catalogos',
+      crear: 'catalogos:clientes:crear',
+      editar: 'catalogos:clientes:editar',
+      eliminar: 'catalogos:clientes:eliminar',
+      guardar: 'catalogos:clientes:crear|catalogos:clientes:editar',
+      gestionar: 'catalogos'
+    },
+    'lugares.html': {
+      ver: 'catalogos',
+      crear: 'catalogos:pisos:crear',
+      editar: 'catalogos:pisos:editar',
+      eliminar: 'catalogos:pisos:eliminar',
+      guardar: 'catalogos:pisos:crear|catalogos:pisos:editar',
+      gestionar: 'catalogos'
+    },
+    'dominios.html': {
+      ver: 'catalogos:dominios:gestionar',
+      crear: 'catalogos:dominios:gestionar',
+      editar: 'catalogos:dominios:gestionar',
+      eliminar: 'catalogos:dominios:gestionar',
+      guardar: 'catalogos:dominios:gestionar',
+      gestionar: 'catalogos:dominios:gestionar'
+    },
+    'configred.html': {
+      ver: 'catalogos:config:gestionar',
+      crear: 'catalogos:config:gestionar',
+      editar: 'catalogos:config:gestionar',
+      eliminar: 'catalogos:config:gestionar',
+      guardar: 'catalogos:config:gestionar',
+      gestionar: 'catalogos:config:gestionar'
+    },
+    'catalogos.html': {
+      ver: 'catalogos',
+      crear: 'catalogos',
+      editar: 'catalogos',
+      eliminar: 'catalogos',
+      guardar: 'catalogos',
+      exportar: 'catalogos',
+      gestionar: 'catalogos'
+    },
+    'historico.html': {
+      ver: 'historico',
+      exportar: 'historico',
+      gestionar: 'historico'
+    }
+  };
+
+  const CONTEXTOS_ACTIVOFIJO = {
+    'catalogos.html': {
+      ver: 'af-cat:listado:ver',
+      crear: 'af-cat:crear',
+      editar: 'af-cat:editar',
+      eliminar: 'af-cat:eliminar',
+      guardar: 'af-cat:crear|af-cat:editar',
+      exportar: 'af-cat:listado:ver',
+      gestionar: 'activofijo_catalogos'
+    },
+    'activos.html': {
+      ver: 'af-act:listado:ver',
+      crear: 'af-act:crear',
+      editar: 'af-act:editar',
+      eliminar: 'af-act:eliminar',
+      guardar: 'af-act:crear|af-act:editar',
+      exportar: 'af-act:listado:ver',
+      gestionar: 'activofijo_activos'
+    },
+    'responsivas.html': {
+      ver: 'af-resp:listado:ver',
+      crear: 'af-resp:crear',
+      editar: 'af-resp:editar',
+      eliminar: 'af-resp:eliminar',
+      guardar: 'af-resp:crear|af-resp:editar',
+      exportar: 'af-resp:pdf',
+      gestionar: 'activofijo_responsivas'
+    },
+    'reportes.html': {
+      ver: 'af-rep:ver',
+      exportar: 'af-rep:exportar',
+      gestionar: 'activofijo_reportes'
+    },
+    'importar.html': {
+      ver: 'activofijo_importar',
+      crear: 'af-imp:ejecutar',
+      guardar: 'af-imp:ejecutar',
+      exportar: 'af-imp:ejecutar',
+      gestionar: 'activofijo_importar'
+    }
+  };
+
+  /* Tokens que identifican la acción de un control. Se comparan por
+     palabra completa (id/texto partidos por separadores), así "btn-volver"
+     nunca se confunde con "ver". El orden define la prioridad. */
+  const TOKENS_ACCION = [
+    ['eliminar', ['eliminar', 'elimina', 'eliminacion', 'borrar', 'borra', 'quitar', 'quita', 'desactivar', 'danger', 'peligro', 'trash']],
+    ['exportar', ['exportar', 'exporta', 'excel', 'xlsx', 'pdf', 'descargar', 'descarga', 'imprimir']],
+    ['importar', ['importar', 'importa', 'importacion', 'subir', 'plantilla', 'carga']],
+    ['editar', ['editar', 'edita', 'edicion', 'modificar', 'modifica']],
+    ['guardar', ['guardar', 'guarda', 'aceptar', 'aplicar', 'confirmar', 'save']],
+    ['crear', ['nuevo', 'nueva', 'crear', 'crea', 'agregar', 'agrega', 'anadir', 'añadir', 'registrar', 'registra', 'alta']],
+    ['asignar', ['asignar', 'asigna', 'permisos', 'permiso', 'rol', 'roles']],
+    ['ver', ['ver', 'consultar', 'consulta', 'auditar', 'auditoria', 'recargar', 'actualizar', 'catalogo', 'catalogos', 'listado', 'historial', 'detalle', 'seleccionar']]
+  ];
+
+  /* Acciones detectables por selector genérico (filas de tabla, etc.). */
+  const SELECTORES_ACCION = {
+    editar: '.btn-accion.editar, button.editar, [data-accion="editar"], [data-editar], table button.secundario, .data-table button.secundario, .acciones-tabla button.secundario',
+    eliminar: '.btn-accion.eliminar, button.eliminar, button.peligro, button.danger, [data-accion="eliminar"], [data-eliminar], table button.peligro, .acciones-tabla button.peligro',
+    crear: '.btn-accion.crear, button.crear, [data-accion="crear"], [data-agregar]',
+    guardar: '[data-accion="guardar"], [data-guardar]',
+    exportar: '[data-accion="exportar"], [data-exportar]',
+    ver: '[data-accion="ver"], [data-ver], .card-tabla table, table.data-table'
+  };
+
+  const SELECTOR_CONTROL = 'button, input[type="submit"], input[type="button"], [role="button"]';
 
   let permisos = {};
   let rol = null;
   let observer = null;
+  let iniciando = null;
   const coloresClientes = new Map();
   const coloresRoles = new Map();
+  /* Estado propio de cada elemento antes de que PermisosUI lo ocultara:
+     así devolvemos el control tal cual estaba si el permiso vuelve. */
+  const estados = new WeakMap();
+  const pendientes = new Set();
+  let temporizador = null;
+
+  /* ---------- Permisos ---------- */
 
   function puede(claves) {
     if (rol === 'ADMIN') return true;
@@ -170,93 +417,173 @@
     return /[\\/]activofijo[\\/]html[\\/]/i.test(location.pathname);
   }
 
+  function reglasDePagina(pagina = obtenerPagina()) {
+    if (esActivoFijo()) return REGLAS_ACTIVOFIJO[pagina] || {};
+    return REGLAS_PAGINA[pagina] || {};
+  }
+
+  function contextoDePagina(pagina = obtenerPagina()) {
+    if (esActivoFijo()) return CONTEXTOS_ACTIVOFIJO[pagina] || null;
+    return CONTEXTOS[pagina] || null;
+  }
+
+  /* ---------- Inferencia de permisos ---------- */
+
+  function partirEnTokens(texto) {
+    return String(texto || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z]+/)
+      .filter(Boolean);
+  }
+
+  function accionPorTokens(tokens) {
+    if (!tokens.length) return null;
+    for (const [accion, lista] of TOKENS_ACCION) {
+      if (tokens.some(token => lista.includes(token))) return accion;
+    }
+    return null;
+  }
+
+  /** Acción deducible de un control, o null si no se puede interpretar. */
+  function accionDeElemento(el) {
+    const declarada = String(el.dataset.accion || '').toLowerCase();
+    if (declarada && TOKENS_ACCION.some(([accion]) => accion === declarada)) return declarada;
+
+    const porId = accionPorTokens(partirEnTokens(el.id));
+    if (porId) return porId;
+
+    const porClases = accionPorTokens(partirEnTokens(typeof el.className === 'string' ? el.className : ''));
+    if (porClases) return porClases;
+
+    if (el.tagName === 'INPUT') {
+      const porValor = accionPorTokens(partirEnTokens(el.value));
+      if (porValor) return porValor;
+    }
+
+    return accionPorTokens(partirEnTokens((el.textContent || '').slice(0, 60)));
+  }
+
+  /** Aplica la inferencia dentro de `root`, reciclando lo ya asignado. */
+  function inferirPermisos(root) {
+    const contexto = contextoDePagina();
+    if (!contexto) return;
+
+    const candidatos = [];
+    if (root.nodeType === Node.ELEMENT_NODE && root.matches?.(SELECTOR_CONTROL)) candidatos.push(root);
+    if (root.querySelectorAll) candidatos.push(...root.querySelectorAll(SELECTOR_CONTROL));
+
+    for (const el of candidatos) {
+      if (el.closest('.app-sidebar')) continue;
+
+      const previo = el.dataset.permisoAuto;
+      const accion = accionDeElemento(el);
+      const permiso = accion ? contexto[accion] : null;
+
+      if (previo) {
+        /* Reciclaje: si la regla cambió o desapareció, limpiamos en vez de
+           arrastrar un permiso viejo (nada de basura acumulada). */
+        if (!permiso) {
+          el.removeAttribute('data-permiso');
+          delete el.dataset.permisoAuto;
+        } else if (el.dataset.permiso !== permiso) {
+          el.dataset.permiso = permiso;
+        }
+        continue;
+      }
+
+      if (el.hasAttribute('data-permiso') || !permiso) continue;
+      el.dataset.permisoAuto = accion;
+      el.dataset.permiso = permiso;
+    }
+  }
+
+  /* ---------- Aplicación de reglas ---------- */
+
   function aplicarReglasPagina(root = document) {
-    const reglasAF = {
-      'catalogos.html': {
-        '#btn-nuevo': 'af-cat:crear',
-        '#btn-guardar': 'af-cat:crear|af-cat:editar',
-        '#card-tabla': 'af-cat:listado:ver'
-      },
-      'activos.html': {
-        '#btn-nuevo': 'af-act:crear',
-        '#btn-guardar': 'af-act:crear|af-act:editar',
-        '#btn-exportar': 'af-act:listado:ver',
-        '#card-tabla': 'af-act:listado:ver'
-      },
-      'responsivas.html': {
-        '#btn-nuevo': 'af-resp:crear',
-        '#btn-guardar': 'af-resp:crear|af-resp:editar',
-        '#btn-catalogos-responsiva': 'activofijo_responsivas',
-        '#card-tabla': 'af-resp:listado:ver',
-        '[data-agregar]': 'activofijo_responsivas',
-        '[data-editar]': 'activofijo_responsivas',
-        '[data-guardar]': 'activofijo_responsivas',
-        '[data-eliminar]': 'activofijo_responsivas'
-      },
-      'reportes.html': {
-        '#btn-exportar': 'af-rep:exportar',
-        '#btn-recargar': 'af-rep:ver',
-        '#card-tabla': 'af-rep:ver'
-      },
-      'importar.html': { '#btn-importar': 'af-imp:ejecutar', '#btn-descargar-plantilla': 'af-imp:ejecutar' }
-    };
-    const pagina = obtenerPagina();
-    const reglas = esActivoFijo() ? (reglasAF[pagina] || {}) : (REGLAS_PAGINA[pagina] || {});
+    const reglas = reglasDePagina();
     for (const [selector, permiso] of Object.entries(reglas)) {
-      const elementos = [...root.querySelectorAll(selector)];
+      const elementos = root.querySelectorAll ? [...root.querySelectorAll(selector)] : [];
       if (root.matches?.(selector)) elementos.unshift(root);
       elementos.forEach(el => {
         if (!el.hasAttribute('data-permiso')) el.setAttribute('data-permiso', permiso);
       });
     }
 
-    const paginaAF = esActivoFijo();
-    const acciones = {
-      editar: {
-        'equipos.html': 'equipos:editar', 'usuarios.html': 'usuarios:editar',
-        'clientes.html': 'catalogos:clientes:editar', 'catalogos.html': 'catalogos:clientes:editar',
-        'roles.html': 'catalogos:roles:editar', 'activos.html': 'af-act:editar', 'responsivas.html': 'af-resp:editar'
-      },
-      eliminar: {
-        'equipos.html': 'equipos:eliminar', 'usuarios.html': 'usuarios:eliminar',
-        'clientes.html': 'catalogos:clientes:eliminar', 'catalogos.html': 'catalogos:clientes:eliminar',
-        'roles.html': 'catalogos:roles:eliminar',
-        'activos.html': 'af-act:eliminar', 'responsivas.html': 'af-resp:eliminar'
-      },
-      restaurar: { 'activos.html': 'af-act:restaurar', 'catalogos.html': 'af-cat:restaurar' },
-      devolver: { 'responsivas.html': 'af-resp:devolver' },
-      exito: { 'responsivas.html': 'af-resp:devolver' },
-      guardar: { 'responsivas.html': 'af-resp:pdf' },
-      ver: { 'responsivas.html': 'af-resp:pdf', 'activos.html': 'af-act:listado:ver' },
-      historial: { 'activos.html': 'af-act:listado:ver' }
-    };
-    for (const accion of Object.keys(acciones)) {
-      const elementos = [...root.querySelectorAll(`.btn-accion.${accion}, button.${accion}, [data-accion="${accion}"]`)];
-      if (root.matches?.(`.btn-accion.${accion}, button.${accion}, [data-accion="${accion}"]`)) elementos.unshift(root);
-      elementos.forEach(el => {
-        const permiso = paginaAF && pagina === 'catalogos.html'
-          ? (accion === 'restaurar' ? 'af-cat:restaurar' : `af-cat:${accion}`)
-          : acciones[accion][pagina];
-        if (!el.hasAttribute('data-permiso') && permiso) {
-          el.setAttribute('data-permiso', permiso);
-        }
-      });
+    const contexto = contextoDePagina();
+    if (contexto) {
+      for (const [accion, selector] of Object.entries(SELECTORES_ACCION)) {
+        const permiso = contexto[accion];
+        if (!permiso) continue;
+        const elementos = root.querySelectorAll ? [...root.querySelectorAll(selector)] : [];
+        if (root.matches?.(selector)) elementos.unshift(root);
+        elementos.forEach(el => {
+          if (!el.hasAttribute('data-permiso')) el.setAttribute('data-permiso', permiso);
+        });
+      }
     }
+
+    inferirPermisos(root);
     aplicar(root);
   }
 
-  function aplicar(root = document) {
-    const elementos = [];
-    if (root.matches?.('[data-permiso]')) elementos.push(root);
-    elementos.push(...root.querySelectorAll('[data-permiso]'));
-    elementos.forEach(el => {
-      const permitido = puede(el.dataset.permiso);
-      el.hidden = !permitido;
-      el.classList.toggle('permiso-ui-oculto', !permitido);
-      if ('disabled' in el) el.disabled = !permitido;
-      el.setAttribute('aria-hidden', permitido ? 'false' : 'true');
-    });
+  /** Devuelve un control a cómo estaba antes de que PermisosUI lo ocultara. */
+  function restaurarNatural(el) {
+    const estado = estados.get(el);
+    if (!estado) {
+      el.classList.remove('permiso-ui-oculto');
+      return;
+    }
+    el.hidden = estado.hidden === true;
+    if ('disabled' in el && estado.disabled !== null) el.disabled = estado.disabled;
+    el.classList.remove('permiso-ui-oculto');
+    if (estado.aria === null || estado.aria === undefined) el.removeAttribute('aria-hidden');
+    else el.setAttribute('aria-hidden', estado.aria);
+    /* Estado natural devuelto: la próxima vez volvemos a capturarlo, así no
+       arrastramos un estado viejo (nada de basura acumulada). */
+    estados.delete(el);
   }
+
+  function aplicarElemento(el) {
+    const permitido = puede(el.dataset.permiso);
+    const estado = estados.get(el);
+
+    if (!permitido) {
+      if (!estado) {
+        /* Primera vez que lo ocultamos: guardamos cómo estaba. */
+        estados.set(el, {
+          hidden: el.hidden,
+          disabled: 'disabled' in el ? el.disabled : null,
+          aria: el.getAttribute('aria-hidden'),
+          oculto: true
+        });
+      }
+      el.hidden = true;
+      el.classList.add('permiso-ui-oculto');
+      if ('disabled' in el) el.disabled = true;
+      el.setAttribute('aria-hidden', 'true');
+      return;
+    }
+
+    if (!estado || !estado.oculto) {
+      /* Nunca lo ocultamos nosotros: no tocamos su visibilidad para no
+         des-ocultar controles que la propia página esconde por su lógica. */
+      el.classList.remove('permiso-ui-oculto');
+      return;
+    }
+
+    restaurarNatural(el);
+  }
+
+  function aplicar(root = document) {
+    const lista = [];
+    if (root.nodeType === Node.ELEMENT_NODE && root.matches?.('[data-permiso]')) lista.push(root);
+    if (root.querySelectorAll) lista.push(...root.querySelectorAll('[data-permiso]'));
+    lista.forEach(aplicarElemento);
+  }
+
+  /* ---------- Colores de clientes y roles ---------- */
 
   function contraste(hex) {
     const canales = hex.slice(1).match(/.{2}/g).map(canal => parseInt(canal, 16) / 255)
@@ -266,20 +593,20 @@
 
   function aplicarColores(root = document) {
     const elementos = [];
-    if (root.matches?.('[data-color], [data-rol]')) elementos.push(root);
-    elementos.push(...root.querySelectorAll('[data-color], [data-rol]'));
+    if (root.nodeType === Node.ELEMENT_NODE && root.matches?.('[data-color], [data-rol]')) elementos.push(root);
+    if (root.querySelectorAll) elementos.push(...root.querySelectorAll('[data-color], [data-rol]'));
     elementos.forEach(el => {
       const codigo = String(el.dataset.color || el.dataset.rol || '').trim().toUpperCase();
       if (!codigo || codigo === 'BOTON') return;
+      const pagina = obtenerPagina();
       const esCliente = el.matches('.badge-cliente, .badge-cli') ||
         el.dataset.colorKind === 'client' ||
-        (obtenerPagina() === 'clientes.html' && el.matches('.badge-codigo'));
+        (pagina === 'clientes.html' && el.matches('.badge-codigo'));
       const esRol = el.matches('.rol-pill, .hostname-badge') ||
         el.matches('.badge-equipo') ||
         el.hasAttribute('data-rol') ||
         el.dataset.colorKind === 'role' ||
-        ((obtenerPagina() === 'roles.html' || obtenerPagina() === 'catalogos.html') &&
-          el.matches('.badge-codigo'));
+        ((pagina === 'roles.html' || pagina === 'catalogos.html') && el.matches('.badge-codigo'));
       const color = esCliente ? coloresClientes.get(codigo) : esRol ? coloresRoles.get(codigo) : null;
       if (!color || !/^#[0-9A-F]{6}$/i.test(color)) return;
       const esCeldaEquipo = el.matches('.celda[data-rol]');
@@ -322,12 +649,17 @@
     }
   }
 
+  /* ---------- Menú lateral ---------- */
+
   function montarMenu() {
     if (obtenerPagina() === 'login.html' || document.querySelector('.app-sidebar')) return;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = esActivoFijo() ? '../../css/app-shell.css' : '../css/app-shell.css';
-    document.head.appendChild(link);
+    if (!document.getElementById('app-shell-css')) {
+      const link = document.createElement('link');
+      link.id = 'app-shell-css';
+      link.rel = 'stylesheet';
+      link.href = esActivoFijo() ? '../../css/app-shell.css' : '../css/app-shell.css';
+      document.head.appendChild(link);
+    }
     document.body.classList.add('app-shell');
 
     const aside = document.createElement('aside');
@@ -400,10 +732,10 @@
 
     aside.querySelector('.app-sidebar-toggle').addEventListener('click', () => {
       document.body.classList.toggle('app-sidebar-collapsed');
-      const collapsed = document.body.classList.contains('app-sidebar-collapsed');
-      localStorage.setItem('app-sidebar-collapsed', String(collapsed));
-      aside.querySelector('.app-sidebar-toggle').textContent = collapsed ? '›' : '‹';
-      aside.querySelector('.app-sidebar-toggle').setAttribute('aria-label', collapsed ? 'Expandir menú' : 'Contraer menú');
+      const colapsado = document.body.classList.contains('app-sidebar-collapsed');
+      localStorage.setItem('app-sidebar-collapsed', String(colapsado));
+      aside.querySelector('.app-sidebar-toggle').textContent = colapsado ? '›' : '‹';
+      aside.querySelector('.app-sidebar-toggle').setAttribute('aria-label', colapsado ? 'Expandir menú' : 'Contraer menú');
     });
     aside.querySelector('.app-sidebar-logout').addEventListener('click', async () => {
       if (window.Swal) {
@@ -429,6 +761,8 @@
 
     document.querySelectorAll('#btn-volver').forEach(button => button.hidden = true);
   }
+
+  /* ---------- Estilos base de los diálogos ---------- */
 
   function instalarToastSinBlurNiCerrar() {
     const style = document.createElement('style');
@@ -479,7 +813,47 @@
     window.Swal.__globalToastFix = true;
   }
 
-  async function init() {
+  /* ---------- Observación del DOM (reciclaje continuo) ---------- */
+
+  function procesarPendientes() {
+    temporizador = null;
+    const raices = [...pendientes];
+    pendientes.clear();
+    /* Si un nodo ya está dentro de otra raíz pendiente, se revisa una sola
+       vez: evita trabajo repetido y listas que crecen sin control. */
+    const utiles = raices.filter(raiz =>
+      raiz !== document &&
+      raiz.isConnected &&
+      !raices.some(otra => otra !== raiz && otra !== document && otra.contains(raiz))
+    );
+    utiles.forEach(raiz => {
+      aplicarReglasPagina(raiz);
+      aplicarColores(raiz);
+    });
+  }
+
+  function programarRevision(raiz) {
+    if (!raiz) return;
+    pendientes.add(raiz);
+    if (temporizador) return;
+    temporizador = setTimeout(procesarPendientes, 60);
+  }
+
+  function observar() {
+    if (observer) observer.disconnect();
+    observer = new MutationObserver(mutaciones => {
+      mutaciones.forEach(mutacion => {
+        mutacion.addedNodes.forEach(nodo => {
+          if (nodo.nodeType === Node.ELEMENT_NODE) programarRevision(nodo);
+        });
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  /* ---------- Ciclo de vida ---------- */
+
+  async function cargarPermisos() {
     try {
       if (window.api?.permisos) {
         const [mapa, miRol] = await Promise.all([
@@ -494,18 +868,42 @@
       permisos = {};
       rol = null;
     }
+  }
 
+  async function arrancar() {
+    await cargarPermisos();
     aplicarReglasPagina();
     montarMenu();
-    if (observer) observer.disconnect();
-    observer = new MutationObserver(mutations => {
-      if (mutations.some(mutation => [...mutation.addedNodes].some(node => node.nodeType === Node.ELEMENT_NODE))) {
-        aplicarReglasPagina();
-        aplicarColores();
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observar();
     await refrescarColores();
+  }
+
+  function init() {
+    if (!iniciando) iniciando = arrancar();
+    return iniciando;
+  }
+
+  /**
+   * Vuelve a leer permisos y recicla todo: reglas, inferencia, menú y colores.
+   * Úsalo cuando cambien los permisos del rol en sesión.
+   */
+  async function refrescar(opciones = {}) {
+    await cargarPermisos();
+    if (opciones.menu !== false) {
+      document.querySelector('.app-sidebar')?.remove();
+      montarMenu();
+    }
+    document.querySelectorAll('[data-permiso-auto]').forEach(el => {
+      /* Primero devolvemos el control a su estado natural: si estaba
+         oculto por permisos y la regla desapareció, no debe quedarse
+         escondido (sería basura del filtro anterior). */
+      restaurarNatural(el);
+      delete el.dataset.permisoAuto;
+      el.removeAttribute('data-permiso');
+    });
+    aplicarReglasPagina();
+    if (opciones.colores !== false) await refrescarColores();
+    return true;
   }
 
   function mostrarError(texto) {
@@ -532,8 +930,11 @@
   window.PermisosUI = {
     init,
     aplicar: aplicarReglasPagina,
+    refrescar,
     refrescarColores,
     puede,
+    accionDe: accionDeElemento,
+    permisoDe: el => el?.dataset?.permiso || null,
     colorCliente: codigo => coloresClientes.get(String(codigo || '').trim().toUpperCase()) || null,
     colorRol: codigo => coloresRoles.get(String(codigo || '').trim().toUpperCase()) || null,
     puedoRemoto: async clave => {

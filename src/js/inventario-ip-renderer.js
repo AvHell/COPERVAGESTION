@@ -19,12 +19,11 @@ let rangosCliente = [];
 let clientesCatalogo = [];
 let ipOriginalRegistro = '';
 let tokenHintRango = 0;
-const filtrosColumna = {};
+
 
 const HOST_INICIAL = 1;
 const HOST_FINAL = 254;
 
-const CAMPOS_TEXTO = new Set(['IP', 'Hostname', 'MAC', 'PuertoFortinet', 'Descripcion']);
 const CAMPOS_BUSQUEDA = [
     'Origen', 'IP', 'Hostname', 'MAC', 'Descripcion', 'PuertoFortinet', 'Estado', 'Dispositivo',
     'TipoEquipo', 'Piso', 'ClienteCodigo', 'ClienteNombre', 'Site'
@@ -49,19 +48,21 @@ function contraste(hex) {
     return canales[0] * 0.2126 + canales[1] * 0.7152 + canales[2] * 0.0722 > 0.42 ? '#20271f' : '#ffffff';
 }
 
-/* Badge de cliente: usa el color configurado en Catálogos del Sistema
-   (Clientes.ColorHex) y cae al color por código de la hoja de estilos. */
+/* Badge de cliente: muestra SOLO el nombre del cliente (el código ya no se
+   repite en la tabla) con el color configurado en Catálogos del Sistema.
+   Si el cliente no tiene nombre registrado se usa el código como respaldo. */
 function badgeCliente(registro) {
     const codigo = String(registro?.ClienteCodigo || '').trim().toUpperCase();
-    if (!codigo) return badge('', 'cliente');
-    const color = window.PermisosUI?.colorCliente?.(codigo) || '';
-    const estilo = /^#[0-9A-F]{6}$/i.test(color)
+    const nombre = String(registro?.ClienteNombre || '').trim();
+    const etiqueta = nombre || codigo;
+    if (!etiqueta) return badge('', 'cliente');
+    const color = colorDeCliente(codigo);
+    const estilo = color
         ? ` style="background-color:${color} !important;border-color:${color} !important;color:${contraste(color)} !important"`
         : '';
-    const nombre = String(registro?.ClienteNombre || '').trim();
-    return `<span class="ip-badge cliente badge-cliente" data-color="${escaparHTML(codigo)}"${estilo}>`
-        + `<span class="codigo">${escaparHTML(codigo)}</span>`
-        + (nombre ? `<span class="nombre">${escaparHTML(nombre)}</span>` : '')
+    const titulo = codigo ? ` title="Cliente ${escaparHTML(codigo)}"` : '';
+    return `<span class="ip-badge cliente badge-cliente" data-color="${escaparHTML(codigo)}"${estilo}${titulo}>`
+        + `<span class="nombre">${escaparHTML(etiqueta)}</span>`
         + '</span>';
 }
 
@@ -471,62 +472,20 @@ function actualizarCabeceraSegmento() {
 }
 
 /* =========================================================
-   FILTROS POR COLUMNA
+   FILTRADO DE LA TABLA
+   La tabla se acota con el segmento elegido y con el buscador
+   general; no lleva filtros por columna.
    ========================================================= */
-
-function valoresUnicos(campo) {
-    const valores = new Set();
-    for (const fila of filas) {
-        if (campo === 'ClienteCodigo') {
-            if (fila.ClienteCodigo) valores.add(String(fila.ClienteCodigo));
-        } else if (fila[campo]) valores.add(String(fila[campo]));
-    }
-    return [...valores].sort((a, b) => a.localeCompare(b, 'es'));
-}
-
-function poblarFiltros() {
-    document.querySelectorAll('[data-filtro]').forEach(control => {
-        const campo = control.dataset.filtro;
-        if (!(control instanceof HTMLSelectElement)) return;
-        const valorActual = filtrosColumna[campo] || control.value || '';
-        const valores = valoresUnicos(campo);
-        control.replaceChildren(new Option('Todos', ''));
-        for (const valor of valores) {
-            const etiqueta = campo === 'ClienteCodigo'
-                ? `${valor} — ${filas.find(fila => String(fila.ClienteCodigo) === valor)?.ClienteNombre || ''}`.trim()
-                : valor;
-            control.add(new Option(etiqueta, valor));
-        }
-        control.value = valores.includes(valorActual) ? valorActual : '';
-        filtrosColumna[campo] = control.value;
-    });
-}
-
-function coincideFiltro(registro, campo, valor) {
-    const texto = String(valor || '').toLowerCase();
-    if (!texto) return true;
-    if (campo === 'ClienteCodigo') return String(registro.ClienteCodigo || '').toLowerCase() === texto;
-    const dato = String(registro[campo] ?? '').toLowerCase();
-    return CAMPOS_TEXTO.has(campo) ? dato.includes(texto) : dato === texto;
-}
 
 function registrosFiltrados() {
     const termino = $('busqueda').value.trim().toLowerCase();
     return filas.filter(registro => {
         if (segmentoActual && segmentoDe(registro.IP) !== segmentoActual) return false;
-        if (termino && !CAMPOS_BUSQUEDA.some(campo =>
+        if (!termino) return true;
+        return CAMPOS_BUSQUEDA.some(campo =>
             String(registro[campo] || '').toLowerCase().includes(termino)
-        )) return false;
-        return Object.entries(filtrosColumna).every(([campo, valor]) => coincideFiltro(registro, campo, valor));
+        );
     });
-}
-
-function limpiarFiltros() {
-    $('busqueda').value = '';
-    Object.keys(filtrosColumna).forEach(campo => { filtrosColumna[campo] = ''; });
-    document.querySelectorAll('[data-filtro]').forEach(control => { control.value = ''; });
-    paginaActual = 1;
-    renderizarTabla();
 }
 
 /* =========================================================
@@ -1147,55 +1106,39 @@ function limpiarFormularioCatalogo() {
    ========================================================= */
 
 async function exportarExcel() {
-    const segmentos = calcularSegmentos(filas).map(item => item.segmento).filter(segmento => segmento !== 'Sin IP');
-    const clientes = [...new Map(
-        registros.filter(registro => registro.ClienteCodigo)
-            .map(registro => [String(registro.ClienteCodigo), registro])
-    ).values()];
+    const segmentos = calcularSegmentos(filas)
+        .map(item => item.segmento)
+        .filter(segmento => segmento !== 'Sin IP');
+    if (!segmentos.length) {
+        return mostrarError('Todavía no hay segmentos con IP registradas para exportar.');
+    }
 
     const resultado = await fireSwal({
         title: 'Exportar a Excel',
         html: `
             <div class="exportar-form">
-                <label>Alcance
-                    <select id="exportar-alcance">
-                        <option value="todo">Todo el inventario</option>
-                        <option value="cliente">Por cliente</option>
-                        <option value="segmento">Por segmento</option>
-                    </select>
-                </label>
-                <label id="exportar-cliente-campo" hidden>Cliente
-                    <select id="exportar-cliente">
-                        ${clientes.map(registro => `<option value="${escaparHTML(registro.ClienteCodigo)}">${escaparHTML(registro.ClienteCodigo)} — ${escaparHTML(registro.ClienteNombre || '')}</option>`).join('')}
-                    </select>
-                </label>
-                <label id="exportar-segmento-campo" hidden>Segmento
+                <label>Segmento
                     <select id="exportar-segmento">
+                        <option value="">Todos los segmentos</option>
                         ${segmentos.map(segmento => `<option value="${escaparHTML(segmento)}">${escaparHTML(etiquetaSegmento(segmento))}</option>`).join('')}
                     </select>
                 </label>
+                <p class="exportar-ayuda">
+                    El archivo incluye las IP ocupadas, reservadas y libres del segmento elegido.
+                    Los encabezados llevan filtro para localizar cualquier dato en un clic.
+                </p>
             </div>`,
         showCancelButton: true,
         confirmButtonText: 'Exportar',
         cancelButtonText: 'Cancelar',
         didOpen: () => {
-            const alcance = document.getElementById('exportar-alcance');
-            const campos = {
-                cliente: document.getElementById('exportar-cliente-campo'),
-                segmento: document.getElementById('exportar-segmento-campo')
-            };
-            alcance.addEventListener('change', () => {
-                campos.cliente.hidden = alcance.value !== 'cliente';
-                campos.segmento.hidden = alcance.value !== 'segmento';
-            });
+            /* Si hay un segmento seleccionado en pantalla, se propone ese. */
+            const selector = document.getElementById('exportar-segmento');
+            if (selector && segmentoActual && segmentos.includes(segmentoActual)) {
+                selector.value = segmentoActual;
+            }
         },
-        preConfirm: () => {
-            const alcance = document.getElementById('exportar-alcance').value;
-            return {
-                cliente: alcance === 'cliente' ? document.getElementById('exportar-cliente').value : null,
-                segmento: alcance === 'segmento' ? document.getElementById('exportar-segmento').value : null
-            };
-        }
+        preConfirm: () => ({ segmento: document.getElementById('exportar-segmento')?.value || null })
     });
     if (!resultado.isConfirmed) return;
     try {
@@ -1248,7 +1191,6 @@ async function cargar() {
        para que un alta o cambio de ColorHex se vea al recargar la tabla. */
     await window.PermisosUI?.refrescarColores?.();
     actualizarFormularioCatalogos();
-    poblarFiltros();
     renderizarSegmentos();
     renderizarTabla();
     renderizarCatalogos();
@@ -1326,7 +1268,7 @@ $('btn-nueva-opcion').addEventListener('click', () => abrirModalCatalogo());
 $('btn-cerrar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('btn-cancelar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('btn-exportar').addEventListener('click', () => exportarExcel().catch(error => mostrarError(error.message)));
-$('btn-limpiar-filtros').addEventListener('click', limpiarFiltros);
+
 
 $('busqueda').addEventListener('input', () => {
     paginaActual = 1;
@@ -1336,24 +1278,6 @@ $('busqueda').addEventListener('input', () => {
 /* Aviso en línea: mientras se captura la IP, indica si está reservada
    a un cliente o si queda libre para el control general. */
 $('ip').addEventListener('input', programarHintRangoIP);
-
-let debounceFiltros = null;
-document.querySelectorAll('[data-filtro]').forEach(control => {
-    const campo = control.dataset.filtro;
-    const aplicar = () => {
-        filtrosColumna[campo] = control.value || '';
-        paginaActual = 1;
-        renderizarTabla();
-    };
-    if (control instanceof HTMLSelectElement) {
-        control.addEventListener('change', aplicar);
-    } else {
-        control.addEventListener('input', () => {
-            clearTimeout(debounceFiltros);
-            debounceFiltros = setTimeout(aplicar, 220);
-        });
-    }
-});
 
 $('tamano-pagina').addEventListener('change', () => {
     tamanoPagina = Number($('tamano-pagina').value) || 25;

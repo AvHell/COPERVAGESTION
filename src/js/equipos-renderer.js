@@ -1403,25 +1403,19 @@ const rangoDescripcion  = document.getElementById('rango-descripcion');
 const rangoMensaje      = document.getElementById('rango-mensaje');
 const btnRangoGuardar   = document.getElementById('rango-guardar');
 
-const modalRangosLote = document.getElementById('modal-rangos-lote');
-const loteCliente     = document.getElementById('lote-cliente');
-const loteSegmento    = document.getElementById('lote-segmento');
-const loteTexto       = document.getElementById('lote-texto');
-const lotePreview     = document.getElementById('lote-preview');
-const loteMensaje     = document.getElementById('lote-mensaje');
-const btnLoteProcesar = document.getElementById('lote-procesar');
+const rangoCantidad     = document.getElementById('rango-cantidad');
+const rangoSugerencias  = document.getElementById('rango-sugerencias');
+const btnSugerirRango   = document.getElementById('btn-sugerir-rango');
 
 const hintRangoIP     = document.getElementById('hint-rango-ip');
 
 let rangos = [];
 let rangoEditando = null;
 let guardandoRango = false;
-let procesandoLote = false;
-let loteFilas = [];
 let tokenValidacionRango = 0;
 
 function actualizarBloqueoScroll() {
-    const abierto = [modalEquipo, modalRangos, modalRango, modalRangosLote]
+    const abierto = [modalEquipo, modalRangos, modalRango]
         .some(modal => modal && modal.style.display === 'flex');
     document.body.style.overflow = abierto ? 'hidden' : '';
 }
@@ -1598,6 +1592,11 @@ function abrirModalRango(rango = null) {
     rangoFin.value = (rango?.IPFin && rango.IPFin !== rango.IPInicio) ? rango.IPFin : '';
     rangoDescripcion.value = rango?.Descripcion || '';
 
+    sugerenciasRango = [];
+    sugerenciasFragmentadas = [];
+    if (rangoCantidad && !parseInt(rangoCantidad.value, 10)) rangoCantidad.value = '10';
+    reiniciarSugerenciasRango();
+
     ocultarRangoMensaje();
     modalRango.style.display = 'flex';
     actualizarBloqueoScroll();
@@ -1607,8 +1606,20 @@ function abrirModalRango(rango = null) {
 function cerrarModalRango() {
     modalRango.style.display = 'none';
     rangoEditando = null;
+    sugerenciasRango = [];
+    sugerenciasFragmentadas = [];
     ocultarRangoMensaje();
     actualizarBloqueoScroll();
+}
+
+function reiniciarSugerenciasRango() {
+    if (!rangoSugerencias) return;
+    sugerenciasRango = [];
+    sugerenciasFragmentadas = [];
+    rangoSugerencias.innerHTML = `
+        <p class="sugerencias-vacio">
+            Elige cliente, segmento y cantidad de hosts; después pulsa «Sugerir».
+        </p>`;
 }
 
 function mostrarRangoMensaje(texto, tipo) {
@@ -1756,246 +1767,313 @@ function renderResumenAuditoria(res) {
     `;
 }
 
-/* ---------- Carga por lote ---------- */
+/* ---------- Sugerencia inteligente de IP libres ----------
+   Regla: un rango nuevo no debe pisar el rango de NINGÚN cliente
+   (no solo del actual) ni una IP ya registrada, porque esas
+   direcciones quedan reservadas en el control general de IP.
+   Se prefieren bloques consecutivos; si no alcanzan, se ofrecen
+   fragmentos consecutivos pequeños que en conjunto cubren lo pedido. */
 
-function normalizarTexto(valor) {
-    return String(valor ?? '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toLowerCase();
+const HOST_INICIAL_RANGO = 2;   /* .0 = dirección de red */
+const HOST_FINAL_RANGO   = 254; /* .255 = broadcast */
+
+let sugerenciasRango = [];
+let sugerenciasFragmentadas = [];
+let sugiriendoRango = false;
+
+function normalizarSegmentoRango(valor) {
+    const partes = String(valor ?? '').trim().replace(/\.$/, '').split('.');
+    if (partes.length !== 3) return null;
+    if (!partes.every(p => /^\d{1,3}$/.test(p) && Number(p) <= 255)) return null;
+    return partes.map(p => String(Number(p))).join('.');
 }
 
-function distanciaLevenshtein(a, b) {
-    const fila = Array.from({ length: b.length + 1 }, (_, i) => i);
-    for (let i = 1; i <= a.length; i++) {
-        let anterior = fila[0];
-        fila[0] = i;
-        for (let j = 1; j <= b.length; j++) {
-            const actual = fila[j];
-            fila[j] = Math.min(
-                fila[j] + 1,
-                fila[j - 1] + 1,
-                anterior + (a[i - 1] === b[j - 1] ? 0 : 1)
-            );
-            anterior = actual;
+/** Mapa host → motivo de ocupación para un segmento /24. */
+async function mapaOcupacionSegmento(segmento, idRangoIgnorar = null) {
+    const ocupados = new Map();
+    ocupados.set(0, { tipo: 'red', etiqueta: 'Dirección de red' });
+    ocupados.set(255, { tipo: 'red', etiqueta: 'Broadcast' });
+
+    let todos = [];
+    try {
+        todos = await window.api.rangos.listar();
+    } catch (_) {
+        todos = [];
+    }
+    if (!Array.isArray(todos)) todos = [];
+
+    const base = ipValorEntero(`${segmento}.0`);
+    for (const r of todos) {
+        if (idRangoIgnorar && Number(r.IdRangoIP) === Number(idRangoIgnorar)) continue;
+        const inicio = ipValorEntero(r.IPInicio);
+        const fin = ipValorEntero(r.IPFin);
+        if (inicio === null || fin === null) continue;
+        const desde = Math.max(inicio, base + HOST_INICIAL_RANGO);
+        const hasta = Math.min(fin, base + HOST_FINAL_RANGO);
+        const etiqueta = `${r.ClienteCodigo || 'Cliente'}${r.RolNombre ? ' · ' + r.RolNombre : ''}`;
+        for (let valor = desde; valor <= hasta; valor += 1) {
+            ocupados.set(valor - base, { tipo: 'rango', etiqueta });
         }
     }
-    return fila[b.length];
+
+    try {
+        const asignadas = await window.api.equipos.listarIPsAsignadasEnSegmento(segmento);
+        if (Array.isArray(asignadas)) {
+            asignadas.forEach(ip => {
+                const host = hostEnSegmento(String(ip ?? '').trim(), segmento);
+                if (host === null || host < HOST_INICIAL_RANGO || host > HOST_FINAL_RANGO) return;
+                if (!ocupados.has(host)) ocupados.set(host, { tipo: 'equipo', etiqueta: 'IP ya registrada' });
+            });
+        }
+    } catch (_) { /* sin permiso o esquema pendiente: seguimos con los rangos */ }
+
+    return ocupados;
 }
 
-function buscarRolPorNombre(perfil) {
-    const clave = normalizarTexto(perfil);
-    if (!clave) return null;
-    const exacto = roles.find(r =>
-        normalizarTexto(r.Nombre) === clave || normalizarTexto(r.Codigo) === clave);
-    if (exacto) return exacto;
-    return roles.find(r => {
-        const nombre = normalizarTexto(r.Nombre);
-        const codigo = normalizarTexto(r.Codigo);
-        return (nombre.length >= 5 && distanciaLevenshtein(nombre, clave) <= 2)
-            || (codigo.length >= 5 && distanciaLevenshtein(codigo, clave) <= 2);
-    }) || null;
+/** Bloques consecutivos de hosts libres dentro del segmento. */
+function fragmentosLibres(ocupados) {
+    const libres = [];
+    let inicio = null;
+    for (let host = HOST_INICIAL_RANGO; host <= HOST_FINAL_RANGO; host += 1) {
+        const libre = !ocupados.has(host);
+        if (libre && inicio === null) inicio = host;
+        const ultimo = host === HOST_FINAL_RANGO;
+        if (inicio !== null && (!libre || ultimo)) {
+            const fin = libre && ultimo ? host : host - 1;
+            libres.push({ inicio, fin, hosts: fin - inicio + 1 });
+            inicio = null;
+        }
+    }
+    return libres;
 }
 
-function pareceIPv4(valor) {
-    const texto = String(valor ?? '').trim();
-    return /^\d{1,3}(\.\d{1,3}){1,3}$/.test(texto);
+function tarjetaSugerencia(segmento, bloque, indice, singular) {
+    const etiqueta = bloque.inicio === bloque.fin
+        ? `${segmento}.${bloque.inicio}`
+        : `${segmento}.${bloque.inicio} – ${segmento}.${bloque.fin}`;
+    return `
+        <article class="sugerencia-card">
+            <div class="sugerencia-datos">
+                <code class="sugerencia-rango">${escaparHTML(etiqueta)}</code>
+                <span class="sugerencia-host">${bloque.hosts} ${bloque.hosts === 1 ? 'host' : 'hosts'}</span>
+            </div>
+            <button type="button" class="btn-ghost sugerencia-usar"
+                    data-sugerencia="${indice}" data-inicio="${bloque.inicio}" data-fin="${bloque.fin}">
+                ${singular ? 'Usar' : 'Usar bloque'}
+            </button>
+        </article>`;
 }
 
-function abrirModalLote() {
-    llenarSelectClientes(loteCliente, rangosFiltroCliente.value || selectCli.value || '');
-    if (!loteSegmento.value.trim()) loteSegmento.value = '192.168.2';
-    lotePreview.classList.add('oculto');
-    lotePreview.innerHTML = '';
-    ocultarLoteMensaje();
-    loteFilas = [];
-    modalRangosLote.style.display = 'flex';
-    actualizarBloqueoScroll();
-    loteTexto.focus();
+function renderSugerenciasRango(segmento, cantidad, fragmentos, ocupados) {
+    sugerenciasRango = [];
+    sugerenciasFragmentadas = [];
+    const consecutivos = fragmentos
+        .filter(f => f.hosts >= cantidad)
+        .sort((a, b) => a.inicio - b.inicio);
+    const restantes = fragmentos
+        .filter(f => f.hosts < cantidad)
+        .sort((a, b) => b.hosts - a.hosts || a.inicio - b.inicio);
+
+    const totalLibres = fragmentos.reduce((suma, f) => suma + f.hosts, 0);
+    const ocupadas = ocupados.size;
+    const resumen = `
+        <p class="sugerencias-resumen">
+            <span class="sugerencias-pill">${totalLibres} hosts libres</span>
+            <span class="sugerencias-pill">${ocupadas} ocupadas</span>
+            <span class="sugerencias-pill">${fragmentos.length} ${fragmentos.length === 1 ? 'bloque' : 'bloques'} libres</span>
+        </p>`;
+
+    if (!totalLibres) {
+        rangoSugerencias.innerHTML = `${resumen}
+            <p class="sugerencias-vacio alerta">
+                El segmento ${escaparHTML(segmento)} no tiene hosts libres: todos están en rangos de clientes o registrados.
+            </p>`;
+        sugerenciasRango = [];
+        return;
+    }
+
+    let cuerpo = '';
+    if (consecutivos.length) {
+        const primeros = consecutivos.slice(0, 6);
+        cuerpo += `
+            <div class="sugerencias-grupo">
+                <h5>Consecutivo recomendado</h5>
+                <div class="sugerencias-grid">
+                    ${primeros.map((f, i) => tarjetaSugerencia(segmento, f, i, true)).join('')}
+                </div>
+            </div>`;
+        sugerenciasRango = primeros;
+    }
+
+    if (restantes.length && totalLibres >= cantidad) {
+        const elegidos = [];
+        let acumulado = 0;
+        for (const f of restantes) {
+            if (acumulado >= cantidad) break;
+            elegidos.push(f);
+            acumulado += f.hosts;
+        }
+        if (acumulado >= cantidad) {
+            cuerpo += `
+                <div class="sugerencias-grupo">
+                    <h5>Sin consecutivo suficiente · ${elegidos.length} rangos fragmentados</h5>
+                    <p class="sugerencias-nota">
+                        No hay un bloque de ${cantidad} hosts seguidos. Estos fragmentos suman
+                        ${acumulado} hosts sin pisar ningún rango ajeno.
+                    </p>
+                    <div class="sugerencias-grid">
+                        ${elegidos.map((f, i) => tarjetaSugerencia(segmento, f, consecutivos.length + i, false)).join('')}
+                    </div>
+                    <button type="button" id="btn-sugerencia-fragmentada" class="btn-primary"
+                            data-permiso="equipos:rangos:crear">
+                        Crear ${elegidos.length} rangos fragmentados
+                    </button>
+                </div>`;
+            sugerenciasFragmentadas = elegidos;
+        }
+    }
+
+    if (!cuerpo) {
+        cuerpo = `<p class="sugerencias-vacio alerta">
+            Sólo hay bloques libres menores a ${cantidad} hosts y no alcanzan a cubrirlo.
+            Baja la cantidad de hosts o revisa los rangos del segmento.
+        </p>`;
+        sugerenciasRango = [];
+    }
+
+    const sinCliente = !parseInt(rangoCliente.value, 10);
+    rangoSugerencias.innerHTML = `
+        ${resumen}
+        ${sinCliente ? '<p class="sugerencias-vacio alerta">Selecciona el cliente del rango para poder registrar la sugerencia.</p>' : ''}
+        ${cuerpo}`;
 }
 
-function cerrarModalLote() {
-    modalRangosLote.style.display = 'none';
-    ocultarLoteMensaje();
-    actualizarBloqueoScroll();
-}
-
-function mostrarLoteMensaje(texto, tipo) {
-    loteMensaje.textContent = texto;
-    loteMensaje.className = 'alert ' + tipo;
-}
-function ocultarLoteMensaje() { loteMensaje.className = 'alert oculto'; }
-
-function setProcesandoLote(valor) {
-    procesandoLote = valor;
-    btnLoteProcesar.disabled = valor;
-    const txt = btnLoteProcesar.querySelector('.btn-text');
-    const spin = btnLoteProcesar.querySelector('.btn-spinner');
-    if (txt) txt.textContent = valor ? 'Cargando...' : 'Cargar rangos';
+function setSugiriendoRango(valor) {
+    sugiriendoRango = valor;
+    if (!btnSugerirRango) return;
+    btnSugerirRango.disabled = valor;
+    const txt = btnSugerirRango.querySelector('.btn-text');
+    const spin = btnSugerirRango.querySelector('.btn-spinner');
+    if (txt) txt.textContent = valor ? 'Calculando...' : 'Sugerir';
     if (spin) spin.classList.toggle('oculto', !valor);
 }
 
-function parsearLote(texto) {
-    const filas = [];
-    const ignoradas = [];
-    const lineas = String(texto || '').split(/\r?\n/);
+async function sugerirIPsRango() {
+    if (sugiriendoRango) return;
 
-    lineas.forEach((linea, indice) => {
-        const crudo = linea.trim();
-        if (!crudo) return;
-
-        const columnas = crudo.split(/\t|;|,/).map(c => c.trim());
-        while (columnas.length && columnas[columnas.length - 1] === '') columnas.pop();
-        if (!columnas.length) return;
-
-        const encabezado = normalizarTexto(columnas[0]) === 'perfil'
-            || normalizarTexto(columnas[0]) === 'nombre'
-            || normalizarTexto(columnas[0]) === 'usuario';
-        if (encabezado) { ignoradas.push(indice + 1); return; }
-
-        let perfil = '';
-        let inicio = '';
-        let fin = '';
-
-        if (columnas.length >= 3) {
-            [perfil, inicio, fin] = columnas;
-        } else if (columnas.length === 2) {
-            if (pareceIPv4(columnas[0]) && pareceIPv4(columnas[1])) {
-                inicio = columnas[0];
-                fin = columnas[1];
-            } else {
-                perfil = columnas[0];
-                inicio = columnas[1];
-            }
-        } else {
-            ignoradas.push(indice + 1);
-            return;
-        }
-
-        if (!inicio || normalizarTexto(inicio) === 'na') { ignoradas.push(indice + 1); return; }
-        if (normalizarTexto(perfil) === 'na') perfil = '';
-        if (normalizarTexto(fin) === 'na') fin = '';
-
-        const fila = {
-            linea: indice + 1,
-            perfil: perfil || '',
-            inicio,
-            fin: fin || '',
-            idRolEquipo: null,
-            error: ''
-        };
-
-        if (fila.perfil) {
-            const rol = buscarRolPorNombre(fila.perfil);
-            if (rol) fila.idRolEquipo = rol.IdRolEquipo;
-            else fila.error = `Perfil "${fila.perfil}" no encontrado`;
-        }
-
-        filas.push(fila);
-    });
-
-    return { filas, ignoradas };
-}
-
-function renderPreviewLote() {
-    if (!loteFilas.length) {
-        lotePreview.classList.add('oculto');
-        lotePreview.innerHTML = '';
+    const segmento = normalizarSegmentoRango(rangoSegmento.value);
+    if (!segmento) {
+        rangoSugerencias.innerHTML = '<p class="sugerencias-vacio alerta">Indica el segmento con formato 192.168.2 para calcular las IP libres.</p>';
         return;
     }
+    rangoSegmento.value = segmento;
 
-    const validas = loteFilas.filter(f => !f.error).length;
-    const filasHTML = loteFilas.map(f => {
-        const rango = f.fin
-            ? `<code class="rango-ip">${escaparHTML(f.inicio)}</code> – <code class="rango-ip">${escaparHTML(f.fin)}</code>`
-            : `<code class="rango-ip">${escaparHTML(f.inicio)}</code>`;
-        const perfil = f.perfil
-            ? escaparHTML(f.perfil)
-            : '<span class="rango-general">Todos los perfiles</span>';
-        return `<tr class="${f.error ? 'fila-invalida' : ''}">
-            <td>${f.linea}</td>
-            <td>${perfil}</td>
-            <td>${rango}</td>
-            <td>${f.error ? escaparHTML(f.error) : '<span class="estado-ok">Listo</span>'}</td>
-        </tr>`;
-    }).join('');
+    const cantidad = Math.min(
+        HOST_FINAL_RANGO,
+        Math.max(1, parseInt(rangoCantidad.value, 10) || 10)
+    );
+    rangoCantidad.value = String(cantidad);
 
-    lotePreview.classList.remove('oculto');
-    lotePreview.innerHTML = `
-        <p class="lote-preview-titulo">
-            ${validas} de ${loteFilas.length} renglón(es) válidos
-        </p>
-        <div class="lote-preview-lista">
-            <table class="rangos-tabla">
-                <thead><tr><th>Línea</th><th>Perfil</th><th>Rango</th><th>Estado</th></tr></thead>
-                <tbody>${filasHTML}</tbody>
-            </table>
-        </div>
-    `;
-}
-
-async function procesarLote() {
-    if (procesandoLote) return;
-
-    const idCliente = parseInt(loteCliente.value, 10);
-    const segmento = loteSegmento.value.trim();
-    if (!idCliente) {
-        mostrarLoteMensaje('Selecciona el cliente al que pertenecen los rangos.', 'error');
-        return;
-    }
-
-    const { filas } = parsearLote(loteTexto.value);
-    loteFilas = filas;
-    renderPreviewLote();
-
-    if (!filas.length) {
-        mostrarLoteMensaje('No se detectaron rangos en el texto. Revisa el formato de la tabla.', 'error');
-        return;
-    }
-
-    const validas = filas.filter(f => !f.error);
-    if (!validas.length) {
-        mostrarLoteMensaje('Ningún renglón es válido. Corrige los perfiles marcados antes de continuar.', 'error');
-        return;
-    }
-
-    setProcesandoLote(true);
-    const errores = [];
-    let creados = 0;
-
+    setSugiriendoRango(true);
+    rangoSugerencias.innerHTML = '<p class="sugerencias-vacio">Buscando huecos libres en el segmento...</p>';
     try {
-        for (const fila of validas) {
+        const ocupados = await mapaOcupacionSegmento(segmento, rangoEditando);
+        renderSugerenciasRango(segmento, cantidad, fragmentosLibres(ocupados), ocupados);
+    } catch (err) {
+        rangoSugerencias.innerHTML = `<p class="sugerencias-vacio alerta">${escaparHTML(err.message || 'No se pudieron calcular las IP libres.')}</p>`;
+        sugerenciasRango = [];
+    } finally {
+        setSugiriendoRango(false);
+    }
+}
+
+function usarSugerencia(indice) {
+    const bloque = sugerenciasRango[indice];
+    if (!bloque) return;
+    const segmento = normalizarSegmentoRango(rangoSegmento.value);
+    if (!segmento) return;
+    rangoInicio.value = `${segmento}.${bloque.inicio}`;
+    rangoFin.value = bloque.inicio === bloque.fin ? '' : `${segmento}.${bloque.fin}`;
+    ocultarRangoMensaje();
+    rangoDescripcion.focus();
+}
+
+async function crearRangosFragmentados() {
+    const idCliente = parseInt(rangoCliente.value, 10);
+    if (!idCliente) {
+        mostrarRangoMensaje('Selecciona el cliente al que pertenece el rango.', 'error');
+        return;
+    }
+    const segmento = normalizarSegmentoRango(rangoSegmento.value);
+    if (!segmento) {
+        mostrarRangoMensaje('Indica un segmento válido antes de crear los rangos.', 'error');
+        return;
+    }
+    const cantidad = Math.max(1, parseInt(rangoCantidad.value, 10) || 10);
+    const bloques = sugerenciasFragmentadas;
+    if (!bloques.length) return;
+
+    const detalle = bloques
+        .map(b => `${segmento}.${b.inicio}${b.inicio === b.fin ? '' : ' – ' + segmento + '.' + b.fin}`)
+        .join('<br>');
+
+    const confirmacion = await Swal.fire({
+        icon: 'question',
+        title: '¿Crear rangos fragmentados?',
+        html: `<div style="text-align:left;font-size:0.9rem;">
+            Se crearán ${bloques.length} rangos para el cliente seleccionado:<br><br>
+            <div style="background:#F4F6F0;padding:10px;border-radius:6px;border-left:3px solid #516848;">
+                ${detalle}
+            </div>
+            <p style="margin-top:10px;color:#7a7563;">
+                Ninguno se empalma con rangos de otros clientes. La suma cubre al menos ${cantidad} hosts.
+            </p></div>`,
+        showCancelButton: true,
+        confirmButtonText: 'Crear rangos',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    const datosBase = {
+        idCliente,
+        idRolEquipo: rangoPerfil.value ? parseInt(rangoPerfil.value, 10) : null,
+        segmento,
+        descripcion: 'Sugerencia de IP fragmentada'
+    };
+
+    let creados = 0;
+    const errores = [];
+    for (const bloque of bloques) {
+        try {
             const res = await window.api.rangos.crear({
-                idCliente,
-                idRolEquipo: fila.idRolEquipo,
-                segmento,
-                ipInicio: fila.inicio,
-                ipFin: fila.fin,
-                descripcion: 'Carga por lote'
+                ...datosBase,
+                ipInicio: `${segmento}.${bloque.inicio}`,
+                ipFin: `${segmento}.${bloque.fin}`
             });
             if (res && res.ok) creados += 1;
-            else errores.push(`Línea ${fila.linea}: ${res?.mensaje || 'Error desconocido'}`);
+            else errores.push(res?.mensaje || 'Error desconocido');
+        } catch (err) {
+            errores.push(err.message);
         }
+    }
 
-        if (rangosFiltroCliente.querySelector(`option[value="${idCliente}"]`)) {
-            rangosFiltroCliente.value = String(idCliente);
-        }
-        await cargarRangos();
+    if (rangosFiltroCliente.querySelector(`option[value="${idCliente}"]`)) {
+        rangosFiltroCliente.value = String(idCliente);
+    }
+    await cargarRangos();
+    cerrarModalRango();
 
-        if (errores.length) {
-            mostrarLoteMensaje(
-                `${creados} rango(s) agregados. ${errores.length} con error: ${errores.join(' | ')}`,
-                'warning'
-            );
-        } else {
-            cerrarModalLote();
-            toastExito(`${creados} rango(s) agregados correctamente`);
-        }
-    } catch (err) {
-        mostrarLoteMensaje('Error: ' + err.message, 'error');
-    } finally {
-        setProcesandoLote(false);
+    if (errores.length) {
+        toastError(`Se crearon ${creados} rangos`, errores[0]);
+    } else {
+        toastExito(`${creados} rango(s) fragmentados creados`);
     }
 }
 
@@ -2053,22 +2131,39 @@ rangosFiltroCliente.addEventListener('change', () => {
 
 document.getElementById('btn-rangos-auditar').addEventListener('click', auditarRangos);
 document.getElementById('btn-rango-nuevo').addEventListener('click', () => abrirModalRango(null));
-document.getElementById('btn-rangos-lote').addEventListener('click', abrirModalLote);
 
 document.getElementById('modal-rango-cerrar').addEventListener('click', cerrarModalRango);
 document.getElementById('rango-cancelar').addEventListener('click', cerrarModalRango);
 modalRango.addEventListener('click', (e) => { if (e.target === modalRango) cerrarModalRango(); });
 btnRangoGuardar.addEventListener('click', guardarRango);
 
-document.getElementById('modal-rangos-lote-cerrar').addEventListener('click', cerrarModalLote);
-document.getElementById('lote-cancelar').addEventListener('click', cerrarModalLote);
-modalRangosLote.addEventListener('click', (e) => { if (e.target === modalRangosLote) cerrarModalLote(); });
-btnLoteProcesar.addEventListener('click', procesarLote);
-loteTexto.addEventListener('input', () => {
-    const { filas } = parsearLote(loteTexto.value);
-    loteFilas = filas;
-    renderPreviewLote();
-});
+/* Sugerencia de IP libres */
+if (btnSugerirRango) btnSugerirRango.addEventListener('click', sugerirIPsRango);
+if (rangoSegmento) {
+    rangoSegmento.addEventListener('change', reiniciarSugerenciasRango);
+    rangoSegmento.addEventListener('blur', () => {
+        const segmento = normalizarSegmentoRango(rangoSegmento.value);
+        if (segmento) rangoSegmento.value = segmento;
+    });
+}
+if (rangoCantidad) {
+    rangoCantidad.addEventListener('change', () => {
+        if (!sugerenciasRango.length) return;
+        sugerirIPsRango();
+    });
+}
+if (rangoSugerencias) {
+    rangoSugerencias.addEventListener('click', (evento) => {
+        const boton = evento.target.closest('.sugerencia-usar');
+        if (boton) {
+            usarSugerencia(Number(boton.dataset.sugerencia));
+            return;
+        }
+        if (evento.target.closest('#btn-sugerencia-fragmentada')) {
+            crearRangosFragmentados();
+        }
+    });
+}
 
 inputIP.addEventListener('input', actualizarHintRango);
 inputIP.addEventListener('blur', actualizarHintRango);

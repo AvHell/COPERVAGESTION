@@ -19,20 +19,29 @@
     --plano-oro: #a99a63;
     --plano-rojo: #b5442e;
     --plano-rojo-suave: #f3ded6;
+    /* Respaldo cuando el rol no tiene color en el catálogo. El color real de
+       celda e insignia lo inyecta el renderer desde Catálogos (inline). */
     --rol-agt: #557fa8;
     --rol-agt-suave: #e5edf4;
+    --rol-agt-texto: #315978;
     --rol-crd: #8f7016;
     --rol-crd-suave: #f5efd9;
+    --rol-crd-texto: #695315;
     --rol-cld: #c45f86;
     --rol-cld-suave: #f7e5ec;
+    --rol-cld-texto: #8a3c59;
     --rol-spr: #6e7b5b;
     --rol-spr-suave: #e8ebdf;
+    --rol-spr-texto: #47543a;
     --rol-grn: #805b9b;
     --rol-grn-suave: #eee7f2;
+    --rol-grn-texto: #5c3f75;
     --rol-adm: #73766d;
     --rol-adm-suave: #e8e8e4;
+    --rol-adm-texto: #4d5048;
     --rol-mis: #b5442e;
     --rol-mis-suave: #f3ded6;
+    --rol-mis-texto: #7a2a1b;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -223,14 +232,15 @@ body {
     letter-spacing: -0.01em;
 }
 
-/* Colores por rol */
-.celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); }
-.celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); }
-.celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); }
-.celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); }
-.celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); }
-.celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); }
-.celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); }
+/* Colores por rol: SOLO respaldo. El fondo, el borde y el contraste del texto
+   los inyecta el renderer con el color del catálogo de Roles. */
+.celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); --rol-texto: var(--rol-agt-texto); }
+.celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); --rol-texto: var(--rol-crd-texto); }
+.celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); --rol-texto: var(--rol-cld-texto); }
+.celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); --rol-texto: var(--rol-spr-texto); }
+.celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); --rol-texto: var(--rol-grn-texto); }
+.celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); --rol-texto: var(--rol-adm-texto); }
+.celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); --rol-texto: var(--rol-mis-texto); }
 
 /* =========================================================
    TABLA
@@ -527,14 +537,8 @@ body {
     background: var(--plano-superficie);
 }
 
-.celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); }
-.celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); }
-.celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); }
-.celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); }
-.celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); }
-.celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); }
-.celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); }
-
+/* Insignias: color del catálogo de Roles con respaldo en los tokens --rol-*.
+   El color del texto de la insignia lo inyecta el renderer (contraste). */
 .badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
 .badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
 .badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
@@ -543,28 +547,12 @@ body {
 .badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
 .badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
 
-/* Paleta compartida con Equipos para celdas, insignias y tabla documentada. */
-.celda[data-rol="AGT"] { background: #93c5fd; border-color: #60a5fa; }
-.celda[data-rol="CRD"] { background: #fef08a; border-color: #fde047; }
-.celda[data-rol="CLD"] { background: #fbcfe8; border-color: #f9a8d4; }
-.celda[data-rol="SPR"] { background: #bbf7d0; border-color: #86efac; }
-.celda[data-rol="GRN"] { background: #d8b4fe; border-color: #c084fc; }
-.celda[data-rol="ADM"] { background: #1d201a; border-color: #000000; }
-.celda[data-rol="MIS"] { background: #fca5a5; border-color: #f87171; }
-.celda[data-rol="AGT"] .celda-hostname, .celda[data-rol="AGT"] .celda-ip { color: #1e3a8a; }
-.celda[data-rol="CRD"] .celda-hostname, .celda[data-rol="CRD"] .celda-ip { color: #713f12; }
-.celda[data-rol="CLD"] .celda-hostname, .celda[data-rol="CLD"] .celda-ip { color: #831843; }
-.celda[data-rol="SPR"] .celda-hostname, .celda[data-rol="SPR"] .celda-ip { color: #14532d; }
-.celda[data-rol="GRN"] .celda-hostname, .celda[data-rol="GRN"] .celda-ip { color: #4c1d95; }
-.celda[data-rol="ADM"] .celda-hostname, .celda[data-rol="ADM"] .celda-ip { color: #ffffff; }
-.celda[data-rol="MIS"] .celda-hostname, .celda[data-rol="MIS"] .celda-ip { color: #7f1d1d; }
-.badge-rol[data-rol="AGT"] { background: #93c5fd; border-color: #60a5fa; color: #1e3a8a; }
-.badge-rol[data-rol="CRD"] { background: #fef08a; border-color: #fde047; color: #713f12; }
-.badge-rol[data-rol="CLD"] { background: #fbcfe8; border-color: #f9a8d4; color: #831843; }
-.badge-rol[data-rol="SPR"] { background: #bbf7d0; border-color: #86efac; color: #14532d; }
-.badge-rol[data-rol="GRN"] { background: #d8b4fe; border-color: #c084fc; color: #4c1d95; }
-.badge-rol[data-rol="ADM"] { background: #1d201a; border-color: #000000; color: #ffffff; }
-.badge-rol[data-rol="MIS"] { background: #fca5a5; border-color: #f87171; color: #7f1d1d; }
+/* Contraste del texto de la celda: primero el que hereda del catálogo
+   (--celda-texto), después el respaldo por rol y al final el texto del plano. */
+.celda[data-rol] .celda-hostname,
+.celda[data-rol] .celda-ip {
+    color: var(--celda-texto, var(--rol-texto, var(--plano-texto)));
+}
 .badge-cli[data-color] { border: 1px solid transparent; }
 [data-color="MEGA"] { background: #217a4b !important; color: #ffffff !important; border-color: #14532d !important; }
 [data-color="NATR"] { background: #5b92e5 !important; color: #ffffff !important; border-color: #3b82f6 !important; }

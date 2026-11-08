@@ -637,6 +637,23 @@ function renderPermisosTabla() {
     }
 }
 
+/* Refresca PermisosUI en caliente si el cambio afecta al rol de la sesión */
+let refrescoPermisos = null;
+function refrescarPermisosSesion(idRol) {
+    const destino = roles.find(r => Number(r.IdRol) === Number(idRol));
+    const propio  = window.PermisosUI?.rol;
+    if (!destino || !propio) return;
+    const a = String(destino.Codigo || '').trim().toUpperCase();
+    const b = String(propio).trim().toUpperCase();
+    if (!a || a !== b) return;
+
+    clearTimeout(refrescoPermisos);
+    refrescoPermisos = setTimeout(() => {
+        Promise.resolve(window.PermisosUI?.refrescar())
+            .catch(err => console.warn('[PermisosUI] No se pudo refrescar:', err));
+    }, 350);
+}
+
 async function togglePermiso(idRol, modulo, permitido, checkbox) {
     try {
         const res = await window.api.permisos.actualizar(idRol, modulo, permitido);
@@ -645,6 +662,7 @@ async function togglePermiso(idRol, modulo, permitido, checkbox) {
             if (ex) ex.Permitido = permitido;
             else permisos.push({ IdRol: idRol, Modulo: modulo, Permitido: permitido });
             toastExito('Permiso actualizado');
+            refrescarPermisosSesion(idRol);
         } else {
             checkbox.checked = !permitido;
             toastError('No se pudo actualizar el permiso', res?.mensaje || '');

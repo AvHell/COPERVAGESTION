@@ -244,9 +244,15 @@ body.plano-body {
 .grid-plano-wrapper {
     position: relative;
     display: inline-block;
-    /* Espacio para llaves a la derecha + margen arriba/abajo */
-    padding: 12px 90px 12px 12px;
+    padding: 14px;
     box-sizing: border-box;
+}
+
+/* Rieles laterales: espacio reservado FUERA del canvas donde viven los
+   indicadores de zona (llave + etiqueta), sin tapar ninguna celda. Solo se
+   reserva cuando el piso tiene zonas; si no, la grilla no pierde ancho. */
+.grid-plano-wrapper.con-riel {
+    padding: 14px 132px;
 }
 
 /* =========================================================
@@ -440,6 +446,19 @@ body.plano-body {
     background: var(--plano-oro-suave) !important;
 }
 
+/* Arrastre de banda en modo zona: mientras se recorre la grilla no se
+   selecciona texto ni se arrastran imágenes sin querer. */
+body.seleccionando-grupo {
+    user-select: none;
+    cursor: crosshair;
+}
+
+body.seleccionando-grupo .celda,
+body.seleccionando-grupo .celda * {
+    cursor: crosshair;
+    user-select: none;
+}
+
 /* Celda filtrada (atenuada) */
 .celda.celda-filtrada {
     opacity: 0.25;
@@ -470,9 +489,20 @@ body.plano-body {
     overflow: hidden;
 }
 
-/* Celda que pertenece a una zona normal: anillo con el color de la zona */
-.celda.celda-zona {
-    box-shadow: inset 0 0 0 2px var(--zona-color, var(--plano-oro));
+/* Celda que pertenece a una zona normal: sin marco ni anillo, para no tapar
+   el color del rol ni el hostname. La pertenencia se marca solo con el punto
+   de la esquina, que empareja la celda con su etiqueta externa del riel. */
+.celda.celda-zona::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--zona-color, var(--plano-oro));
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+    pointer-events: none;
 }
 
 /* Grid activo en modo zona libre */
@@ -495,6 +525,9 @@ body.plano-body {
     color: #334155;
     border: 1px solid #e2e8f0;
     font-weight: 500;
+    /* La etiqueta del modo zona lleva un contador en vivo ("— 3 celdas · Enter");
+       sin nowrap se parte en dos líneas y descuadra la barra superior. */
+    white-space: nowrap;
 }
 
 .btn-modo:hover:not(:disabled) { background: var(--plano-fondo); }
@@ -530,44 +563,44 @@ body.plano-body {
     pointer-events: none;
 }
 
-.llave-zona {
+/* Etiqueta del grupo de zona: siempre en el riel, nunca encima de la grilla. */
+.etiqueta-llave {
     position: absolute;
-    pointer-events: none;
-    height: 100%;
-}
-
-.llave-zona svg {
-    display: block;
-    overflow: visible;
-}
-
-.llave-zona .etiqueta-llave {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 10px;
+    max-width: 104px;
+    padding: 4px 9px;
     background: #fff;
     border: 2px solid;
     border-radius: 6px;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 700;
+    line-height: 1.15;
     color: #1e293b;
-    white-space: nowrap;
+    word-break: break-word;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     letter-spacing: 0.02em;
     pointer-events: auto;
-    cursor: pointer;
-    transition: transform 0.12s;
+    /* La etiqueta se puede arrastrar libremente dentro de su lado del riel
+       (más hacia la derecha si está a la derecha, más hacia la izquierda si está
+       a la izquierda) para acomodarla al gusto del usuario. */
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
 }
 
-.llave-zona .etiqueta-llave:hover {
-    transform: translateY(-50%) scale(1.05);
+.etiqueta-llave:hover {
+    box-shadow: 0 3px 10px rgba(0,0,0,0.14);
 }
 
-.llave-zona .etiqueta-llave .punto-color {
+.etiqueta-llave.arrastrando {
+    cursor: grabbing;
+    z-index: 30;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.22);
+}
+
+.etiqueta-llave .punto-color {
     width: 8px;
     height: 8px;
     border-radius: 2px;
@@ -578,19 +611,21 @@ body.plano-body {
    TOOLTIP
    ========================================================= */
 
+/* Tarjeta clara con la paleta del plano: todos los colores salen de los
+   tokens (los mismos de Catálogos y Equipos), ninguno fijado aquí. */
 .tooltip-plano {
     position: fixed;
     z-index: 9999;
-    min-width: 280px;
-    max-width: 360px;
-    padding: 12px 14px;
-    background: #1e293b;
-    color: #f1f5f9;
+    min-width: 210px;
+    max-width: 320px;
+    padding: 10px 12px;
+    background: var(--plano-superficie);
+    color: var(--plano-texto);
+    border: 1px solid var(--plano-borde-fuerte);
     border-radius: 10px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.35);
-    font-size: 0.82rem;
+    box-shadow: 0 10px 28px rgba(46, 50, 40, 0.18);
+    font-size: 0.8rem;
     pointer-events: none;
-    backdrop-filter: blur(4px);
 }
 
 .tooltip-plano .tooltip-header {
@@ -599,68 +634,73 @@ body.plano-body {
     gap: 8px;
     padding-bottom: 8px;
     margin-bottom: 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.15);
+    border-bottom: 1px solid var(--plano-borde);
 }
 
 .tooltip-plano .tooltip-header .hostname {
     font-weight: 700;
-    font-size: 0.95rem;
-    color: #ffffff;
+    font-size: 0.88rem;
+    color: var(--plano-texto);
+    overflow-wrap: anywhere;
 }
 
+/* El color de la insignia lo pone el catálogo de roles (--rol-*), igual que en
+   Equipos y Catálogos; sin él se usa la superficie del plano. */
 .tooltip-plano .tooltip-header .rol-badge {
     display: inline-block;
+    flex-shrink: 0;
     padding: 2px 8px;
+    border: 1px solid var(--rol-borde, var(--plano-borde));
     border-radius: 4px;
     font-size: 0.68rem;
     font-weight: 700;
-    color: #fff;
-    background: #475569;
+    line-height: 1.25;
+    color: var(--rol-texto, var(--plano-texto));
+    background: var(--rol-color, var(--plano-superficie-suave));
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
-.tooltip-plano .tooltip-header .rol-badge[data-rol="AGT"] { background: var(--rol-agt); }
-.tooltip-plano .tooltip-header .rol-badge[data-rol="CRD"] { background: var(--rol-crd); }
-.tooltip-plano .tooltip-header .rol-badge[data-rol="CLD"] { background: var(--rol-cld); }
-.tooltip-plano .tooltip-header .rol-badge[data-rol="SPR"] { background: var(--rol-spr); }
-.tooltip-plano .tooltip-header .rol-badge[data-rol="GRN"] { background: var(--rol-grn); }
-.tooltip-plano .tooltip-header .rol-badge[data-rol="ADM"] { background: var(--rol-adm); }
-.tooltip-plano .tooltip-header .rol-badge[data-rol="MIS"] { background: var(--rol-mis); }
-
 .tooltip-plano .tooltip-body {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
 }
 
+/* Rejilla etiqueta/valor: la etiqueta reserva una columna fija y el valor
+   queda alineado a la izquierda, así los dominios e IPs largos se leen en
+   columna y no bailan según su longitud. */
 .tooltip-plano .tooltip-row {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
     align-items: baseline;
     gap: 10px;
     line-height: 1.35;
 }
 
 .tooltip-plano .tooltip-row .label {
-    color: #94a3b8;
-    font-weight: 600;
-    font-size: 0.76rem;
+    color: var(--plano-texto-suave);
+    font-weight: 700;
+    font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    white-space: nowrap;
 }
 
 .tooltip-plano .tooltip-row .valor {
-    color: #f1f5f9;
-    font-weight: 500;
-    font-size: 0.85rem;
-    text-align: right;
+    color: var(--plano-texto);
+    font-weight: 600;
+    font-size: 0.8rem;
+    min-width: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
 }
 
 .tooltip-plano .tooltip-row .valor.mono {
     font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 0.82rem;
-    letter-spacing: -0.02em;
+    font-size: 0.76rem;
+    letter-spacing: -0.01em;
+    color: var(--plano-texto-secundario);
 }
 
 /* =========================================================
@@ -674,8 +714,9 @@ body.plano-body {
     bottom: 0;
     width: 340px;
     max-width: 90vw;
-    background: #fff;
-    box-shadow: -6px 0 24px rgba(0,0,0,0.15);
+    background: var(--plano-superficie);
+    border-left: 1px solid var(--plano-borde);
+    box-shadow: -10px 0 32px rgba(46, 50, 40, 0.16);
     z-index: 100;
     display: flex;
     flex-direction: column;
@@ -692,47 +733,81 @@ body.plano-body {
 }
 
 .lateral-header {
-    padding: 16px 18px 12px;
-    border-bottom: 1px solid #e2e8f0;
-    background: #f8fafc;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--plano-borde);
+    background: var(--plano-superficie-suave);
 }
 
 .lateral-titulo {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
     margin-bottom: 10px;
 }
 
+/* Micro-etiqueta en mayúsculas, igual que los demás encabezados del plano
+   (.filtro-titulo, .zonas-titulo): el título dejaba de leerse como propio. */
 .lateral-titulo h3 {
     margin: 0;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #1e293b;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--plano-texto-secundario);
 }
 
 .btn-cerrar-lateral {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    font-size: 0.85rem;
+    line-height: 1;
     background: transparent;
-    color: #64748b;
-    font-size: 0.9rem;
-    padding: 4px 8px;
-    border-radius: 4px;
+    color: var(--plano-texto-suave);
+    border: 1px solid transparent;
+    border-radius: 50%;
 }
 
 .btn-cerrar-lateral:hover:not(:disabled) {
-    background: #e2e8f0;
-    color: #1e293b;
+    background: var(--plano-oliva-suave);
+    border-color: var(--plano-borde-fuerte);
+    color: var(--plano-oliva-oscuro);
 }
 
 .lateral-buscador {
     position: relative;
 }
 
+/* Buscador del panel: el input heredaba el gris/azul de general.css y se veía
+   ajeno a la paleta tierra. Aquí queda con superficie blanca y borde oliva. */
 .lateral-buscador input {
+    width: 100%;
+    height: 34px;
     padding-left: 34px;
     font-size: 0.85rem;
-    height: 34px;
-    width: 100%;
+    color: var(--plano-texto);
+    background-color: var(--plano-superficie);
+    border: 1px solid var(--plano-borde);
+    border-radius: 8px;
+}
+
+.lateral-buscador input::placeholder {
+    color: var(--plano-texto-suave);
+}
+
+.lateral-buscador input:hover:not(:focus) {
+    border-color: var(--plano-borde-fuerte);
+}
+
+.lateral-buscador input:focus {
+    background-color: var(--plano-superficie);
+    border-color: var(--plano-oliva);
+    box-shadow: 0 0 0 3px rgba(110, 123, 91, 0.16);
 }
 
 .lateral-buscador .icono-svg {
@@ -740,86 +815,132 @@ body.plano-body {
     left: 11px;
     top: 50%;
     transform: translateY(-50%);
-    color: #94a3b8;
+    color: var(--plano-texto-suave);
     pointer-events: none;
 }
 
 .lateral-tabs {
     display: flex;
-    gap: 4px;
-    padding: 10px 16px 0 16px;
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--plano-superficie-suave);
+    border-bottom: 1px solid var(--plano-borde);
     overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
     scrollbar-width: thin;
+    scrollbar-color: var(--plano-borde-fuerte) transparent;
 }
 
-.lateral-tab {
-    padding: 6px 12px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: #64748b;
+/* Barra de desplazamiento horizontal de las pestañas de cliente: la nativa
+   del sistema (gruesa y gris) rompía la paleta del panel. */
+.lateral-tabs::-webkit-scrollbar {
+    height: 6px;
+}
+
+.lateral-tabs::-webkit-scrollbar-track {
     background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
+    margin: 0 6px;
+}
+
+.lateral-tabs::-webkit-scrollbar-thumb {
+    background: var(--plano-borde-fuerte);
+    border-radius: 6px;
+}
+
+.lateral-tabs::-webkit-scrollbar-thumb:hover {
+    background: var(--plano-oliva);
+}
+
+/* Pestañas de cliente: pastillas, no pestañas de subrayado. La activa se
+   rellena con el oliva de la paleta para que se lea como filtro elegido. */
+.lateral-tab {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--plano-texto-secundario);
+    background: var(--plano-superficie);
+    border: 1px solid var(--plano-borde);
     cursor: pointer;
-    border-radius: 4px 4px 0 0;
-    transition: all 0.15s;
+    border-radius: 999px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
     white-space: nowrap;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    margin-bottom: -1px;
+    gap: 6px;
 }
 
 .lateral-tab:hover {
     background: var(--plano-oliva-suave);
+    border-color: var(--plano-oliva);
     color: var(--plano-oliva-oscuro);
 }
 
 .lateral-tab.activo {
-    color: var(--plano-oliva);
-    border-bottom-color: var(--plano-oliva);
-    background: #fff;
+    color: #fff;
+    background: var(--plano-oliva);
+    border-color: var(--plano-oliva);
+    box-shadow: 0 1px 2px rgba(46, 50, 40, 0.16);
+}
+
+.lateral-tab:focus-visible {
+    outline: 2px solid var(--plano-oliva);
+    outline-offset: 2px;
 }
 
 .lateral-tab .tab-badge {
-    background: #e2e8f0;
-    color: #1e293b;
+    background: var(--plano-superficie-suave);
+    color: var(--plano-texto-secundario);
     font-size: 0.68rem;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    min-width: 20px;
     padding: 1px 6px;
+    border: 1px solid var(--plano-borde);
     border-radius: 8px;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .lateral-tab.activo .tab-badge {
-    background: var(--plano-oliva);
+    background: rgba(255, 255, 255, 0.22);
     color: #fff;
+    border-color: rgba(255, 255, 255, 0.45);
 }
 
 .lateral-filtros-rol {
     display: flex;
-    gap: 4px;
-    padding: 10px 16px;
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--plano-superficie-suave);
+    border-bottom: 1px solid var(--plano-borde);
     flex-wrap: wrap;
 }
 
+/* Chips de rol del panel lateral: pastillas blancas sobre la franja tierra,
+   con el mismo lenguaje que las pestañas de cliente de arriba. */
 .filtro-rol-chip {
     padding: 4px 10px;
     font-size: 0.72rem;
     font-weight: 700;
-    border-radius: 12px;
-    cursor: pointer;
-    border: 1.5px solid transparent;
-    background: #e2e8f0;
-    color: #475569;
-    transition: all 0.12s;
     letter-spacing: 0.03em;
+    cursor: pointer;
+    background: var(--plano-superficie);
+    color: var(--plano-texto-secundario);
+    border: 1px solid var(--plano-borde);
+    border-radius: 999px;
+    transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.12s;
 }
 
-.filtro-rol-chip:hover { transform: translateY(-1px); }
+.filtro-rol-chip:hover {
+    transform: translateY(-1px);
+    border-color: var(--plano-oliva);
+    color: var(--plano-oliva-oscuro);
+}
 
 .filtro-rol-chip.activo[data-rol="AGT"] { background: var(--rol-agt); color: #fff; border-color: var(--rol-agt); }
 .filtro-rol-chip.activo[data-rol="CRD"] { background: var(--rol-crd); color: #fff; border-color: var(--rol-crd); }
@@ -833,8 +954,14 @@ body.plano-body {
 .lista-sin-ubicar-wrapper {
     flex: 1;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 12px 16px;
     min-height: 0;
+    /* Barra de desplazamiento propia y discreta, en la paleta del plano: sin
+       esto Chromium dibuja la barra genérica del sistema encima del panel. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--plano-borde-fuerte) transparent;
+    scrollbar-gutter: stable;
 }
 
 .lista-sin-ubicar {
@@ -865,20 +992,8 @@ body.plano-body {
 
 .lista-sin-ubicar li:active { cursor: grabbing; }
 
-.lista-sin-ubicar li .rol-punto {
-    width: 10px;
-    height: 10px;
-    border-radius: 3px;
-    flex-shrink: 0;
-}
-
-.lista-sin-ubicar li[data-rol="AGT"] .rol-punto { background: var(--rol-agt); }
-.lista-sin-ubicar li[data-rol="CRD"] .rol-punto { background: var(--rol-crd); }
-.lista-sin-ubicar li[data-rol="CLD"] .rol-punto { background: var(--rol-cld); }
-.lista-sin-ubicar li[data-rol="SPR"] .rol-punto { background: var(--rol-spr); }
-.lista-sin-ubicar li[data-rol="GRN"] .rol-punto { background: var(--rol-grn); }
-.lista-sin-ubicar li[data-rol="ADM"] .rol-punto { background: var(--rol-adm); }
-.lista-sin-ubicar li[data-rol="MIS"] .rol-punto { background: var(--rol-mis); }
+/* El listado de equipos sin ubicar NO usa el código de color por rol:
+   esos colores solo se aplican a los chips del filtro y a la leyenda. */
 
 .lista-sin-ubicar li .equipo-info {
     flex: 1;
@@ -912,6 +1027,9 @@ body.plano-body {
     background: #f8fafc;
     max-height: 28vh;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--plano-borde-fuerte) transparent;
 }
 
 .zonas-titulo {
@@ -1010,6 +1128,33 @@ body.plano-body {
     justify-content: flex-end;
     margin-top: 22px;
 }
+
+/* Botón X de cierre (mismo patrón que el modal de Equipos) */
+.modal-caja { position: relative; }
+
+.btn-cerrar-modal {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 9px;
+    color: var(--plano-texto-suave);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    font-family: inherit;
+    z-index: 2;
+}
+
+.btn-cerrar-modal svg { width: 17px; height: 17px; }
+.btn-cerrar-modal:hover { background: var(--plano-rojo-suave); color: var(--plano-rojo); }
+.btn-cerrar-modal:focus-visible { outline: 2px solid var(--plano-oliva); outline-offset: 2px; }
 
 .campo-zona { margin-bottom: 12px; }
 
@@ -1381,7 +1526,8 @@ body.plano-body {
 
 #modal-editar-equipo h3 {
     padding-bottom: 10px;
-    border-bottom: 2px solid #e2e8f0;
+    padding-right: 44px;
+    border-bottom: 2px solid var(--plano-borde);
     margin-bottom: 14px;
 }
 
@@ -1390,8 +1536,8 @@ body.plano-body {
     margin-top: 18px;
     margin-bottom: 8px;
     font-size: 0.78rem;
-    color: #475569;
-    border-bottom: 1px solid #e2e8f0;
+    color: var(--plano-texto-secundario);
+    border-bottom: 1px solid var(--plano-borde);
 }
 
 #modal-editar-equipo .seccion-titulo:first-of-type {
@@ -1401,11 +1547,11 @@ body.plano-body {
 /* Campos obligatorios: borde sutil + asterisco rojo */
 #modal-editar-equipo .campo-obligatorio label {
     font-weight: 600;
-    color: #1e293b;
+    color: var(--plano-texto);
 }
 
 #modal-editar-equipo .campo-obligatorio .req {
-    color: #dc2626;
+    color: var(--plano-rojo);
     font-weight: 700;
     margin-left: 2px;
 }
@@ -1416,35 +1562,35 @@ body.plano-body {
     border-left: 3px solid var(--plano-oliva);
 }
 
-/* Input/select opcional con borde gris */
+/* Input/select opcional con borde neutro */
 #modal-editar-equipo input:not(.campo-obligatorio input),
 #modal-editar-equipo select:not(.campo-obligatorio select) {
-    border-left: 3px solid #e2e8f0;
+    border-left: 3px solid var(--plano-borde);
 }
 
 /* Inputs readonly (hostname auto, número host) */
 #modal-editar-equipo input[readonly] {
-    background: #f8fafc;
-    color: #475569;
+    background: var(--plano-superficie-suave);
+    color: var(--plano-texto-secundario);
     cursor: not-allowed;
 }
 
 /* Inputs deshabilitados */
 #modal-editar-equipo input:disabled,
 #modal-editar-equipo select:disabled {
-    background: #f1f5f9;
-    color: #94a3b8;
+    background: var(--plano-superficie-suave);
+    color: var(--plano-texto-suave);
     cursor: not-allowed;
     opacity: 0.85;
 }
 
 /* Sección Red (solo visible en Estática) con fondo tenue */
 #modal-editar-equipo #ed-seccion-red {
-    background: #f8fafc;
+    background: var(--plano-superficie-suave);
     border-radius: 8px;
     padding: 4px 12px 12px;
     margin-top: 6px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--plano-borde);
 }
 
 #modal-editar-equipo #ed-seccion-red .seccion-titulo {
@@ -1453,35 +1599,35 @@ body.plano-body {
     padding-left: 4px;
 }
 
-/* Bloque hostname DHCP */
+/* Bloque hostname DHCP — canal de color "oro" de la paleta del plano */
 #modal-editar-equipo #ed-campoHostnameDHCP {
-    background: #f0f9ff;
+    background: var(--plano-oro-suave);
     border-radius: 8px;
     padding: 4px 12px 12px;
     margin-top: 6px;
-    border: 1px solid #bae6fd;
+    border: 1px solid var(--plano-oro);
 }
 
 #modal-editar-equipo #ed-campoHostnameDHCP .seccion-titulo {
     margin-top: 12px;
     border-bottom: none;
-    color: #0369a1;
+    color: var(--plano-texto-secundario);
     padding-left: 4px;
 }
 
-/* Bloque hostname Estática */
+/* Bloque hostname Estática — canal de color "oliva" de la paleta del plano */
 #modal-editar-equipo #ed-campoHostnameEstatico {
-    background: #f0fdf4;
+    background: var(--plano-oliva-suave);
     border-radius: 8px;
     padding: 4px 12px 12px;
     margin-top: 6px;
-    border: 1px solid #bbf7d0;
+    border: 1px solid var(--plano-oliva);
 }
 
 #modal-editar-equipo #ed-campoHostnameEstatico .seccion-titulo {
     margin-top: 12px;
     border-bottom: none;
-    color: #15803d;
+    color: var(--plano-oliva-oscuro);
     padding-left: 4px;
 }
 
@@ -1560,7 +1706,7 @@ body.plano-body {
 .modal-caja,
 .lista-zonas li,
 .identificador-item,
-.llave-zona .etiqueta-llave {
+.etiqueta-llave {
     background: var(--plano-superficie);
 }
 
@@ -1573,7 +1719,6 @@ body.plano-body {
 .grid-plano.modo-zona-libre .celda.vacia:hover,
 .celda.vacia:hover,
 .btn-modo:hover:not(:disabled),
-.lateral-tab:hover,
 .btn-filtro-accion:hover,
 .chip-cliente {
     background: var(--plano-fondo);
@@ -1653,9 +1798,14 @@ body.plano-body {
     background: var(--plano-oliva-oscuro);
 }
 
-.lateral-tab.activo {
-    color: var(--plano-oliva);
-    border-bottom-color: var(--plano-oliva);
+.lateral-tab.activo,
+.lateral-tab.activo .tab-badge {
+    color: #fff;
+}
+
+.lateral-tab.activo .tab-badge {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.45);
 }
 
 .lateral-tab .tab-badge,
@@ -1690,14 +1840,8 @@ body.plano-body {
     color: var(--plano-superficie);
 }
 
-.tooltip-plano {
-    background: var(--plano-texto);
-    color: var(--tierra-crema, #fff7e8);
-}
-
-.tooltip-plano .tooltip-row .label {
-    color: var(--plano-borde-fuerte);
-}
+/* (El tooltip toma sus colores de los tokens en su propio bloque: aquí ya no
+   se pisa el fondo ni el color del texto.) */
 
 .panel-lateral,
 .modal-caja {
@@ -1839,10 +1983,12 @@ select:focus {
     outline-offset: 2px;
 }
 
-/* Colores semánticos por rol, iguales en plano, filtros y listas. */
+/* Colores semánticos por rol para el canvas, los filtros y las listas.
+   El tooltip NO aparece aquí: su insignia toma el color del catálogo de Roles
+   (token --rol-* inyectado por el renderer) y, si no hay color configurado,
+   se queda con la superficie neutra del plano. */
 .plano-body .celda[data-rol="AGT"],
 .plano-body .badge-rol[data-rol="AGT"],
-.plano-body .tooltip-plano .rol-badge[data-rol="AGT"],
 .plano-body .filtro-rol-chip.activo[data-rol="AGT"] {
     --rol-color: #93c5fd;
     --rol-borde: #60a5fa;
@@ -1852,7 +1998,6 @@ select:focus {
 
 .plano-body .celda[data-rol="CRD"],
 .plano-body .badge-rol[data-rol="CRD"],
-.plano-body .tooltip-plano .rol-badge[data-rol="CRD"],
 .plano-body .filtro-rol-chip.activo[data-rol="CRD"] {
     --rol-color: #fef08a;
     --rol-borde: #fde047;
@@ -1862,7 +2007,6 @@ select:focus {
 
 .plano-body .celda[data-rol="CLD"],
 .plano-body .badge-rol[data-rol="CLD"],
-.plano-body .tooltip-plano .rol-badge[data-rol="CLD"],
 .plano-body .filtro-rol-chip.activo[data-rol="CLD"] {
     --rol-color: #fbcfe8;
     --rol-borde: #f9a8d4;
@@ -1872,7 +2016,6 @@ select:focus {
 
 .plano-body .celda[data-rol="SPR"],
 .plano-body .badge-rol[data-rol="SPR"],
-.plano-body .tooltip-plano .rol-badge[data-rol="SPR"],
 .plano-body .filtro-rol-chip.activo[data-rol="SPR"] {
     --rol-color: #bbf7d0;
     --rol-borde: #86efac;
@@ -1882,7 +2025,6 @@ select:focus {
 
 .plano-body .celda[data-rol="GRN"],
 .plano-body .badge-rol[data-rol="GRN"],
-.plano-body .tooltip-plano .rol-badge[data-rol="GRN"],
 .plano-body .filtro-rol-chip.activo[data-rol="GRN"] {
     --rol-color: #d8b4fe;
     --rol-borde: #c084fc;
@@ -1892,7 +2034,6 @@ select:focus {
 
 .plano-body .celda[data-rol="ADM"],
 .plano-body .badge-rol[data-rol="ADM"],
-.plano-body .tooltip-plano .rol-badge[data-rol="ADM"],
 .plano-body .filtro-rol-chip.activo[data-rol="ADM"] {
     --rol-color: #1d201a;
     --rol-borde: #000000;
@@ -1902,7 +2043,6 @@ select:focus {
 
 .plano-body .celda[data-rol="MIS"],
 .plano-body .badge-rol[data-rol="MIS"],
-.plano-body .tooltip-plano .rol-badge[data-rol="MIS"],
 .plano-body .filtro-rol-chip.activo[data-rol="MIS"] {
     --rol-color: #fca5a5;
     --rol-borde: #f87171;
@@ -1915,27 +2055,22 @@ select:focus {
     border-color: var(--rol-borde);
 }
 
+/* --celda-texto es el contraste que el renderer calcula del color del catálogo
+   de Roles; si no llega, se usa el respaldo --rol-texto de cada rol. */
 .plano-body .celda[data-rol] .icono-pc,
 .plano-body .celda[data-rol] .celda-hostname,
 .plano-body .celda[data-rol] .celda-ip {
-    color: var(--rol-texto);
+    color: var(--celda-texto, var(--rol-texto));
 }
 
 .plano-body .badge-rol[data-rol],
-.plano-body .tooltip-plano .rol-badge[data-rol],
 .plano-body .filtro-rol-chip.activo[data-rol] {
     background: var(--rol-color);
     border-color: var(--rol-borde);
     color: var(--rol-texto);
 }
 
-.plano-body .lista-sin-ubicar li[data-rol="AGT"] .rol-punto { background: #93c5fd; }
-.plano-body .lista-sin-ubicar li[data-rol="CRD"] .rol-punto { background: #fef08a; }
-.plano-body .lista-sin-ubicar li[data-rol="CLD"] .rol-punto { background: #fbcfe8; }
-.plano-body .lista-sin-ubicar li[data-rol="SPR"] .rol-punto { background: #bbf7d0; }
-.plano-body .lista-sin-ubicar li[data-rol="GRN"] .rol-punto { background: #d8b4fe; }
-.plano-body .lista-sin-ubicar li[data-rol="ADM"] .rol-punto { background: #1d201a; }
-.plano-body .lista-sin-ubicar li[data-rol="MIS"] .rol-punto { background: #fca5a5; }
+
 
 .plano-body .filtro-rol-chip.activo.todos {
     background: var(--plano-oliva);
@@ -1967,10 +2102,6 @@ select:focus {
 .plano-body [data-color="DIDI"] { background: #ea580c !important; color: #ffffff !important; border-color: #c2410c !important; }
 .plano-body [data-color="FESA"] { background: #0f766e !important; color: #ffffff !important; border-color: #115e59 !important; }
 .plano-body [data-color="FRN"] { background: #6d28d9 !important; color: #ffffff !important; border-color: #5b21b6 !important; }
-
-.plano-body .lista-sin-ubicar li {
-    gap: 7px;
-}
 
 .plano-body .lista-sin-ubicar li:hover {
     background: var(--plano-oliva-suave);
@@ -2026,4 +2157,125 @@ select:focus {
     background: var(--plano-oliva-oscuro);
     border-color: var(--plano-oliva-oscuro);
     color: #fff;
+}
+
+/* =========================================================
+   PANEL LATERAL — scroll y lista de equipos sin ubicar
+   ========================================================= */
+
+/* Barra de desplazamiento con la paleta del plano (WebKit/Electron). El
+   scrollbar-width/color de arriba cubre Firefox; esto cubre Chromium. */
+.lista-sin-ubicar-wrapper::-webkit-scrollbar,
+.zonas-wrapper::-webkit-scrollbar {
+    width: 10px;
+}
+
+.lista-sin-ubicar-wrapper::-webkit-scrollbar-track,
+.zonas-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 6px 0;
+}
+
+.lista-sin-ubicar-wrapper::-webkit-scrollbar-thumb,
+.zonas-wrapper::-webkit-scrollbar-thumb {
+    background: var(--plano-borde-fuerte);
+    border: 3px solid transparent;
+    border-radius: 10px;
+    background-clip: content-box;
+}
+
+.lista-sin-ubicar-wrapper::-webkit-scrollbar-thumb:hover,
+.zonas-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--plano-oliva);
+    background-clip: content-box;
+}
+
+/* Cada equipo: acento lateral al pasar el cursor, para que se vea que la fila
+   es arrastrable al plano. */
+.lista-sin-ubicar li {
+    position: relative;
+    overflow: hidden;
+}
+
+.lista-sin-ubicar li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: transparent;
+    transition: background 0.12s;
+}
+
+.lista-sin-ubicar li:hover::before {
+    background: var(--plano-oliva);
+}
+
+.lista-sin-ubicar-vacia {
+    display: block;
+    text-align: center;
+    padding: 14px 10px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--plano-texto-suave);
+    background: transparent;
+    border: 1px dashed var(--plano-borde);
+    border-radius: 8px;
+    cursor: default;
+}
+
+.lista-sin-ubicar-vacia::before {
+    display: none;
+}
+
+/* Pestañas de cliente del panel lateral: pastillas con la paleta del plano.
+   La activa va rellena de oliva; el contador se aclara sobre ese relleno. */
+.plano-body .lateral-tab.activo {
+    background: var(--plano-oliva);
+    color: #fff;
+    border-color: var(--plano-oliva);
+}
+
+.plano-body .lateral-tab:not(.activo) {
+    color: var(--plano-texto-secundario);
+}
+
+.plano-body .lateral-tab.activo .tab-badge {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+/* Chips de rol: blancos sobre la franja tierra del panel. La regla de tema
+   (`.lateral-tab .tab-badge, .filtro-rol-chip, ...`) los pintaba con la misma
+   superficie que su barra y quedaban invisibles, sin bordes ni hover. */
+.plano-body .lateral-filtros-rol .filtro-rol-chip {
+    background: var(--plano-superficie);
+    color: var(--plano-texto-secundario);
+    border-color: var(--plano-borde);
+}
+
+/* `:not(.activo)` para no borrar el color propio del rol al pasar el cursor. */
+.plano-body .lateral-filtros-rol .filtro-rol-chip:hover:not(.activo) {
+    background: var(--plano-oliva-suave);
+    border-color: var(--plano-oliva);
+    color: var(--plano-oliva-oscuro);
+}
+
+/* Cable de unión etiqueta → zona. Uno solo por etiqueta, fino y translúcido:
+   acompaña al arrastre sin llegar nunca al interior de la grilla. */
+.cable-llave {
+    position: absolute;
+    height: 2px;
+    border-radius: 2px;
+    opacity: 0.45;
+    transform-origin: 0 50%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.cable-llave.cable-oculto {
+    display: none;
 }

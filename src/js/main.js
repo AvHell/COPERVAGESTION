@@ -1299,19 +1299,13 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
         };
         const registros = await inventarioIPDB.listar();
         let filtrados = registros;
-        if (opciones.cliente) {
-            filtrados = filtrados.filter(registro =>
-                String(registro.ClienteCodigo || '').toUpperCase() === String(opciones.cliente).toUpperCase());
-        }
         if (opciones.segmento) {
             filtrados = filtrados.filter(registro => segmentoDe(registro.IP) === String(opciones.segmento));
         }
-        if (!filtrados.length) return { ok: false, mensaje: 'No hay registros de IP para exportar con ese filtro.' };
 
         /* La tabla del control general muestra el segmento completo: las IP
            registradas más las libres (1-254), que NO existen en la base de
-           datos. El Excel refleja lo mismo salvo cuando se exporta un cliente
-           (esas direcciones libres no pertenecen a ningún cliente). */
+           datos. El Excel refleja exactamente lo mismo por segmento. */
         /* Misma norma que la pantalla y que la validación al guardar: la IP
            incluida en los rangos declarados por un cliente se exporta como
            reservada, nunca como libre. Si el esquema de rangos no existe
@@ -1344,27 +1338,25 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
                 Reserva: `${rango.ClienteCodigo || 'Cliente'} · ${rango.RolNombre || 'cualquier perfil'} (${rango.IPInicio} – ${rango.IPFin})`
             };
         };
-        if (!opciones.cliente) {
-            const HOST_INICIAL = 1;
-            const HOST_FINAL = 254;
-            const ocupadas = new Set();
-            const segmentos = new Set();
-            for (const registro of filtrados) {
-                const segmento = segmentoDe(registro.IP);
-                if (segmento === 'Sin IP') continue;
-                ocupadas.add(String(registro.IP || '').trim());
-                segmentos.add(segmento);
-            }
-            const adicionales = [];
-            for (const segmento of segmentos) {
-                for (let host = HOST_INICIAL; host <= HOST_FINAL; host += 1) {
-                    const ip = `${segmento}.${host}`;
-                    if (ocupadas.has(ip)) continue;
-                    adicionales.push(conReserva({ Origen: '', IP: ip, Estado: 'Libre', Libre: true }));
-                }
-            }
-            filtrados = filtrados.concat(adicionales);
+        const HOST_INICIAL = 1;
+        const HOST_FINAL = 254;
+        const ocupadas = new Set();
+        const segmentos = new Set();
+        for (const registro of filtrados) {
+            const segmento = segmentoDe(registro.IP);
+            if (segmento === 'Sin IP') continue;
+            ocupadas.add(String(registro.IP || '').trim());
+            segmentos.add(segmento);
         }
+        const adicionales = [];
+        for (const segmento of segmentos) {
+            for (let host = HOST_INICIAL; host <= HOST_FINAL; host += 1) {
+                const ip = `${segmento}.${host}`;
+                if (ocupadas.has(ip)) continue;
+                adicionales.push(conReserva({ Origen: '', IP: ip, Estado: 'Libre', Libre: true }));
+            }
+        }
+        filtrados = filtrados.concat(adicionales);
         filtrados = filtrados.map(conReserva);
         filtrados = filtrados.slice().sort((a, b) => {
             const porSegmento = segmentoDe(a.IP).localeCompare(segmentoDe(b.IP));
@@ -1400,9 +1392,7 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
         const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
         const sufijo = opciones.segmento
             ? `Segmento_${String(opciones.segmento).replace(/\./g, '-')}`
-            : opciones.cliente
-                ? `Cliente_${opciones.cliente}`
-                : 'General';
+            : 'General';
         const downloadsDir = path.join(os.homedir(), 'Downloads');
         const defaultPath = path.join(
             fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
@@ -1432,7 +1422,9 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
             headerRow: true,
             totalsRow: false,
             style: { theme: 'TableStyleMedium4', showRowStripes: true },
-            columns: columnas.map(columna => ({ name: columna.etiqueta })),
+            /* filterButton:true deja visible el botón de filtro en cada
+               encabezado del Excel (por defecto ExcelJS los oculta). */
+            columns: columnas.map(columna => ({ name: columna.etiqueta, filterButton: true })),
             rows: filtrados.map(registro => columnas.map(columna => columna.valor(registro)))
         });
         worksheet.getRow(1).eachCell(celda => {

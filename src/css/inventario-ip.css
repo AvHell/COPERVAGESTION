@@ -791,38 +791,7 @@ td { font-size: .84rem; }
 .tabla-ip td { border-bottom: 1px solid #eeede5; vertical-align: middle; color: var(--ip-texto-secundario); }
 .tabla-ip tbody tr:last-child td { border-bottom: 0; }
 
-.fila-filtros th {
-    position: static;
-    padding: 6px 8px;
-    background: #f7f6f1;
-    border-bottom: 1px solid var(--ip-borde);
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: normal;
-}
-.fila-filtros input,
-.fila-filtros select {
-    width: 100%;
-    min-height: 30px;
-    padding: 4px 7px;
-    border: 1px solid #dbd8ca;
-    border-radius: 6px;
-    background: #fff;
-    font: inherit;
-    font-size: .74rem;
-    font-weight: 500;
-    color: var(--ip-texto-secundario);
-}
-.fila-filtros input:focus,
-.fila-filtros select:focus { outline: 2px solid #a99a6380; border-color: var(--ip-oro); }
-.fila-filtros input { min-width: 96px; }
-.fila-filtros select { min-width: 108px; max-width: 190px; }
-.btn-limpiar-filtros {
-    width: 100%;
-    min-height: 30px;
-    padding: 4px 8px;
-    font-size: .74rem;
-}
+
 
 /* =========================================================
    SWITCH
@@ -892,7 +861,19 @@ td { font-size: .84rem; }
 #modal-catalogos { width: min(760px, calc(100% - 28px)); }
 
 .exportar-form { display: grid; gap: 12px; text-align: left; padding: 4px 2px; }
-.exportar-form label { display: grid; gap: 5px; }
+.exportar-form label { display: grid; gap: 5px; font-size: .82rem; font-weight: 600; color: var(--ip-texto-secundario); }
+.exportar-form select { width: 100%; min-height: 38px; padding: 6px 10px; }
+.exportar-ayuda {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--ip-borde);
+    border-left: 3px solid var(--ip-oliva);
+    border-radius: 8px;
+    background: var(--ip-superficie-suave);
+    font-size: .75rem;
+    line-height: 1.5;
+    color: var(--ip-texto-suave);
+}
 
 /* =========================================================
    RESPONSIVE

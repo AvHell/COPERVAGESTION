@@ -641,6 +641,46 @@ async function guardarZona(idUsuario, idPiso, anterior, nombre, color, celdas) {
         }
     }
 
+    /* Ninguna celda puede pertenecer a dos grupos a la vez: si el usuario marca
+       una celda que ya está en otra zona, se avisa en lugar de dejar la celda
+       duplicada (la primera zona pintada ganaría y la otra parecería rota). */
+    const zonasPiso = (await pool.request()
+        .input('IdPiso', sql.Int, idPiso)
+        .query(`SELECT Nombre, Color, FilaInicio, FilaFin, ColumnaInicio, ColumnaFin
+                FROM PlanoZonas WHERE IdPiso = @IdPiso`)).recordset;
+
+    const esDelMismoGrupo = (zona) => Boolean(anterior?.nombre) &&
+        String(zona.Nombre || '').trim() === String(anterior.nombre).trim() &&
+        String(zona.Color || '').toLowerCase() === String(anterior.color || '').toLowerCase();
+
+    const choques = [];
+    for (const celda of nuevas) {
+        for (const zona of zonasPiso) {
+            if (esDelMismoGrupo(zona)) continue;
+
+            const filaInicio = Number(zona.FilaInicio) || 0;
+            const filaFin = Number(zona.FilaFin) || filaInicio;
+            const columnaInicio = Number(zona.ColumnaInicio) || 0;
+            const columnaFin = Number(zona.ColumnaFin) || columnaInicio;
+
+            const dentro = celda.fila >= filaInicio && celda.fila <= filaFin &&
+                celda.columna >= columnaInicio && celda.columna <= columnaFin;
+
+            if (dentro && !choques.includes(zona.Nombre)) {
+                choques.push(zona.Nombre);
+                break;
+            }
+        }
+    }
+
+    if (choques.length) {
+        return {
+            ok: false,
+            mensaje: `Esas celdas ya pertenecen a la${choques.length > 1 ? 's zona' : ' zona'} ` +
+                `"${choques.join('", "')}". Quítalas de esa zona o marca otras celdas.`
+        };
+    }
+
     const tx = new sql.Transaction(pool);
     await tx.begin();
 

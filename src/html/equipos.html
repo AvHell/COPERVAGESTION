@@ -58,7 +58,7 @@
             </div>
 
             <div class="toolbar-actions">
-                <button id="btn-rangos-ip" class="btn-export" type="button" title="Administrar los rangos IP autorizados por cliente y perfil">
+                <button id="btn-rangos-ip" class="btn-export" type="button" data-permiso="equipos" title="Administrar los rangos IP autorizados por cliente y perfil">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                         <path d="M9 12l2 2 4-4"/>
@@ -307,7 +307,6 @@
                     </div>
                     <div class="rangos-acciones">
                         <button id="btn-rangos-auditar" class="btn-ghost" type="button" data-permiso="equipos:rangos:auditar|equipos">Auditar</button>
-                        <button id="btn-rangos-lote" class="btn-ghost" type="button" data-permiso="equipos:rangos:crear">Carga por lote</button>
                         <button id="btn-rango-nuevo" class="btn-primary" type="button" data-permiso="equipos:rangos:crear">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                 <path d="M12 5v14M5 12h14"/>
@@ -391,6 +390,34 @@
                     (<code>60</code>) indicando el segmento. Si dejas la IP final vacía, el rango será de una sola IP.
                 </p>
 
+                <!-- SUGERENCIA INTELIGENTE DE IP LIBRES -->
+                <section class="sugerencias-rango" aria-labelledby="sugerencias-rango-titulo">
+                    <div class="sugerencias-cabecera">
+                        <div class="sugerencias-titulo">
+                            <h4 id="sugerencias-rango-titulo">Sugerir IP libres del segmento</h4>
+                            <p>
+                                Calcula bloques consecutivos que no chocan con los rangos de
+                                <strong>ningún</strong> cliente ni con las IP ya registradas.
+                            </p>
+                        </div>
+                        <div class="sugerencias-control">
+                            <label for="rango-cantidad">Hosts
+                                <input type="number" id="rango-cantidad" min="1" max="254" step="1" value="10">
+                            </label>
+                            <button id="btn-sugerir-rango" type="button" class="btn-ghost"
+                                    data-permiso="equipos:rangos:crear|equipos:rangos:editar">
+                                <span class="btn-text">Sugerir</span>
+                                <span class="btn-spinner oculto"></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="rango-sugerencias" class="sugerencias-lista">
+                        <p class="sugerencias-vacio">
+                            Elige cliente, segmento y cantidad de hosts; después pulsa «Sugerir».
+                        </p>
+                    </div>
+                </section>
+
                 <div id="rango-mensaje" class="alert oculto"></div>
             </div>
 
@@ -398,64 +425,6 @@
                 <button id="rango-cancelar" class="btn-ghost">Cancelar</button>
                 <button id="rango-guardar" class="btn-primary">
                     <span class="btn-text">Guardar</span>
-                    <span class="btn-spinner oculto"></span>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL CARGA POR LOTE -->
-    <div id="modal-rangos-lote" class="modal-overlay modal-anidado" style="display:none;">
-        <div class="modal-base modal-xl">
-            <div class="modal-header">
-                <div class="modal-header-content">
-                    <div class="modal-header-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 3v12m0 0 4-4m-4 4-4-4"/>
-                            <path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>
-                        </svg>
-                    </div>
-                    <h3>Carga masiva de rangos</h3>
-                </div>
-                <button id="modal-rangos-lote-cerrar" class="btn-cerrar-modal" aria-label="Cerrar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                </button>
-            </div>
-
-            <div class="modal-body">
-                <div class="field-row-2">
-                    <div class="field">
-                        <label for="lote-cliente">Cliente <span class="req">*</span></label>
-                        <select id="lote-cliente"></select>
-                    </div>
-                    <div class="field">
-                        <label for="lote-segmento">Segmento <span class="req">*</span></label>
-                        <input type="text" id="lote-segmento" placeholder="192.168.2" value="192.168.2" inputmode="numeric">
-                    </div>
-                </div>
-
-                <div class="field">
-                    <label for="lote-texto">Rangos (perfil · IP inicial · IP final)</label>
-                    <textarea id="lote-texto" rows="9" spellcheck="false"
-                        placeholder="Agentes&#9;195&#9;205&#10;Supervisor&#9;206&#9;209&#10;Coordinador&#9;210&#9;211&#10;Gerente&#9;212&#10;Extra&#9;213&#9;214"></textarea>
-                    <span class="ayuda-checkbox">
-                        Un renglón por rango. Separa con tabulación, punto y coma o coma.
-                        Omite la columna de perfil para un rango general y deja la IP final vacía para una sola IP.
-                        Las filas con <code>NA</code> o la palabra <code>Perfil</code> se ignoran.
-                    </span>
-                </div>
-
-                <div id="lote-preview" class="lote-preview oculto"></div>
-                <div id="lote-mensaje" class="alert oculto"></div>
-            </div>
-
-            <div class="modal-footer">
-                <button id="lote-cancelar" class="btn-ghost">Cancelar</button>
-                <button id="lote-procesar" class="btn-primary">
-                    <span class="btn-text">Cargar rangos</span>
                     <span class="btn-spinner oculto"></span>
                 </button>
             </div>

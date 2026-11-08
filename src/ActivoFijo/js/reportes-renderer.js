@@ -379,7 +379,17 @@ function renderTabla(cols) {
 /* =========================================================
    RENDER BODY
    ========================================================= */
+/* Repintado en vivo: la tabla del reporte conserva su desplazamiento al
+   cambiar de vista o aplicar filtros por columna. */
 function renderBody(cols) {
+    if (window.Vivo && tablaBody) {
+        window.Vivo.enVivo(tablaBody, () => pintarBody(cols));
+        return;
+    }
+    pintarBody(cols);
+}
+
+function pintarBody(cols) {
     if (datosFiltrados.length === 0) {
         cardTabla.classList.add('oculto');
         sinResultados.classList.remove('oculto');

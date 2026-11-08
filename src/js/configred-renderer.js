@@ -124,6 +124,9 @@ function limpiarResiduosSwal() {
    ========================================================= */
 let clientes = [];
 let configs  = [];
+/* Códigos de cliente cuyos grupos el usuario dejó abiertos: se conserva
+   entre repintados para no colapsar las tablas tras un refresco. */
+const gruposExpandidos = new Set();
 
 /* =========================================================
    REFERENCIAS DOM
@@ -196,6 +199,15 @@ async function cargarConfigs() {
    RENDER TABLA (agrupado por cliente, grupos cerrados al inicio)
    ========================================================= */
 function renderTabla() {
+    // Refresco en vivo: conserva el desplazamiento y los grupos abiertos.
+    if (window.Vivo && contenedorGrupos) {
+        window.Vivo.enVivo(contenedorGrupos, pintarTabla);
+        return;
+    }
+    pintarTabla();
+}
+
+function pintarTabla() {
     contenedorGrupos.innerHTML = '';
 
     if (!configs || configs.length === 0) {
@@ -223,8 +235,10 @@ function renderTabla() {
 
     clientesOrdenados.forEach(grupoCliente => {
         const divCliente = document.createElement('div');
-        // ✅ CLIENTE: inicia COLAPSADO
-        divCliente.className = 'grupo-cliente colapsado';
+        // ✅ CLIENTE: cerrado por defecto, pero respeta lo que el usuario abrió
+        divCliente.className = gruposExpandidos.has(grupoCliente.codigo)
+            ? 'grupo-cliente'
+            : 'grupo-cliente colapsado';
 
         const claseCodigo = claseCodigoCliente(grupoCliente.codigo);
 
@@ -243,6 +257,8 @@ function renderTabla() {
         `;
         headerCliente.addEventListener('click', () => {
             divCliente.classList.toggle('colapsado');
+            if (divCliente.classList.contains('colapsado')) gruposExpandidos.delete(grupoCliente.codigo);
+            else gruposExpandidos.add(grupoCliente.codigo);
         });
         divCliente.appendChild(headerCliente);
 

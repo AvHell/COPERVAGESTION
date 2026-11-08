@@ -12,13 +12,13 @@
     --rojo: #a84437;
     --verde: #55744f;
     --sombra: 0 8px 26px rgba(49, 45, 33, .08);
-    --agt: #345f9b;
-    --crd: #c89b2c;
-    --cld: #c46b8d;
-    --spr: #54845d;
-    --grn: #765394;
-    --adm: #777b80;
-    --mis: #b54437;
+    /* ROLES: no se declara ni un color por código. El color real llega del
+       catálogo de Roles (PermisosUI lo inyecta inline con !important); estos
+       cuatro tokens son sólo el respaldo neutro para un rol sin color. */
+    --rol-color: #a6a99d;
+    --rol-borde: #8c9182;
+    --rol-fondo: #eceae2;
+    --rol-texto: var(--texto);
 }
 
 * { box-sizing: border-box; }
@@ -161,6 +161,17 @@ main { width: 100%; max-width: none; margin: 0; padding: 24px 28px 40px; }
     color: var(--texto);
     text-align: left;
 }
+/* Celdas por rol: sin colores escritos a mano. El renderer marca cada celda
+   ocupada con data-rol y PermisosUI deja aquí el ColorHex del catálogo de
+   Roles como variables CSS (--rol-fondo/--rol-borde), así que un rol nuevo
+   funciona sin tocar el CSS y los estados de hover/selección siguen vivos.
+   Estos tokens --rol-* del :root son sólo el respaldo neutro.
+   Va ANTES de .celda:hover a propósito: misma especificidad, así el hover
+   gana por orden. */
+.celda[data-rol] {
+    border-color: var(--rol-borde);
+    background: var(--rol-fondo);
+}
 .celda:hover { border-color: var(--tierra); background: #f7f0e2; }
 .celda.vacia { border-style: dashed; background: rgba(255,255,255,.55); }
 .celda.con-mantenimiento {
@@ -172,13 +183,6 @@ main { width: 100%; max-width: none; margin: 0; padding: 24px 28px 40px; }
 .celda .hostname { max-width: 100%; font-size: .78rem; font-weight: 750; line-height: 1.12; overflow-wrap: anywhere; white-space: normal; }
 .celda .cliente { min-height: 0; max-width: 100%; overflow: hidden; padding: 1px 4px; color: var(--texto-suave); font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
 .celda .ip { max-width: 100%; overflow: hidden; color: var(--texto-suave); font-size: .7rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.celda[data-rol="AGT"] { border-color: var(--agt); background: #eaf0f8; }
-.celda[data-rol="CRD"] { border-color: var(--crd); background: #fbf4df; }
-.celda[data-rol="CLD"] { border-color: var(--cld); background: #f8eaf0; }
-.celda[data-rol="SPR"] { border-color: var(--spr); background: #eaf2e9; }
-.celda[data-rol="GRN"] { border-color: var(--grn); background: #f0eaf5; }
-.celda[data-rol="ADM"] { border-color: var(--adm); background: #eff0f0; }
-.celda[data-rol="MIS"] { border-color: var(--mis); background: #f8eae7; }
 .celda .marca-mantenimiento {
     position: absolute;
     left: 7px;
@@ -304,49 +308,10 @@ td { max-width: 260px; overflow-wrap: anywhere; }
 .badge-mantenimiento[data-color="BOTON"] { background: #2e3228; color: #fff7e8; border-color: #1d201a; }
 .badge-mantenimiento[data-color="FECHA"] { background: #55744f; color: #fff; border-color: #3e5a38; }
 .badge-mantenimiento[data-color="UBICACION"] { background: #fde047; color: #713f12; border-color: #ca8a04; }
-.badge-mantenimiento[data-color="AGT"] { background: #93c5fd; color: #1e3a8a; border-color: #60a5fa; }
-.badge-mantenimiento[data-color="SPR"] { background: #bbf7d0; color: #14532d; border-color: #86efac; }
-.badge-mantenimiento[data-color="CLD_ROLE"],
-.badge-mantenimiento.rol-pill[data-color="CLD"] { background: #fbcfe8; color: #831843; border-color: #f9a8d4; }
-.badge-mantenimiento[data-color="GRN"] { background: #d8b4fe; color: #4c1d95; border-color: #c084fc; }
-.badge-mantenimiento[data-color="CRD"] { background: #fef08a; color: #713f12; border-color: #fde047; }
-.badge-mantenimiento[data-color="MIS"] { background: #fca5a5; color: #7f1d1d; border-color: #f87171; }
-.badge-mantenimiento[data-color="ADM"] { background: #1d201a; color: #fff; border-color: #000; }
-.badge-mantenimiento[data-color="MEGA"] { background: #217a4b; color: #fff; border-color: #14532d; }
-.badge-mantenimiento[data-color="NATR"] { background: #5b92e5; color: #fff; border-color: #3b82f6; }
-.badge-mantenimiento[data-color="PHIE"] { background: #eab308; color: #3f3010; border-color: #a16207; }
-.badge-mantenimiento[data-color="TOYL"] { background: #ef4444; color: #fff; border-color: #b91c1c; }
-.badge-mantenimiento[data-color="NU"] { background: #a855f7; color: #fff; border-color: #7e22ce; }
-.badge-mantenimiento[data-color="CLD"] { background: #dc2626; color: #fff; border-color: #991b1b; }
-.badge-mantenimiento.hostname-badge[data-color="CLD"] { background: #fbcfe8; color: #831843; border-color: #f9a8d4; }
-.badge-mantenimiento[data-color="TPLAY"] { background: #1e40af; color: #fff; border-color: #1e3a8a; }
-.badge-mantenimiento[data-color="ATT"] { background: #3b82f6; color: #fff; border-color: #2563eb; }
-.badge-mantenimiento[data-color="DMEX"] { background: #4ade80; color: #064e3b; border-color: #22c55e; }
-.badge-mantenimiento[data-color="SHOP"] { background: #f97316; color: #fff; border-color: #c2410c; }
-.badge-mantenimiento[data-color="HBAN"] { background: #fde047; color: #713f12; border-color: #ca8a04; }
-.badge-mantenimiento[data-color="TOY"] { background: #b91c1c; color: #fff; border-color: #7f1d1d; }
-.badge-mantenimiento[data-color="ADAMA"] { background: #2563eb; color: #fff; border-color: #1d4ed8; }
-.badge-mantenimiento[data-color="KUBO"] { background: #15803d; color: #fff; border-color: #166534; }
-.badge-mantenimiento[data-color="DIDI"] { background: #ea580c; color: #fff; border-color: #c2410c; }
-.badge-mantenimiento[data-color="FESA"] { background: #0f766e; color: #fff; border-color: #115e59; }
-.badge-mantenimiento[data-color="FRN"] { background: #6d28d9; color: #fff; border-color: #5b21b6; }
-.badge-mantenimiento.badge-cliente[data-color="MEGA"] { background: #217a4b; color: #fff; border-color: #14532d; }
-.badge-mantenimiento.badge-cliente[data-color="NATR"] { background: #5b92e5; color: #fff; border-color: #3b82f6; }
-.badge-mantenimiento.badge-cliente[data-color="PHIE"] { background: #eab308; color: #3f3010; border-color: #a16207; }
-.badge-mantenimiento.badge-cliente[data-color="TOYL"] { background: #ef4444; color: #fff; border-color: #b91c1c; }
-.badge-mantenimiento.badge-cliente[data-color="NU"] { background: #a855f7; color: #fff; border-color: #7e22ce; }
-.badge-mantenimiento.badge-cliente[data-color="CLD"] { background: #dc2626; color: #fff; border-color: #991b1b; }
-.badge-mantenimiento.badge-cliente[data-color="TPLAY"] { background: #1e40af; color: #fff; border-color: #1e3a8a; }
-.badge-mantenimiento.badge-cliente[data-color="ATT"] { background: #3b82f6; color: #fff; border-color: #2563eb; }
-.badge-mantenimiento.badge-cliente[data-color="DMEX"] { background: #4ade80; color: #064e3b; border-color: #22c55e; }
-.badge-mantenimiento.badge-cliente[data-color="SHOP"] { background: #f97316; color: #fff; border-color: #c2410c; }
-.badge-mantenimiento.badge-cliente[data-color="HBAN"] { background: #fde047; color: #713f12; border-color: #ca8a04; }
-.badge-mantenimiento.badge-cliente[data-color="TOY"] { background: #b91c1c; color: #fff; border-color: #7f1d1d; }
-.badge-mantenimiento.badge-cliente[data-color="ADAMA"] { background: #2563eb; color: #fff; border-color: #1d4ed8; }
-.badge-mantenimiento.badge-cliente[data-color="KUBO"] { background: #15803d; color: #fff; border-color: #166534; }
-.badge-mantenimiento.badge-cliente[data-color="DIDI"] { background: #ea580c; color: #fff; border-color: #c2410c; }
-.badge-mantenimiento.badge-cliente[data-color="FESA"] { background: #0f766e; color: #fff; border-color: #115e59; }
-.badge-mantenimiento.badge-cliente[data-color="FRN"] { background: #6d28d9; color: #fff; border-color: #5b21b6; }
+/* Los badges de cliente ([data-color] + .badge-cliente / data-colorKind="client")
+   y de rol (.rol-pill, .hostname-badge) NO llevan color aquí: PermisosUI
+   aplica el ColorHex configurado en Catálogos (inline con !important) y lo
+   refresca solo con su MutationObserver. */
 .ultimo-registro { margin: 12px 0; padding: 10px 12px; border-left: 3px solid var(--verde); border-radius: 5px; background: #f0f3eb; color: #4a5940; font-size: .8rem; }
 .ultimo-registro.clonado { border-color: var(--rojo); background: #f8efec; color: #81372e; }
 .campo { display: grid; gap: 6px; margin-top: 14px; }

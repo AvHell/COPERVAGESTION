@@ -64,6 +64,12 @@ let moverPendiente = null;
 
 let tabActivo = '__todos__';
 let filtroRolActivo = '__todos__';
+/* Firma de los chips de rol ya dibujados: sólo se reconstruyen cuando cambia
+   el conjunto de roles presentes en "Equipos sin ubicar". */
+let firmaChipsRol = null;
+/* Firma de los ítems de la leyenda de roles ya dibujados: sólo se reconstruyen
+   cuando cambia el conjunto de códigos del catálogo de Roles. */
+let firmaLeyendaRoles = null;
 let filtroBusquedaLateral = '';
 
 let guardandoZonaLibre = false;
@@ -108,25 +114,10 @@ function colorParaInput(c, fallback = COLOR_ZONA_DEFECTO) {
     return fallback;
 }
 
-const COLORES_CLIENTE_POR_CODIGO = Object.freeze({
-    MEGA: '#217a4b',
-    NATR: '#5b92e5',
-    PHIE: '#eab308',
-    TOYL: '#ef4444',
-    NU: '#a855f7',
-    CLD: '#dc2626',
-    TPLAY: '#1e40af',
-    ATT: '#3b82f6',
-    DMEX: '#4ade80',
-    SHOP: '#f97316',
-    HBAN: '#fde047',
-    TOY: '#b91c1c',
-    ADAMA: '#2563eb',
-    KUBO: '#15803d',
-    DIDI: '#ea580c',
-    FESA: '#0f766e',
-    FRN: '#6d28d9'
-});
+/* Color neutro cuando el cliente todavía no tiene ColorHex en Catálogos.
+   No hay tabla de colores por código: la única fuente de verdad es el
+   catálogo (clientes.ColorHex), igual que en el resto de páginas. */
+const COLOR_CLIENTE_NEUTRO = '#2e3228';
 
 const CELL_W = 74;
 const CELL_H = 52;
@@ -363,13 +354,12 @@ const CSS_PDF = `
         letter-spacing: -0.01em;
     }
 
-    .celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); }
-    .celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); }
-    .celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); }
-    .celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); }
-    .celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); }
-    .celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); }
-    .celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); }
+    /* Colores por rol: sin códigos fijos. El fondo, el borde y el contraste
+       del texto llegan inline desde el catálogo de Roles. */
+    .celda[data-rol] {
+        background: var(--rol-fondo);
+        border-color: var(--rol-borde);
+    }
 
     .tabla-equipos {
         width: 100%;
@@ -419,32 +409,12 @@ const CSS_PDF = `
         color: #fff;
         background: #94a3b8;
     }
-    .badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
-    .badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
-    .badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
-    .badge-rol[data-rol="SPR"] { background: var(--rol-spr); }
-    .badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
-    .badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
-    .badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
 
+
+
+    /* Los colores de cliente provienen del catálogo y llegan como style inline. */
     .badge-cli[data-color] { border: 1px solid transparent; }
-    [data-color="MEGA"] { background: #217a4b !important; color: #ffffff !important; border-color: #14532d !important; }
-    [data-color="NATR"] { background: #5b92e5 !important; color: #ffffff !important; border-color: #3b82f6 !important; }
-    [data-color="PHIE"] { background: #eab308 !important; color: #3f3010 !important; border-color: #a16207 !important; }
-    [data-color="TOYL"] { background: #ef4444 !important; color: #ffffff !important; border-color: #b91c1c !important; }
-    [data-color="NU"] { background: #a855f7 !important; color: #ffffff !important; border-color: #7e22ce !important; }
-    [data-color="CLD"] { background: #dc2626 !important; color: #ffffff !important; border-color: #991b1b !important; }
-    [data-color="TPLAY"] { background: #1e40af !important; color: #ffffff !important; border-color: #1e3a8a !important; }
-    [data-color="ATT"] { background: #3b82f6 !important; color: #ffffff !important; border-color: #2563eb !important; }
-    [data-color="DMEX"] { background: #4ade80 !important; color: #064e3b !important; border-color: #22c55e !important; }
-    [data-color="SHOP"] { background: #f97316 !important; color: #ffffff !important; border-color: #c2410c !important; }
-    [data-color="HBAN"] { background: #fde047 !important; color: #713f12 !important; border-color: #ca8a04 !important; }
-    [data-color="TOY"] { background: #b91c1c !important; color: #ffffff !important; border-color: #7f1d1d !important; }
-    [data-color="ADAMA"] { background: #2563eb !important; color: #ffffff !important; border-color: #1d4ed8 !important; }
-    [data-color="KUBO"] { background: #15803d !important; color: #ffffff !important; border-color: #166534 !important; }
-    [data-color="DIDI"] { background: #ea580c !important; color: #ffffff !important; border-color: #c2410c !important; }
-    [data-color="FESA"] { background: #0f766e !important; color: #ffffff !important; border-color: #115e59 !important; }
-    [data-color="FRN"] { background: #6d28d9 !important; color: #ffffff !important; border-color: #5b21b6 !important; }
+
 
     .badge-dhcp {
         display: inline-block;
@@ -521,29 +491,12 @@ const CSS_PDF = `
         --plano-oro: #a99a63;
         --plano-rojo: #b5442e;
         --plano-rojo-suave: #f3ded6;
-        /* Respaldo cuando el rol no tiene color en el catálogo. Los tokens
-           -texto solo se usan si tampoco llega --celda-texto del catálogo. */
-        --rol-agt: #93c5fd;
-        --rol-agt-suave: #93c5fd;
-        --rol-agt-texto: #1e3a8a;
-        --rol-crd: #fef08a;
-        --rol-crd-suave: #fef08a;
-        --rol-crd-texto: #713f12;
-        --rol-cld: #fbcfe8;
-        --rol-cld-suave: #fbcfe8;
-        --rol-cld-texto: #831843;
-        --rol-spr: #bbf7d0;
-        --rol-spr-suave: #bbf7d0;
-        --rol-spr-texto: #14532d;
-        --rol-grn: #d8b4fe;
-        --rol-grn-suave: #d8b4fe;
-        --rol-grn-texto: #4c1d95;
-        --rol-adm: #1d201a;
-        --rol-adm-suave: #1d201a;
-        --rol-adm-texto: #ffffff;
-        --rol-mis: #fca5a5;
-        --rol-mis-suave: #fca5a5;
-        --rol-mis-texto: #7f1d1d;
+        /* ROLES: ningún color por código. El renderer inyecta el color del
+           catálogo de Roles inline; estos tokens son el respaldo neutro. */
+        --rol-color: #a6a99d;
+        --rol-borde: #8c9182;
+        --rol-fondo: #eceae2;
+        --rol-texto: #2e3228;
     }
 
     html, body { color: var(--plano-texto); }
@@ -579,29 +532,13 @@ const CSS_PDF = `
        ROLES: el color NO se declara aquí.
        El renderer inyecta en la celda el fondo y el borde del color
        configurado en el catálogo de Roles, y el contraste del texto como
-       --celda-texto. Estas reglas solo aportan el respaldo (tokens --rol-*)
-       cuando el rol no tiene color capturado.
+       --celda-texto. El fondo/borde genérico de [data-rol] ya está arriba,
+       con los tokens neutros del :root como respaldo.
        ------------------------------------------------------------------ */
-    .celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); --rol-texto: var(--rol-agt-texto); }
-    .celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); --rol-texto: var(--rol-crd-texto); }
-    .celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); --rol-texto: var(--rol-cld-texto); }
-    .celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); --rol-texto: var(--rol-spr-texto); }
-    .celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); --rol-texto: var(--rol-grn-texto); }
-    .celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); --rol-texto: var(--rol-adm-texto); }
-    .celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); --rol-texto: var(--rol-mis-texto); }
-
     .celda[data-rol] .celda-hostname,
     .celda[data-rol] .celda-ip {
         color: var(--celda-texto, var(--rol-texto, var(--plano-texto)));
     }
-
-    .badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
-    .badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
-    .badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
-    .badge-rol[data-rol="SPR"] { background: var(--rol-spr); }
-    .badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
-    .badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
-    .badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
 `;
 
 /* =========================================================
@@ -2235,12 +2172,16 @@ function actualizarBotonesModo() {
 /* =========================================================
    LIMPIEZA TOTAL DE UN PANEL
    ========================================================= */
-function limpiarRenderPanel(panel) {
+function limpiarRenderPanel(panel, conservarCeldas = false) {
     const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
     const llaves = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
     if (!grid) return;
 
-    grid.innerHTML = '';
+    /* Al repintar el canvas las celdas NO se vacían: se sustituyen de golpe al
+       final (ver pintarGridPanel). Un canvas vacío a medio dibujar hace que el
+       navegador recorte el scroll del .plano-wrapper a 0 y el plano "salta" al
+       inicio aunque después se vuelva a dibujar. */
+    if (!conservarCeldas) grid.innerHTML = '';
     if (llaves) llaves.innerHTML = '';
 
     const wrapper = grid.closest('.grid-plano-wrapper');
@@ -2310,6 +2251,18 @@ async function cargarPisosPanel(panel, seleccionarPrimero) {
 
 function renderFiltroClientes(panel) {
     const contenedor = panel.sufijo === 'izq' ? filtroClientesIzq : filtroClientesDer;
+    if (!contenedor) return;
+
+    /* Los chips viven en una fila con desplazamiento horizontal propio:
+       se repintan en vivo para no volver al primer cliente al marcar uno. */
+    if (window.Vivo) {
+        window.Vivo.enVivo(contenedor, () => pintarFiltroClientes(panel, contenedor));
+        return;
+    }
+    pintarFiltroClientes(panel, contenedor);
+}
+
+function pintarFiltroClientes(panel, contenedor) {
     const setFiltro  = panel.sufijo === 'izq' ? clientesFiltroIzq : clientesFiltroDer;
 
     contenedor.innerHTML = '';
@@ -2442,7 +2395,28 @@ conectarEventosPanel(panelDer, selectLugarDer, inputFilasDer, inputColumnasDer,
 async function cargarPanel(panel) {
     if (!panel.idPiso) return;
 
-    limpiarRenderPanel(panel);
+    const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
+
+    /* IMPORTANTE: la limpieza del canvas ocurre dentro de cargarPanelDatos(),
+       así que hay que capturar el desplazamiento ANTES de entrar. Si se
+       envolviera sólo el render final, el grid ya estaría vacío y el
+       navegador habría llevado el .plano-wrapper al inicio: eso era el
+       "postback" que devolvía el plano a su posición original. */
+    if (window.Vivo && grid) {
+        await window.Vivo.enVivo(grid, () => cargarPanelDatos(panel));
+        return;
+    }
+
+    await cargarPanelDatos(panel);
+}
+
+async function cargarPanelDatos(panel) {
+    if (!panel.idPiso) return;
+
+    /* conservarCeldas = true: el canvas anterior sigue visible mientras llegan
+       los datos y sólo al final se sustituye de golpe. Antes se vaciaba aquí,
+       el .plano-wrapper perdía su altura desplazable y el scroll caía a 0. */
+    limpiarRenderPanel(panel, true);
 
     const piso = pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso));
     panel.clientesDelPiso = piso ? piso.clientes : [];
@@ -2787,15 +2761,35 @@ const SVG_PC = `
 /* =========================================================
    RENDER DEL GRID — CANVAS EN VIVO
    ========================================================= */
+/* Repintado en vivo del canvas: conserva el desplazamiento de la ventana y del
+   .plano-wrapper, además del foco. Mover un equipo, cambiar una zona o
+   recargar el piso ya no devuelve la vista al inicio del plano. */
 function renderGridPanel(panel) {
     const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
     if (!grid) return;
 
-    limpiarRenderPanel(panel);
+    if (window.Vivo) {
+        window.Vivo.enVivo(grid, () => pintarGridPanel(panel, grid));
+        return;
+    }
+    pintarGridPanel(panel, grid);
+}
 
-    if (!panel.dimensiones.Filas) return;
+function pintarGridPanel(panel, grid) {
+    /* conservarCeldas = true: las celdas actuales se mantienen en el DOM mientras
+       se construye el repintado y se sustituyen de golpe al final. Vaciar el
+       canvas a media construcción hacía que el navegador recortara el scroll
+       del .plano-wrapper a 0 (el "postback" del plano). */
+    limpiarRenderPanel(panel, true);
+
+    if (!panel.dimensiones.Filas) {
+        grid.replaceChildren();
+        return;
+    }
 
     grid.style.gridTemplateColumns = `repeat(${panel.dimensiones.Columnas}, 1fr)`;
+
+    const fragmento = document.createDocumentFragment();
 
     const setFiltro = panel.sufijo === 'izq' ? clientesFiltroIzq : clientesFiltroDer;
 
@@ -2998,9 +2992,13 @@ function renderGridPanel(panel) {
                 });
             }
 
-            grid.appendChild(celda);
+            fragmento.appendChild(celda);
         }
     }
+
+    /* Sustitución atómica: un solo reflow, el canvas nunca queda vacío. */
+    grid.replaceChildren(fragmento);
+
 
     /* ORDEN IMPORTANTE: el riel de zonas reserva (o libera) el espacio lateral
        del wrapper; los textos de zona libre se posicionan midiendo el wrapper,
@@ -3508,10 +3506,17 @@ lateralTabs.addEventListener('click', (ev) => {
 });
 
 function renderPanelLateral() {
-    renderTabs();
+    /* Refresco en vivo del panel lateral: cada lista conserva su propio
+       desplazamiento (incluido el horizontal de las pestañas por cliente). */
+    const enVivo = (nodo, tarea) => (window.Vivo && nodo)
+        ? window.Vivo.enVivo(nodo, tarea)
+        : tarea();
+
+    enVivo(lateralTabs, renderTabs);
+    enVivo(listaSinUbicar, renderListaSinUbicarFiltrada);
+    enVivo(listaZonas, renderListaZonas);
+
     renderFiltrosRol();
-    renderListaSinUbicarFiltrada();
-    renderListaZonas();
     actualizarBadge();
     window.PermisosUI?.aplicar(listaSinUbicar);
     window.PermisosUI?.aplicar(listaZonas);
@@ -3547,11 +3552,44 @@ function renderTabs() {
     });
 }
 
+/* Los chips de rol se generan desde los roles que realmente tienen equipos sin
+   ubicar: un rol nuevo en Catálogos aparece aquí sin tocar el HTML. "Todos" es
+   el único chip fijo (está en plano.html) y actúa de reinicio del filtro. */
 function renderFiltrosRol() {
+    const roles = [...new Set((panelActivo?.equiposSinUbicar || [])
+        .map(equipo => String(equipo.RolCodigo || '').trim().toUpperCase())
+        .filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'es'));
+
+    /* Si el rol filtrado desapareció (se ubicó su último equipo o se cambió de
+       piso), el filtro vuelve a "Todos" para no dejar la lista vacía sin salida. */
+    if (filtroRolActivo !== '__todos__' && !roles.includes(filtroRolActivo)) {
+        filtroRolActivo = '__todos__';
+    }
+
+    const firma = roles.join('|');
+    if (firma !== firmaChipsRol) {
+        firmaChipsRol = firma;
+        const chipTodos = lateralFiltrosRol.querySelector('.filtro-rol-chip.todos');
+        const fragmento = document.createDocumentFragment();
+        roles.forEach(rol => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'filtro-rol-chip';
+            chip.dataset.rol = rol;
+            chip.textContent = rol;
+            fragmento.append(chip);
+        });
+        if (chipTodos) lateralFiltrosRol.replaceChildren(chipTodos, fragmento);
+        else lateralFiltrosRol.replaceChildren(fragmento);
+    }
+
     lateralFiltrosRol.querySelectorAll('.filtro-rol-chip').forEach(chip => {
-        const rol = chip.dataset.rol;
-        chip.classList.toggle('activo', rol === filtroRolActivo);
+        chip.classList.toggle('activo', chip.dataset.rol === filtroRolActivo);
     });
+    /* El color del catálogo sólo lo lleva el chip activo, así que hay que
+       repintarlos cada vez que cambia la clase .activo. */
+    window.PermisosUI?.aplicarColores?.(lateralFiltrosRol);
 }
 
 function renderListaSinUbicarFiltrada() {
@@ -4475,7 +4513,7 @@ function construirBloquesPlano(panel, layout) {
         const colorGuardado = window.PermisosUI?.colorCliente?.(codigoNormalizado) ||
             clientes.find(cliente => String(cliente.Codigo || '').toUpperCase() === codigoNormalizado)?.ColorHex;
         if (/^#[0-9A-F]{6}$/i.test(colorGuardado || '')) return colorGuardado;
-        return COLORES_CLIENTE_POR_CODIGO[codigoNormalizado] || '#2e3228';
+        return COLOR_CLIENTE_NEUTRO;
     };
     const colorPorCliente = new Map();
     equiposList.forEach(e => {
@@ -5460,6 +5498,74 @@ document.addEventListener('keydown', (ev) => {
 });
 
 /* =========================================================
+   LEYENDA DE ROLES
+   El color de cada punto sale del catálogo de Roles: primero
+   PermisosUI.colorRol() (colores cargados desde `catalogos:colores`) y, si no
+   llega, el ColorHex del propio catálogo. Sin colores fijos en el CSS.
+   ========================================================= */
+function colorDeRol(codigo) {
+    const clave = String(codigo || '').trim().toUpperCase();
+    const guardado = window.PermisosUI?.colorRol?.(clave) ||
+        roles.find(rol => String(rol.Codigo || '').trim().toUpperCase() === clave)?.ColorHex;
+    return /^#[0-9A-F]{6}$/i.test(guardado || '') ? guardado : '';
+}
+
+/* Dibuja un ítem de la leyenda por cada rol del catálogo (los carga el INICIO
+   con roles.listar()), de modo que un rol nuevo aparece sin tocar el HTML.
+   Sólo se reconstruye el DOM cuando cambia el conjunto de códigos; el color se
+   repinta siempre aparte, porque el catálogo puede cambiar sin cambiar códigos. */
+function renderLeyendaRoles() {
+    const contenedor = document.getElementById('leyenda-roles');
+    if (!contenedor) return;
+
+    const vistos = new Set();
+    const items = [];
+    (Array.isArray(roles) ? roles : []).forEach(rol => {
+        const codigo = String(rol.Codigo || '').trim().toUpperCase();
+        if (!codigo || vistos.has(codigo)) return;
+        vistos.add(codigo);
+        items.push({ codigo, nombre: String(rol.Nombre || '').trim() });
+    });
+    items.sort((a, b) => a.codigo.localeCompare(b.codigo, 'es'));
+
+    const firma = items.map(item => item.codigo).join('|');
+    if (firma !== firmaLeyendaRoles) {
+        firmaLeyendaRoles = firma;
+        const fragmento = document.createDocumentFragment();
+        items.forEach(({ codigo, nombre }) => {
+            const item = document.createElement('div');
+            item.className = 'leyenda-item';
+            item.dataset.rolLeyenda = codigo;
+            if (nombre) item.title = `${codigo} — ${nombre}`;
+
+            const punto = document.createElement('span');
+            punto.className = 'color-punto';
+            const etiqueta = document.createElement('span');
+            etiqueta.className = 'codigo';
+            etiqueta.textContent = codigo;
+
+            item.append(punto, etiqueta);
+            fragmento.append(item);
+        });
+
+        /* Se conserva el título "Roles:" que ya está en plano.html. */
+        const titulo = contenedor.querySelector('.titulo-leyenda');
+        if (titulo) contenedor.replaceChildren(titulo, fragmento);
+        else contenedor.replaceChildren(fragmento);
+    }
+
+    pintarLeyendaRoles();
+}
+
+function pintarLeyendaRoles() {
+    document.querySelectorAll('.leyenda-item[data-rol-leyenda]').forEach(item => {
+        const color = colorDeRol(item.dataset.rolLeyenda);
+        if (color) item.style.setProperty('--rol-color', color);
+        else item.style.removeProperty('--rol-color');
+    });
+}
+
+/* =========================================================
    INICIO
    ========================================================= */
 (async () => {
@@ -5471,6 +5577,7 @@ document.addEventListener('keydown', (ev) => {
     // 2. Cargar el resto de datos
     await cargarClientes();
     roles = await window.api.roles.listar();
+    renderLeyendaRoles();
     await cargarPisosPanel(panelIzq, false);
     renderPanelLateral();
     crearTooltip();

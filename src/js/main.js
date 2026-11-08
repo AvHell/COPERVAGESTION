@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell, safeStorage } = requir
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const { PDFDocument } = require('pdf-lib');
 const { autoUpdater } = require('electron-updater');
 const XLSX = require('xlsx');
@@ -23,6 +24,7 @@ const dominiosDB   = require('./db/dominios');
 const configDB     = require('./db/configuraciones');
 const permisosDB   = require('./db/permisos');
 const mantenimientosDB = require('./db/mantenimientos');
+const documentosDB   = require('./db/documentos');
 const conexionDB = require('./db/conexion');
 const credencialesDB = require('./db/credenciales');
 
@@ -376,6 +378,7 @@ const RUTAS_MODULOS = {
     equipos: { basePath: HTML, archivo: 'equipos.html', permiso: 'equipos', titulo: 'Equipos' },
     inventario_ip: { basePath: HTML, archivo: 'inventario-ip.html', permiso: 'equipos', titulo: 'Control general de IP' },
     plano: { basePath: HTML, archivo: 'plano.html', permiso: 'plano', titulo: 'Plano Visual' },
+    documentacion: { basePath: HTML, archivo: 'documentacion.html', permiso: 'documentos', titulo: 'Documentación' },
     historico: { basePath: HTML, archivo: 'historico.html', permiso: 'historico', titulo: 'Histórico del Plano' },
     mantenimientos: { basePath: HTML, archivo: 'mantenimientos.html', permiso: 'mantenimientos', titulo: 'Mantenimientos' },
     usuarios: { basePath: HTML, archivo: 'usuarios.html', permiso: 'usuarios', titulo: 'Usuarios' },
@@ -713,6 +716,7 @@ ipcMain.handle('navegar-modulo', (e, modulo) => {
 ipcMain.handle('abrir-catalogos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'catalogos'));
 ipcMain.handle('abrir-equipos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'equipos'));
 ipcMain.handle('abrir-plano', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'plano'));
+ipcMain.handle('abrir-documentacion', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'documentacion'));
 ipcMain.handle('abrir-usuarios', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'usuarios'));
 ipcMain.handle('abrir-historico', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'historico'));
 ipcMain.handle('abrir-mantenimientos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'mantenimientos'));
@@ -1760,6 +1764,257 @@ ipcMain.handle('plano:exportarPDF', async (_e, opciones) => {
         }
     }
 });
+
+/* =========================================================
+   IPC: DOCUMENTACIÓN
+   ---------------------------------------------------------
+   El archivo se guarda DENTRO de la base de datos en la columna
+   Contenido VARBINARY(MAX) (scripts/documentacion.sql).
+   NombreGuardado es una clave lógica que se genera aquí, no una
+   ruta: al abrir o descargar se escribe una copia temporal en
+   disco sólo porque el sistema operativo necesita un archivo real.
+   ========================================================= */
+const LIMITE_DOCUMENTO_BYTES = 60 * 1024 * 1024;
+
+/** Carpeta de versiones anteriores del módulo (sólo lectura de respaldo). */
+function carpetaDocumentosLegado() {
+    return path.join(app.getPath('userData'), 'documentos');
+}
+
+function limpiarNombreArchivo(nombre) {
+    return String(nombre || 'archivo')
+        .replace(/[\\/:*?"<>|]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 200) || 'archivo';
+}
+
+function extensionArchivo(nombre) {
+    const ext = path.extname(String(nombre || '')).toLowerCase();
+    return /^\.[a-z0-9]{1,12}$/.test(ext) ? ext : '';
+}
+
+/** Convierte lo que llega por IPC (ArrayBuffer/Uint8Array/Buffer) en Buffer. */
+function bufferDeArchivo(archivo) {
+    const datos = archivo?.datos;
+    if (!datos) return null;
+    if (Buffer.isBuffer(datos)) return datos;
+    if (datos instanceof ArrayBuffer) return Buffer.from(new Uint8Array(datos));
+    if (ArrayBuffer.isView(datos)) return Buffer.from(datos.buffer, datos.byteOffset, datos.byteLength);
+    if (Array.isArray(datos)) return Buffer.from(datos);
+    return null;
+}
+
+/** Clave lógica única con la que se localiza el binario en la base. */
+function nombreLogicoDocumento(nombreOriginal) {
+    return `doc_${Date.now().toString(36)}${crypto.randomBytes(5).toString('hex')}${extensionArchivo(nombreOriginal)}`;
+}
+
+function hashDocumento(buffer) {
+    return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/** Carpeta temporal donde se materializa el archivo para abrirlo. */
+function carpetaTemporalDocumentos() {
+    const base = path.join(app.getPath('temp'), 'documentos-abrir');
+    fs.mkdirSync(base, { recursive: true });
+    return base;
+}
+
+function limpiarTemporales(base) {
+    try {
+        const limite = Date.now() - 24 * 60 * 60 * 1000;
+        fs.readdirSync(base).forEach(nombre => {
+            const ruta = path.join(base, nombre);
+            try {
+                if (fs.statSync(ruta).mtimeMs < limite) fs.unlinkSync(ruta);
+            } catch (_) { /* archivo en uso: se deja para la próxima */ }
+        });
+    } catch (_) { /* la carpeta temporal es prescindible */ }
+}
+
+/**
+ * Recupera el binario del documento desde la base de datos. Si el
+ * registro se subió con la versión anterior del módulo (archivo en
+ * disco, Contenido = NULL), se lee desde userData/documentos.
+ */
+async function obtenerArchivoDocumento(nombreGuardado) {
+    const nombre = path.basename(String(nombreGuardado || ''));
+    if (!nombre) return { ok: false, mensaje: 'No se recibió el archivo.' };
+
+    let registro = null;
+    try {
+        registro = await documentosDB.obtenerArchivo(nombre);
+    } catch (e) {
+        return { ok: false, mensaje: 'No se pudo leer el archivo: ' + e.message };
+    }
+
+    if (registro?.contenido) {
+        return {
+            ok: true,
+            datos: Buffer.from(registro.contenido),
+            tipoMime: registro.tipoMime,
+            nombreOriginal: registro.nombreOriginal
+        };
+    }
+
+    try {
+        const legado = path.join(carpetaDocumentosLegado(), nombre);
+        if (fs.existsSync(legado)) {
+            return {
+                ok: true,
+                datos: fs.readFileSync(legado),
+                tipoMime: '',
+                nombreOriginal: registro?.nombreOriginal || nombre
+            };
+        }
+    } catch (_) { /* sin respaldo disponible */ }
+
+    return { ok: false, mensaje: 'El archivo ya no está disponible en la base de datos.' };
+}
+
+/* ---------- Subida ---------- */
+ipcMain.handle('documentos:subir', async (_e, datos) => {
+    const err = requerirSesion('documentos:subir');
+    if (err) return err;
+
+    try {
+        const seccion = String(datos?.seccion || '').trim();
+        if (!seccion) return { ok: false, mensaje: 'Selecciona una sección.' };
+
+        const archivo = datos?.archivo || {};
+        const buffer = bufferDeArchivo(archivo);
+        if (!buffer || !buffer.length) return { ok: false, mensaje: 'No se recibió el archivo.' };
+        if (buffer.length > LIMITE_DOCUMENTO_BYTES) {
+            const limiteMB = Math.round(LIMITE_DOCUMENTO_BYTES / (1024 * 1024));
+            return { ok: false, mensaje: `El archivo supera el límite de ${limiteMB} MB.` };
+        }
+
+        const nombreOriginal = limpiarNombreArchivo(archivo.nombre);
+
+        return await documentosDB.crear({
+            seccion,
+            titulo: datos?.titulo || nombreOriginal.replace(/\.[^.]+$/, ''),
+            cliente: datos?.cliente,
+            categoria: datos?.categoria,
+            descripcion: datos?.descripcion,
+            etiquetas: datos?.etiquetas,
+            nombreOriginal,
+            nombreGuardado: nombreLogicoDocumento(nombreOriginal),
+            tipoMime: archivo.mime,
+            tamanoBytes: buffer.length,
+            hash: hashDocumento(buffer),
+            contenido: buffer
+        });
+    } catch (e) {
+        console.error('[Documentos] Error al subir:', e);
+        return { ok: false, mensaje: 'No se pudo guardar el documento: ' + e.message };
+    }
+});
+
+/* ---------- Nueva versión ---------- */
+ipcMain.handle('documentos:agregarVersion', async (_e, id, archivo) => {
+    const err = requerirSesion('documentos:editar');
+    if (err) return err;
+    if (!id) return { ok: false, mensaje: 'No se recibió el documento.' };
+
+    const buffer = bufferDeArchivo(archivo);
+    if (!buffer || !buffer.length) return { ok: false, mensaje: 'No se recibió el archivo.' };
+    if (buffer.length > LIMITE_DOCUMENTO_BYTES) {
+        const limiteMB = Math.round(LIMITE_DOCUMENTO_BYTES / (1024 * 1024));
+        return { ok: false, mensaje: `El archivo supera el límite de ${limiteMB} MB.` };
+    }
+
+    const nombreOriginal = limpiarNombreArchivo(archivo?.nombre);
+    try {
+        return await documentosDB.agregarVersion(id, {
+            nombreOriginal,
+            nombreGuardado: nombreLogicoDocumento(nombreOriginal),
+            tipoMime: archivo?.mime,
+            tamanoBytes: buffer.length,
+            hash: hashDocumento(buffer),
+            contenido: buffer
+        });
+    } catch (e) {
+        return { ok: false, mensaje: 'No se pudo registrar la versión: ' + e.message };
+    }
+});
+
+/* ---------- Consultas ---------- */
+ipcMain.handle('documentos:listar',     async (_e, opciones) => { const err = requerirSesion('documentos:listado:ver'); if (err) return err; return await documentosDB.listar(opciones || {}); });
+ipcMain.handle('documentos:obtener',    async (_e, id)       => { const err = requerirSesion('documentos:listado:ver'); if (err) return err; return await documentosDB.obtener(id); });
+ipcMain.handle('documentos:versiones',  async (_e, id)       => { const err = requerirSesion('documentos:listado:ver'); if (err) return err; return await documentosDB.listarVersiones(id); });
+ipcMain.handle('documentos:etiquetas',  async ()             => { const err = requerirSesion('documentos:listado:ver'); if (err) return err; return await documentosDB.listarEtiquetas(); });
+
+ipcMain.handle('documentos:actualizar', async (_e, id, datos) => {
+    const err = requerirSesion('documentos:editar');
+    if (err) return err;
+    return await documentosDB.actualizar(id, datos);
+});
+
+/* ---------- Abrir / guardar copia (binario desde la base) ---------- */
+ipcMain.handle('documentos:abrir', async (_e, nombreGuardado) => {
+    const err = requerirSesion('documentos:descargar');
+    if (err) return err;
+
+    const archivo = await obtenerArchivoDocumento(nombreGuardado);
+    if (!archivo.ok) return { ok: false, mensaje: archivo.mensaje };
+
+    try {
+        const base = carpetaTemporalDocumentos();
+        limpiarTemporales(base);
+
+        const destino = path.join(
+            base,
+            `${Date.now().toString(36)}_${path.basename(archivo.nombreOriginal || 'documento')}`
+        );
+        fs.writeFileSync(destino, archivo.datos);
+
+        const resultado = await shell.openPath(destino);
+        if (resultado) return { ok: false, mensaje: 'No se pudo abrir el archivo: ' + resultado };
+        return { ok: true, mensaje: 'Archivo abierto.' };
+    } catch (error) {
+        return { ok: false, mensaje: 'No se pudo preparar el archivo: ' + error.message };
+    }
+});
+
+ipcMain.handle('documentos:guardarComo', async (e, nombreGuardado, nombreSugerido) => {
+    const err = requerirSesion('documentos:descargar');
+    if (err) return err;
+
+    const archivo = await obtenerArchivoDocumento(nombreGuardado);
+    if (!archivo.ok) return { ok: false, mensaje: archivo.mensaje };
+
+    const ventana = BrowserWindow.fromWebContents(e.sender);
+    const { canceled, filePath } = await dialog.showSaveDialog(ventana, {
+        title: 'Guardar copia del documento',
+        defaultPath: nombreSugerido || archivo.nombreOriginal || 'documento'
+    });
+    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+
+    try {
+        fs.writeFileSync(filePath, archivo.datos);
+        return { ok: true, mensaje: 'Copia guardada correctamente.', ruta: filePath };
+    } catch (error) {
+        return { ok: false, mensaje: 'No se pudo guardar la copia: ' + error.message };
+    }
+});
+
+/* ---------- Papelera ---------- */
+ipcMain.handle('documentos:papelera',  async (_e, id) => { const err = requerirSesion('documentos:eliminar'); if (err) return err; return await documentosDB.moverAPapelera(id); });
+ipcMain.handle('documentos:restaurar', async (_e, id) => { const err = requerirSesion('documentos:eliminar'); if (err) return err; return await documentosDB.restaurar(id); });
+
+ipcMain.handle('documentos:eliminar', async (_e, id) => {
+    const err = requerirSesion('documentos:eliminar');
+    if (err) return err;
+    return await documentosDB.eliminar(id);
+});
+
+/* ---------- Secciones (menú dinámico) ---------- */
+ipcMain.handle('documentos:secciones',           async ()             => { const err = requerirSesion('documentos:listado:ver'); if (err) return err; return await documentosDB.listarSecciones(); });
+ipcMain.handle('documentos:seccion:crear',       async (_e, datos)    => { const err = requerirSesion('documentos:secciones:gestionar'); if (err) return err; return await documentosDB.crearSeccion(datos); });
+ipcMain.handle('documentos:seccion:actualizar',  async (_e, id, datos) => { const err = requerirSesion('documentos:secciones:gestionar'); if (err) return err; return await documentosDB.actualizarSeccion(id, datos); });
+ipcMain.handle('documentos:seccion:eliminar',    async (_e, id)       => { const err = requerirSesion('documentos:secciones:gestionar'); if (err) return err; return await documentosDB.eliminarSeccion(id); });
 
 /* =========================================================
    CICLO DE VIDA

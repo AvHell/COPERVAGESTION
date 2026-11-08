@@ -287,6 +287,15 @@ async function cargarPermisos() {
    TABLA USUARIOS
    ========================================================= */
 function renderTabla() {
+    // Refresco en vivo: el repintado conserva el desplazamiento de la tabla.
+    if (window.Vivo && tabla) {
+        window.Vivo.enVivo(tabla, pintarTabla);
+        return;
+    }
+    pintarTabla();
+}
+
+function pintarTabla() {
     tabla.innerHTML = '';
 
     if (!usuarios || usuarios.length === 0) {

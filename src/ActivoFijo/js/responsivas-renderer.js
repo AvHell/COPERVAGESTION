@@ -543,7 +543,17 @@ function crearBotonAccion(icono, tooltip, clase, accion, permiso) {
 /* =========================================================
    RENDER TABLA
    ========================================================= */
+/* Repintado en vivo: la tabla conserva su desplazamiento y el foco del
+   buscador al filtrar, crear o cancelar una responsiva. */
 function renderTabla() {
+    if (window.Vivo && tablaBody) {
+        window.Vivo.enVivo(tablaBody, pintarTabla);
+        return;
+    }
+    pintarTabla();
+}
+
+function pintarTabla() {
     const listaFiltrada = responsivas.filter(r => {
         if (!filtroBusqueda) return true;
         const texto = [r.FolioTicket, r.NoSerie, r.IMEI1, r.IMEI2, r.NoTelefono, r.NombreRecibe, r.Cartera, r.Tipo, r.Marca, r.Modelo].filter(Boolean).join(' ').toLowerCase();

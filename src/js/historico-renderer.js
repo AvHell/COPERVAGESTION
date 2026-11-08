@@ -440,6 +440,15 @@ function aplicarFiltros(lista) {
    RENDER
    ========================================================= */
 function renderTabla() {
+    // Refresco en vivo: el repintado conserva el desplazamiento del historial.
+    if (window.Vivo && tabla) {
+        window.Vivo.enVivo(tabla, pintarTabla);
+        return;
+    }
+    pintarTabla();
+}
+
+function pintarTabla() {
     tabla.innerHTML = '';
 
     const filtrados = aplicarFiltros(historicos);

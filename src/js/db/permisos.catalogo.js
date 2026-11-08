@@ -14,6 +14,7 @@ const CATALOGO = {
   'catalogos':                     { grupo: 'Catálogos',    etiqueta: 'Acceso al módulo' },
   'equipos':                       { grupo: 'Equipos',      etiqueta: 'Acceso al módulo' },
   'plano':                         { grupo: 'Plano',        etiqueta: 'Acceso al módulo' },
+  'documentos':                    { grupo: 'Documentación', etiqueta: 'Acceso al módulo' },
   'usuarios':                      { grupo: 'Usuarios',     etiqueta: 'Acceso al módulo' },
   'historico':                     { grupo: 'Histórico',    etiqueta: 'Acceso al módulo' },
   'mantenimientos':                { grupo: 'Mantenimientos', etiqueta: 'Acceso al módulo' },
@@ -60,6 +61,14 @@ const CATALOGO = {
   'plano:zonas:gestionar':         { grupo: 'Plano',        etiqueta: 'Crear/editar zonas' },
   'plano:zonas:eliminar':          { grupo: 'Plano',        etiqueta: 'Eliminar zonas' },
   'plano:exportar':                { grupo: 'Plano',        etiqueta: 'Exportar PDF' },
+
+  /* ---------- DOCUMENTACIÓN ---------- */
+  'documentos:listado:ver':        { grupo: 'Documentación', etiqueta: 'Ver documentos' },
+  'documentos:subir':              { grupo: 'Documentación', etiqueta: 'Subir documentos' },
+  'documentos:editar':             { grupo: 'Documentación', etiqueta: 'Editar metadatos / nuevas versiones' },
+  'documentos:eliminar':           { grupo: 'Documentación', etiqueta: 'Mover a papelera / eliminar' },
+  'documentos:descargar':          { grupo: 'Documentación', etiqueta: 'Abrir y descargar archivos' },
+  'documentos:secciones:gestionar':{ grupo: 'Documentación', etiqueta: 'Gestionar secciones' },
 
   /* ---------- USUARIOS ---------- */
   'usuarios:listado:ver':          { grupo: 'Usuarios',     etiqueta: 'Ver tabla de usuarios' },

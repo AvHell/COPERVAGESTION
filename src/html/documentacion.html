@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#2E3228">
+    <title>Documentación</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Se reutiliza la paleta y los componentes base de Catálogos -->
+    <link rel="stylesheet" href="../css/catalogos.css">
+    <link rel="stylesheet" href="../css/documentacion.css">
+</head>
+<body>
+
+    <!-- HERO -->
+    <header class="header-global">
+        <div class="header-inner">
+            <button id="btn-volver" class="btn-back" aria-label="Volver al menú">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                <span>Volver</span>
+            </button>
+
+            <div class="header-titles">
+                <h1>Documentación</h1>
+                <p>Diagramas, manuales y procedimientos del sistema</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- MENÚ DE SECCIONES -->
+    <nav class="doc-menu" aria-label="Secciones de documentación">
+        <div class="menu-bar">
+            <div class="doc-secciones" id="doc-secciones" role="tablist"></div>
+
+            <div class="doc-menu-acciones">
+                <div class="buscador">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="doc-busqueda" placeholder="Buscar título, cliente o etiqueta...">
+                    <button type="button" id="doc-limpiar-busq" class="btn-clear oculto" aria-label="Limpiar búsqueda">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <button id="btn-nueva-seccion" class="doc-btn-ghost" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h7l2 2h7v14H4z"/>
+                        <path d="M12 11v5M9.5 13.5h5"/>
+                    </svg>
+                    <span>Sección</span>
+                </button>
+
+                <button id="btn-papelera" class="doc-btn-ghost" type="button" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>
+                    </svg>
+                    <span>Papelera</span>
+                </button>
+
+                <button id="btn-subir" class="btn-primary" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M12 16V4M7 9l5-5 5 5"/>
+                        <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>
+                    </svg>
+                    <span>Subir documento</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="tabs-main">
+
+        <section class="panel-header">
+            <div class="panel-title">
+                <h2 id="doc-titulo">Documentos</h2>
+                <p id="doc-subtitulo">Sube diagramas, manuales y procedimientos</p>
+            </div>
+
+            <div class="panel-actions">
+                <div class="filtro-group">
+                    <label for="doc-filtro-cliente">Cliente</label>
+                    <select id="doc-filtro-cliente"></select>
+                </div>
+                <div class="filtro-group">
+                    <label for="doc-filtro-categoria">Categoría</label>
+                    <select id="doc-filtro-categoria"></select>
+                </div>
+                <button id="btn-recargar" class="doc-btn-ghost" type="button" title="Recargar documentos">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12a9 9 0 1 1-3-6.7"/>
+                        <path d="M21 3v6h-6"/>
+                    </svg>
+                    <span>Recargar</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- DROPZONE -->
+        <div id="zona-subida" class="doc-dropzone" tabindex="0" role="button"
+             aria-label="Arrastra archivos aquí o pulsa para seleccionarlos">
+            <div class="doc-dropzone-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M12 16V4M7 9l5-5 5 5"/>
+                    <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>
+                </svg>
+            </div>
+            <div class="doc-dropzone-text">
+                <strong>Arrastra tus archivos aquí</strong>
+                <span>o pulsa para elegirlos · imágenes, PDF, Word, Excel, ZIP · máx. 60 MB por archivo (se guardan en la base de datos)</span>
+            </div>
+            <input type="file" id="doc-archivo" multiple hidden>
+        </div>
+
+        <div id="doc-vacio" class="empty-state oculto">
+            <div class="empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M6 2h7l5 5v15H6z"/>
+                    <path d="M13 2v5h5"/>
+                </svg>
+            </div>
+            <h3 id="doc-vacio-titulo">Sin documentos</h3>
+            <p id="doc-vacio-texto">Sube el primer archivo de esta sección.</p>
+        </div>
+
+        <div id="doc-grid" class="doc-grid"></div>
+    </main>
+
+    <!-- MODAL: SUBIR DOCUMENTOS -->
+    <div id="modal-subida" class="modal-overlay oculto">
+        <div class="modal-base modal-lg">
+            <div class="modal-header">
+                <div class="modal-header-content">
+                    <div class="modal-header-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 16V4M7 9l5-5 5 5"/>
+                            <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>
+                        </svg>
+                    </div>
+                    <h3>Subir documentos</h3>
+                </div>
+                <button id="modal-subida-cerrar" class="btn-cerrar-modal" aria-label="Cerrar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="section-title">
+                    <span>Archivos seleccionados</span>
+                    <span class="section-hint" id="sub-contador">0 archivos</span>
+                </div>
+                <div id="sub-lista-archivos" class="doc-lista-archivos"></div>
+
+                <div class="field-row doc-field-row">
+                    <div class="field">
+                        <label for="sub-seccion">Sección <span class="req">*</span></label>
+                        <select id="sub-seccion"></select>
+                    </div>
+                    <div class="field">
+                        <label for="sub-cliente">Cliente</label>
+                        <select id="sub-cliente"></select>
+                    </div>
+                </div>
+
+                <div class="field-row doc-field-row">
+                    <div class="field">
+                        <label for="sub-categoria">Categoría</label>
+                        <input type="text" id="sub-categoria" maxlength="100" placeholder="Ej. Red, Servidores, Procesos" list="doc-categorias">
+                    </div>
+                    <div class="field">
+                        <label for="sub-etiquetas">Etiquetas</label>
+                        <input type="text" id="sub-etiquetas" maxlength="200" placeholder="Sepáralas con comas">
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="sub-descripcion">Descripción</label>
+                    <textarea id="sub-descripcion" rows="3" maxlength="1000" placeholder="Notas opcionales sobre el contenido"></textarea>
+                </div>
+
+                <datalist id="doc-categorias"></datalist>
+                <div id="sub-mensaje" class="alert oculto"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" id="sub-guardar" class="btn-primary">
+                    <span class="btn-text">Subir</span>
+                    <span class="btn-spinner oculto"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DETALLE / EDICIÓN -->
+    <div id="modal-detalle" class="modal-overlay oculto">
+        <div class="modal-base modal-lg">
+            <div class="modal-header">
+                <div class="modal-header-content">
+                    <div class="modal-header-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 2h7l5 5v15H6z"/>
+                            <path d="M13 2v5h5"/>
+                        </svg>
+                    </div>
+                    <h3 id="det-encabezado">Detalle del documento</h3>
+                </div>
+                <button id="modal-detalle-cerrar" class="btn-cerrar-modal" aria-label="Cerrar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div id="det-info" class="doc-info"></div>
+
+                <div class="section-title"><span>Metadatos</span></div>
+                <div class="field">
+                    <label for="det-titulo">Título <span class="req">*</span></label>
+                    <input type="text" id="det-titulo" maxlength="200">
+                </div>
+                <div class="field-row doc-field-row">
+                    <div class="field">
+                        <label for="det-seccion">Sección</label>
+                        <select id="det-seccion"></select>
+                    </div>
+                    <div class="field">
+                        <label for="det-cliente">Cliente</label>
+                        <select id="det-cliente"></select>
+                    </div>
+                </div>
+                <div class="field-row doc-field-row">
+                    <div class="field">
+                        <label for="det-categoria">Categoría</label>
+                        <input type="text" id="det-categoria" maxlength="100" list="doc-categorias">
+                    </div>
+                    <div class="field">
+                        <label for="det-etiquetas">Etiquetas</label>
+                        <input type="text" id="det-etiquetas" maxlength="200" placeholder="Sepáralas con comas">
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="det-descripcion">Descripción</label>
+                    <textarea id="det-descripcion" rows="3" maxlength="1000"></textarea>
+                </div>
+
+                <div class="section-title">
+                    <span>Versiones</span>
+                    <span class="section-hint">El archivo actual siempre es la última versión</span>
+                </div>
+                <div id="det-versiones" class="doc-versiones"></div>
+
+                <div id="det-mensaje" class="alert oculto"></div>
+            </div>
+
+            <div class="modal-footer doc-modal-footer">
+                <div class="doc-footer-acciones">
+                    <button type="button" id="det-abrir" class="doc-btn-ghost">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 3h7v7M21 3l-9 9"/>
+                            <path d="M19 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6"/>
+                        </svg>
+                        <span>Abrir</span>
+                    </button>
+                    <button type="button" id="det-copia" class="doc-btn-ghost">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 3v12M7 10l5 5 5-5"/>
+                            <path d="M4 17v3h16v-3"/>
+                        </svg>
+                        <span>Guardar copia</span>
+                    </button>
+                    <button type="button" id="det-nueva-version" class="doc-btn-ghost">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 16V4M7 9l5-5 5 5"/>
+                            <path d="M4 16v3h16v-3"/>
+                        </svg>
+                        <span>Nueva versión</span>
+                    </button>
+                    <input type="file" id="det-archivo-version" hidden>
+                </div>
+                <button type="button" id="det-guardar" class="btn-primary">
+                    <span class="btn-text">Guardar cambios</span>
+                    <span class="btn-spinner oculto"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/vivo.js"></script>
+    <script src="../js/permisos-ui.js"></script>
+    <script src="../js/documentacion-renderer.js"></script>
+</body>
+</html>

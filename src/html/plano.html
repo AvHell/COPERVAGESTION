@@ -97,15 +97,12 @@
     <!-- ========================================================= -->
     <!-- LEYENDA DE ROLES + FILTRO DE CLIENTES -->
     <!-- ========================================================= -->
-    <div class="leyenda-roles" data-permiso="plano:ver">
+    <!-- Los ítems de la leyenda se generan en JS con TODOS los roles del catálogo
+         (plano-renderer.js → renderLeyendaRoles), así que un rol nuevo aparece
+         aquí sin tocar este HTML. El punto toma el ColorHex del catálogo de Roles
+         (pintarLeyendaRoles); no hay colores de rol en el CSS. -->
+    <div class="leyenda-roles" id="leyenda-roles" data-permiso="plano:ver">
         <span class="titulo-leyenda">Roles:</span>
-        <div class="leyenda-item" data-rol="AGT"><span class="color-punto"></span><span class="codigo">AGT</span></div>
-        <div class="leyenda-item" data-rol="CRD"><span class="color-punto"></span><span class="codigo">CRD</span></div>
-        <div class="leyenda-item" data-rol="CLD"><span class="color-punto"></span><span class="codigo">CLD</span></div>
-        <div class="leyenda-item" data-rol="SPR"><span class="color-punto"></span><span class="codigo">SPR</span></div>
-        <div class="leyenda-item" data-rol="GRN"><span class="color-punto"></span><span class="codigo">GRN</span></div>
-        <div class="leyenda-item" data-rol="ADM"><span class="color-punto"></span><span class="codigo">ADM</span></div>
-        <div class="leyenda-item" data-rol="MIS"><span class="color-punto"></span><span class="codigo">MIS</span></div>
     </div>
 
     <div class="filtro-clientes-barra" id="filtro-clientes-izq-wrap">
@@ -200,15 +197,12 @@
 
         <div class="lateral-tabs" id="lateral-tabs"></div>
 
+        <!-- Los chips de rol se generan en JS con los roles que realmente tienen
+             equipos sin ubicar (plano-renderer.js → renderFiltrosRol), así que un
+             rol nuevo aparece sin tocar este HTML. "Todos" es el único fijo y
+             sirve de reinicio del filtro. -->
         <div class="lateral-filtros-rol" id="lateral-filtros-rol">
-            <button class="filtro-rol-chip todos activo" data-rol="__todos__">Todos</button>
-            <button class="filtro-rol-chip" data-rol="AGT">AGT</button>
-            <button class="filtro-rol-chip" data-rol="SPR">SPR</button>
-            <button class="filtro-rol-chip" data-rol="CLD">CLD</button>
-            <button class="filtro-rol-chip" data-rol="GRN">GRN</button>
-            <button class="filtro-rol-chip" data-rol="CRD">CRD</button>
-            <button class="filtro-rol-chip" data-rol="MIS">MIS</button>
-            <button class="filtro-rol-chip" data-rol="ADM">ADM</button>
+            <button type="button" class="filtro-rol-chip todos activo" data-rol="__todos__">Todos</button>
         </div>
 
         <div class="lista-sin-ubicar-wrapper">
@@ -520,7 +514,8 @@
 </div>
 
     <!-- 1. Incluir helper de permisos PRIMERO -->
-     <script src="../js/permisos-ui.js"></script>
+     <script src="../js/vivo.js"></script>
+    <script src="../js/permisos-ui.js"></script>
     <!-- 2. Lógica del renderer -->
     <script src="../js/plano-renderer.js"></script>
 </body>

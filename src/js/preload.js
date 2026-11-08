@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
     abrirCatalogos: () => ipcRenderer.invoke('abrir-catalogos'),
     abrirEquipos:   () => ipcRenderer.invoke('abrir-equipos'),
     abrirPlano:     () => ipcRenderer.invoke('abrir-plano'),
+    abrirDocumentacion: () => ipcRenderer.invoke('abrir-documentacion'),
     abrirUsuarios:  () => ipcRenderer.invoke('abrir-usuarios'),
     abrirHistorico: () => ipcRenderer.invoke('abrir-historico'),
     abrirMantenimientos: () => ipcRenderer.invoke('abrir-mantenimientos'),
@@ -230,6 +231,30 @@ contextBridge.exposeInMainWorld('api', {
         eliminarZonaLibre:  (idPiso, nombre, color)           => ipcRenderer.invoke('plano:eliminarZonaLibre', idPiso, nombre, color),
 
         exportarPDF: (opciones) => ipcRenderer.invoke('plano:exportarPDF', opciones)
+    },
+
+    /* =========================================================
+       DOCUMENTACIÓN
+       ========================================================= */
+    documentos: {
+        listar:        (opciones)              => ipcRenderer.invoke('documentos:listar', opciones),
+        obtener:       (id)                    => ipcRenderer.invoke('documentos:obtener', id),
+        subir:         (datos)                 => ipcRenderer.invoke('documentos:subir', datos),
+        actualizar:    (id, datos)             => ipcRenderer.invoke('documentos:actualizar', id, datos),
+        versiones:     (id)                    => ipcRenderer.invoke('documentos:versiones', id),
+        agregarVersion:(id, archivo)           => ipcRenderer.invoke('documentos:agregarVersion', id, archivo),
+        abrir:         (nombreGuardado)        => ipcRenderer.invoke('documentos:abrir', nombreGuardado),
+        guardarComo:   (nombreGuardado, nombreSugerido) => ipcRenderer.invoke('documentos:guardarComo', nombreGuardado, nombreSugerido),
+        papelera:      (id)                    => ipcRenderer.invoke('documentos:papelera', id),
+        restaurar:     (id)                    => ipcRenderer.invoke('documentos:restaurar', id),
+        eliminar:      (id)                    => ipcRenderer.invoke('documentos:eliminar', id),
+        etiquetas:     ()                      => ipcRenderer.invoke('documentos:etiquetas'),
+        secciones: {
+            listar:     ()           => ipcRenderer.invoke('documentos:secciones'),
+            crear:      (datos)      => ipcRenderer.invoke('documentos:seccion:crear', datos),
+            actualizar: (id, datos)  => ipcRenderer.invoke('documentos:seccion:actualizar', id, datos),
+            eliminar:   (id)         => ipcRenderer.invoke('documentos:seccion:eliminar', id)
+        }
     },
 
     /* =========================================================

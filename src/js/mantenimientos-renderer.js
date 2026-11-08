@@ -218,6 +218,17 @@ function dibujarZonasLibres() {
 }
 
 function renderizarPlano() {
+    /* Refresco en vivo: el mapa se redibuja conservando el desplazamiento de
+       #mapa-scroll (y de la ventana), así registrar un mantenimiento no
+       devuelve la vista al origen del piso. */
+    if (window.Vivo && mapa) {
+        window.Vivo.enVivo(mapa, pintarPlano);
+        return;
+    }
+    pintarPlano();
+}
+
+function pintarPlano() {
     mapa.replaceChildren();
     if (!planoActual) {
         $('mapa-vacio').hidden = false;
@@ -249,6 +260,16 @@ function renderizarPlano() {
 }
 
 function renderizarHistorial() {
+    // Refresco en vivo: el repintado conserva el desplazamiento del historial.
+    const cuerpoHistorial = $('historial-body');
+    if (window.Vivo && cuerpoHistorial) {
+        window.Vivo.enVivo(cuerpoHistorial, pintarHistorial);
+        return;
+    }
+    pintarHistorial();
+}
+
+function pintarHistorial() {
     const body = $('historial-body');
     body.replaceChildren();
     $('contador-registros').textContent = String(registrosActuales.length);

@@ -6,6 +6,7 @@
         { key: 'catalogos', label: 'Catálogos', permiso: 'catalogos', icon: '▦' },
         { key: 'equipos', label: 'Equipos', permiso: 'equipos', icon: '▣' },
         { key: 'plano', label: 'Plano visual', permiso: 'plano', icon: '▤' },
+        { key: 'documentacion', label: 'Documentación', permiso: 'documentos', icon: '▨' },
         { key: 'historico', label: 'Histórico', permiso: 'historico', icon: '◷' }
       ]
     },
@@ -170,6 +171,19 @@
       '#btn-actualizar': 'mantenimientos',
       '#btn-cerrar-historial': 'mantenimientos'
     },
+    'documentacion.html': {
+      '#btn-subir': 'documentos:subir',
+      '#zona-subida': 'documentos:subir',
+      '#btn-nueva-seccion': 'documentos:secciones:gestionar',
+      '#btn-editar-seccion': 'documentos:secciones:gestionar',
+      '#btn-eliminar-seccion': 'documentos:secciones:gestionar',
+      '#btn-papelera': 'documentos:listado:ver',
+      '#btn-recargar': 'documentos:listado:ver',
+      '.tarjeta-doc button.secundario': 'documentos:editar',
+      '.tarjeta-doc button.peligro': 'documentos:eliminar',
+      '.btn-archivo': 'documentos:descargar',
+      '#det-versiones button.secundario': 'documentos:descargar'
+    },
     'historico.html': {
       '.main-content': 'historico'
     }
@@ -312,6 +326,17 @@
       guardar: 'catalogos',
       exportar: 'catalogos',
       gestionar: 'catalogos'
+    },
+    'documentacion.html': {
+      ver: 'documentos:listado:ver',
+      crear: 'documentos:subir',
+      editar: 'documentos:editar',
+      eliminar: 'documentos:eliminar',
+      guardar: 'documentos:subir|documentos:editar',
+      exportar: 'documentos:descargar',
+      importar: 'documentos:subir',
+      gestionar: 'documentos:secciones:gestionar',
+      asignar: 'documentos'
     },
     'historico.html': {
       ver: 'historico',
@@ -591,34 +616,96 @@
     return canales[0] * 0.2126 + canales[1] * 0.7152 + canales[2] * 0.0722 > 0.42 ? '#20271f' : '#ffffff';
   }
 
+  /* Firma de lo último que pintamos en cada elemento. Sirve para dos cosas:
+     no reescribir estilos idénticos en cada repintado del DOM (el
+     MutationObserver revisa muy seguido) y poder retirar exactamente lo que
+     nosotros pusimos cuando un color deja de existir en Catálogos. */
+  const pintados = new WeakMap();
+
+  /* Aclara un color hacia blanco: el mismo cálculo que usa el renderer del
+     plano para el fondo de las celdas ocupadas. */
+  function aclararColor(hex) {
+    const canales = hex.slice(1).match(/.{2}/g).map(canal => parseInt(canal, 16));
+    return `#${canales.map(canal => Math.round(canal + (255 - canal) * .78).toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  /* Devuelve el elemento a su estado natural (lo pinta la hoja de estilos). */
+  function despintarElemento(el) {
+    if (!pintados.has(el)) return;
+    pintados.delete(el);
+    ['--rol-color', '--rol-borde', '--rol-fondo', '--rol-texto',
+      'background-color', 'border-color', 'color']
+      .forEach(propiedad => el.style.removeProperty(propiedad));
+    /* Si el navegador no dejó nada en el atributo, lo quitamos para no
+       arrastrar un style="" vacío en el DOM. */
+    if (!el.getAttribute('style')) el.removeAttribute('style');
+  }
+
+  function pintarElemento(el) {
+    const codigo = String(el.dataset.color || el.dataset.rol || '').trim().toUpperCase();
+    /* 'BOTON' es el marcador de insignia neutra: no es un color de catálogo. */
+    if (!codigo || codigo === 'BOTON') return;
+
+    /* Chips del filtro por rol (panel lateral del plano): sólo el activo toma
+       el color del catálogo; los inactivos vuelven al estilo de la hoja,
+       porque si no todos parecerían seleccionados. */
+    const esChipFiltro = el.matches('.filtro-rol-chip');
+    if (esChipFiltro && !el.classList.contains('activo')) {
+      despintarElemento(el);
+      return;
+    }
+
+    const pagina = obtenerPagina();
+    const esCliente = el.matches('.badge-cliente, .badge-cli') ||
+      el.dataset.colorKind === 'client' ||
+      (pagina === 'clientes.html' && el.matches('.badge-codigo'));
+    const esRol = esChipFiltro ||
+      el.matches('.rol-pill, .hostname-badge') ||
+      el.matches('.badge-equipo') ||
+      el.hasAttribute('data-rol') ||
+      el.dataset.colorKind === 'role' ||
+      ((pagina === 'roles.html' || pagina === 'catalogos.html') && el.matches('.badge-codigo'));
+    const color = esCliente ? coloresClientes.get(codigo) : esRol ? coloresRoles.get(codigo) : null;
+    if (!color || !/^#[0-9A-F]{6}$/i.test(color)) {
+      /* El cliente/rol ya no tiene color en Catálogos: si lo habíamos pintado,
+         se retira para no arrastrar un color viejo. */
+      despintarElemento(el);
+      return;
+    }
+
+    /* Las celdas del plano y de mantenimientos (y los chips del filtro de rol)
+       se colorean con variables CSS que ya consumen sus hojas de estilo. Es
+       importante NO escribir background/border inline con !important: eso
+       aplastaría los estados :hover, .seleccionada y .destino, que es
+       justamente lo que se perdió al quitar los colores fijos del CSS. */
+    const esCeldaEquipo = el.matches('.celda[data-rol]');
+    const usaVariables = esCeldaEquipo || esChipFiltro;
+    const fondo = esCeldaEquipo ? aclararColor(color) : color;
+
+    const firma = `${color}|${usaVariables ? (esCeldaEquipo ? 'celda' : 'chip') : 'solido'}`;
+    if (pintados.get(el) === firma) return;
+
+    el.style.setProperty('--rol-color', color);
+    el.style.setProperty('--rol-borde', color);
+    el.style.setProperty('--rol-fondo', fondo);
+    el.style.setProperty('--rol-texto', esCeldaEquipo ? '#20271f' : contraste(color));
+    if (usaVariables) {
+      el.style.removeProperty('background-color');
+      el.style.removeProperty('border-color');
+      el.style.removeProperty('color');
+    } else {
+      el.style.setProperty('background-color', fondo, 'important');
+      el.style.setProperty('border-color', color, 'important');
+      el.style.setProperty('color', contraste(color), 'important');
+    }
+    pintados.set(el, firma);
+  }
+
   function aplicarColores(root = document) {
     const elementos = [];
     if (root.nodeType === Node.ELEMENT_NODE && root.matches?.('[data-color], [data-rol]')) elementos.push(root);
     if (root.querySelectorAll) elementos.push(...root.querySelectorAll('[data-color], [data-rol]'));
-    elementos.forEach(el => {
-      const codigo = String(el.dataset.color || el.dataset.rol || '').trim().toUpperCase();
-      if (!codigo || codigo === 'BOTON') return;
-      const pagina = obtenerPagina();
-      const esCliente = el.matches('.badge-cliente, .badge-cli') ||
-        el.dataset.colorKind === 'client' ||
-        (pagina === 'clientes.html' && el.matches('.badge-codigo'));
-      const esRol = el.matches('.rol-pill, .hostname-badge') ||
-        el.matches('.badge-equipo') ||
-        el.hasAttribute('data-rol') ||
-        el.dataset.colorKind === 'role' ||
-        ((pagina === 'roles.html' || pagina === 'catalogos.html') && el.matches('.badge-codigo'));
-      const color = esCliente ? coloresClientes.get(codigo) : esRol ? coloresRoles.get(codigo) : null;
-      if (!color || !/^#[0-9A-F]{6}$/i.test(color)) return;
-      const esCeldaEquipo = el.matches('.celda[data-rol]');
-      let fondo = color;
-      if (esCeldaEquipo) {
-        const partes = color.slice(1).match(/.{2}/g).map(canal => parseInt(canal, 16));
-        fondo = `#${partes.map(canal => Math.round(canal + (255 - canal) * .78).toString(16).padStart(2, '0')).join('')}`;
-      }
-      el.style.setProperty('background-color', fondo, 'important');
-      el.style.setProperty('border-color', color, 'important');
-      el.style.setProperty('color', esCeldaEquipo ? '#20271f' : contraste(color), 'important');
-    });
+    elementos.forEach(pintarElemento);
   }
 
   async function refrescarColores() {
@@ -930,6 +1017,7 @@
   window.PermisosUI = {
     init,
     aplicar: aplicarReglasPagina,
+    aplicarColores,
     refrescar,
     refrescarColores,
     puede,

@@ -134,6 +134,15 @@ btnLimpiarFiltro.addEventListener('click', () => {
    RENDER TABLA
    ========================================================= */
 function renderTabla() {
+    // Refresco en vivo: el repintado conserva el desplazamiento de la tabla.
+    if (window.Vivo && contenedorGrupos) {
+        window.Vivo.enVivo(contenedorGrupos, pintarTabla);
+        return;
+    }
+    pintarTabla();
+}
+
+function pintarTabla() {
     contenedorGrupos.innerHTML = '';
 
     const listaFiltrada = pisos.filter(p => {

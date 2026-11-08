@@ -551,10 +551,20 @@ async function cargarCatalogo() {
 /* =========================================================
    RENDER TABLA
    ========================================================= */
+/* Repintado en vivo: la tabla conserva su desplazamiento al cambiar de
+   catálogo, filtrar o guardar un registro. */
 function renderTabla() {
     const cfg = CATALOGOS_FRONT[catalogoActual];
     if (!cfg || !tablaHead || !tablaBody) return;
 
+    if (window.Vivo) {
+        window.Vivo.enVivo(tablaBody, () => pintarTabla(cfg));
+        return;
+    }
+    pintarTabla(cfg);
+}
+
+function pintarTabla(cfg) {
     const listaFiltrada = registros.filter(r => {
         if (!filtroBusqueda) return true;
         const texto = cfg.campos

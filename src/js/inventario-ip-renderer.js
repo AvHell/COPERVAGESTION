@@ -431,6 +431,17 @@ function detalleTotales(datos) {
 function renderizarSegmentos() {
     const lista = $('lista-segmentos');
     if (!lista) return;
+
+    // Refresco en vivo: la lista de segmentos conserva su desplazamiento
+    // al cambiar de segmento, exportar o recargar datos.
+    if (window.Vivo) {
+        window.Vivo.enVivo(lista, () => pintarSegmentos(lista));
+        return;
+    }
+    pintarSegmentos(lista);
+}
+
+function pintarSegmentos(lista) {
     lista.replaceChildren();
     const segmentos = calcularSegmentos(filas);
 
@@ -551,6 +562,16 @@ async function alternarSwitch(item, asignar, input) {
 }
 
 function renderizarTabla() {
+    // Refresco en vivo: el repintado conserva el desplazamiento de la tabla.
+    const cuerpoTabla = $('tabla-ip');
+    if (window.Vivo && cuerpoTabla) {
+        window.Vivo.enVivo(cuerpoTabla, pintarTabla);
+        return;
+    }
+    pintarTabla();
+}
+
+function pintarTabla() {
     const cuerpo = $('tabla-ip');
     cuerpo.replaceChildren();
     const lista = registrosFiltrados();

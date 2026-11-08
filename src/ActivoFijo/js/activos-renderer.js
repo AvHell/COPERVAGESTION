@@ -276,7 +276,17 @@ async function cargarActivos() {
 /* =========================================================
    RENDER TABLA
    ========================================================= */
+/* Repintado en vivo: la tabla conserva su desplazamiento y el foco del
+   buscador al filtrar, crear, editar o dar de baja un activo. */
 function renderTabla() {
+    if (window.Vivo && tablaBody) {
+        window.Vivo.enVivo(tablaBody, pintarTabla);
+        return;
+    }
+    pintarTabla();
+}
+
+function pintarTabla() {
     const listaFiltrada = activos.filter(a => {
         if (!filtroBusqueda) return true;
         const texto = [

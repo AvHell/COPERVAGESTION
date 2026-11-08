@@ -176,6 +176,9 @@ let pisos = [];
 let roles = [];
 let dominios = [];
 let filtroBusqueda = '';
+/* Códigos de cliente cuyos grupos el usuario dejó abiertos. Se conserva
+   entre repintados para que un refresco no vuelva a colapsar las tablas. */
+const gruposExpandidos = new Set();
 let modoEdicion = false;
 let idEditando = null;
 let guardando = false;
@@ -981,6 +984,15 @@ function iconoEliminarSVG() {
 }
 
 function renderTabla() {
+    // Refresco en vivo: conserva el desplazamiento y los grupos abiertos.
+    if (window.Vivo && contenedorGrupos) {
+        window.Vivo.enVivo(contenedorGrupos, pintarTablaEquipos);
+        return;
+    }
+    pintarTablaEquipos();
+}
+
+function pintarTablaEquipos() {
     contenedorGrupos.innerHTML = '';
 
     const listaFiltrada = equipos.filter(e => {
@@ -1012,7 +1024,9 @@ function renderTabla() {
 
     clientesOrdenados.forEach(grupoCliente => {
         const divCliente = document.createElement('div');
-        divCliente.className = 'grupo-cliente colapsado';
+        divCliente.className = gruposExpandidos.has(grupoCliente.codigo)
+            ? 'grupo-cliente'
+            : 'grupo-cliente colapsado';
 
         const headerCliente = document.createElement('div');
         headerCliente.className = 'grupo-cliente-header';
@@ -1023,7 +1037,11 @@ function renderTabla() {
             ${renderBadgeCliente(grupoCliente.codigo, grupoCliente.nombre)}
             <span class="grupo-count">${grupoCliente.equipos.length} ${grupoCliente.equipos.length === 1 ? 'equipo' : 'equipos'}</span>
         `;
-        headerCliente.addEventListener('click', () => divCliente.classList.toggle('colapsado'));
+        headerCliente.addEventListener('click', () => {
+            divCliente.classList.toggle('colapsado');
+            if (divCliente.classList.contains('colapsado')) gruposExpandidos.delete(grupoCliente.codigo);
+            else gruposExpandidos.add(grupoCliente.codigo);
+        });
         divCliente.appendChild(headerCliente);
 
         const bodyCliente = document.createElement('div');

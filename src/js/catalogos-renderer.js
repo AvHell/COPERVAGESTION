@@ -205,6 +205,15 @@ const TabClientes = (() => {
     }
 
     function render() {
+        // Refresco en vivo: el repintado conserva el desplazamiento de la tabla.
+        if (window.Vivo && tbody) {
+            window.Vivo.enVivo(tbody, pintar);
+            return;
+        }
+        pintar();
+    }
+
+    function pintar() {
         tbody.innerHTML = '';
         const lista = clientes.filter(c => {
             if (!filtroBusqueda) return true;
@@ -444,6 +453,15 @@ const TabPisos = (() => {
     }
 
     function render() {
+        // Refresco en vivo: el repintado conserva el desplazamiento del listado.
+        if (window.Vivo && contenedor) {
+            window.Vivo.enVivo(contenedor, pintar);
+            return;
+        }
+        pintar();
+    }
+
+    function pintar() {
         contenedor.innerHTML = '';
         const lista = pisos.filter(p => {
             if (!filtroBusqueda) return true;
@@ -693,6 +711,15 @@ const TabRoles = (() => {
     }
 
     function render() {
+        // Refresco en vivo: el repintado conserva el desplazamiento de la tabla.
+        if (window.Vivo && tbody) {
+            window.Vivo.enVivo(tbody, pintar);
+            return;
+        }
+        pintar();
+    }
+
+    function pintar() {
         tbody.innerHTML = '';
         const lista = roles.filter(r => {
             if (!filtroBusqueda) return true;
@@ -889,6 +916,15 @@ const TabDominios = (() => {
     }
 
     function render() {
+        // Refresco en vivo: el repintado conserva el desplazamiento de la tabla.
+        if (window.Vivo && tbody) {
+            window.Vivo.enVivo(tbody, pintar);
+            return;
+        }
+        pintar();
+    }
+
+    function pintar() {
         tbody.innerHTML = '';
         if (!dominios || dominios.length === 0) {
             const tr = document.createElement('tr');
@@ -1123,7 +1159,19 @@ const TabConfig = (() => {
         }
     }
 
+    /* Códigos de cliente con el grupo abierto: se conserva entre repintados. */
+    const gruposExpandidos = new Set();
+
     function render() {
+        // Refresco en vivo: conserva el desplazamiento y los grupos abiertos.
+        if (window.Vivo && contenedor) {
+            window.Vivo.enVivo(contenedor, pintar);
+            return;
+        }
+        pintar();
+    }
+
+    function pintar() {
         contenedor.innerHTML = '';
         if (!configs || configs.length === 0) {
             sinResultados.classList.remove('oculto');
@@ -1144,7 +1192,9 @@ const TabConfig = (() => {
 
         ordenados.forEach(g => {
             const divCliente = document.createElement('div');
-            divCliente.className = 'grupo-cliente colapsado';
+            divCliente.className = gruposExpandidos.has(g.codigo)
+                ? 'grupo-cliente'
+                : 'grupo-cliente colapsado';
 
             divCliente.innerHTML = `
                 <div class="grupo-cliente-header">
@@ -1159,6 +1209,8 @@ const TabConfig = (() => {
             `;
             divCliente.querySelector('.grupo-cliente-header').addEventListener('click', () => {
                 divCliente.classList.toggle('colapsado');
+                if (divCliente.classList.contains('colapsado')) gruposExpandidos.delete(g.codigo);
+                else gruposExpandidos.add(g.codigo);
             });
 
             const body = document.createElement('div');

@@ -19,29 +19,12 @@
     --plano-oro: #a99a63;
     --plano-rojo: #b5442e;
     --plano-rojo-suave: #f3ded6;
-    /* Respaldo cuando el rol no tiene color en el catálogo. El color real de
-       celda e insignia lo inyecta el renderer desde Catálogos (inline). */
-    --rol-agt: #557fa8;
-    --rol-agt-suave: #e5edf4;
-    --rol-agt-texto: #315978;
-    --rol-crd: #8f7016;
-    --rol-crd-suave: #f5efd9;
-    --rol-crd-texto: #695315;
-    --rol-cld: #c45f86;
-    --rol-cld-suave: #f7e5ec;
-    --rol-cld-texto: #8a3c59;
-    --rol-spr: #6e7b5b;
-    --rol-spr-suave: #e8ebdf;
-    --rol-spr-texto: #47543a;
-    --rol-grn: #805b9b;
-    --rol-grn-suave: #eee7f2;
-    --rol-grn-texto: #5c3f75;
-    --rol-adm: #73766d;
-    --rol-adm-suave: #e8e8e4;
-    --rol-adm-texto: #4d5048;
-    --rol-mis: #b5442e;
-    --rol-mis-suave: #f3ded6;
-    --rol-mis-texto: #7a2a1b;
+    /* ROLES: sin colores por código. El renderer inyecta el color del catálogo
+       de Roles inline; estos tokens son el respaldo neutro. */
+    --rol-color: #a6a99d;
+    --rol-borde: #8c9182;
+    --rol-fondo: #eceae2;
+    --rol-texto: var(--plano-texto);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -232,15 +215,12 @@ body {
     letter-spacing: -0.01em;
 }
 
-/* Colores por rol: SOLO respaldo. El fondo, el borde y el contraste del texto
-   los inyecta el renderer con el color del catálogo de Roles. */
-.celda[data-rol="AGT"] { background: var(--rol-agt-suave); border-color: var(--rol-agt); --rol-texto: var(--rol-agt-texto); }
-.celda[data-rol="CRD"] { background: var(--rol-crd-suave); border-color: var(--rol-crd); --rol-texto: var(--rol-crd-texto); }
-.celda[data-rol="CLD"] { background: var(--rol-cld-suave); border-color: var(--rol-cld); --rol-texto: var(--rol-cld-texto); }
-.celda[data-rol="SPR"] { background: var(--rol-spr-suave); border-color: var(--rol-spr); --rol-texto: var(--rol-spr-texto); }
-.celda[data-rol="GRN"] { background: var(--rol-grn-suave); border-color: var(--rol-grn); --rol-texto: var(--rol-grn-texto); }
-.celda[data-rol="ADM"] { background: var(--rol-adm-suave); border-color: var(--rol-adm); --rol-texto: var(--rol-adm-texto); }
-.celda[data-rol="MIS"] { background: var(--rol-mis-suave); border-color: var(--rol-mis); --rol-texto: var(--rol-mis-texto); }
+/* Colores por rol: SOLO forma y respaldo neutro. El fondo, el borde y el
+   contraste del texto los inyecta el renderer con el color del catálogo. */
+.celda[data-rol] {
+    background: var(--rol-fondo);
+    border-color: var(--rol-borde);
+}
 
 /* =========================================================
    TABLA
@@ -303,13 +283,6 @@ body {
     color: #fff;
     background: #94a3b8;
 }
-.badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
-.badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
-.badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
-.badge-rol[data-rol="SPR"] { background: var(--rol-spr); }
-.badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
-.badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
-.badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
 
 .badge-cli {
     display: inline-block;
@@ -537,40 +510,15 @@ body {
     background: var(--plano-superficie);
 }
 
-/* Insignias: color del catálogo de Roles con respaldo en los tokens --rol-*.
-   El color del texto de la insignia lo inyecta el renderer (contraste). */
-.badge-rol[data-rol="AGT"] { background: var(--rol-agt); }
-.badge-rol[data-rol="CRD"] { background: var(--rol-crd); }
-.badge-rol[data-rol="CLD"] { background: var(--rol-cld); }
-.badge-rol[data-rol="SPR"] { background: var(--rol-spr); }
-.badge-rol[data-rol="GRN"] { background: var(--rol-grn); }
-.badge-rol[data-rol="ADM"] { background: var(--rol-adm); }
-.badge-rol[data-rol="MIS"] { background: var(--rol-mis); }
-
 /* Contraste del texto de la celda: primero el que hereda del catálogo
-   (--celda-texto), después el respaldo por rol y al final el texto del plano. */
+   (--celda-texto), después el respaldo neutro y al final el texto del plano. */
 .celda[data-rol] .celda-hostname,
 .celda[data-rol] .celda-ip {
     color: var(--celda-texto, var(--rol-texto, var(--plano-texto)));
 }
+/* El color de la insignia de cliente llega inline desde el catálogo de Clientes. */
 .badge-cli[data-color] { border: 1px solid transparent; }
-[data-color="MEGA"] { background: #217a4b !important; color: #ffffff !important; border-color: #14532d !important; }
-[data-color="NATR"] { background: #5b92e5 !important; color: #ffffff !important; border-color: #3b82f6 !important; }
-[data-color="PHIE"] { background: #eab308 !important; color: #3f3010 !important; border-color: #a16207 !important; }
-[data-color="TOYL"] { background: #ef4444 !important; color: #ffffff !important; border-color: #b91c1c !important; }
-[data-color="NU"] { background: #a855f7 !important; color: #ffffff !important; border-color: #7e22ce !important; }
-[data-color="CLD"] { background: #dc2626 !important; color: #ffffff !important; border-color: #991b1b !important; }
-[data-color="TPLAY"] { background: #1e40af !important; color: #ffffff !important; border-color: #1e3a8a !important; }
-[data-color="ATT"] { background: #3b82f6 !important; color: #ffffff !important; border-color: #2563eb !important; }
-[data-color="DMEX"] { background: #4ade80 !important; color: #064e3b !important; border-color: #22c55e !important; }
-[data-color="SHOP"] { background: #f97316 !important; color: #ffffff !important; border-color: #c2410c !important; }
-[data-color="HBAN"] { background: #fde047 !important; color: #713f12 !important; border-color: #ca8a04 !important; }
-[data-color="TOY"] { background: #b91c1c !important; color: #ffffff !important; border-color: #7f1d1d !important; }
-[data-color="ADAMA"] { background: #2563eb !important; color: #ffffff !important; border-color: #1d4ed8 !important; }
-[data-color="KUBO"] { background: #15803d !important; color: #ffffff !important; border-color: #166534 !important; }
-[data-color="DIDI"] { background: #ea580c !important; color: #ffffff !important; border-color: #c2410c !important; }
-[data-color="FESA"] { background: #0f766e !important; color: #ffffff !important; border-color: #115e59 !important; }
-[data-color="FRN"] { background: #6d28d9 !important; color: #ffffff !important; border-color: #5b21b6 !important; }
+
 
 .badge-dhcp {
     display: inline-block;

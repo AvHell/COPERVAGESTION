@@ -569,39 +569,15 @@ body {
 }
 
 /* =========================================================
-   COLORES ESTRICTOS POR CLIENTE Y ROL (Solidos)
+   COLORES DE CLIENTE Y ROL
+   ---------------------------------------------------------
+   No se fijan colores aquí: PermisosUI.aplicarColores() pinta
+   fondo, borde y texto en línea (con !important) tomándolos del
+   catálogo de clientes y roles. Si el catálogo no responde, los
+   badges conservan el fondo base definido arriba.
+   data-color="BOTON" sí se define arriba porque no es un color
+   de catálogo.
    ========================================================= */
-
-/* CLIENTES */
-[data-color="MEGA"] { background: #217a4b !important; color: #ffffff !important; border-color: #14532d !important; }
-[data-color="NATR"] { background: #5b92e5 !important; color: #ffffff !important; border-color: #3b82f6 !important; }
-[data-color="PHIE"] { background: #eab308 !important; color: #3f3010 !important; border-color: #a16207 !important; }
-[data-color="TOYL"] { background: #ef4444 !important; color: #ffffff !important; border-color: #b91c1c !important; }
-[data-color="NU"]   { background: #a855f7 !important; color: #ffffff !important; border-color: #7e22ce !important; }
-[data-color="CLD"]  { background: #dc2626 !important; color: #ffffff !important; border-color: #991b1b !important; }
-[data-color="TPLAY"]{ background: #1e40af !important; color: #ffffff !important; border-color: #1e3a8a !important; }
-[data-color="ATT"]  { background: #3b82f6 !important; color: #ffffff !important; border-color: #2563eb !important; }
-[data-color="DMEX"] { background: #4ade80 !important; color: #064e3b !important; border-color: #22c55e !important; }
-[data-color="SHOP"] { background: #f97316 !important; color: #ffffff !important; border-color: #c2410c !important; }
-[data-color="HBAN"] { background: #fde047 !important; color: #713f12 !important; border-color: #ca8a04 !important; }
-[data-color="TOY"]  { background: #b91c1c !important; color: #ffffff !important; border-color: #7f1d1d !important; }
-[data-color="ADAMA"]{ background: #2563eb !important; color: #ffffff !important; border-color: #1d4ed8 !important; }
-[data-color="KUBO"] { background: #15803d !important; color: #ffffff !important; border-color: #166534 !important; }
-[data-color="DIDI"] { background: #ea580c !important; color: #ffffff !important; border-color: #c2410c !important; }
-[data-color="FESA"] { background: #0f766e !important; color: #ffffff !important; border-color: #115e59 !important; }
-[data-color="FRN"]  { background: #6d28d9 !important; color: #ffffff !important; border-color: #5b21b6 !important; }
-
-/* ROLES */
-[data-color="AGT"] { background: #93c5fd !important; color: #1e3a8a !important; border-color: #60a5fa !important; } /* Azul claro sólido */
-[data-color="SPR"] { background: #bbf7d0 !important; color: #14532d !important; border-color: #86efac !important; }
-[data-color="CLD_ROLE"] { background: #fbcfe8 !important; color: #831843 !important; border-color: #f9a8d4 !important; }
-[data-color="GRN"] { background: #d8b4fe !important; color: #4c1d95 !important; border-color: #c084fc !important; }
-[data-color="CRD"] { background: #fef08a !important; color: #713f12 !important; border-color: #fde047 !important; }
-[data-color="MIS"] { background: #fca5a5 !important; color: #7f1d1d !important; border-color: #f87171 !important; }
-[data-color="ADM"] { background: #1d201a !important; color: #ffffff !important; border-color: #000000 !important; }
-
-/* Regla especial para el rol CLD */
-.rol-pill[data-color="CLD"] { background: #fbcfe8 !important; color: #831843 !important; border-color: #f9a8d4 !important; }
 
 /* =========================================================
    EMPTY STATE

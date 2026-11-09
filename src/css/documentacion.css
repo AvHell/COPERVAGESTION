@@ -260,6 +260,9 @@
     color: var(--gray-600);
     white-space: nowrap;
 }
+/* El color real lo inyecta PermisosUI desde Clientes.ColorHex (la píldora
+   lleva data-color + data-color-kind="client"); el oliva es solo el respaldo
+   para un cliente sin color configurado. */
 .doc-pill.cliente { color: #fff; background: var(--tierra-oliva); }
 .doc-pill.version {
     background: var(--tierra-crema);

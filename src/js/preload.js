@@ -197,12 +197,16 @@ contextBridge.exposeInMainWorld('api', {
         actualizarDim:  (idPiso, f, c)           => ipcRenderer.invoke('plano:actualizarDim', idPiso, f, c),
 
         listarPorLugar: (idPiso)                 => ipcRenderer.invoke('plano:listarPorLugar', idPiso),
-        sinUbicacion:   (idPiso)                 => ipcRenderer.invoke('plano:sinUbicacion', idPiso),
+        sinUbicacion:   (idPiso, idEscenarioFuturo = null) =>
+            ipcRenderer.invoke('plano:sinUbicacion', idPiso, idEscenarioFuturo),
         listarFuturos: (idPiso) => ipcRenderer.invoke('plano:futuros:listar', idPiso),
         ubicacionesFuturas: (idEscenario, idPiso) => ipcRenderer.invoke('plano:futuros:ubicaciones', idEscenario, idPiso),
         crearFuturo: (idPisos, nombre) => ipcRenderer.invoke('plano:futuros:crear', idPisos, nombre),
         moverFuturo: (idEscenario, idEquipo, idPisoDestino, fila, columna) => ipcRenderer.invoke('plano:futuros:mover', idEscenario, idEquipo, idPisoDestino, fila, columna),
         editarEquipoFuturo: (idEscenario, idEquipo, datos) => ipcRenderer.invoke('plano:futuros:editar-equipo', idEscenario, idEquipo, datos),
+        quitarEquipoFuturo: (idEscenario, idEquipo) => ipcRenderer.invoke('plano:futuros:quitar-equipo', idEscenario, idEquipo),
+        agregarEquipoFuturo: (idEscenario, idEquipo, idPiso, fila, columna) =>
+            ipcRenderer.invoke('plano:futuros:agregar-equipo', idEscenario, idEquipo, idPiso, fila, columna),
         eliminarFuturo: (idEscenario, idPiso) => ipcRenderer.invoke('plano:futuros:eliminar', idEscenario, idPiso),
 
         asignar:        (idPiso, idEquipo, fila, col)                              => ipcRenderer.invoke('plano:asignar', idPiso, idEquipo, fila, col),

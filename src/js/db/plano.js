@@ -137,29 +137,56 @@ async function listarPorLugar(idPiso) {
     return r.recordset;
 }
 
-async function equiposSinUbicacion(idPiso) {
+/* Campos comunes a las dos variantes de "Equipos sin ubicar": plano actual y
+   copia futura. Se comparten para que ambas listas devuelvan lo mismo. */
+const SELECT_EQUIPOS_SIN_UBICAR = `
+    SELECT E.IdEquipo, E.Hostname, E.TipoIP, E.IP, E.IdCliente, E.IdPiso, E.IdRolEquipo,
+           E.Mascara, E.PuertaEnlace, E.DNS1, E.DNS2,
+           E.UsuarioAdmin, E.PasswordAdmin,
+           C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
+           R.Codigo AS RolCodigo,
+           DA.Descripcion AS DescripcionAdmin
+    FROM Equipos E
+    INNER JOIN RolesEquipo R ON R.IdRolEquipo = E.IdRolEquipo
+    INNER JOIN Clientes C ON C.IdCliente = E.IdCliente
+    LEFT JOIN DominiosAdmin DA
+           ON DA.IdCliente = E.IdCliente
+          AND DA.Usuario   = E.UsuarioAdmin
+`;
+
+/* Con idEscenarioFuturo la lista se calcula contra la PROPUESTA: un equipo
+   sigue "sin ubicar" mientras no tenga fila en EscenarioPlanoFuturoUbicaciones,
+   aunque en el plano actual sí tenga sitio. Sin escenario se mantiene el
+   comportamiento del plano real. */
+async function equiposSinUbicacion(idPiso, idEscenarioFuturo = null) {
     const pool = await getPool();
-    const r = await pool.request()
-        .input('IdPiso', sql.Int, idPiso)
-        .query(`
-            SELECT E.IdEquipo, E.Hostname, E.TipoIP, E.IP, E.IdCliente, E.IdPiso, E.IdRolEquipo,
-                   E.Mascara, E.PuertaEnlace, E.DNS1, E.DNS2,
-                   E.UsuarioAdmin, E.PasswordAdmin,
-                   C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
-                   R.Codigo AS RolCodigo,
-                   DA.Descripcion AS DescripcionAdmin
-            FROM Equipos E
-            INNER JOIN RolesEquipo R ON R.IdRolEquipo = E.IdRolEquipo
-            INNER JOIN Clientes C ON C.IdCliente = E.IdCliente
-            LEFT JOIN DominiosAdmin DA
-                   ON DA.IdCliente = E.IdCliente
-                  AND DA.Usuario   = E.UsuarioAdmin
-            WHERE E.IdPiso = @IdPiso
-              AND NOT EXISTS (
-                  SELECT 1 FROM PlanoUbicaciones P
-                  WHERE P.IdEquipo = E.IdEquipo AND P.IdPiso = @IdPiso
-              )
-        `);
+    const escenario = Number(idEscenarioFuturo);
+    const enPropuesta = Number.isInteger(escenario) && escenario > 0;
+
+    const r = enPropuesta
+        ? await pool.request()
+            .input('IdPiso', sql.Int, idPiso)
+            .input('IdEscenarioFuturo', sql.Int, escenario)
+            .query(`${SELECT_EQUIPOS_SIN_UBICAR}
+                LEFT JOIN dbo.EscenarioPlanoFuturoOriginal O
+                       ON O.IdEscenarioFuturo = @IdEscenarioFuturo
+                      AND O.IdEquipo = E.IdEquipo
+                WHERE ISNULL(O.IdPisoOriginal, E.IdPiso) = @IdPiso
+                  AND NOT EXISTS (
+                      SELECT 1 FROM dbo.EscenarioPlanoFuturoUbicaciones U
+                      WHERE U.IdEscenarioFuturo = @IdEscenarioFuturo
+                        AND U.IdEquipo = E.IdEquipo
+                  )
+            `)
+        : await pool.request()
+            .input('IdPiso', sql.Int, idPiso)
+            .query(`${SELECT_EQUIPOS_SIN_UBICAR}
+                WHERE E.IdPiso = @IdPiso
+                  AND NOT EXISTS (
+                      SELECT 1 FROM PlanoUbicaciones P
+                      WHERE P.IdEquipo = E.IdEquipo AND P.IdPiso = @IdPiso
+                  )
+            `);
     return r.recordset;
 }
 
@@ -1178,6 +1205,164 @@ async function moverEquipoEnEscenarioFuturo(idEscenario, idEquipo, idPisoDestino
     }
 }
 
+/* Quita un equipo del PLANO de una copia futura sin sacarlo de la propuesta:
+   se borra solo su fila en EscenarioPlanoFuturoUbicaciones, así que el equipo
+   pasa a "Equipos sin ubicar" y puede volver a colocarse (o quedarse fuera de
+   la propuesta). La fila de EscenarioPlanoFuturoOriginal se conserva con su
+   posición real, por lo que el plano actual (PlanoUbicaciones / Equipos) y el
+   estado "no estaba ubicado" quedan intactos. */
+async function quitarEquipoEnEscenarioFuturo(idEscenario, idEquipo) {
+    const escenario = Number(idEscenario);
+    const equipo = Number(idEquipo);
+    if (!Number.isInteger(escenario) || !Number.isInteger(equipo) ||
+        escenario <= 0 || equipo <= 0) {
+        return { ok: false, mensaje: 'La propuesta o el equipo seleccionado no son válidos.' };
+    }
+
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('IdEscenarioFuturo', sql.Int, escenario)
+        .input('IdEquipo', sql.Int, equipo)
+        .query(`
+            DELETE FROM dbo.EscenarioPlanoFuturoUbicaciones
+            WHERE IdEscenarioFuturo = @IdEscenarioFuturo
+              AND IdEquipo = @IdEquipo
+        `);
+
+    if (!result.rowsAffected[0]) {
+        return { ok: false, mensaje: 'Ese equipo ya no está colocado en esta propuesta.' };
+    }
+    return {
+        ok: true,
+        mensaje: 'Equipo quitado del plano de la propuesta: sigue disponible en "Equipos sin ubicar". El plano actual no cambia.'
+    };
+}
+
+/* Coloca en la copia futura un equipo del panel "Equipos sin ubicar": puede ser
+   uno que nunca tuvo sitio en el plano real (en "Original" se guarda (0,0) con
+   scripts/plano-futuros-sin-ubicar.sql) o uno que se quitó de la propuesta y
+   conserva su fila en "Original". Nada se escribe en PlanoUbicaciones ni en
+   Equipos, así que el plano documentado sigue igual. */
+async function agregarEquipoEnEscenarioFuturo(idEscenario, idEquipo, idPiso, fila, columna) {
+    const escenario = Number(idEscenario);
+    const equipo = Number(idEquipo);
+    const piso = Number(idPiso);
+    const destinoFila = Number(fila);
+    const destinoColumna = Number(columna);
+    if (![escenario, equipo, piso, destinoFila, destinoColumna].every(Number.isInteger) ||
+        escenario <= 0 || equipo <= 0 || piso <= 0 || destinoFila <= 0 || destinoColumna <= 0) {
+        return { ok: false, mensaje: 'La propuesta o la posición seleccionada no son válidas.' };
+    }
+
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+    await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+        const revision = await new sql.Request(tx)
+            .input('IdEscenarioFuturo', sql.Int, escenario)
+            .input('IdEquipo', sql.Int, equipo)
+            .input('IdPiso', sql.Int, piso)
+            .input('Fila', sql.Int, destinoFila)
+            .input('Columna', sql.Int, destinoColumna)
+            .query(`
+                SELECT
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM dbo.EscenarioPlanoFuturoPisos
+                        WHERE IdEscenarioFuturo = @IdEscenarioFuturo AND IdPiso = @IdPiso
+                    ) THEN 1 ELSE 0 END AS PisoValido,
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM dbo.EscenarioPlanoFuturoUbicaciones
+                        WHERE IdEscenarioFuturo = @IdEscenarioFuturo AND IdEquipo = @IdEquipo
+                    ) THEN 1 ELSE 0 END AS YaEnPropuesta,
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM dbo.EscenarioPlanoFuturoOriginal
+                        WHERE IdEscenarioFuturo = @IdEscenarioFuturo AND IdEquipo = @IdEquipo
+                    ) THEN 1 ELSE 0 END AS YaEnOriginal,
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM dbo.EscenarioPlanoFuturoUbicaciones WITH (UPDLOCK, HOLDLOCK)
+                        WHERE IdEscenarioFuturo = @IdEscenarioFuturo
+                          AND IdPiso = @IdPiso AND Fila = @Fila AND Columna = @Columna
+                    ) THEN 1 ELSE 0 END AS CeldaOcupada,
+                    (SELECT P.Filas FROM dbo.Pisos P WHERE P.IdPiso = @IdPiso) AS Filas,
+                    (SELECT P.Columnas FROM dbo.Pisos P WHERE P.IdPiso = @IdPiso) AS Columnas,
+                    (SELECT E.IdPiso FROM dbo.Equipos E WHERE E.IdEquipo = @IdEquipo) AS IdPisoEquipo,
+                    (SELECT MAX(P.Fila) FROM dbo.PlanoUbicaciones P WHERE P.IdEquipo = @IdEquipo) AS FilaReal,
+                    (SELECT MAX(P.Columna) FROM dbo.PlanoUbicaciones P WHERE P.IdEquipo = @IdEquipo) AS ColumnaReal
+            `);
+        const estado = revision.recordset[0];
+
+        if (!estado || !estado.PisoValido) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'El piso indicado no forma parte de esta propuesta.' };
+        }
+        if (estado.YaEnPropuesta) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'El equipo ya está colocado en esta propuesta futura.' };
+        }
+        if (!estado.IdPisoEquipo) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'El equipo seleccionado ya no existe.' };
+        }
+        if (destinoFila > estado.Filas || destinoColumna > estado.Columnas) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'La posición destino está fuera de las dimensiones del piso.' };
+        }
+        if (estado.CeldaOcupada) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'La celda destino ya está ocupada en esta propuesta.' };
+        }
+
+        /* Si el equipo ya tenía fila en "Original" (se quitó del plano de la
+           propuesta con anterioridad) se respeta tal cual: ahí vive su posición
+           original. Si no, se guarda la posición real en el plano actual o (0,0)
+           cuando nunca estuvo ubicado. */
+        if (!estado.YaEnOriginal) {
+            await new sql.Request(tx)
+                .input('IdEscenarioFuturo', sql.Int, escenario)
+                .input('IdEquipo', sql.Int, equipo)
+                .input('IdPisoOriginal', sql.Int, Number(estado.IdPisoEquipo))
+                .input('FilaOriginal', sql.Int, Number(estado.FilaReal) > 0 ? Number(estado.FilaReal) : 0)
+                .input('ColumnaOriginal', sql.Int, Number(estado.ColumnaReal) > 0 ? Number(estado.ColumnaReal) : 0)
+                .query(`
+                    INSERT INTO dbo.EscenarioPlanoFuturoOriginal
+                        (IdEscenarioFuturo, IdEquipo, IdPisoOriginal, FilaOriginal, ColumnaOriginal)
+                    VALUES (@IdEscenarioFuturo, @IdEquipo, @IdPisoOriginal, @FilaOriginal, @ColumnaOriginal)
+                `);
+        }
+
+        await new sql.Request(tx)
+            .input('IdEscenarioFuturo', sql.Int, escenario)
+            .input('IdEquipo', sql.Int, equipo)
+            .input('IdPiso', sql.Int, piso)
+            .input('Fila', sql.Int, destinoFila)
+            .input('Columna', sql.Int, destinoColumna)
+            .query(`
+                INSERT INTO dbo.EscenarioPlanoFuturoUbicaciones
+                    (IdEscenarioFuturo, IdEquipo, IdPiso, Fila, Columna)
+                VALUES (@IdEscenarioFuturo, @IdEquipo, @IdPiso, @Fila, @Columna)
+            `);
+
+        await tx.commit();
+        return { ok: true, mensaje: 'Equipo añadido a la propuesta futura. El plano actual no cambia.' };
+    } catch (error) {
+        try {
+            await tx.rollback();
+        } catch (rollbackError) {
+            console.error('[Plano] Error al revertir el alta en la propuesta:', rollbackError);
+        }
+        if (error.number === 547 && /CK_EscenarioPlanoFuturoOriginal_Posicion/i.test(error.message || '')) {
+            return {
+                ok: false,
+                mensaje: 'Falta ejecutar scripts/plano-futuros-sin-ubicar.sql para poder colocar en una propuesta equipos que no están ubicados en el plano actual.'
+            };
+        }
+        if (error.number === 2627 || error.number === 2601) {
+            return { ok: false, mensaje: 'La celda destino ya está ocupada en esta propuesta.' };
+        }
+        throw error;
+    }
+}
+
 async function eliminarEscenarioFuturo(idEscenario, idPiso) {
     const pool = await getPool();
     const result = await pool.request()
@@ -1207,5 +1392,6 @@ module.exports = {
     listarZonasLibres, guardarZonaLibre, actualizarZonaLibre, eliminarZonaLibre,
     actualizarZonasPorNombre,
     listarEscenariosFuturos, crearEscenarioFuturo, obtenerUbicacionesFuturas,
-    moverEquipoEnEscenarioFuturo, actualizarEquipoEnEscenarioFuturo, eliminarEscenarioFuturo
+    moverEquipoEnEscenarioFuturo, actualizarEquipoEnEscenarioFuturo, eliminarEscenarioFuturo,
+    quitarEquipoEnEscenarioFuturo, agregarEquipoEnEscenarioFuturo
 };

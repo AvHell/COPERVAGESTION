@@ -159,6 +159,12 @@ function nombreCliente(codigo) {
     return encontrado?.Nombre || String(codigo);
 }
 
+/* Código del cliente normalizado: es la clave con la que PermisosUI resuelve
+   el color del catálogo (Clientes.ColorHex). */
+function codigoCliente(codigo) {
+    return String(codigo || '').trim().toUpperCase();
+}
+
 /** Comprueba un permiso del rol en sesión (si la capa de permisos no cargó, no bloquea). */
 function permite(clave) {
     const ui = window.PermisosUI;
@@ -462,7 +468,11 @@ function tarjeta(doc) {
 
     const etiquetas = [];
     if (doc.Cliente) {
-        etiquetas.push(`<span class="doc-pill cliente" title="${escaparHTML(doc.Cliente)}">${escaparHTML(nombreCliente(doc.Cliente))}</span>`);
+        /* data-color + data-color-kind: PermisosUI pinta la píldora con el
+           ColorHex del catálogo de Clientes, así que el color sale de la BD y
+           se actualiza en vivo cuando se cambia en Catálogos. */
+        const codigo = codigoCliente(doc.Cliente);
+        etiquetas.push(`<span class="doc-pill cliente" data-color="${escaparHTML(codigo)}" data-color-kind="client" title="${escaparHTML(doc.Cliente)}">${escaparHTML(nombreCliente(doc.Cliente))}</span>`);
     }
     if (doc.Categoria) etiquetas.push(`<span class="doc-pill">${escaparHTML(doc.Categoria)}</span>`);
     if (Number(doc.VersionActual) > 1) etiquetas.push(`<span class="doc-pill version">v${Number(doc.VersionActual)}</span>`);
@@ -546,9 +556,13 @@ function renderizar() {
     }
     if (el.zonaSubida) el.zonaSubida.classList.toggle('oculto', estado.papelera);
 
-    // Permisos sobre las tarjetas recién creadas
+    // Permisos y colores de catálogo sobre las tarjetas recién creadas
     if (window.PermisosUI && typeof window.PermisosUI.aplicar === 'function' && el.grid) {
         window.PermisosUI.aplicar(el.grid);
+        /* El MutationObserver ya repinta las tarjetas nuevas, pero si el color
+           de un cliente se cambia en Catálogos y esta página se refresca en
+           vivo, esto garantiza que la píldora tome el ColorHex actual. */
+        window.PermisosUI.aplicarColores?.(el.grid);
     }
 }
 

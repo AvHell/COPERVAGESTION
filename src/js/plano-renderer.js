@@ -729,17 +729,20 @@ function mostrarTooltip(ev, contenido) {
 
     const esc = escaparTextoTooltip;
 
-    const clienteTexto = contenido.clienteNombre
-        ? `${contenido.cliente || ''} — ${contenido.clienteNombre}`
-        : (contenido.cliente || '—');
+    /* Sólo el NOMBRE del cliente: el código queda como title para no ensuciar
+       la tarjeta. El nombre se pinta con el color del catálogo de Clientes. */
+    const clienteCodigo = String(contenido.cliente || '').toUpperCase().trim();
+    const clienteNombre = contenido.clienteNombre || contenido.cliente || '—';
+    const clienteHTML = clienteCodigo
+        ? `<span class="tooltip-cliente" data-color="${clienteCodigo}" data-color-kind="client" title="${esc(clienteCodigo)}">${esc(clienteNombre)}</span>`
+        : esc(clienteNombre);
 
     const ipTexto = contenido.ip ? contenido.ip : 'DHCP (sin IP estática)';
 
     /* OJO con el JOIN de dominios: DescripcionAdmin es la Descripcion del
-       catálogo DominiosAdmin (el dominio en sí) y UsuarioAdmin es la cuenta.
-       Estaban cruzados y el tooltip mostraba el dominio como usuario. */
+       catálogo DominiosAdmin (el dominio en sí) y UsuarioAdmin es la cuenta. */
     const filas = [
-        ['Cliente', esc(clienteTexto), ''],
+        ['Cliente', clienteHTML, ''],
         ['Dirección IP', esc(ipTexto), 'mono'],
         ['Dominio', esc(contenido.descripcionAdmin || '—'), 'mono'],
         ['Usuario admin', esc(contenido.usuarioAdmin || '—'), ''],
@@ -768,6 +771,10 @@ function mostrarTooltip(ev, contenido) {
                 </div>`).join('')}
         </div>
     `;
+
+    /* El tooltip vive fuera del grid: hay que pedir el color del cliente aquí
+       (una vez armado el HTML) para que tome el de Catálogos. */
+    window.PermisosUI?.aplicarColores?.(tooltipDiv);
 
     tooltipDiv.style.display = 'block';
 
@@ -2431,6 +2438,10 @@ async function cargarPanelDatos(panel) {
     // en lugar de secuencialmente. Reduce el tiempo total de
     // carga de ~5 round-trips a 1 (el más lento).
     // ============================================================
+    /* La lista "Equipos sin ubicar" se calcula contra la propuesta cuando hay
+       una copia futura activa: un equipo quitado del plano de la copia sigue en
+       esa lista aunque en el plano actual tenga sitio. */
+    const escenarioSolicitado = panel.escenarioFuturoId ? Number(panel.escenarioFuturoId) : null;
     const [
         dimensiones,
         ubicaciones,
@@ -2441,7 +2452,7 @@ async function cargarPanelDatos(panel) {
     ] = await Promise.all([
         window.api.plano.dimensiones(panel.idPiso),
         window.api.plano.listarPorLugar(panel.idPiso),
-        window.api.plano.sinUbicacion(panel.idPiso),
+        window.api.plano.sinUbicacion(panel.idPiso, escenarioSolicitado),
         window.api.plano.listarZonas(panel.idPiso),
         window.api.plano.listarZonasLibres(panel.idPiso),
         window.api.plano.listarFuturos(panel.idPiso)
@@ -2500,6 +2511,12 @@ async function cargarPanelDatos(panel) {
     if (panel.escenarioFuturoId &&
         !escenariosFuturos.some(escenario => Number(escenario.IdEscenarioFuturo) === Number(panel.escenarioFuturoId))) {
         panel.escenarioFuturoId = null;
+    }
+    /* La propuesta se eliminó mientras el panel estaba abierto: la lista se
+       había pedido contra el escenario, así que se vuelve a pedir para el plano
+       actual. */
+    if (escenarioSolicitado && !panel.escenarioFuturoId) {
+        panel.equiposSinUbicar = await window.api.plano.sinUbicacion(panel.idPiso, null);
     }
     if (panel.escenarioFuturoId) {
         const propuesta = await window.api.plano.ubicacionesFuturas(panel.escenarioFuturoId, panel.idPiso);
@@ -2855,7 +2872,9 @@ function pintarGridPanel(panel, grid) {
             }
 
             if (contenido) {
-                celda.innerHTML = `${panel.escenarioFuturoId ? '' : `<button class="cerrar" data-id="${contenido.IdEquipo}">✕</button>`}
+                /* La ✕ también existe en las copias futuras: ahí solo quita el
+                   equipo de la propuesta, nunca del plano actual. */
+                celda.innerHTML = `<button class="cerrar" data-id="${contenido.IdEquipo}" title="${panel.escenarioFuturoId ? 'Quitar del plano de la propuesta (vuelve a Equipos sin ubicar)' : 'Quitar del plano'}">✕</button>
                     ${SVG_PC}
                     ${contenido._movimientoFuturo ? '<span class="marca-futuro">FUTURO</span>' : ''}`;
 
@@ -2905,7 +2924,9 @@ function pintarGridPanel(panel, grid) {
                     btnCerrar.dataset.permiso = 'plano:quitar';
                     btnCerrar.addEventListener('click', (ev) => {
                         ev.stopPropagation();
-                        if (!modoZona && !modoZonaLibre && !modoEdicion) confirmarQuitar(contenido, panel);
+                        if (modoZona || modoZonaLibre || modoEdicion) return;
+                        if (panel.escenarioFuturoId) confirmarQuitarEnPropuesta(contenido, panel);
+                        else confirmarQuitar(contenido, panel);
                     });
                 }
             }
@@ -3607,6 +3628,18 @@ function renderListaSinUbicarFiltrada() {
         equipos = equipos.filter(e => e.Hostname.toLowerCase().includes(filtroBusquedaLateral));
     }
 
+    /* En una copia futura se ocultan los equipos que ya están colocados en la
+       propuesta: cada equipo ocupa una sola celda del escenario. */
+    if (panelActivo?.escenarioFuturoId) {
+        const enPropuesta = new Set();
+        for (const fila of panelActivo.celdas || []) {
+            for (const celda of fila || []) {
+                if (celda) enPropuesta.add(Number(celda.IdEquipo));
+            }
+        }
+        equipos = equipos.filter(e => !enPropuesta.has(Number(e.IdEquipo)));
+    }
+
     if (equipos.length === 0) {
         listaSinUbicar.innerHTML = '<li class="lista-sin-ubicar-vacia">Sin equipos que coincidan con el filtro.</li>';
         return;
@@ -3616,7 +3649,10 @@ function renderListaSinUbicarFiltrada() {
         const li = document.createElement('li');
         li.draggable = true;
 
-        const clienteNom = e.ClienteCodigo || '?';
+        /* Se muestra el NOMBRE del cliente (el código va en el title) y el punto
+           toma su color del catálogo, igual que los chips "Clientes del piso". */
+        const clienteCodigo = String(e.ClienteCodigo || '').toUpperCase();
+        const clienteNom = e.ClienteNombre || e.ClienteCodigo || '?';
         const pisoNom = pisos.find(p => Number(p.IdPiso) === Number(e.IdPiso))?.Nombre
                        || `Piso ${e.IdPiso || '?'}`;
 
@@ -3625,7 +3661,9 @@ function renderListaSinUbicarFiltrada() {
         li.innerHTML = `
             <div class="equipo-info">
                 <div class="hostname-texto">${e.Hostname}</div>
-                <div class="equipo-ubicacion">${clienteNom} · ${pisoNom}</div>
+                <div class="equipo-ubicacion" title="${clienteNom} (${clienteCodigo || 's/c'}) · ${pisoNom}">
+                    <span class="punto-cliente" data-color="${clienteCodigo}" data-color-kind="client" aria-hidden="true"></span>${clienteNom} · ${pisoNom}
+                </div>
             </div>
         `;
         const btnEditar = document.createElement('button');
@@ -3640,7 +3678,15 @@ function renderListaSinUbicarFiltrada() {
             ev.stopPropagation();
             abrirModalEditarEquipo(e, panelActivo);
         });
-        li.appendChild(btnEditar);
+        if (panelActivo?.escenarioFuturoId) {
+            /* Con una copia futura activa el listado solo contiene equipos que
+               aún no están en la propuesta: se añaden arrastrándolos. Editarlos
+               antes de colocarlos escribiría en el equipo real, y eso está
+               prohibido desde una propuesta. */
+            li.title = 'Arrastra el equipo a una celda libre de la propuesta para colocarlo.';
+        } else {
+            li.appendChild(btnEditar);
+        }
         li.addEventListener('dragstart', (ev) => {
             if (window.PermisosUI && !window.PermisosUI.puede('plano:asignar')) {
                 ev.preventDefault();
@@ -3666,6 +3712,10 @@ function renderListaSinUbicarFiltrada() {
         });
         listaSinUbicar.appendChild(li);
     });
+
+    /* El punto de cada cliente toma su color del catálogo (también al repintar
+       en vivo, sin recargar la página). */
+    window.PermisosUI?.aplicarColores?.(listaSinUbicar);
 }
 
 function actualizarBadge() {
@@ -3843,6 +3893,62 @@ async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
             Number(panelOrigen.escenarioFuturoId) === Number(panelDestino.escenarioFuturoId);
         const vistaPermitida = mismoPanel || selectModo.value === 'doble';
         const pisosDistintos = Number(panelOrigen.idPiso) !== Number(panelDestino.idPiso);
+
+        /* Alta desde el panel lateral dentro de una propuesta: el equipo entra
+           SOLO en la copia futura (EscenarioPlanoFuturo*, nunca en
+           PlanoUbicaciones ni en Equipos). */
+        if (origen.tipo === 'lista') {
+            if (!panelDestino.escenarioFuturoId) {
+                mostrarToast('La celda pertenece al plano actual; quita la propuesta para editar el plano real.', 'warn', 4500);
+                return;
+            }
+            const equipo = (panelOrigen.equiposSinUbicar || [])
+                .find(e => Number(e.IdEquipo) === Number(origen.idEquipo));
+            if (!equipo) {
+                mostrarToast('El equipo ya no está disponible en el panel lateral.', 'warn', 4000);
+                return;
+            }
+            if (window.PermisosUI && !window.PermisosUI.puede('plano:asignar')) {
+                mostrarToast('No tienes permiso para añadir equipos a la propuesta.', 'error');
+                return;
+            }
+            if (contenidoDestino) {
+                mostrarToast(
+                    `La celda (${filaDestino}, ${columnaDestino}) ya está ocupada en la propuesta; elige una libre.`,
+                    'warn', 4500
+                );
+                return;
+            }
+            mostrarConfirmacion(
+                'Añadir a la propuesta',
+                `¿Colocar <b>${equipo.Hostname}</b> en la celda (${filaDestino}, ${columnaDestino}) de la copia futura?<br><br>
+                 <span style="color:#64748b;font-size:0.85rem;">Solo se guarda en la propuesta: el plano actual y los datos del equipo no cambian.</span>`,
+                async () => {
+                    try {
+                        const res = await window.api.plano.agregarEquipoFuturo(
+                            panelDestino.escenarioFuturoId,
+                            equipo.IdEquipo,
+                            panelDestino.idPiso,
+                            filaDestino,
+                            columnaDestino
+                        );
+                        if (!res || res.ok === false) {
+                            mostrarToast(res?.mensaje || 'No se pudo añadir el equipo a la propuesta.', 'error', 4500);
+                            return;
+                        }
+                        await Promise.all((selectModo.value === 'doble' ? [panelIzq, panelDer] : [panelDestino])
+                            .filter(panel => panel.idPiso)
+                            .map(recargarPanel));
+                        mostrarToast(res.mensaje, 'exito', 4000);
+                    } catch (error) {
+                        mostrarToast(error.message, 'error', 4500);
+                    }
+                },
+                'plano:asignar'
+            );
+            return;
+        }
+
         if (origen.tipo !== 'celda' || !mismaPropuesta || !vistaPermitida ||
             (!mismoPanel && !pisosDistintos)) {
             mostrarToast('Para mover entre pisos, ambos paneles deben pertenecer a la misma propuesta futura.', 'warn', 4000);
@@ -4276,6 +4382,36 @@ function confirmarQuitar(equipo, panel) {
             await window.api.plano.quitar(equipo.IdEquipo, panel.idPiso, equipo.Hostname);
             mostrarToast(`"${equipo.Hostname}" quitado del plano`, 'exito');
             await recargarPanel(panel);
+        },
+        'plano:quitar'
+    );
+}
+
+/* Quitar un equipo del plano de una copia futura: deja de estar colocado y
+   pasa al panel "Equipos sin ubicar" de la propuesta. PlanoUbicaciones y los
+   datos del equipo quedan intactos. */
+function confirmarQuitarEnPropuesta(equipo, panel) {
+    if (!panel?.escenarioFuturoId) return;
+    mostrarConfirmacion(
+        'Quitar del plano de la propuesta',
+        `¿Quitar <b>${equipo.Hostname}</b> (${equipo.ClienteCodigo || ''}) del plano de esta copia futura?<br><br>
+         El equipo seguirá dentro de la propuesta en <b>Equipos sin ubicar</b>, listo para colocarlo en otra celda.
+         El plano actual y los datos del equipo no cambian.`,
+        async () => {
+            try {
+                const res = await window.api.plano.quitarEquipoFuturo(
+                    panel.escenarioFuturoId,
+                    equipo.IdEquipo
+                );
+                if (!res || res.ok === false) {
+                    mostrarToast(res?.mensaje || 'No se pudo quitar el equipo de la propuesta.', 'error', 4500);
+                    return;
+                }
+                mostrarToast(res.mensaje || `"${equipo.Hostname}" quitado de la propuesta`, 'exito');
+                await recargarPanel(panel);
+            } catch (err) {
+                mostrarToast('Error al quitar de la propuesta: ' + err.message, 'error', 4500);
+            }
         },
         'plano:quitar'
     );
@@ -4835,9 +4971,9 @@ function construirBloquesPlano(panel, layout) {
                 <td class="mono">${celdaRed(e.PuertaEnlace)}</td>
                 <td class="mono">${celdaRed(e.DNS1)}</td>
                 <td class="mono">${celdaRed(e.DNS2)}</td>
-                <td class="mono">${e.UsuarioAdmin || '-'}</td>
-                <td class="mono">${e.PasswordAdmin || '-'}</td>
                 <td class="mono">${e.DescripcionAdmin || '-'}</td>
+                <td class="mono">${e.PasswordAdmin || '-'}</td>
+                <td class="mono">${e.UsuarioAdmin || '-'}</td>
             </tr>
         `;
     }).join('');
@@ -5200,9 +5336,9 @@ function generarHTMLVistaPrevia(panel) {
                                         <th style="width:110px;">Puerta enlace</th>
                                         <th style="width:100px;">DNS 1</th>
                                         <th style="width:90px;">DNS 2</th>
-                                        <th style="width:120px;">Dominio</th>
+                                        <th style="width:150px;">Dominio</th>
                                         <th style="width:130px;">Password admin</th>
-                                        <th style="width:150px;">UsuarioAdmin</th>
+                                        <th style="width:130px;">Usuario admin</th>
                                     </tr>
                                 </thead>
                                 <tbody>${filasTabla}</tbody>
@@ -5394,9 +5530,9 @@ function generarHTMLParaPDF(panel) {
                             <th style="width:110px;">Puerta enlace</th>
                             <th style="width:100px;">DNS 1</th>
                             <th style="width:90px;">DNS 2</th>
-                            <th style="width:120px;">Dominio</th>
+                            <th style="width:150px;">Dominio</th>
                             <th style="width:130px;">Password admin</th>
-                            <th style="width:150px;">UsuarioAdmin</th>
+                            <th style="width:130px;">Usuario admin</th>
                         </tr>
                     </thead>
                     <tbody>${filasTabla}</tbody>

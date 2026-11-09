@@ -634,6 +634,7 @@
     if (!pintados.has(el)) return;
     pintados.delete(el);
     ['--rol-color', '--rol-borde', '--rol-fondo', '--rol-texto',
+      '--cliente-color', '--cliente-borde', '--cliente-fondo', '--cliente-texto',
       'background-color', 'border-color', 'color']
       .forEach(propiedad => el.style.removeProperty(propiedad));
     /* Si el navegador no dejó nada en el atributo, lo quitamos para no
@@ -646,17 +647,21 @@
     /* 'BOTON' es el marcador de insignia neutra: no es un color de catálogo. */
     if (!codigo || codigo === 'BOTON') return;
 
-    /* Chips del filtro por rol (panel lateral del plano): sólo el activo toma
-       el color del catálogo; los inactivos vuelven al estilo de la hoja,
-       porque si no todos parecerían seleccionados. */
+    /* Chips de filtro del panel lateral del plano (roles y clientes del piso):
+       sólo el activo toma el color del catálogo; los inactivos vuelven al
+       estilo de la hoja, porque si no todos parecerían seleccionados. */
     const esChipFiltro = el.matches('.filtro-rol-chip');
-    if (esChipFiltro && !el.classList.contains('activo')) {
+    const esChipCliente = el.matches('.chip-cliente');
+    /* Punto de color junto al nombre del cliente (lista "Equipos sin ubicar"). */
+    const esPuntoCliente = el.matches('.punto-cliente');
+    if ((esChipFiltro || esChipCliente) && !el.classList.contains('activo')) {
       despintarElemento(el);
       return;
     }
 
     const pagina = obtenerPagina();
-    const esCliente = el.matches('.badge-cliente, .badge-cli') ||
+    const esCliente = esChipCliente || esPuntoCliente ||
+      el.matches('.badge-cliente, .badge-cli') ||
       el.dataset.colorKind === 'client' ||
       (pagina === 'clientes.html' && el.matches('.badge-codigo'));
     const esRol = esChipFiltro ||
@@ -679,16 +684,24 @@
        aplastaría los estados :hover, .seleccionada y .destino, que es
        justamente lo que se perdió al quitar los colores fijos del CSS. */
     const esCeldaEquipo = el.matches('.celda[data-rol]');
-    const usaVariables = esCeldaEquipo || esChipFiltro;
+    const usaVariables = esCeldaEquipo || esChipFiltro || esChipCliente || esPuntoCliente;
     const fondo = esCeldaEquipo ? aclararColor(color) : color;
+    const modo = esCeldaEquipo ? 'celda'
+      : esChipCliente ? 'chip-cliente'
+      : esPuntoCliente ? 'punto-cliente'
+      : esChipFiltro ? 'chip'
+      : 'solido';
 
-    const firma = `${color}|${usaVariables ? (esCeldaEquipo ? 'celda' : 'chip') : 'solido'}`;
+    const firma = `${color}|${modo}`;
     if (pintados.get(el) === firma) return;
 
-    el.style.setProperty('--rol-color', color);
-    el.style.setProperty('--rol-borde', color);
-    el.style.setProperty('--rol-fondo', fondo);
-    el.style.setProperty('--rol-texto', esCeldaEquipo ? '#20271f' : contraste(color));
+    /* Los chips y puntos de cliente escriben tokens `--cliente-*` propios: así
+       el color de un cliente nunca se mezcla con el de un rol en la variable. */
+    const prefijo = (esChipCliente || esPuntoCliente) ? 'cliente' : 'rol';
+    el.style.setProperty(`--${prefijo}-color`, color);
+    el.style.setProperty(`--${prefijo}-borde`, color);
+    el.style.setProperty(`--${prefijo}-fondo`, fondo);
+    el.style.setProperty(`--${prefijo}-texto`, esCeldaEquipo ? '#20271f' : contraste(color));
     if (usaVariables) {
       el.style.removeProperty('background-color');
       el.style.removeProperty('border-color');

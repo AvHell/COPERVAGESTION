@@ -691,6 +691,18 @@ body.seleccionando-grupo .celda * {
     color: var(--plano-texto-secundario);
 }
 
+/* Nombre del cliente en la tarjeta: la píldora toma su color del catálogo de
+   Clientes (PermisosUI escribe --cliente-*); aquí sólo va la forma. */
+.tooltip-plano .tooltip-row .valor .tooltip-cliente {
+    display: inline-block;
+    padding: 1px 8px;
+    border: 1px solid var(--cliente-borde, transparent);
+    border-radius: 999px;
+    background: var(--cliente-color, var(--plano-superficie-suave));
+    font-weight: 700;
+    font-size: 0.76rem;
+}
+
 /* =========================================================
    PANEL LATERAL
    ========================================================= */
@@ -1008,6 +1020,19 @@ body.seleccionando-grupo .celda * {
     overflow: hidden;
     text-overflow: ellipsis;
     font-weight: 500;
+}
+
+/* Punto con el color del cliente (catálogo de Clientes): PermisosUI escribe
+   --cliente-color; aquí sólo se define la forma y el respaldo neutro. */
+.lista-sin-ubicar li .punto-cliente {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 5px;
+    border-radius: 50%;
+    flex: none;
+    vertical-align: 1px;
+    background: var(--cliente-color, var(--plano-borde-fuerte));
 }
 
 .zonas-wrapper {
@@ -1382,10 +1407,13 @@ body.seleccionando-grupo .celda * {
     transform: translateY(-1px);
 }
 
+/* El chip activo toma el color del catálogo de Clientes (PermisosUI escribe
+   --cliente-color / --cliente-texto). Los valores oliva son solo el respaldo
+   para un cliente sin color configurado. */
 .chip-cliente.activo {
-    background: var(--plano-oliva-suave);
-    border-color: var(--plano-oliva);
-    color: var(--plano-oliva-oscuro);
+    background: var(--cliente-color, var(--plano-oliva-suave));
+    border-color: var(--cliente-color, var(--plano-oliva));
+    color: var(--cliente-texto, var(--plano-oliva-oscuro));
 }
 
 .chip-cliente .chip-check {
@@ -1404,9 +1432,9 @@ body.seleccionando-grupo .celda * {
 }
 
 .chip-cliente.activo .chip-check {
-    border-color: var(--plano-oliva);
-    background: var(--plano-oliva);
-    color: #fff;
+    border-color: var(--cliente-color, var(--plano-oliva));
+    background: var(--cliente-color, var(--plano-oliva));
+    color: var(--cliente-texto, #fff);
 }
 
 .chip-cliente .chip-nombre {
@@ -1811,9 +1839,7 @@ body.plano-body {
     color: var(--plano-texto-secundario);
 }
 
-.lista-sin-ubicar li:hover,
-.chip-cliente.activo,
-.chip-cliente.activo .chip-check {
+.lista-sin-ubicar li:hover {
     background: var(--plano-oliva-suave);
     border-color: var(--plano-oliva);
     color: var(--plano-oliva-oscuro);
@@ -1824,10 +1850,8 @@ body.plano-body {
     color: var(--plano-oliva);
 }
 
-.chip-cliente.activo .chip-check {
-    background: var(--plano-oliva);
-    color: var(--plano-superficie);
-}
+/* El estado visual del chip activo y de su casilla vive arriba (tokens
+   --cliente-*): aquí no se repite para no pisar el color del catálogo. */
 
 /* (El tooltip toma sus colores de los tokens en su propio bloque: aquí ya no
    se pisa el fondo ni el color del texto.) */

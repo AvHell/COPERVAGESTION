@@ -1591,7 +1591,10 @@ ipcMain.handle('plano:actualizarDim', async (_e, idPiso, filas, columnas) => {
 });
 
 ipcMain.handle('plano:listarPorLugar', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.listarPorLugar(idPiso); });
-ipcMain.handle('plano:sinUbicacion',   async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.equiposSinUbicacion(idPiso); });
+ipcMain.handle('plano:sinUbicacion',   async (_e, idPiso, idEscenarioFuturo = null) => {
+    const err = requerirSesion('plano:ver'); if (err) return err;
+    return await planoDB.equiposSinUbicacion(idPiso, idEscenarioFuturo);
+});
 ipcMain.handle('plano:futuros:listar', async (_e, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.listarEscenariosFuturos(idPiso); });
 ipcMain.handle('plano:futuros:ubicaciones', async (_e, idEscenario, idPiso) => { const err = requerirSesion('plano:ver'); if (err) return err; return await planoDB.obtenerUbicacionesFuturas(idEscenario, idPiso); });
 ipcMain.handle('plano:futuros:crear', async (_e, idPisos, nombre) => {
@@ -1605,6 +1608,14 @@ ipcMain.handle('plano:futuros:mover', async (_e, idEscenario, idEquipo, idPisoDe
 ipcMain.handle('plano:futuros:editar-equipo', async (_e, idEscenario, idEquipo, datos) => {
     const err = requerirSesion('equipos:editar'); if (err) return err;
     return await planoDB.actualizarEquipoEnEscenarioFuturo(idEscenario, idEquipo, datos);
+});
+ipcMain.handle('plano:futuros:quitar-equipo', async (_e, idEscenario, idEquipo) => {
+    const err = requerirSesion('plano:quitar'); if (err) return err;
+    return await planoDB.quitarEquipoEnEscenarioFuturo(idEscenario, idEquipo);
+});
+ipcMain.handle('plano:futuros:agregar-equipo', async (_e, idEscenario, idEquipo, idPiso, fila, columna) => {
+    const err = requerirSesion('plano:asignar'); if (err) return err;
+    return await planoDB.agregarEquipoEnEscenarioFuturo(idEscenario, idEquipo, idPiso, fila, columna);
 });
 ipcMain.handle('plano:futuros:eliminar', async (_e, idEscenario, idPiso) => {
     const err = requerirSesion('plano:mover'); if (err) return err;

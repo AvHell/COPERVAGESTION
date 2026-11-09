@@ -9,49 +9,48 @@ function obtenerRuta() {
     return path.join(app.getPath('userData'), ARCHIVO_CREDENCIALES);
 }
 
-function validar(datos) {
+/**
+ * Normaliza y valida los datos de conexión.
+ *
+ * @param {object} datos Campos del formulario o del entorno.
+ * @param {{ passwordOpcional?: boolean }} opciones
+ *   passwordOpcional: permite enviar la contraseña en blanco. El llamador debe
+ *   reutilizar la contraseña ya guardada antes de guardar el resultado.
+ */
+function validar(datos, opciones = {}) {
+    const passwordOpcional = opciones.passwordOpcional === true;
+
     const config = {
         server: String(datos?.server || '').trim(),
         port: datos?.port !== undefined && datos?.port !== null && datos?.port !== ''
             ? Number(datos.port)
             : undefined,
-        instanceName: String(datos?.instanceName || '').trim(),
         database: String(datos?.database || '').trim(),
         user: String(datos?.user || '').trim(),
-        password: String(datos?.password || '')
+        password: String(datos?.password ?? '')
     };
 
-    const faltantes = ['server', 'database', 'user', 'password']
-        .filter(campo => !config[campo]);
+    const requeridos = ['server', 'database', 'user'];
+    if (!passwordOpcional) requeridos.push('password');
+
+    const faltantes = requeridos.filter(campo => !config[campo]);
     if (faltantes.length) {
-        throw new Error('Completa servidor, base de datos, usuario y contraseña.');
+        throw new Error(passwordOpcional
+            ? 'Completa servidor, base de datos y usuario.'
+            : 'Completa servidor, base de datos, usuario y contraseña.');
     }
 
     if (config.server.length > 255 || config.database.length > 128 ||
-        config.user.length > 128 || config.password.length > 1024 ||
-        config.instanceName.length > 128) {
+        config.user.length > 128 || config.password.length > 1024) {
         throw new Error('Uno o más campos exceden el tamaño permitido.');
     }
 
-    // Validar puerto (si viene)
+    // Validar puerto (si viene). Sin puerto, tedious usa el 1433 por defecto.
     if (config.port !== undefined) {
         if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
             throw new Error('El puerto debe ser un número entre 1 y 65535.');
         }
     }
-
-    // Regla para hosting compartido (sql.bsite.net, etc.):
-    // si hay instanceName pero no port, tedious intentará SQL Browser (UDP 1434)
-    // y fallará con EINSTLOOKUP. Forzamos a que el usuario ponga el puerto.
-    if (config.instanceName && !config.port) {
-        throw new Error(
-            'Si indicas un nombre de instancia, también debes indicar el puerto TCP ' +
-            '(por ejemplo 1433). En hosting compartido el SQL Browser no está accesible.'
-        );
-    }
-
-    // Si NO hay instanceName y NO hay port, dejamos que tedious use el 1433 por defecto.
-    // No es un error, pero lo dejamos documentado.
 
     return config;
 }
@@ -96,6 +95,8 @@ function cargar() {
         if (contenido.version !== VERSION_FORMATO) {
             throw new Error('La configuración cifrada usa una versión no compatible.');
         }
+        // Las configuraciones anteriores podían incluir instanceName; validar() ya no lo
+        // captura ni lo devuelve, así que se descarta de forma transparente.
         return validar(contenido.config);
     } catch (error) {
         throw new Error(`No se pudo leer la configuración cifrada de la base de datos: ${error.message}`);
@@ -108,7 +109,6 @@ function desdeEntorno(env = process.env) {
     return validar({
         server: env.DB_SERVER,
         port: env.DB_PORT,
-        instanceName: env.DB_INSTANCE,
         database: env.DB_DATABASE,
         user: env.DB_USER,
         password: env.DB_PASSWORD

@@ -71,6 +71,16 @@ label {
 
 label span { color: #858e80; font-weight: 400; }
 
+.hint {
+    display: none;
+    margin-top: -2px;
+    color: #647a56;
+    font-size: .72rem;
+    line-height: 1.4;
+}
+
+.hint.visible { display: block; }
+
 input {
     width: 100%;
     height: 43px;

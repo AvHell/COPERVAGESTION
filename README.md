@@ -10,17 +10,17 @@ Aplicación de escritorio Electron para administrar equipos, pisos, activo fijo 
 
 ## Inicio de sesión y conexión a SQL Server
 
-Las credenciales de base de datos no se guardan en el código ni en un archivo `.env`. En el primer inicio, la aplicación solicita servidor, instancia (opcional), base de datos, usuario y contraseña; prueba la conexión y guarda el bloque cifrado mediante `safeStorage` de Electron, respaldado por el almacenamiento seguro del sistema operativo (DPAPI en Windows).
+Las credenciales de base de datos no se guardan en el código ni en un archivo `.env`. En el primer inicio, la aplicación solicita servidor, puerto (recomendado 1433), base de datos, usuario y contraseña; prueba la conexión y guarda el bloque cifrado mediante `safeStorage` de Electron, respaldado por el almacenamiento seguro del sistema operativo (DPAPI en Windows).
 
-El archivo cifrado se guarda en el directorio de datos de usuario de Electron (`app.getPath('userData')`), fuera de la carpeta de instalación y del repositorio. Al instalar una versión nueva, la aplicación elimina únicamente esa configuración de conexión para evitar reutilizar datos locales antiguos; el asistente solicitará probar y guardar de nuevo el acceso SQL. La configuración queda ligada al perfil de Windows que la creó: ejecuta la aplicación con ese mismo usuario. No copies el archivo cifrado a otra computadora o perfil.
+El archivo cifrado se guarda en el directorio de datos de usuario de Electron (`app.getPath('userData')`), fuera de la carpeta de instalación y del repositorio. Al volver a abrir el asistente, el servidor, puerto, base de datos y usuario se precargan y la contraseña queda en blanco: si se deja vacía se reutiliza la guardada, siempre que el destino (servidor, puerto, base de datos y usuario) no haya cambiado. La configuración queda ligada al perfil de Windows que la creó: ejecuta la aplicación con ese mismo usuario. No copies el archivo cifrado a otra computadora o perfil.
 
-Para desarrollo o despliegues administrados se admite una configuración inicial por variables de entorno: `DB_SERVER`, `DB_DATABASE`, `DB_USER` y `DB_PASSWORD`; `DB_INSTANCE` es opcional. Si están completas y todavía no hay una configuración cifrada, se guardan cifradas al iniciar. La configuración visual de primer inicio es la opción recomendada. No guardes estas variables en el repositorio, scripts compartidos, logs ni archivos `.env` distribuidos.
+Para desarrollo o despliegues administrados se admite una configuración inicial por variables de entorno: `DB_SERVER`, `DB_PORT` (opcional), `DB_DATABASE`, `DB_USER` y `DB_PASSWORD`. Si están completas y todavía no hay una configuración cifrada, se guardan cifradas al iniciar. La configuración visual de primer inicio es la opción recomendada. No guardes estas variables en el repositorio, scripts compartidos, logs ni archivos `.env` distribuidos.
 
 Para cambiar las credenciales guardadas, elimina **solo** `db-credentials.dat` del directorio de datos de usuario de la aplicación y vuelve a iniciarla para abrir el asistente de configuración. No es necesario reinstalar ni borrar otros datos de usuario.
 
 ### Actualizaciones
 
-Las actualizaciones se anuncian mediante un cuadro de diálogo nativo y son obligatorias. Mientras se descarga e instala una nueva versión, las ventanas de la aplicación permanecen bloqueadas. Al iniciar una versión distinta, se elimina `db-credentials.dat` y se vuelve a solicitar la configuración de SQL; el resto de datos locales de la aplicación no se borra. La versión instalada se registra en `app-version.txt` para que la limpieza se ejecute una sola vez por versión.
+Las actualizaciones se anuncian mediante un cuadro de diálogo nativo y son obligatorias. Mientras se descarga e instala una nueva versión, las ventanas de la aplicación permanecen bloqueadas. La conexión cifrada se conserva entre versiones: solo se solicita de nuevo cuando cambia el usuario de Windows o el origen de la instalación (otra carpeta de instalación u otra copia portable), que se registra en `instalacion.json` dentro del directorio de datos de usuario. El resto de datos locales de la aplicación nunca se borra.
 
 ### Límite de seguridad importante
 

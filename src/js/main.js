@@ -535,6 +535,51 @@ ipcMain.handle('logout', async () => {
 ipcMain.handle('usuario-actual', () => usuarioActual);
 ipcMain.handle('app:version', () => app.getVersion());
 
+/** Lee las credenciales guardadas sin lanzar si el archivo no se puede descifrar. */
+function leerCredencialesGuardadas() {
+    try {
+        return credencialesDB.cargar();
+    } catch (error) {
+        console.warn('[Configuración DB] No se pudieron leer las credenciales guardadas:', error.message);
+        return null;
+    }
+}
+
+/** ¿Los datos del formulario apuntan al mismo servidor/base/usuario que la conexión guardada? */
+function mismoDestinoGuardado(guardada, datos) {
+    if (!guardada) return false;
+    const normalizar = valor => String(valor ?? '').trim().toLowerCase();
+    const puertoGuardado = guardada.port ? Number(guardada.port) : 1433;
+    const puertoNuevo = datos.port !== undefined && datos.port !== null && datos.port !== ''
+        ? Number(datos.port)
+        : 1433;
+    return normalizar(guardada.server) === normalizar(datos.server) &&
+        normalizar(guardada.database) === normalizar(datos.database) &&
+        normalizar(guardada.user) === normalizar(datos.user) &&
+        puertoGuardado === puertoNuevo;
+}
+
+ipcMain.handle('db-config:estado', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win !== ventanas['configuracion-db'] || win.isDestroyed()) {
+        return { ok: false, mensaje: 'Consulta no disponible fuera de la ventana de configuración.' };
+    }
+
+    const guardada = leerCredencialesGuardadas();
+    if (!guardada) return { ok: true, configurada: false };
+
+    // Solo se exponen datos no sensibles; la contraseña nunca cruza al renderer.
+    return {
+        ok: true,
+        configurada: true,
+        server: guardada.server,
+        port: guardada.port ?? null,
+        database: guardada.database,
+        user: guardada.user,
+        tienePassword: !!guardada.password
+    };
+});
+
 ipcMain.handle('db-config:guardar', async (event, datos) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win !== ventanas['configuracion-db'] || win.isDestroyed()) {
@@ -543,7 +588,28 @@ ipcMain.handle('db-config:guardar', async (event, datos) => {
 
     let pool;
     try {
-        const configuracion = credencialesDB.validar(datos);
+        const datosFormulario = {
+            server: datos?.server,
+            port: datos?.port,
+            database: datos?.database,
+            user: datos?.user,
+            password: String(datos?.password ?? '')
+        };
+
+        // Contraseña en blanco: se conserva la guardada siempre que el destino
+        // (servidor, puerto, base de datos y usuario) sea exactamente el mismo.
+        if (!datosFormulario.password) {
+            const guardada = leerCredencialesGuardadas();
+            if (guardada && mismoDestinoGuardado(guardada, datosFormulario)) {
+                datosFormulario.password = guardada.password;
+            }
+        }
+
+        const configuracion = credencialesDB.validar(datosFormulario, { passwordOpcional: true });
+        if (!configuracion.password) {
+            return { ok: false, mensaje: 'Escribe la contraseña de SQL Server: no hay una guardada para este servidor, base de datos y usuario.' };
+        }
+
         pool = await new conexionDB.sql.ConnectionPool(
             conexionDB.crearConfig(configuracion)
         ).connect();
@@ -553,7 +619,8 @@ ipcMain.handle('db-config:guardar', async (event, datos) => {
         return { ok: true };
     } catch (error) {
         console.error('[Configuración DB] No se pudo validar o guardar la conexión:', error.code || error.name);
-        if (error.message.startsWith('Completa ') || error.message.startsWith('Uno o más campos')) {
+        if (error.message.startsWith('Completa ') || error.message.startsWith('Uno o más campos') ||
+            error.message.startsWith('Escribe la contraseña') || error.message.startsWith('El puerto debe')) {
             return { ok: false, mensaje: error.message };
         }
         if (error.message.includes('cifrado seguro') || error.message.includes('guardar la configuración cifrada')) {
@@ -2030,30 +2097,109 @@ ipcMain.handle('documentos:seccion:eliminar',    async (_e, id)       => { const
 /* =========================================================
    CICLO DE VIDA
    ========================================================= */
-function limpiarConexionAlCambiarVersion() {
-    const rutaVersion = path.join(app.getPath('userData'), 'app-version.txt');
-    let versionAnterior = null;
-    if (fs.existsSync(rutaVersion)) {
-        versionAnterior = fs.readFileSync(rutaVersion, 'utf8').trim();
+const ARCHIVO_INSTALACION = 'instalacion.json';
+const ARCHIVO_VERSION_LEGADO = 'app-version.txt';
+
+/**
+ * Origen real de la instalación en uso.
+ * En builds portables el ejecutable se descomprime en una carpeta temporal
+ * distinta en cada arranque, por eso se usa la carpeta del .exe portable.
+ */
+function origenInstalacion() {
+    if (!app.isPackaged) return __dirname;
+    return process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath('exe'));
+}
+
+function usuarioWindows() {
+    try {
+        return String(os.userInfo().username || '').toLowerCase();
+    } catch (_) {
+        return String(process.env.USERNAME || process.env.USER || '').toLowerCase();
+    }
+}
+
+function normalizarRuta(valor) {
+    const texto = String(valor || '').trim();
+    if (!texto) return '';
+    try {
+        return path.resolve(texto).toLowerCase();
+    } catch (_) {
+        return texto.toLowerCase();
+    }
+}
+
+function huellaInstalacion() {
+    return {
+        usuario: usuarioWindows(),
+        origen: normalizarRuta(origenInstalacion())
+    };
+}
+
+function leerMarcaInstalacion(ruta) {
+    try {
+        if (!fs.existsSync(ruta)) return null;
+        const contenido = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+        return contenido && typeof contenido === 'object' ? contenido : null;
+    } catch (error) {
+        console.warn('[Conexión] No se pudo leer la marca de instalación:', error.message);
+        return null;
+    }
+}
+
+/**
+ * Conserva la conexión cifrada al instalar una versión nueva.
+ * Solo se descarta cuando cambia el usuario de Windows o el origen de la
+ * instalación (otra carpeta / otra copia portable); en ese caso se vuelve a
+ * solicitar la configuración. Si todavía no existe la marca (actualización
+ * desde una versión anterior), se adopta la instalación actual y se conserva
+ * la conexión, que además DPAPI solo puede descifrar con el mismo usuario.
+ */
+function conservarConexionEntreVersiones() {
+    const dataDir = app.getPath('userData');
+    const rutaMarca = path.join(dataDir, ARCHIVO_INSTALACION);
+    const anterior = leerMarcaInstalacion(rutaMarca);
+    const actual = huellaInstalacion();
+
+    const mismaInstalacion = !!anterior &&
+        String(anterior.usuario || '').toLowerCase() === actual.usuario &&
+        normalizarRuta(anterior.origen) === actual.origen &&
+        actual.origen !== '';
+
+    if (anterior && !mismaInstalacion) {
+        credencialesDB.eliminar();
+        console.log(
+            `[Conexión] Instalación distinta (origen "${anterior.origen || '?'}", usuario "${anterior.usuario || '?'}"). ` +
+            'Se solicitará la conexión de nuevo.'
+        );
+    } else if (!anterior) {
+        console.log('[Conexión] Marca de instalación creada; se conserva la conexión guardada si existe.');
     }
 
-    const versionActual = app.getVersion();
-    if (versionAnterior !== versionActual) {
-        credencialesDB.eliminar();
-        fs.writeFileSync(rutaVersion, versionActual, 'utf8');
-        console.log(`[Migración] Configuración local de conexión limpiada (${versionAnterior || 'sin versión previa'} → ${versionActual}).`);
-    }
+    const marca = {
+        usuario: actual.usuario,
+        origen: actual.origen,
+        version: app.getVersion(),
+        actualizado: new Date().toISOString()
+    };
+    fs.writeFileSync(rutaMarca, JSON.stringify(marca, null, 2), { encoding: 'utf8', mode: 0o600 });
+
+    // Archivo de control de versiones anteriores; ya no se usa.
+    const rutaVersion = path.join(dataDir, ARCHIVO_VERSION_LEGADO);
+    try {
+        if (fs.existsSync(rutaVersion)) fs.unlinkSync(rutaVersion);
+    } catch (_) { /* irrelevante */ }
 }
 
 app.whenReady().then(() => {
     if (app.isPackaged) {
         try {
-            limpiarConexionAlCambiarVersion();
+            conservarConexionEntreVersiones();
         } catch (error) {
-            console.error('[Migración] No se pudo limpiar la configuración de conexión:', error);
+            console.error('[Conexión] No se pudo verificar el origen de la instalación:', error);
             dialog.showErrorBox(
-                'No se pudo preparar la actualización',
-                'No se pudo limpiar la configuración de conexión anterior. La aplicación se cerrará para evitar usar datos obsoletos.\n\n' + error.message
+                'No se pudo preparar la instalación',
+                'No se pudo verificar el origen de la instalación para reutilizar la conexión guardada. ' +
+                'La aplicación se cerrará para evitar usar datos obsoletos.\n\n' + error.message
             );
             app.quit();
             return;

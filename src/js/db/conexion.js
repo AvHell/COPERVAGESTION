@@ -7,7 +7,9 @@ function crearConfig(credencial = credenciales.cargar()) {
     }
 
     const {
-        instanceName,
+        // Las configuraciones antiguas podían guardar instanceName; ya no se usa
+        // (el servidor se resuelve por host + puerto, sin SQL Browser).
+        instanceName: _instanceName,
         port,
         encrypt,
         trustServerCertificate,
@@ -28,7 +30,6 @@ function crearConfig(credencial = credenciales.cargar()) {
         ...datosConexion,                       // server, database, user, password
         ...(port ? { port: Number(port) } : {}), // 👈 puerto explícito → sin SQL Browser
         options: {
-            ...(instanceName ? { instanceName } : {}),
             trustServerCertificate: trustFinal,
             encrypt: encryptFinal,
             enableArithAbort: true,

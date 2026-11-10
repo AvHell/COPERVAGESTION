@@ -3,6 +3,10 @@
    ========================================================= */
 const Swal = window.Swal;
 
+/* Color oliva por defecto: mismo valor que usa la capa de datos
+   (src/js/db/clientes.js) y el input de clientes.html. */
+const COLOR_DEFECTO = '#6E7B5B';
+
 /* =========================================================
    TOASTS — versión limpia (sin !important masivos)
    Todas las personalizaciones visuales se aplican vía:
@@ -324,7 +328,7 @@ document.getElementById('btn-nuevo').addEventListener('click', () => {
     modalTitulo.textContent = 'Nuevo cliente';
     inputCodigo.value = '';
     inputNombre.value = '';
-    inputColor.value = '#6E7B5B';
+    inputColor.value = COLOR_DEFECTO;
     inputCodigo.disabled = false;
     ocultarMensaje();
     abrirModal();
@@ -346,7 +350,7 @@ function abrirEdicion(id) {
 
     inputCodigo.value = c.Codigo ?? '';
     inputNombre.value = c.Nombre ?? '';
-    inputColor.value = c.ColorHex || '#6E7B5B';
+    inputColor.value = c.ColorHex || COLOR_DEFECTO;
     inputCodigo.disabled = false;
 
     ocultarMensaje();

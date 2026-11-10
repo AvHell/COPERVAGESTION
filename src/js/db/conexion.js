@@ -34,7 +34,9 @@ function crearConfig(credencial = credenciales.cargar()) {
             encrypt: encryptFinal,
             enableArithAbort: true,
             connectionTimeout: 30000,
-            requestTimeout: 30000,
+            // Holgado a propósito: las operaciones con binarios (subir una
+            // nueva versión de un documento) tardan más que una consulta.
+            requestTimeout: 120000,
             useUTC: false
         },
         pool: {

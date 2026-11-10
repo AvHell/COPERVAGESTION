@@ -40,6 +40,20 @@ function binario(valor) {
     return buffer && buffer.length ? buffer : null;
 }
 
+/**
+ * Deshace una transacción sin tapar el error original.
+ * Si SQL Server ya la abortó, `tx.rollback()` lanza su propio
+ * "Transaction has been aborted." y ese mensaje reemplazaría a la causa
+ * real (columna inválida, timeout, dato demasiado grande, etc.).
+ */
+async function rollbackSeguro(tx) {
+    try {
+        if (tx) await tx.rollback();
+    } catch (_) {
+        /* la transacción ya estaba abortada: se conserva el error original */
+    }
+}
+
 async function etiquetasPorDocumento(pool, ids) {
     const mapa = new Map();
     if (!ids.length) return mapa;
@@ -275,29 +289,65 @@ async function crear(datos) {
         const id = `doc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`;
         const ahora = Date.now();
 
-        await pool.request()
-            .input('Id', sql.NVarChar(40), id)
-            .input('Seccion', sql.NVarChar(60), seccion)
-            .input('Titulo', sql.NVarChar(200), titulo)
-            .input('Cliente', sql.NVarChar(60), limpiar(datos?.cliente, 60))
-            .input('Categoria', sql.NVarChar(100), limpiar(datos?.categoria, 100))
-            .input('NombreOriginal', sql.NVarChar(260), nombreOriginal)
-            .input('NombreGuardado', sql.NVarChar(260), nombreGuardado)
-            .input('Contenido', sql.VarBinary(sql.MAX), contenido)
-            .input('TipoMime', sql.NVarChar(150), limpiar(datos?.tipoMime, 150) || 'application/octet-stream')
-            .input('TamanoBytes', sql.BigInt, numero(datos?.tamanoBytes) || (contenido ? contenido.length : 0))
-            .input('Hash', sql.Char(64), String(datos?.hash || '').substring(0, 64))
-            .input('Descripcion', sql.NVarChar(1000), limpiar(datos?.descripcion, 1000))
-            .input('CreadoEn', sql.BigInt, ahora)
-            .input('ActualizadoEn', sql.BigInt, ahora)
-            .query(`
-                INSERT INTO dbo.Documentos
-                    (Id, Seccion, Titulo, Cliente, Categoria, NombreOriginal, NombreGuardado, Contenido,
-                     TipoMime, TamanoBytes, Hash, VersionActual, Descripcion, Eliminado, CreadoEn, ActualizadoEn)
-                VALUES
-                    (@Id, @Seccion, @Titulo, @Cliente, @Categoria, @NombreOriginal, @NombreGuardado, @Contenido,
-                     @TipoMime, @TamanoBytes, @Hash, 1, @Descripcion, 0, @CreadoEn, @ActualizadoEn)
-            `);
+        const tipoMime = limpiar(datos?.tipoMime, 150) || 'application/octet-stream';
+        const tamano = numero(datos?.tamanoBytes) || (contenido ? contenido.length : 0);
+        const hash = String(datos?.hash || '').substring(0, 64);
+
+        // El documento y su versión 1 se guardan juntos: así el histórico
+        // siempre arranca en v1 y no se pierde el archivo original.
+        const tx = new sql.Transaction(pool);
+        await tx.begin();
+
+        try {
+            await new sql.Request(tx)
+                .input('Id', sql.NVarChar(40), id)
+                .input('Seccion', sql.NVarChar(60), seccion)
+                .input('Titulo', sql.NVarChar(200), titulo)
+                .input('Cliente', sql.NVarChar(60), limpiar(datos?.cliente, 60))
+                .input('Categoria', sql.NVarChar(100), limpiar(datos?.categoria, 100))
+                .input('NombreOriginal', sql.NVarChar(260), nombreOriginal)
+                .input('NombreGuardado', sql.NVarChar(260), nombreGuardado)
+                .input('Contenido', sql.VarBinary(sql.MAX), contenido)
+                .input('TipoMime', sql.NVarChar(150), tipoMime)
+                .input('TamanoBytes', sql.BigInt, tamano)
+                .input('Hash', sql.Char(64), hash)
+                .input('Descripcion', sql.NVarChar(1000), limpiar(datos?.descripcion, 1000))
+                .input('CreadoEn', sql.BigInt, ahora)
+                .input('ActualizadoEn', sql.BigInt, ahora)
+                .query(`
+                    INSERT INTO dbo.Documentos
+                        (Id, Seccion, Titulo, Cliente, Categoria, NombreOriginal, NombreGuardado, Contenido,
+                         TipoMime, TamanoBytes, Hash, VersionActual, Descripcion, Eliminado, CreadoEn, ActualizadoEn)
+                    VALUES
+                        (@Id, @Seccion, @Titulo, @Cliente, @Categoria, @NombreOriginal, @NombreGuardado, @Contenido,
+                         @TipoMime, @TamanoBytes, @Hash, 1, @Descripcion, 0, @CreadoEn, @ActualizadoEn)
+                `);
+
+            await new sql.Request(tx)
+                .input('Id', sql.NVarChar(40), `ver_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`)
+                .input('DocumentoId', sql.NVarChar(40), id)
+                .input('NumeroVersion', sql.Int, 1)
+                .input('NombreGuardado', sql.NVarChar(260), nombreGuardado)
+                .input('NombreOriginal', sql.NVarChar(260), nombreOriginal)
+                .input('Contenido', sql.VarBinary(sql.MAX), contenido)
+                .input('Hash', sql.Char(64), hash)
+                .input('TamanoBytes', sql.BigInt, tamano)
+                .input('TipoMime', sql.NVarChar(150), tipoMime)
+                .input('CreadoEn', sql.BigInt, ahora)
+                .query(`
+                    INSERT INTO dbo.VersionesDocumento
+                        (Id, DocumentoId, NumeroVersion, NombreGuardado, NombreOriginal,
+                         Contenido, Hash, TamanoBytes, TipoMime, CreadoEn)
+                    VALUES
+                        (@Id, @DocumentoId, @NumeroVersion, @NombreGuardado, @NombreOriginal,
+                         @Contenido, @Hash, @TamanoBytes, @TipoMime, @CreadoEn)
+                `);
+
+            await tx.commit();
+        } catch (errorTx) {
+            await rollbackSeguro(tx);
+            throw errorTx;
+        }
 
         await guardarEtiquetas(pool, id, datos?.etiquetas);
         return { ok: true, mensaje: 'Documento guardado correctamente.', id };
@@ -366,59 +416,108 @@ async function agregarVersion(documentoId, datos) {
 
         const actual = await pool.request()
             .input('Id', sql.NVarChar(40), documentoId)
-            .query('SELECT VersionActual, NombreOriginal FROM dbo.Documentos WHERE Id = @Id');
+            .query(`
+                SELECT VersionActual, NombreOriginal, NombreGuardado,
+                       Contenido, Hash, TamanoBytes, TipoMime
+                FROM dbo.Documentos
+                WHERE Id = @Id
+            `);
         if (!actual.recordset.length) return { ok: false, mensaje: 'El documento ya no existe.' };
 
-        const versionActual = actual.recordset[0].VersionActual || 1;
-        const numero = versionActual + 1;
-        const id = `ver_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`;
+        const vigente = actual.recordset[0];
+        const versionActual = Number(vigente.VersionActual) || 1;
+        // OJO: no llamar a esta variable `numero`, porque tapa el helper
+        // numero() de arriba y rompe el cálculo del tamaño del archivo.
+        const nuevaVersion = versionActual + 1;
         const ahora = Date.now();
-        const nombreOriginal = limpiar(datos?.nombreOriginal, 260) || actual.recordset[0].NombreOriginal;
+        const nombreOriginal = limpiar(datos?.nombreOriginal, 260) || vigente.NombreOriginal;
         const nombreGuardado = limpiar(datos?.nombreGuardado, 260);
         if (!nombreGuardado) return { ok: false, mensaje: 'No se recibió el archivo de la nueva versión.' };
         const contenido = binario(datos?.contenido);
-        const tamano = numero(datos?.tamanoBytes) || (contenido ? contenido.length : 0);
+        if (!contenido) return { ok: false, mensaje: 'No se recibió el contenido de la nueva versión.' };
+        const tamano = numero(datos?.tamanoBytes) || contenido.length;
+        const tipoMime = limpiar(datos?.tipoMime, 150) || 'application/octet-stream';
+        const hash = String(datos?.hash || '').substring(0, 64);
 
-        await pool.request()
-            .input('Id', sql.NVarChar(40), id)
-            .input('DocumentoId', sql.NVarChar(40), documentoId)
-            .input('NumeroVersion', sql.Int, numero)
-            .input('NombreGuardado', sql.NVarChar(260), nombreGuardado)
-            .input('NombreOriginal', sql.NVarChar(260), nombreOriginal)
-            .input('Contenido', sql.VarBinary(sql.MAX), contenido)
-            .input('Hash', sql.Char(64), String(datos?.hash || '').substring(0, 64))
-            .input('TamanoBytes', sql.BigInt, tamano)
-            .input('TipoMime', sql.NVarChar(150), limpiar(datos?.tipoMime, 150) || 'application/octet-stream')
-            .input('CreadoEn', sql.BigInt, ahora)
-            .query(`
-                INSERT INTO dbo.VersionesDocumento
-                    (Id, DocumentoId, NumeroVersion, NombreGuardado, NombreOriginal,
-                     Contenido, Hash, TamanoBytes, TipoMime, CreadoEn)
-                VALUES
-                    (@Id, @DocumentoId, @NumeroVersion, @NombreGuardado, @NombreOriginal,
-                     @Contenido, @Hash, @TamanoBytes, @TipoMime, @CreadoEn)
-            `);
+        // Todo va en una transacción: el histórico y la versión vigente
+        // nunca quedan descuadrados si algo falla a medias.
+        const tx = new sql.Transaction(pool);
+        await tx.begin();
 
-        await pool.request()
-            .input('Id', sql.NVarChar(40), documentoId)
-            .input('VersionActual', sql.Int, numero)
-            .input('NombreGuardado', sql.NVarChar(260), nombreGuardado)
-            .input('NombreOriginal', sql.NVarChar(260), nombreOriginal)
-            .input('Contenido', sql.VarBinary(sql.MAX), contenido)
-            .input('Hash', sql.Char(64), String(datos?.hash || '').substring(0, 64))
-            .input('TamanoBytes', sql.BigInt, tamano)
-            .input('TipoMime', sql.NVarChar(150), limpiar(datos?.tipoMime, 150) || 'application/octet-stream')
-            .input('ActualizadoEn', sql.BigInt, ahora)
-            .query(`
-                UPDATE dbo.Documentos
-                   SET VersionActual = @VersionActual, NombreGuardado = @NombreGuardado,
-                       NombreOriginal = @NombreOriginal, Contenido = @Contenido,
-                       Hash = @Hash, TamanoBytes = @TamanoBytes, TipoMime = @TipoMime,
-                       ActualizadoEn = @ActualizadoEn
-                 WHERE Id = @Id
-            `);
+        try {
+            // 1) Respalda la versión vigente si aún no está en el histórico
+            //    (documentos creados antes de versionar la v1).
+            await new sql.Request(tx)
+                .input('Id', sql.NVarChar(40), `ver_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`)
+                .input('DocumentoId', sql.NVarChar(40), documentoId)
+                .input('NumeroVersion', sql.Int, versionActual)
+                .input('NombreGuardado', sql.NVarChar(260), limpiar(vigente.NombreGuardado, 260) || nombreGuardado)
+                .input('NombreOriginal', sql.NVarChar(260), limpiar(vigente.NombreOriginal, 260) || nombreOriginal)
+                .input('Contenido', sql.VarBinary(sql.MAX), binario(vigente.Contenido))
+                .input('Hash', sql.Char(64), String(vigente.Hash || '').substring(0, 64))
+                .input('TamanoBytes', sql.BigInt, numero(vigente.TamanoBytes))
+                .input('TipoMime', sql.NVarChar(150), limpiar(vigente.TipoMime, 150) || tipoMime)
+                .input('CreadoEn', sql.BigInt, ahora)
+                .query(`
+                    IF NOT EXISTS (SELECT 1 FROM dbo.VersionesDocumento
+                                    WHERE DocumentoId = @DocumentoId AND NumeroVersion = @NumeroVersion)
+                        INSERT INTO dbo.VersionesDocumento
+                            (Id, DocumentoId, NumeroVersion, NombreGuardado, NombreOriginal,
+                             Contenido, Hash, TamanoBytes, TipoMime, CreadoEn)
+                        VALUES
+                            (@Id, @DocumentoId, @NumeroVersion, @NombreGuardado, @NombreOriginal,
+                             @Contenido, @Hash, @TamanoBytes, @TipoMime, @CreadoEn)
+                `);
 
-        return { ok: true, mensaje: `Versión ${numero} registrada.`, version: numero };
+            // 2) Registra la nueva versión
+            await new sql.Request(tx)
+                .input('Id', sql.NVarChar(40), `ver_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`)
+                .input('DocumentoId', sql.NVarChar(40), documentoId)
+                .input('NumeroVersion', sql.Int, nuevaVersion)
+                .input('NombreGuardado', sql.NVarChar(260), nombreGuardado)
+                .input('NombreOriginal', sql.NVarChar(260), nombreOriginal)
+                .input('Contenido', sql.VarBinary(sql.MAX), contenido)
+                .input('Hash', sql.Char(64), hash)
+                .input('TamanoBytes', sql.BigInt, tamano)
+                .input('TipoMime', sql.NVarChar(150), tipoMime)
+                .input('CreadoEn', sql.BigInt, ahora)
+                .query(`
+                    INSERT INTO dbo.VersionesDocumento
+                        (Id, DocumentoId, NumeroVersion, NombreGuardado, NombreOriginal,
+                         Contenido, Hash, TamanoBytes, TipoMime, CreadoEn)
+                    VALUES
+                        (@Id, @DocumentoId, @NumeroVersion, @NombreGuardado, @NombreOriginal,
+                         @Contenido, @Hash, @TamanoBytes, @TipoMime, @CreadoEn)
+                `);
+
+            // 3) La versión nueva pasa a ser la vigente del documento
+            await new sql.Request(tx)
+                .input('Id', sql.NVarChar(40), documentoId)
+                .input('VersionActual', sql.Int, nuevaVersion)
+                .input('NombreGuardado', sql.NVarChar(260), nombreGuardado)
+                .input('NombreOriginal', sql.NVarChar(260), nombreOriginal)
+                .input('Contenido', sql.VarBinary(sql.MAX), contenido)
+                .input('Hash', sql.Char(64), hash)
+                .input('TamanoBytes', sql.BigInt, tamano)
+                .input('TipoMime', sql.NVarChar(150), tipoMime)
+                .input('ActualizadoEn', sql.BigInt, ahora)
+                .query(`
+                    UPDATE dbo.Documentos
+                       SET VersionActual = @VersionActual, NombreGuardado = @NombreGuardado,
+                           NombreOriginal = @NombreOriginal, Contenido = @Contenido,
+                           Hash = @Hash, TamanoBytes = @TamanoBytes, TipoMime = @TipoMime,
+                           ActualizadoEn = @ActualizadoEn
+                     WHERE Id = @Id
+                `);
+
+            await tx.commit();
+        } catch (errorTx) {
+            // Nunca dejar que el rollback tape la causa real del fallo.
+            await rollbackSeguro(tx);
+            throw errorTx;
+        }
+
+        return { ok: true, mensaje: `Versión ${nuevaVersion} registrada.`, version: nuevaVersion };
     } catch (err) {
         return { ok: false, mensaje: 'Error al guardar la nueva versión: ' + err.message };
     }

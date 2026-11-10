@@ -67,7 +67,6 @@
                                 <th>Tipo</th>
                                 <th>Piso</th>
                                 <th>Cliente</th>
-                                <th>Switch</th>
                                 <th>Puerto Fortinet</th>
                                 <th>Descripción</th>
                                 <th>Acciones</th>
@@ -151,7 +150,7 @@
             <div class="modal-heading">
                 <div>
                     <h2 id="modal-catalogos-titulo">Catálogos editables</h2>
-                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP. En <b>Cliente (color)</b> se ajusta el color con el que se pintan las etiquetas del cliente y el hostname de sus equipos.</p>
+                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP. El color de las etiquetas de los equipos de cada cliente se ajusta en Catálogos del Sistema; los registros del control general tienen su propio color, que se asigna desde el botón <b>Asignar color</b> de la columna Cliente.</p>
                 </div>
                 <button id="btn-cerrar-catalogos" type="button" class="button secondary" aria-label="Cerrar">Cerrar</button>
             </div>
@@ -164,7 +163,6 @@
                         <option value="Piso">Piso</option>
                         <option value="Site">Switch</option>
                         <option value="TipoIP">Tipo de IP</option>
-                        <option value="Cliente">Cliente (color)</option>
                     </select>
                 </label>
                 <button id="btn-nueva-opcion" type="button" class="button primary" data-permiso="equipos:crear">Agregar opción</button>
@@ -173,8 +171,8 @@
                 <table class="catalog-table">
                     <thead>
                         <tr>
-                            <th id="catalogo-th-nombre">Nombre</th>
-                            <th id="catalogo-th-estado">Estado</th>
+                            <th>Nombre</th>
+                            <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>

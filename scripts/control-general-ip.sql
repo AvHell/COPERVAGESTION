@@ -192,3 +192,74 @@ WHERE NOT EXISTS (
       AND EP.IdPiso = E.IdPiso
 );
 GO
+
+/* =========================================================
+   PREFERENCIAS DEL CONTROL GENERAL DE IP
+   Guarda en la base de datos los ajustes de la pantalla que antes
+   vivían sólo en el navegador (localStorage), empezando por el color
+   con el que se pintan los dispositivos que no pertenecen a ningún
+   cliente. Así el ajuste es el mismo en cualquier equipo.
+   Idempotente: se puede volver a ejecutar sin duplicar nada.
+   ========================================================= */
+
+IF OBJECT_ID(N'dbo.PreferenciasInventarioIP', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PreferenciasInventarioIP (
+        Clave VARCHAR(60) NOT NULL
+            CONSTRAINT PK_PreferenciasInventarioIP PRIMARY KEY,
+        Valor NVARCHAR(200) NULL,
+        FechaActualizacion DATETIME2(0) NOT NULL
+            CONSTRAINT DF_PreferenciasInventarioIP_Fecha DEFAULT (SYSDATETIME())
+    );
+END;
+GO
+
+/* Color de la etiqueta "General" (dispositivos sin cliente). */
+INSERT INTO dbo.PreferenciasInventarioIP (Clave, Valor)
+SELECT 'color-general', N'#5C6B73'
+WHERE NOT EXISTS (
+    SELECT 1 FROM dbo.PreferenciasInventarioIP WHERE Clave = 'color-general'
+);
+GO
+
+/* =========================================================
+   CATÁLOGOS POR ORIGEN
+   Origen NULL  -> opción compartida: sirve al control general y a los
+                   equipos de los clientes (comportamiento histórico).
+   Origen 'General' / 'Cliente' -> opción exclusiva de ese origen, para
+                   poder administrar listas distintas sin que choquen.
+   ========================================================= */
+
+IF COL_LENGTH('dbo.CatalogosInventarioIP', 'Origen') IS NULL
+    ALTER TABLE dbo.CatalogosInventarioIP ADD Origen VARCHAR(10) NULL;
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.check_constraints
+    WHERE parent_object_id = OBJECT_ID(N'dbo.CatalogosInventarioIP')
+      AND name = N'CK_CatalogosInventarioIP_Origen'
+)
+    ALTER TABLE dbo.CatalogosInventarioIP
+        ADD CONSTRAINT CK_CatalogosInventarioIP_Origen
+        CHECK (Origen IS NULL OR Origen IN ('General', 'Cliente'));
+GO
+
+/* La unicidad pasa a incluir Origen: "Piso 1" puede existir a la vez como
+   opción compartida, del control general y de los equipos de cliente. */
+IF EXISTS (
+    SELECT 1 FROM sys.key_constraints
+    WHERE parent_object_id = OBJECT_ID(N'dbo.CatalogosInventarioIP')
+      AND name = N'UQ_CatalogosInventarioIP_Tipo_Nombre'
+)
+    ALTER TABLE dbo.CatalogosInventarioIP
+        DROP CONSTRAINT UQ_CatalogosInventarioIP_Tipo_Nombre;
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.CatalogosInventarioIP')
+      AND name = N'UX_CatalogosInventarioIP_Tipo_Nombre_Origen'
+)
+    CREATE UNIQUE INDEX UX_CatalogosInventarioIP_Tipo_Nombre_Origen
+        ON dbo.CatalogosInventarioIP (TipoCatalogo, Nombre, Origen);
+GO

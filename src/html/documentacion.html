@@ -38,7 +38,21 @@
     <!-- MENÚ DE SECCIONES -->
     <nav class="doc-menu" aria-label="Secciones de documentación">
         <div class="menu-bar">
-            <div class="doc-secciones" id="doc-secciones" role="tablist"></div>
+            <!-- Selector de sección: menú desplegable (antes era una fila de chips) -->
+            <div class="doc-secciones-menu" id="doc-secciones">
+                <button id="btn-seccion-actual" class="doc-btn-ghost doc-btn-seccion" type="button"
+                        aria-haspopup="true" aria-expanded="false" aria-controls="doc-secciones-lista"
+                        title="Cambiar de sección">
+                    <span class="doc-seccion-icono" id="doc-seccion-icono">▦</span>
+                    <span class="doc-seccion-nombre" id="doc-seccion-nombre">Todas</span>
+                    <span class="doc-chip-total" id="doc-seccion-total">0</span>
+                    <svg class="doc-menu-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                </button>
+
+                <div id="doc-secciones-lista" class="doc-menu-lista oculto" role="menu" aria-label="Secciones de documentación"></div>
+            </div>
 
             <div class="doc-menu-acciones">
                 <div class="buscador">
@@ -55,13 +69,50 @@
                     </button>
                 </div>
 
-                <button id="btn-nueva-seccion" class="doc-btn-ghost" type="button">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M4 4h7l2 2h7v14H4z"/>
-                        <path d="M12 11v5M9.5 13.5h5"/>
-                    </svg>
-                    <span>Sección</span>
-                </button>
+                <!-- Menú de secciones: separado de las acciones de documentos -->
+                <div class="doc-menu-secciones" id="menu-secciones">
+                    <button id="btn-menu-secciones" class="doc-btn-ghost" type="button"
+                            aria-haspopup="true" aria-expanded="false" aria-controls="menu-secciones-lista"
+                            title="Gestionar secciones">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 4h7l2 2h7v14H4z"/>
+                            <path d="M4 10h16"/>
+                        </svg>
+                        <span>Secciones</span>
+                        <svg class="doc-menu-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+
+                    <div id="menu-secciones-lista" class="doc-menu-lista oculto" role="menu">
+                        <button type="button" id="btn-nueva-seccion" role="menuitem" data-menu-sec="nueva">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14"/>
+                            </svg>
+                            <span>Nueva sección</span>
+                        </button>
+                        <button type="button" id="btn-editar-seccion" role="menuitem" data-menu-sec="editar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16z"/>
+                                <path d="M13.5 6.5 17.5 10.5"/>
+                            </svg>
+                            <span>Editar sección actual</span>
+                        </button>
+                        <button type="button" id="btn-eliminar-seccion" role="menuitem" data-menu-sec="eliminar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>
+                            </svg>
+                            <span>Eliminar sección actual</span>
+                        </button>
+                        <div class="doc-menu-separador" role="separator"></div>
+                        <button type="button" id="btn-gestionar-secciones" role="menuitem" data-menu-sec="gestionar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 6h16M4 12h16M4 18h16"/>
+                            </svg>
+                            <span>Administrar secciones</span>
+                        </button>
+                    </div>
+                </div>
 
                 <button id="btn-papelera" class="doc-btn-ghost" type="button" aria-pressed="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

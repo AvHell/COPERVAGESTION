@@ -125,10 +125,15 @@ contextBridge.exposeInMainWorld('api', {
 
     inventarioIP: {
         listar: () => ipcRenderer.invoke('inventario-ip:listar'),
-        listarCatalogos: () => ipcRenderer.invoke('inventario-ip:catalogos'),
-        crearCatalogo: (tipo, nombre) => ipcRenderer.invoke('inventario-ip:catalogo:crear', tipo, nombre),
-        actualizarCatalogo: (id, tipo, nombre) => ipcRenderer.invoke('inventario-ip:catalogo:actualizar', id, tipo, nombre),
+        listarCatalogos: origen => ipcRenderer.invoke('inventario-ip:catalogos', origen),
+        crearCatalogo: (tipo, nombre, origen) =>
+            ipcRenderer.invoke('inventario-ip:catalogo:crear', tipo, nombre, origen),
+        actualizarCatalogo: (id, tipo, nombre, origen) =>
+            ipcRenderer.invoke('inventario-ip:catalogo:actualizar', id, tipo, nombre, origen),
         eliminarCatalogo: id => ipcRenderer.invoke('inventario-ip:catalogo:eliminar', id),
+        listarPreferencias: () => ipcRenderer.invoke('inventario-ip:preferencias'),
+        guardarPreferencia: (clave, valor) =>
+            ipcRenderer.invoke('inventario-ip:preferencia:guardar', clave, valor),
         crear: datos => ipcRenderer.invoke('inventario-ip:crear', datos),
         actualizar: (id, datos) => ipcRenderer.invoke('inventario-ip:actualizar', id, datos),
         actualizarDatosEquipoCliente: (idEquipo, datos) =>

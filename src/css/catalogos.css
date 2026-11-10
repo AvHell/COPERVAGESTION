@@ -99,8 +99,12 @@ body {
     pointer-events: none;
 }
 
+/* Columnas laterales elásticas y central AJUSTADA AL CONTENIDO: así el
+   título queda EXACTAMENTE centrado respecto a la pantalla (no al espacio
+   sobrante) y nunca se recorta, porque su columna crece con el texto. */
 .header-inner {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     gap: 20px;
     padding: 26px 32px;
@@ -125,6 +129,7 @@ body {
     cursor: pointer;
     transition: all 0.2s ease;
     flex-shrink: 0;
+    justify-self: start;
     box-shadow: 0 2px 6px -2px rgba(181,68,46,0.4);
 }
 .btn-back:hover {
@@ -136,7 +141,12 @@ body {
 .btn-back:focus-visible { outline: 2px solid var(--tierra-crema); outline-offset: 2px; }
 .btn-back svg { width: 16px; height: 16px; }
 
-.header-titles { flex: 1; text-align: center; min-width: 0; }
+.header-titles {
+    grid-column: 2;
+    text-align: center;
+    min-width: 0;
+    max-width: 100%;
+}
 .header-titles h1 {
     font-family: var(--font-display);
     font-size: 1.5rem;
@@ -144,9 +154,11 @@ body {
     letter-spacing: -0.03em;
     margin-bottom: 4px;
     color: var(--tierra-crema);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.2;
+    /* Se permite el salto de línea con balanceo: nunca se corta con "…". */
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-wrap: balance;
 }
 .header-titles p {
     font-size: 0.78rem;
@@ -154,9 +166,10 @@ body {
     font-weight: 400;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-wrap: balance;
 }
 
 /* =========================================================
@@ -178,6 +191,12 @@ body {
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
+    /* Mismo ancho que el encabezado y el contenido: así el selector de
+       secciones queda alineado con las tablas y no "pegado" al borde.
+       Se descuentan los 32px de padding lateral de cada bloque. */
+    width: 100%;
+    max-width: calc(var(--container) - 64px);
+    margin: 0 auto;
 }
 
 .menu-seccion { position: relative; flex-shrink: 0; }
@@ -1283,6 +1302,7 @@ body {
 @media (max-width: 1024px) {
     .tabs-main { padding: 20px 20px 32px; }
     .catalogos-menu { padding: 12px 20px; }
+    .menu-bar { max-width: calc(var(--container) - 40px); }
 }
 @media (max-width: 900px) {
     .header-inner { padding: 18px 20px; gap: 12px; }
@@ -1308,7 +1328,12 @@ body {
     .modal-footer { padding: 16px 20px 18px; }
     .modal-footer .btn-primary { width: 100%; }
     .catalogos-menu { padding: 10px 14px; }
-    .menu-bar { gap: 8px; }
+    .menu-bar { gap: 8px; max-width: 100%; }
+    /* En pantallas angostas el encabezado pasa a dos filas: Volver arriba
+       y el título ocupando todo el ancho, sin recortarse. */
+    .header-inner { display: flex; flex-wrap: wrap; align-items: center; }
+    .header-titles { flex: 1 1 100%; order: 3; text-align: left; }
+    .header-titles h1 { white-space: normal; overflow: visible; text-overflow: clip; }
     .menu-toggle { min-width: 0; width: 100%; padding: 8px 12px; }
     .menu-toggle .tab-label { display: flex; }
     .menu-acciones { width: 100%; }

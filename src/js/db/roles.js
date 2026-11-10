@@ -1,5 +1,9 @@
 const { getPool, sql } = require('./conexion');
 
+/* Color oliva de la paleta: único valor por defecto de la capa de datos.
+   Debe coincidir con el que muestran los formularios (roles.html). */
+const COLOR_DEFECTO = '#6E7B5B';
+
 let columnasColorPromise = null;
 
 async function asegurarColumnaColor() {
@@ -7,6 +11,15 @@ async function asegurarColumnaColor() {
         columnasColorPromise = getPool().then(pool => pool.request().query(`
             IF COL_LENGTH(N'dbo.RolesEquipo', N'ColorHex') IS NULL
                 ALTER TABLE dbo.RolesEquipo ADD ColorHex VARCHAR(7) NULL;
+
+            /* Los roles creados antes de existir la columna (o guardados sin
+               color) quedaban sin color: la tabla los pintaba en gris mientras
+               el formulario mostraba el oliva por defecto. Se igualan aquí. */
+            UPDATE dbo.RolesEquipo
+               SET ColorHex = '${COLOR_DEFECTO}'
+             WHERE ColorHex IS NULL
+                OR LTRIM(RTRIM(ColorHex)) = ''
+                OR LEN(LTRIM(RTRIM(ColorHex))) <> 7;
         `)).catch(error => {
             columnasColorPromise = null;
             throw error;
@@ -38,7 +51,7 @@ async function listar() {
 /* =========================================================
    CREAR
    ========================================================= */
-async function crear(codigo, nombre, descripcion, colorHex = '#6E7B5B') {
+async function crear(codigo, nombre, descripcion, colorHex = COLOR_DEFECTO) {
     try {
         colorHex = validarColor(colorHex);
         await asegurarColumnaColor();
@@ -72,7 +85,7 @@ async function crear(codigo, nombre, descripcion, colorHex = '#6E7B5B') {
 /* =========================================================
    ACTUALIZAR
    ========================================================= */
-async function actualizar(id, codigo, nombre, descripcion, colorHex = '#6E7B5B') {
+async function actualizar(id, codigo, nombre, descripcion, colorHex = COLOR_DEFECTO) {
     try {
         colorHex = validarColor(colorHex);
         await asegurarColumnaColor();

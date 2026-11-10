@@ -48,29 +48,51 @@ function contraste(hex) {
     return canales[0] * 0.2126 + canales[1] * 0.7152 + canales[2] * 0.0722 > 0.42 ? '#20271f' : '#ffffff';
 }
 
+/* Estilo sólido de una insignia pintada con un color propio. */
+function estiloSolido(color) {
+    return ` style="background-color:${color} !important;border-color:${color} !important;color:${contraste(color)} !important"`;
+}
+
 /* Badge de cliente: muestra SOLO el nombre del cliente (el código ya no se
    repite en la tabla) con el color configurado en Catálogos del Sistema.
-   Si el cliente no tiene nombre registrado se usa el código como respaldo. */
+   Si el cliente no tiene nombre registrado se usa el código como respaldo.
+   Los registros que entran directo por el control general no pertenecen a
+   ningún cliente: llevan su propio color (ver colorGeneral()). */
 function badgeCliente(registro) {
     const codigo = String(registro?.ClienteCodigo || '').trim().toUpperCase();
     const nombre = String(registro?.ClienteNombre || '').trim();
     const etiqueta = nombre || codigo;
-    if (!etiqueta) return badge('', 'cliente');
+    if (!etiqueta) {
+        if (String(registro?.Origen || '') === 'General') {
+            return `<span class="ip-badge cliente badge-cliente badge-general"${estiloSolido(colorGeneral())}`
+                + ' title="Dispositivo del control general: no lo administra ningún cliente"'
+                + '>General</span>';
+        }
+        return badge('', 'cliente');
+    }
     const color = colorDeCliente(codigo);
-    const estilo = color
-        ? ` style="background-color:${color} !important;border-color:${color} !important;color:${contraste(color)} !important"`
-        : '';
+    const estilo = color ? estiloSolido(color) : '';
     const titulo = codigo ? ` title="Cliente ${escaparHTML(codigo)}"` : '';
     return `<span class="ip-badge cliente badge-cliente" data-color="${escaparHTML(codigo)}"${estilo}${titulo}>`
         + `<span class="nombre">${escaparHTML(etiqueta)}</span>`
         + '</span>';
 }
 
+/* Botón "Asignar color" de la columna Cliente. Sólo aparece en los registros
+   que entran directo por el control general: no pertenecen a ningún cliente,
+   así que su color se administra desde esta pantalla. */
+function botonColorGeneral(registro) {
+    if (String(registro?.Origen || '') !== 'General') return '';
+    return '<button type="button" class="color-general-btn" data-color-general'
+        + ' data-permiso="equipos:editar"'
+        + ' title="Asignar el color de los registros del control general">Asignar color</button>';
+}
+
 /* =========================================================
    COLOR DEL CLIENTE
-   El color se define en Catálogos del Sistema y también se puede
-   ajustar desde aquí (Control general de IP) para no obligar a
-   cambiar de módulo cuando sólo se quiere corregir el tono.
+   El color se define en Catálogos del Sistema. Aquí sólo se
+   administra el color propio de los registros que entran
+   directo por el control general.
    ========================================================= */
 
 const COLOR_CLIENTE_DEFECTO = '#6E7B5B';
@@ -83,6 +105,66 @@ function normalizarColorHex(valor, defecto = COLOR_CLIENTE_DEFECTO) {
         return `#${texto.slice(1).split('').map(canal => canal + canal).join('')}`.toUpperCase();
     }
     return defecto;
+}
+
+/* =========================================================
+   COLOR DE LOS DISPOSITIVOS SIN CLIENTE
+   Los registros que entran directo por el control general no los
+   administra ningún cliente, pero también necesitan distinguirse por
+   color. Ese color se guarda en la base de datos
+   (dbo.PreferenciasInventarioIP, clave 'color-general'), así es el mismo
+   en todos los equipos; localStorage queda sólo como caché para poder
+   pintar la tabla antes de que responda la base.
+   ========================================================= */
+
+const COLOR_GENERAL_CLAVE = 'inventario-ip:color-general';
+const COLOR_GENERAL_DEFECTO = '#5C6B73';
+
+/* Último color leído de la base (o de la caché) durante esta sesión. */
+let colorGeneralActual = null;
+
+function colorGeneral() {
+    if (colorGeneralActual) return colorGeneralActual;
+    try {
+        return normalizarColorHex(localStorage.getItem(COLOR_GENERAL_CLAVE), COLOR_GENERAL_DEFECTO);
+    } catch (error) {
+        return COLOR_GENERAL_DEFECTO;
+    }
+}
+
+function cachearColorGeneral(color) {
+    colorGeneralActual = normalizarColorHex(color, COLOR_GENERAL_DEFECTO);
+    try {
+        localStorage.setItem(COLOR_GENERAL_CLAVE, colorGeneralActual);
+    } catch (error) {
+        /* Sin almacenamiento el color sigue aplicado en memoria. */
+    }
+    return colorGeneralActual;
+}
+
+/* Lee el color guardado en la base y refresca la caché local. */
+async function cargarColorGeneral() {
+    try {
+        const preferencias = await window.api?.inventarioIP?.listarPreferencias?.();
+        const color = normalizarColorHex(preferencias?.['color-general'], '');
+        if (color) cachearColorGeneral(color);
+    } catch (error) {
+        console.warn('No se pudo leer el color del control general:', error?.message || error);
+    }
+}
+
+/* Guarda el color en la base. Si la base no responde, el color se aplica
+   igual en esta sesión y se avisa del problema. */
+async function guardarColorGeneral(color) {
+    const normalizado = cachearColorGeneral(color);
+    try {
+        const guardado = await window.api.inventarioIP.guardarPreferencia('color-general', normalizado);
+        return guardado?.ok
+            ? guardado
+            : { ok: false, mensaje: guardado?.mensaje || 'No se pudo guardar el color en la base de datos.' };
+    } catch (error) {
+        return { ok: false, mensaje: `No se pudo guardar el color en la base de datos: ${error.message}` };
+    }
 }
 
 function canalesColor(valor) {
@@ -503,64 +585,6 @@ function registrosFiltrados() {
    TABLA
    ========================================================= */
 
-function crearSwitchSite(item) {
-    const esCliente = item.Origen === 'Cliente';
-    const asignado = Boolean(Number(item.IdSite));
-    const etiqueta = document.createElement('label');
-    etiqueta.className = 'switch-site';
-    etiqueta.title = esCliente
-        ? (asignado ? `Switch asignado: ${item.Site || ''}` : 'Sin switch asignado')
-        : 'El switch del inventario general se edita en el formulario del registro.';
-
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.className = 'switch-input';
-    input.checked = asignado;
-    input.disabled = !esCliente;
-    if (esCliente) input.dataset.permiso = 'equipos:editar';
-
-    const pista = document.createElement('span');
-    pista.className = 'switch-track';
-    const pulgar = document.createElement('span');
-    pulgar.className = 'switch-thumb';
-    pista.append(pulgar);
-
-    const texto = document.createElement('span');
-    texto.className = 'switch-texto';
-    texto.textContent = asignado ? (item.Site || 'Switch') : 'Sin switch';
-
-    input.addEventListener('change', () => alternarSwitch(item, input.checked, input));
-    etiqueta.append(input, pista, texto);
-    return etiqueta;
-}
-
-async function alternarSwitch(item, asignar, input) {
-    const opcionSwitch = opcionesCatalogo('Site')[0];
-    if (asignar && !opcionSwitch) {
-        input.checked = false;
-        return mostrarError('No hay un Switch activo en catálogos.');
-    }
-    input.disabled = true;
-    try {
-        const resultado = await window.api.inventarioIP.actualizarDatosEquipoCliente(item.IdEquipo, {
-            mac: item.MAC || '',
-            idDispositivo: item.IdDispositivo || null,
-            idTipoEquipo: item.IdTipoEquipo || null,
-            idSite: asignar ? opcionSwitch.IdCatalogoIP : null,
-            puertoFortinet: item.PuertoFortinet || '',
-            descripcion: item.Descripcion || ''
-        });
-        if (!resultado?.ok) throw new Error(resultado?.mensaje || 'No se pudo actualizar el switch.');
-        mostrarToast(asignar ? 'Switch asignado.' : 'Switch retirado.');
-        await cargar();
-    } catch (error) {
-        input.checked = !asignar;
-        mostrarError(error.message);
-    } finally {
-        input.disabled = false;
-    }
-}
-
 function renderizarTabla() {
     // Refresco en vivo: el repintado conserva el desplazamiento de la tabla.
     const cuerpoTabla = $('tabla-ip');
@@ -603,14 +627,9 @@ function pintarTabla() {
             <td>${badge(item.Dispositivo, 'dato')}</td>
             <td>${badge(item.TipoEquipo, 'dato')}</td>
             <td>${badge(item.Piso, 'dato')}</td>
-            <td>${badgeCliente(item)}</td>`;
-        const celdaSwitch = document.createElement('td');
-        celdaSwitch.className = 'switch-celda';
-        celdaSwitch.append(crearSwitchSite(item));
-        fila.append(celdaSwitch);
-        fila.insertAdjacentHTML('beforeend', `
+            <td class="cliente-celda"><div class="cliente-celda-inner">${badgeCliente(item)}${botonColorGeneral(item)}</div></td>
             <td>${badge(item.PuertoFortinet, 'dato')}</td>
-            <td class="descripcion-celda">${badge(item.Descripcion, 'dato')}</td>`);
+            <td class="descripcion-celda">${badge(item.Descripcion, 'dato')}</td>`;
 
         const acciones = document.createElement('td');
         acciones.className = 'actions';
@@ -713,7 +732,6 @@ async function editarDatosCliente(item) {
     const opciones = tipo => opcionesCatalogo(tipo)
         .map(catalogo => `<option value="${catalogo.IdCatalogoIP}">${escaparHTML(catalogo.Nombre)}</option>`)
         .join('');
-    const sitios = opcionesCatalogo('Site');
     const resultado = await fireSwal({
         title: `Datos complementarios: ${escaparHTML(item.Hostname || item.IP)}`,
         html: `
@@ -721,17 +739,7 @@ async function editarDatosCliente(item) {
                 <label>MAC<input id="cliente-mac" maxlength="17" value="${escaparHTML(item.MAC)}" placeholder="00:11:22:33:44:55"></label>
                 <label>Dispositivo<select id="cliente-dispositivo"><option value="">Sin asignar</option>${opciones('Dispositivo')}</select></label>
                 <label>Tipo<select id="cliente-tipo"><option value="">Sin asignar</option>${opciones('TipoEquipo')}</select></label>
-                <div class="edicion-site wide">
-                    <span class="edicion-site-etiqueta">Switch</span>
-                    <label class="switch-site">
-                        <input id="cliente-site-on" type="checkbox" class="switch-input">
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-texto" id="cliente-site-texto">Sin switch</span>
-                    </label>
-                    ${sitios.length > 1
-                        ? `<select id="cliente-site" class="edicion-site-select"><option value="">Sin asignar</option>${opciones('Site')}</select>`
-                        : ''}
-                </div>
+                <label>Switch<select id="cliente-site"><option value="">Sin asignar</option>${opciones('Site')}</select></label>
                 <label>Puerto Fortinet<input id="cliente-puerto" maxlength="100" value="${escaparHTML(item.PuertoFortinet)}"></label>
                 <label class="wide">Descripción<input id="cliente-descripcion" maxlength="500" value="${escaparHTML(item.Descripcion)}"></label>
             </div>`,
@@ -741,43 +749,19 @@ async function editarDatosCliente(item) {
         didOpen: popup => {
             popup.querySelector('#cliente-dispositivo').value = String(item.IdDispositivo || '');
             popup.querySelector('#cliente-tipo').value = String(item.IdTipoEquipo || '');
-            /* Switch: encendido = asignado. */
-            const interruptor = popup.querySelector('#cliente-site-on');
+            /* Switch: un desplegable más; vacío = sin switch asignado. */
             const selector = popup.querySelector('#cliente-site');
-            const texto = popup.querySelector('#cliente-site-texto');
-            const sincronizar = asignado => {
-                interruptor.checked = Boolean(asignado);
-                if (selector) {
-                    selector.hidden = !interruptor.checked;
-                    if (interruptor.checked && !selector.value) {
-                        selector.value = String(sitios[0]?.IdCatalogoIP || '');
-                    }
-                }
-                const valor = interruptor.checked
-                    ? (selector?.value || String(sitios[0]?.IdCatalogoIP || ''))
-                    : '';
-                const sitio = sitios.find(opcion => String(opcion.IdCatalogoIP) === String(valor));
-                texto.textContent = interruptor.checked ? (sitio?.Nombre || 'Switch activo') : 'Sin switch';
-            };
-            interruptor.addEventListener('change', () => sincronizar(interruptor.checked));
-            if (selector) {
-                selector.value = String(item.IdSite || '');
-                selector.addEventListener('change', () => sincronizar(true));
-            }
-            sincronizar(Boolean(Number(item.IdSite)));
+            const valor = String(item.IdSite || '');
+            selector.value = [...selector.options].some(opcion => opcion.value === valor) ? valor : '';
         },
-        preConfirm: () => {
-            const asignado = $('cliente-site-on').checked;
-            const sitioElegido = $('cliente-site')?.value || String(sitios[0]?.IdCatalogoIP || '');
-            return {
-                mac: $('cliente-mac').value.trim(),
-                idDispositivo: $('cliente-dispositivo').value || null,
-                idTipoEquipo: $('cliente-tipo').value || null,
-                idSite: asignado ? (sitioElegido || null) : null,
-                puertoFortinet: $('cliente-puerto').value.trim(),
-                descripcion: $('cliente-descripcion').value.trim()
-            };
-        }
+        preConfirm: () => ({
+            mac: $('cliente-mac').value.trim(),
+            idDispositivo: $('cliente-dispositivo').value || null,
+            idTipoEquipo: $('cliente-tipo').value || null,
+            idSite: $('cliente-site').value || null,
+            puertoFortinet: $('cliente-puerto').value.trim(),
+            descripcion: $('cliente-descripcion').value.trim()
+        })
     });
     if (!resultado.isConfirmed) return;
     try {
@@ -790,95 +774,23 @@ async function editarDatosCliente(item) {
     }
 }
 
-/* Cabeceras de la tabla de catálogos: la vista de clientes muestra el
-   color en lugar del estado activo/inactivo. */
-function ajustarCabeceraCatalogos(esClientes) {
-    const thNombre = $('catalogo-th-nombre');
-    const thEstado = $('catalogo-th-estado');
-    if (thNombre) thNombre.textContent = esClientes ? 'Cliente' : 'Nombre';
-    if (thEstado) thEstado.textContent = esClientes ? 'Color' : 'Estado';
-}
-
-/* Catálogo de clientes: aquí se ajusta el color con el que se pintan las
-   etiquetas del cliente y el hostname de sus equipos. Incluye a los
-   clientes que todavía no tienen equipos registrados. */
-function renderizarClientesCatalogo(contenedor) {
-    const lista = [...clientesCatalogo].sort((a, b) =>
-        String(a.Codigo || '').localeCompare(String(b.Codigo || ''), 'es')
-    );
-    const vacio = $('sin-catalogos');
-    vacio.hidden = lista.length > 0;
-    vacio.textContent = lista.length
-        ? vacio.textContent
-        : 'No hay clientes registrados en Catálogos del Sistema.';
-
-    for (const cliente of lista) {
-        const fila = document.createElement('tr');
-
-        const celdaNombre = document.createElement('td');
-        celdaNombre.className = 'cliente-catalogo-nombre';
-        const codigo = document.createElement('span');
-        codigo.className = 'cliente-catalogo-codigo';
-        codigo.textContent = String(cliente.Codigo || '').trim() || '—';
-        const nombre = document.createElement('span');
-        nombre.className = 'cliente-catalogo-nombre-texto';
-        nombre.textContent = String(cliente.Nombre || '').trim();
-        celdaNombre.append(codigo, nombre);
-
-        const celdaColor = document.createElement('td');
-        celdaColor.className = 'cliente-catalogo-color';
-        const muestra = document.createElement('span');
-        muestra.className = 'muestra-color';
-        const color = normalizarColorHex(cliente.ColorHex);
-        muestra.style.backgroundColor = color;
-        const valorColor = document.createElement('span');
-        valorColor.className = 'cliente-catalogo-hex';
-        valorColor.textContent = color;
-        celdaColor.append(muestra, valorColor);
-
-        const celdaAcciones = document.createElement('td');
-        const acciones = document.createElement('div');
-        acciones.className = 'catalog-actions';
-        const editar = document.createElement('button');
-        editar.type = 'button';
-        editar.className = 'button secondary';
-        editar.dataset.permiso = 'catalogos:clientes:editar';
-        editar.textContent = 'Cambiar color';
-        editar.addEventListener('click', () => editarColorCliente(cliente.IdCliente));
-        acciones.append(editar);
-        celdaAcciones.append(acciones);
-
-        fila.append(celdaNombre, celdaColor, celdaAcciones);
-        contenedor.append(fila);
-    }
-    window.PermisosUI?.aplicar(contenedor);
-}
-
-/* Selector de color del cliente (mismo patrón que Catálogos del Sistema). */
-async function editarColorCliente(idCliente) {
-    const cliente = clientesCatalogo.find(item => Number(item.IdCliente) === Number(idCliente));
-    if (!cliente) return mostrarError('El cliente ya no está disponible. Actualiza la vista.');
-
-    const colorActual = normalizarColorHex(cliente.ColorHex);
-    const codigo = String(cliente.Codigo || '').trim();
+/* Diálogo de color del tono de los dispositivos que no pertenecen a ningún
+   cliente (mismo patrón que Catálogos del Sistema). Devuelve "#RRGGBB", ""
+   si el valor no es válido o null si el usuario cancela. */
+async function pedirColor({ titulo, etiqueta, colorActual, ayuda }) {
     const resultado = await fireSwal({
-        title: 'Color del cliente',
+        title: titulo,
         html: `
             <div class="color-cliente-form">
-                <p class="color-cliente-titulo">
-                    <b>${escaparHTML(codigo || 'Cliente')}</b> ${escaparHTML(String(cliente.Nombre || '').trim())}
-                </p>
+                <p class="color-cliente-titulo">${etiqueta}</p>
                 <label class="color-cliente-campo">Color
                     <span class="color-picker-field">
                         <input id="color-cliente-input" type="color" value="${escaparHTML(colorActual)}"
-                            aria-label="Color hexadecimal del cliente">
+                            aria-label="Color hexadecimal">
                         <span id="color-cliente-valor">${escaparHTML(colorActual)}</span>
                     </span>
                 </label>
-                <p class="color-cliente-ayuda">
-                    Se aplica a la etiqueta del cliente y al hostname de sus equipos.
-                    Los registros del inventario general conservan su color neutro.
-                </p>
+                <p class="color-cliente-ayuda">${ayuda}</p>
             </div>`,
         showCancelButton: true,
         confirmButtonText: 'Guardar color',
@@ -894,38 +806,39 @@ async function editarColorCliente(idCliente) {
             color: normalizarColorHex(document.getElementById('color-cliente-input')?.value, '')
         })
     });
-    if (!resultado.isConfirmed) return;
-    const color = resultado.value?.color;
+    if (!resultado.isConfirmed) return null;
+    return resultado.value?.color || '';
+}
+
+/* Color de los dispositivos que entran directo por el control general.
+   Es el único color que se administra desde esta pantalla: el color de los
+   equipos de cada cliente se define en Catálogos del Sistema. */
+async function editarColorGeneral() {
+    const colorActual = colorGeneral();
+    const color = await pedirColor({
+        titulo: 'Color de dispositivos sin cliente',
+        etiqueta: '<b>Control general</b> Dispositivos sin cliente asignado',
+        colorActual,
+        ayuda: 'Se aplica a la etiqueta Cliente de los registros que entran directo por '
+            + 'el control general. Se guarda en la base de datos, así que es el mismo '
+            + 'color en cualquier equipo.'
+    });
+    if (color === null) return;
     if (!color) return mostrarError('El color seleccionado no es válido.');
     if (color === colorActual) {
         mostrarToast('El color no cambió.');
         return;
     }
 
-    try {
-        const guardado = await window.api.clientes.actualizar(
-            cliente.IdCliente, cliente.Codigo, cliente.Nombre, color
-        );
-        if (!guardado?.ok) return mostrarError(guardado?.mensaje);
-        await window.PermisosUI?.refrescarColores?.();
-        await cargar();
-        mostrarToast('Color del cliente actualizado.');
-    } catch (error) {
-        mostrarError(error.message);
-    }
+    const guardado = await guardarColorGeneral(color);
+    renderizarTabla();
+    if (!guardado?.ok) return mostrarError(guardado?.mensaje);
+    mostrarToast('Color de dispositivos sin cliente actualizado.');
 }
 
 function renderizarCatalogos() {
     const contenedor = $('lista-catalogos');
     contenedor.replaceChildren();
-    const esClientes = tipoCatalogo.value === 'Cliente';
-    ajustarCabeceraCatalogos(esClientes);
-    const botonNueva = $('btn-nueva-opcion');
-    if (botonNueva) botonNueva.hidden = esClientes;
-    if (esClientes) {
-        renderizarClientesCatalogo(contenedor);
-        return;
-    }
     const vacio = $('sin-catalogos');
     vacio.textContent = 'No hay opciones en este catálogo.';
     const items = catalogos.filter(item => item.TipoCatalogo === tipoCatalogo.value);
@@ -1196,7 +1109,8 @@ async function cargar() {
     const [listaCatalogos, listaRegistros] = await Promise.all([
         window.api.inventarioIP.listarCatalogos(),
         window.api.inventarioIP.listar(),
-        cargarClientesCatalogo()
+        cargarClientesCatalogo(),
+        cargarColorGeneral()
     ]);
     if (!Array.isArray(listaCatalogos)) throw new Error(listaCatalogos?.mensaje || 'No se pudieron cargar los catálogos.');
     if (!Array.isArray(listaRegistros)) throw new Error(listaRegistros?.mensaje || 'No se pudieron cargar las IP.');
@@ -1259,8 +1173,6 @@ formIP.addEventListener('submit', async event => {
 
 formCatalogo.addEventListener('submit', async event => {
     event.preventDefault();
-    /* Los clientes no se crean desde aquí: sólo se ajusta su color. */
-    if (tipoCatalogo.value === 'Cliente') return;
     if (!textoCatalogo.value.trim()) return mostrarError('Escribe el nombre de la opción.');
     try {
         const result = catalogoEditando
@@ -1289,6 +1201,13 @@ $('btn-nueva-opcion').addEventListener('click', () => abrirModalCatalogo());
 $('btn-cerrar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('btn-cancelar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('btn-exportar').addEventListener('click', () => exportarExcel().catch(error => mostrarError(error.message)));
+
+/* El botón "Asignar color" del control general se dibuja dentro de cada fila
+   de la tabla, así que su clic se atiende por delegación. */
+$('tabla-ip').addEventListener('click', event => {
+    if (!event.target.closest('[data-color-general]')) return;
+    editarColorGeneral().catch(error => mostrarError(error.message));
+});
 
 
 $('busqueda').addEventListener('input', () => {

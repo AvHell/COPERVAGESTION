@@ -330,6 +330,10 @@ let ayudaAbierta   = true;
 const $ = (id) => document.getElementById(id);
 
 const tabs             = $('tabs-catalogos');
+const menuToggle       = $('menu-toggle');
+const menuDropdown     = $('menu-dropdown');
+const menuIcono        = $('menu-icon');
+const menuTitulo       = $('menu-titulo');
 const tabsVista        = $('tabs-vista');
 const tablaHead        = $('tabla-head');
 const tablaBody        = $('tabla-body');
@@ -473,9 +477,11 @@ function actualizarUIDeCatalogo() {
     if (!cfg) return;
 
     const enEliminados = (vistaActual === 'eliminados');
-    const sufijo = enEliminados ? ' · Eliminados' : '';
 
-    if (tituloCatalogo) tituloCatalogo.textContent = `Catálogos · ${cfg.titulo}${sufijo}`;
+    // El título del hero muestra el catálogo realmente seleccionado
+    // (la vista "Eliminados" ya se indica en la descripción del panel).
+    if (tituloCatalogo) tituloCatalogo.textContent = `Catálogos · ${cfg.titulo}`;
+    document.title = `Catálogos · ${cfg.titulo} · Activo Fijo`;
     if (panelTitulo) panelTitulo.textContent = cfg.titulo;
 
     if (panelDescripcion) {
@@ -491,19 +497,56 @@ function actualizarUIDeCatalogo() {
         btnNuevo.title = enEliminados ? 'No disponible en la vista de Eliminados' : '';
     }
 
+    actualizarMenuCatalogo();
     renderAyuda();
     aplicarEstadoAyuda();
 }
+
+/* =========================================================
+   MENÚ DE CATÁLOGOS (selector desplegable)
+   ========================================================= */
+function abrirMenuCatalogo(abrir) {
+    if (!menuToggle || !menuDropdown) return;
+    const visible = typeof abrir === 'boolean' ? abrir : menuDropdown.hidden;
+    menuDropdown.hidden = !visible;
+    menuToggle.setAttribute('aria-expanded', String(visible));
+}
+
+/** Refresca el botón del menú (icono + nombre del catálogo activo). */
+function actualizarMenuCatalogo() {
+    if (!menuDropdown) return;
+    const btn = menuDropdown.querySelector(`.tab-btn[data-catalogo="${catalogoActual}"]`);
+    if (!btn) return;
+
+    const iconoOrigen = btn.querySelector('.tab-icon');
+    if (menuIcono && iconoOrigen) menuIcono.innerHTML = iconoOrigen.innerHTML;
+    if (menuTitulo) menuTitulo.textContent = btn.querySelector('.tab-title')?.textContent || '';
+}
+
+if (menuToggle) {
+    menuToggle.addEventListener('click', () => abrirMenuCatalogo());
+}
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.menu-seccion')) abrirMenuCatalogo(false);
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') abrirMenuCatalogo(false);
+});
 
 /* =========================================================
    TABS CATÁLOGO / VISTA
    ========================================================= */
 if (tabs) {
     tabs.addEventListener('click', (e) => {
-        const btn = e.target.closest('.tab');
-        if (!btn || btn.classList.contains('activo')) return;
+        const btn = e.target.closest('.tab-btn');
+        if (!btn) return;
 
-        tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('activo'));
+        abrirMenuCatalogo(false);
+        if (btn.classList.contains('activo')) return;
+
+        tabs.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('activo'));
         btn.classList.add('activo');
 
         catalogoActual = btn.dataset.catalogo;
@@ -511,6 +554,7 @@ if (tabs) {
         filtroBusqueda = '';
         if (btnLimpiarBusq) btnLimpiarBusq.classList.add('oculto');
 
+        actualizarMenuCatalogo();
         actualizarUIDeCatalogo();
         cargarCatalogo();
     });

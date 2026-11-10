@@ -5,6 +5,11 @@
 
 const Swal = window.Swal;
 
+/* Color oliva por defecto para clientes y roles: mismo valor que usan
+   las capas de datos (src/js/db/clientes.js y src/js/db/roles.js) y los
+   inputs de color de catalogos.html. */
+const COLOR_DEFECTO = '#6E7B5B';
+
 /* =========================================================
    ALERTAS MODALES
    ========================================================= */
@@ -279,7 +284,7 @@ const TabClientes = (() => {
         modalTitulo.textContent = 'Editar cliente';
         inputCodigo.value = c.Codigo ?? '';
         inputNombre.value = c.Nombre ?? '';
-        inputColor.value = c.ColorHex || '#6E7B5B';
+        inputColor.value = c.ColorHex || COLOR_DEFECTO;
         ocultarMensaje();
         abrirModal();
         inputNombre.focus();
@@ -325,7 +330,7 @@ const TabClientes = (() => {
             modalTitulo.textContent = 'Nuevo cliente';
             inputCodigo.value = '';
             inputNombre.value = '';
-            inputColor.value = '#6E7B5B';
+            inputColor.value = COLOR_DEFECTO;
             ocultarMensaje();
             abrirModal();
             inputCodigo.focus();
@@ -786,7 +791,7 @@ const TabRoles = (() => {
         inputCodigo.value = r.Codigo ?? '';
         inputNombre.value = r.Nombre ?? '';
         inputDesc.value = r.Descripcion ?? '';
-        inputColor.value = r.ColorHex || '#6E7B5B';
+        inputColor.value = r.ColorHex || COLOR_DEFECTO;
         ocultarMensaje();
         abrirModal();
         inputNombre.focus();
@@ -832,7 +837,7 @@ const TabRoles = (() => {
             inputCodigo.value = '';
             inputNombre.value = '';
             inputDesc.value = '';
-            inputColor.value = '#6E7B5B';
+            inputColor.value = COLOR_DEFECTO;
             ocultarMensaje();
             abrirModal();
             inputCodigo.focus();

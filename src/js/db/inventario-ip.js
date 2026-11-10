@@ -10,9 +10,36 @@ const TIPOS_CATALOGO = Object.freeze([
     'TipoIP'
 ]);
 
+/* Origen de una opción de catálogo: NULL = compartida (sirve al control
+   general y a los equipos de los clientes). Ver scripts/control-general-ip.sql. */
+const ORIGENES_CATALOGO = Object.freeze(['General', 'Cliente']);
+
+/* Preferencias de la pantalla que se guardan en la base de datos
+   (dbo.PreferenciasInventarioIP). */
+const CLAVE_COLOR_GENERAL = 'color-general';
+const COLOR_GENERAL_DEFECTO = '#5C6B73';
+
 function validarIdCatalogo(id) {
     const valor = Number(id);
     return Number.isInteger(valor) && valor > 0 ? valor : null;
+}
+
+function normalizarOrigen(origen) {
+    const valor = String(origen || '').trim();
+    return ORIGENES_CATALOGO.includes(valor) ? valor : null;
+}
+
+/* ¿La base ya tiene la columna Origen? Si el script no se ha ejecutado, el
+   módulo sigue trabajando con la estructura anterior en lugar de fallar. */
+let columnaOrigenDetectada = null;
+async function hayColumnaOrigen(pool) {
+    if (columnaOrigenDetectada !== null) return columnaOrigenDetectada;
+    const result = await pool.request().query(`
+        SELECT 1 AS Existe FROM sys.columns
+        WHERE object_id = OBJECT_ID(N'dbo.CatalogosInventarioIP') AND name = N'Origen'
+    `);
+    columnaOrigenDetectada = result.recordset.length > 0;
+    return columnaOrigenDetectada;
 }
 
 function validarIPv4(ip) {
@@ -41,17 +68,34 @@ async function requiereValidarRangos(pool, idInventario, ip) {
     return normalizarIPv4(anterior) !== normalizarIPv4(ip);
 }
 
-async function listarCatalogos() {
+/**
+ * Lista las opciones de catálogo.
+ * @param {?string} origen 'General' o 'Cliente' para incluir sólo las
+ *   compartidas (Origen NULL) y las de ese origen; null = todas.
+ */
+async function listarCatalogos(origen = null) {
     const pool = await getPool();
-    const result = await pool.request().query(`
-        SELECT IdCatalogoIP, TipoCatalogo, Nombre, Activo
-        FROM dbo.CatalogosInventarioIP
-        ORDER BY TipoCatalogo, Nombre
-    `);
+    const ambito = normalizarOrigen(origen);
+    if (!ambito || !(await hayColumnaOrigen(pool))) {
+        const result = await pool.request().query(`
+            SELECT IdCatalogoIP, TipoCatalogo, Nombre, Activo
+            FROM dbo.CatalogosInventarioIP
+            ORDER BY TipoCatalogo, Nombre
+        `);
+        return result.recordset;
+    }
+    const result = await pool.request()
+        .input('Origen', sql.VarChar(10), ambito)
+        .query(`
+            SELECT IdCatalogoIP, TipoCatalogo, Nombre, Activo, Origen
+            FROM dbo.CatalogosInventarioIP
+            WHERE Origen IS NULL OR Origen = @Origen
+            ORDER BY TipoCatalogo, Nombre
+        `);
     return result.recordset;
 }
 
-async function guardarCatalogo(tipo, nombre, id = null) {
+async function guardarCatalogo(tipo, nombre, id = null, origen = null) {
     const categoria = String(tipo || '');
     const valor = String(nombre || '').trim();
     const idCatalogo = id === null ? null : validarIdCatalogo(id);
@@ -61,9 +105,12 @@ async function guardarCatalogo(tipo, nombre, id = null) {
     }
 
     const pool = await getPool();
+    /* Sin la columna Origen (script sin ejecutar) todo se guarda compartido. */
+    const ambito = (await hayColumnaOrigen(pool)) ? normalizarOrigen(origen) : null;
     const request = pool.request()
         .input('TipoCatalogo', sql.VarChar(30), categoria)
         .input('Nombre', sql.NVarChar(100), valor);
+    if (ambito) request.input('Origen', sql.VarChar(10), ambito);
 
     if (idCatalogo) {
         request.input('IdCatalogoIP', sql.Int, idCatalogo);
@@ -71,6 +118,7 @@ async function guardarCatalogo(tipo, nombre, id = null) {
             const result = await request.query(`
                 UPDATE dbo.CatalogosInventarioIP
                 SET Nombre = @Nombre, Activo = 1
+                    ${ambito ? ', Origen = @Origen' : ''}
                 WHERE IdCatalogoIP = @IdCatalogoIP AND TipoCatalogo = @TipoCatalogo
             `);
             return result.rowsAffected[0]
@@ -86,8 +134,8 @@ async function guardarCatalogo(tipo, nombre, id = null) {
 
     try {
         await request.query(`
-            INSERT INTO dbo.CatalogosInventarioIP (TipoCatalogo, Nombre)
-            VALUES (@TipoCatalogo, @Nombre)
+            INSERT INTO dbo.CatalogosInventarioIP (TipoCatalogo, Nombre${ambito ? ', Origen' : ''})
+            VALUES (@TipoCatalogo, @Nombre${ambito ? ', @Origen' : ''})
         `);
         return { ok: true, mensaje: 'Catálogo agregado.' };
     } catch (error) {
@@ -113,6 +161,78 @@ async function eliminarCatalogo(id) {
     } catch (error) {
         if (error.number === 547) {
             return { ok: false, mensaje: 'No se puede eliminar: el catálogo está asignado a una IP.' };
+        }
+        throw error;
+    }
+}
+
+/* =========================================================
+   PREFERENCIAS DE LA PANTALLA (dbo.PreferenciasInventarioIP)
+   Antes vivían sólo en localStorage, así que cada equipo tenía su propio
+   color. Ahora se guardan en la base y son las mismas para todos.
+   ========================================================= */
+
+/* Validador/normalizador por preferencia conocida. */
+const VALIDADORES_PREFERENCIA = Object.freeze({
+    [CLAVE_COLOR_GENERAL]: valor =>
+        /^#[0-9A-F]{6}$/i.test(String(valor || '').trim())
+            ? String(valor).trim().toUpperCase()
+            : null
+});
+
+function validarPreferencia(clave, valor) {
+    const nombre = String(clave || '').trim().toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(VALIDADORES_PREFERENCIA, nombre)) return null;
+    const normalizado = VALIDADORES_PREFERENCIA[nombre](valor);
+    return normalizado ? { clave: nombre, valor: normalizado } : null;
+}
+
+/** Devuelve { 'color-general': '#RRGGBB', ... }; {} si la tabla no existe. */
+async function listarPreferencias() {
+    const pool = await getPool();
+    try {
+        const result = await pool.request().query(`
+            SELECT Clave, Valor FROM dbo.PreferenciasInventarioIP
+        `);
+        const preferencias = {};
+        for (const fila of result.recordset) {
+            preferencias[String(fila.Clave || '').trim().toLowerCase()] = fila.Valor;
+        }
+        return preferencias;
+    } catch (error) {
+        if (error.number === 208) return {};
+        throw error;
+    }
+}
+
+async function guardarPreferencia(clave, valor) {
+    const preferencia = validarPreferencia(clave, valor);
+    if (!preferencia) return { ok: false, mensaje: 'La preferencia enviada no es válida.' };
+
+    const pool = await getPool();
+    try {
+        const request = pool.request()
+            .input('Clave', sql.VarChar(60), preferencia.clave)
+            .input('Valor', sql.NVarChar(200), preferencia.valor);
+        const actualizado = await request.query(`
+            UPDATE dbo.PreferenciasInventarioIP
+            SET Valor = @Valor, FechaActualizacion = SYSDATETIME()
+            WHERE Clave = @Clave
+        `);
+        if (!actualizado.rowsAffected[0]) {
+            await request.query(`
+                INSERT INTO dbo.PreferenciasInventarioIP (Clave, Valor)
+                VALUES (@Clave, @Valor)
+            `);
+        }
+        return { ok: true, mensaje: 'Preferencia guardada.', valor: preferencia.valor };
+    } catch (error) {
+        if (error.number === 208) {
+            return {
+                ok: false,
+                tablaFaltante: true,
+                mensaje: 'Falta ejecutar scripts/control-general-ip.sql para guardar la preferencia en la base de datos.'
+            };
         }
         throw error;
     }
@@ -406,6 +526,8 @@ module.exports = {
     listarCatalogos,
     guardarCatalogo,
     eliminarCatalogo,
+    listarPreferencias,
+    guardarPreferencia,
     listar,
     actualizarDatosEquipoCliente,
     guardar,

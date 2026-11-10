@@ -99,11 +99,39 @@ body {
             transparent 32px);
 }
 
+/* --- Aurora: degradado cónico girando detrás de todo --- */
+.aurora {
+    position: absolute;
+    /* Cuadrado grande y descentrado: al girar nunca deja ver el borde. */
+    top: -60%;
+    left: -60%;
+    width: 220%;
+    height: 220%;
+    background:
+        conic-gradient(from 0deg,
+            rgba(110,123,91,0.55) 0deg,
+            rgba(169,154,99,0.42) 70deg,
+            rgba(46,50,40,0.00) 140deg,
+            rgba(199,191,162,0.34) 220deg,
+            rgba(110,123,91,0.55) 300deg,
+            rgba(169,154,99,0.42) 360deg);
+    filter: blur(90px);
+    opacity: 0.6;
+    pointer-events: none;
+    will-change: transform;
+    animation: auroraGiro 34s linear infinite;
+}
+
+@keyframes auroraGiro {
+    to { transform: rotate(360deg); }
+}
+
 .blob {
     position: absolute;
     border-radius: 50%;
     filter: blur(80px);
     pointer-events: none;
+    will-change: transform;
 }
 
 .blob-1 {
@@ -113,6 +141,7 @@ body {
     height: 380px;
     background: var(--tierra-oliva);
     opacity: 0.25;
+    animation: blobUno 17s ease-in-out infinite alternate;
 }
 
 .blob-2 {
@@ -122,17 +151,166 @@ body {
     height: 440px;
     background: var(--tierra-oro);
     opacity: 0.15;
+    animation: blobDos 23s ease-in-out infinite alternate;
 }
 
 .blob-3 {
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
     width: 320px;
     height: 320px;
     background: var(--tierra-oliva);
     opacity: 0.12;
     filter: blur(120px);
+    animation: blobTres 29s ease-in-out infinite alternate;
+}
+
+@keyframes blobUno {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(-90px, 70px, 0) scale(1.22); }
+}
+
+@keyframes blobDos {
+    from { transform: translate3d(0, 0, 0) scale(1.08); }
+    to   { transform: translate3d(110px, -80px, 0) scale(0.9); }
+}
+
+@keyframes blobTres {
+    from { transform: translate(-50%, -50%) scale(1); opacity: 0.1; }
+    to   { transform: translate(-34%, -64%) scale(1.35); opacity: 0.22; }
+}
+
+/* --- Ondas tipo sonar que se expanden y se desvanecen --- */
+.ondas {
+    position: absolute;
+    top: 26%;
+    left: 20%;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.ondas span {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 260px;
+    height: 260px;
+    margin: -130px 0 0 -130px;
+    border-radius: 50%;
+    border: 1px solid rgba(199,191,162,0.32);
+    box-shadow: inset 0 0 44px -14px rgba(169,154,99,0.45);
+    opacity: 0;
+    animation: ondaExpandir 10s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+
+.ondas span:nth-child(2) { animation-delay: 3.3s; }
+.ondas span:nth-child(3) { animation-delay: 6.6s; }
+
+@keyframes ondaExpandir {
+    0%   { transform: scale(0.32); opacity: 0; }
+    14%  { opacity: 0.55; }
+    100% { transform: scale(3.4); opacity: 0; }
+}
+
+/* --- Barrido diagonal de luz --- */
+.barrido {
+    position: absolute;
+    top: -20%;
+    bottom: -20%;
+    left: -35%;
+    width: 30%;
+    background: linear-gradient(100deg,
+        transparent 0%,
+        rgba(255,247,232,0.06) 35%,
+        rgba(169,154,99,0.13) 50%,
+        rgba(255,247,232,0.06) 65%,
+        transparent 100%);
+    filter: blur(6px);
+    pointer-events: none;
+    will-change: transform;
+    animation: barridoPaso 12s ease-in-out infinite;
+}
+
+@keyframes barridoPaso {
+    0%   { transform: translateX(0) skewX(-14deg); opacity: 0; }
+    14%  { opacity: 1; }
+    62%  { opacity: 1; }
+    100% { transform: translateX(460%) skewX(-14deg); opacity: 0; }
+}
+
+/* --- Partículas flotantes (un solo elemento, múltiples sombras) --- */
+.particulas,
+.particulas::before {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: transparent;
+    pointer-events: none;
+}
+
+.particulas {
+    box-shadow:
+          60px 140px 0 0 rgba(255,247,232,0.42),
+         190px  62px 0 0 rgba(169,154,99,0.55),
+         320px 210px 0 0 rgba(255,247,232,0.30),
+         430px 112px 0 0 rgba(199,191,162,0.48),
+         560px 268px 0 0 rgba(255,247,232,0.36),
+         690px 150px 0 0 rgba(169,154,99,0.50),
+         820px 300px 0 0 rgba(255,247,232,0.26),
+         960px  84px 0 0 rgba(199,191,162,0.44),
+        1080px 238px 0 0 rgba(255,247,232,0.34),
+        1210px 178px 0 0 rgba(169,154,99,0.52),
+        1330px 320px 0 0 rgba(255,247,232,0.28),
+        1450px 122px 0 0 rgba(199,191,162,0.46),
+        1560px 258px 0 0 rgba(255,247,232,0.32),
+         240px 402px 0 0 rgba(169,154,99,0.42),
+         520px 470px 0 0 rgba(255,247,232,0.24),
+         880px 434px 0 0 rgba(199,191,162,0.40),
+        1180px 482px 0 0 rgba(255,247,232,0.28),
+        1480px 420px 0 0 rgba(169,154,99,0.44);
+    animation: particulasDeriva 30s ease-in-out infinite alternate,
+               particulasBrillo 9s ease-in-out infinite;
+}
+
+.particulas::before {
+    content: '';
+    width: 2px;
+    height: 2px;
+    box-shadow:
+         130px 520px 0 0 rgba(255,247,232,0.22),
+         300px 610px 0 0 rgba(199,191,162,0.30),
+         470px 560px 0 0 rgba(255,247,232,0.20),
+         640px 690px 0 0 rgba(169,154,99,0.34),
+         810px 620px 0 0 rgba(255,247,232,0.18),
+         980px 720px 0 0 rgba(199,191,162,0.28),
+        1150px 580px 0 0 rgba(255,247,232,0.22),
+        1320px 700px 0 0 rgba(169,154,99,0.30),
+        1490px 630px 0 0 rgba(255,247,232,0.18),
+         220px 790px 0 0 rgba(199,191,162,0.24),
+         760px 820px 0 0 rgba(255,247,232,0.20),
+        1240px 800px 0 0 rgba(169,154,99,0.26);
+    animation: particulasDerivaLejos 38s ease-in-out infinite alternate;
+}
+
+@keyframes particulasDeriva {
+    from { transform: translate3d(0, 0, 0); }
+    50%  { transform: translate3d(26px, -36px, 0); }
+    to   { transform: translate3d(-20px, -12px, 0); }
+}
+
+@keyframes particulasDerivaLejos {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-30px, -46px, 0); }
+}
+
+@keyframes particulasBrillo {
+    0%, 100% { opacity: 0.55; }
+    42%      { opacity: 1; }
+    72%      { opacity: 0.32; }
 }
 
 .grid-overlay {
@@ -144,6 +322,12 @@ body {
     background-size: 48px 48px;
     mask-image: radial-gradient(circle at center, black 0%, transparent 75%);
     -webkit-mask-image: radial-gradient(circle at center, black 0%, transparent 75%);
+    animation: gridLatir 18s ease-in-out infinite alternate;
+}
+
+@keyframes gridLatir {
+    from { opacity: 0.5; transform: scale(1); }
+    to   { opacity: 1; transform: scale(1.06); }
 }
 
 /* =========================================================

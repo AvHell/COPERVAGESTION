@@ -174,6 +174,7 @@
     'documentacion.html': {
       '#btn-subir': 'documentos:subir',
       '#zona-subida': 'documentos:subir',
+      '#btn-menu-secciones': 'documentos:secciones:gestionar',
       '#btn-nueva-seccion': 'documentos:secciones:gestionar',
       '#btn-editar-seccion': 'documentos:secciones:gestionar',
       '#btn-eliminar-seccion': 'documentos:secciones:gestionar',

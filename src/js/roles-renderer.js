@@ -3,6 +3,10 @@
    ========================================================= */
 const Swal = window.Swal;
 
+/* Color oliva por defecto: mismo valor que usa la capa de datos
+   (src/js/db/roles.js) y el input de roles.html. */
+const COLOR_DEFECTO = '#6E7B5B';
+
 /* =========================================================
    TOASTS — versión limpia
    Personalización visual vía:
@@ -327,7 +331,7 @@ document.getElementById('btn-nuevo').addEventListener('click', () => {
     inputCodigo.value = '';
     inputNombre.value = '';
     inputDesc.value   = '';
-    inputColor.value = '#6E7B5B';
+    inputColor.value = COLOR_DEFECTO;
     inputCodigo.disabled = false;
     ocultarMensaje();
     abrirModal();
@@ -350,7 +354,7 @@ function abrirEdicion(id) {
     inputCodigo.value = r.Codigo ?? '';
     inputNombre.value = r.Nombre ?? '';
     inputDesc.value   = r.Descripcion ?? '';
-    inputColor.value = r.ColorHex || '#6E7B5B';
+    inputColor.value = r.ColorHex || COLOR_DEFECTO;
     inputCodigo.disabled = false;
 
     ocultarMensaje();

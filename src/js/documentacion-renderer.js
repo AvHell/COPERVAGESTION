@@ -39,9 +39,16 @@ const $ = id => document.getElementById(id);
 
 const el = {
     secciones: $('doc-secciones'),
+    seccionesLista: $('doc-secciones-lista'),
+    btnSeccionActual: $('btn-seccion-actual'),
+    seccionIcono: $('doc-seccion-icono'),
+    seccionNombre: $('doc-seccion-nombre'),
+    seccionTotal: $('doc-seccion-total'),
     busqueda: $('doc-busqueda'),
     limpiarBusqueda: $('doc-limpiar-busq'),
-    btnNuevaSeccion: $('btn-nueva-seccion'),
+    menuSecciones: $('menu-secciones'),
+    btnMenuSecciones: $('btn-menu-secciones'),
+    menuSeccionesLista: $('menu-secciones-lista'),
     btnPapelera: $('btn-papelera'),
     btnSubir: $('btn-subir'),
     btnRecargar: $('btn-recargar'),
@@ -370,40 +377,62 @@ function actualizarFiltroCategorias() {
 }
 
 /* =========================================================
-   RENDER — CHIPS DE SECCIÓN
+   RENDER — MENÚ DE SECCIONES
    ========================================================= */
-function renderizarChips() {
-    if (!el.secciones) return;
-
+/** Ítems del menú de secciones: "Todas" + cada sección activa con su total. */
+function itemsSeccion() {
     const activas = estado.secciones.filter(s => s.Activa === true || Number(s.Activa) !== 0);
-    const totalTodas = estado.documentos.length;
 
-    const chips = [{
+    return [{
         id: 'todas',
         nombre: 'Todas',
         icono: '▦',
-        total: totalTodas
+        total: estado.documentos.length
     }, ...activas.map(s => ({
         id: String(s.Id),
         nombre: s.Nombre,
         icono: s.Icono || '▪',
         total: estado.documentos.filter(d => String(d.Seccion) === String(s.Id)).length
     }))];
+}
 
-    const html = chips.map(chip => `
-        <button type="button" class="doc-chip${chip.id === estado.seccion ? ' activo' : ''}"
-                role="tab" aria-selected="${chip.id === estado.seccion}"
-                data-seccion="${escaparHTML(chip.id)}">
-            <span class="doc-chip-icono">${escaparHTML(chip.icono)}</span>
-            <span>${escaparHTML(chip.nombre)}</span>
-            <span class="doc-chip-total">${chip.total}</span>
+function renderizarChips() {
+    if (!el.secciones) return;
+
+    const items = itemsSeccion();
+    const activo = items.find(item => item.id === estado.seccion) || items[0];
+
+    // Botón que muestra la sección vigente
+    if (el.seccionIcono) el.seccionIcono.textContent = activo.icono;
+    if (el.seccionNombre) el.seccionNombre.textContent = activo.nombre;
+    if (el.seccionTotal) el.seccionTotal.textContent = activo.total;
+
+    if (!el.seccionesLista) return;
+
+    const html = items.map(item => `
+        <button type="button" class="doc-menu-item${item.id === activo.id ? ' activo' : ''}"
+                role="menuitemradio" aria-checked="${item.id === activo.id}"
+                data-seccion="${escaparHTML(item.id)}">
+            <span class="doc-chip-icono">${escaparHTML(item.icono)}</span>
+            <span class="doc-menu-item-nombre">${escaparHTML(item.nombre)}</span>
+            <span class="doc-chip-total">${item.total}</span>
         </button>`).join('');
 
-    // Refresco en vivo: la fila de secciones tiene desplazamiento horizontal
-    // propio, así que se repinta conservando esa posición (y sin tocar el DOM
-    // cuando los contadores no cambiaron).
-    if (window.Vivo) window.Vivo.reemplazar(el.secciones, html);
-    else el.secciones.innerHTML = html;
+    // Refresco en vivo: se repinta sin tocar el DOM cuando no cambió nada
+    // (el menú puede estar abierto y no queremos cerrarlo).
+    if (window.Vivo) window.Vivo.reemplazar(el.seccionesLista, html);
+    else el.seccionesLista.innerHTML = html;
+}
+
+/** Abre o cierra el menú desplegable de secciones. */
+function alternarMenuFiltro(forzar) {
+    const lista = el.seccionesLista;
+    const boton = el.btnSeccionActual;
+    if (!lista || !boton) return;
+
+    const abrir = typeof forzar === 'boolean' ? forzar : lista.classList.contains('oculto');
+    lista.classList.toggle('oculto', !abrir);
+    boton.setAttribute('aria-expanded', abrir ? 'true' : 'false');
 }
 
 /* =========================================================
@@ -1057,6 +1086,89 @@ async function formularioSeccion(seccion = null) {
     }
 }
 
+/**
+ * Edita la sección seleccionada en los chips. Si no hay una sección
+ * concreta activa (vista "Todas"), abre el gestor para elegir cuál.
+ */
+async function editarSeccionActiva() {
+    if (!permite('documentos:secciones:gestionar')) {
+        return toastError('No tienes permiso para gestionar secciones.');
+    }
+
+    const activa = seccionActiva();
+    if (activa) {
+        await formularioSeccion(activa);
+        return;
+    }
+
+    await gestionarSecciones();
+}
+
+/* ---------- Menú desplegable de secciones ---------- */
+
+/**
+ * Abre o cierra el menú de secciones. El menú está separado de las
+ * acciones de documentos para no mezclar gestión de secciones con
+ * subida, papelera, etc.
+ */
+function alternarMenuSecciones(forzar) {
+    const lista = el.menuSeccionesLista;
+    const boton = el.btnMenuSecciones;
+    if (!lista || !boton) return;
+
+    const abrir = typeof forzar === 'boolean' ? forzar : lista.classList.contains('oculto');
+    lista.classList.toggle('oculto', !abrir);
+    boton.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+}
+
+/** Sección seleccionada en los chips, o null si la vista es "Todas". */
+function seccionActiva() {
+    return estado.secciones.find(s => String(s.Id) === String(estado.seccion)) || null;
+}
+
+/** Elimina una sección (con confirmación previa). Devuelve true si se eliminó. */
+async function eliminarSeccion(seccion) {
+    if (!seccion) return false;
+
+    const confirmacion = await Swal.fire({
+        icon: 'warning',
+        title: '¿Eliminar sección?',
+        html: `<p style="margin:0;">Se eliminará <b>${escaparHTML(seccion.Nombre)}</b>. Sólo es posible si ya no tiene documentos.</p>`,
+        showCancelButton: true,
+        confirmButtonText: 'Eliminar',
+        cancelButtonText: 'Cancelar'
+    });
+    if (!confirmacion.isConfirmed) return false;
+
+    try {
+        const resultado = await DOC.secciones.eliminar(seccion.Id);
+        if (resultado?.ok === false) {
+            alertaError('No se pudo eliminar la sección', resultado.mensaje || '');
+            return false;
+        }
+        if (String(estado.seccion) === String(seccion.Id)) estado.seccion = 'todas';
+        await cargarSecciones();
+        renderizar();
+        toastExito(resultado.mensaje || 'Sección eliminada');
+        return true;
+    } catch (err) {
+        alertaError('No se pudo eliminar la sección', err.message);
+        return false;
+    }
+}
+
+/** Elimina la sección seleccionada en los chips. */
+async function eliminarSeccionActiva() {
+    if (!permite('documentos:secciones:gestionar')) {
+        return toastError('No tienes permiso para gestionar secciones.');
+    }
+
+    const activa = seccionActiva();
+    if (!activa) return toastError('Selecciona una sección en el menú para poder eliminarla.');
+
+    await eliminarSeccion(activa);
+}
+
 async function gestionarSecciones() {
     const activas = estado.secciones.filter(s => s.Activa === true || Number(s.Activa) !== 0);
 
@@ -1099,31 +1211,10 @@ async function gestionarSecciones() {
                         return;
                     }
 
-                    const confirmacion = await Swal.fire({
-                        icon: 'warning',
-                        title: '¿Eliminar sección?',
-                        html: `<p style="margin:0;">Se eliminará <b>${escaparHTML(seccion.Nombre)}</b>. Sólo es posible si ya no tiene documentos.</p>`,
-                        showCancelButton: true,
-                        confirmButtonText: 'Eliminar',
-                        cancelButtonText: 'Cancelar'
-                    });
-                    if (!confirmacion.isConfirmed) return;
-
-                    try {
-                        const resultado = await DOC.secciones.eliminar(seccion.Id);
-                        if (resultado?.ok === false) {
-                            alertaError('No se pudo eliminar la sección', resultado.mensaje || '');
-                            return;
-                        }
-                        if (String(estado.seccion) === String(seccion.Id)) estado.seccion = 'todas';
-                        await cargarSecciones();
-                        renderizar();
-                        toastExito(resultado.mensaje || 'Sección eliminada');
-                        Swal.close();
-                        gestionarSecciones();
-                    } catch (err) {
-                        alertaError('No se pudo eliminar la sección', err.message);
-                    }
+                    // Se cierra el gestor antes de confirmar: SweetAlert sólo
+                    // permite un diálogo a la vez.
+                    Swal.close();
+                    if (await eliminarSeccion(seccion)) gestionarSecciones();
                 });
             });
         }
@@ -1146,11 +1237,19 @@ function conectarEventos() {
         toastExito('Documentos actualizados');
     });
 
-    // Chips de sección (delegación: se repintan)
+    // Menú desplegable de secciones: abrir / cerrar
+    el.btnSeccionActual?.addEventListener('click', evento => {
+        evento.stopPropagation();
+        alternarMenuFiltro();
+    });
+
+    // Selección de sección desde el menú (delegación: la lista se repinta)
     el.secciones?.addEventListener('click', evento => {
-        const chip = evento.target.closest('[data-seccion]');
-        if (!chip) return;
-        estado.seccion = chip.dataset.seccion;
+        const item = evento.target.closest('[data-seccion]');
+        if (!item) return;
+        estado.seccion = item.dataset.seccion;
+        alternarMenuFiltro(false);
+        el.btnSeccionActual?.focus({ preventScroll: true });
         renderizar();
     });
 
@@ -1301,9 +1400,38 @@ function conectarEventos() {
         }
     });
 
-    // Secciones
-    el.btnNuevaSeccion?.addEventListener('click', async () => {
-        if (await formularioSeccion()) gestionarSecciones();
+    // Menú desplegable de secciones (separado de las acciones de documentos)
+    el.btnMenuSecciones?.addEventListener('click', evento => {
+        evento.stopPropagation();
+        alternarMenuSecciones();
+    });
+
+    el.menuSeccionesLista?.addEventListener('click', async evento => {
+        const item = evento.target.closest('[data-menu-sec]');
+        if (!item) return;
+
+        alternarMenuSecciones(false);
+        el.btnMenuSecciones?.focus({ preventScroll: true });
+
+        switch (item.dataset.menuSec) {
+            case 'nueva': await formularioSeccion(); break;
+            case 'editar': await editarSeccionActiva(); break;
+            case 'eliminar': await eliminarSeccionActiva(); break;
+            case 'gestionar': await gestionarSecciones(); break;
+        }
+    });
+
+    // Los menús se cierran al hacer clic fuera o al pulsar ESC
+    document.addEventListener('click', evento => {
+        if (!el.menuSecciones?.contains(evento.target)) alternarMenuSecciones(false);
+        if (!el.secciones?.contains(evento.target)) alternarMenuFiltro(false);
+    });
+
+    document.addEventListener('keydown', evento => {
+        if (evento.key === 'Escape') {
+            alternarMenuSecciones(false);
+            alternarMenuFiltro(false);
+        }
     });
 
     // Cierre de modales con clic en el fondo

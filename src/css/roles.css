@@ -450,6 +450,27 @@ h2 {
     color: var(--ro-gris-texto-2);
     font-weight: 400;
 }
+.color-picker-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 44px;
+}
+.color-picker-field input[type="color"] {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 38px;
+    padding: 3px;
+    border: 1px solid var(--ro-gris-borde);
+    border-radius: var(--ro-radio-sm);
+    background-color: var(--ro-blanco);
+    cursor: pointer;
+}
+.color-picker-field span {
+    color: var(--ro-gris-texto-2);
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
 #codigo {
     text-transform: uppercase;
     letter-spacing: 0.05em;

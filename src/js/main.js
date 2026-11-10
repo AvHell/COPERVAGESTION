@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, clipboard, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -404,6 +404,72 @@ async function navegarModuloEnVentana(win, modulo) {
 }
 
 /* =========================================================
+   MENÚ CONTEXTUAL (clic derecho)
+   Todas las ventanas comparten el mismo menú: acciones de edición
+   cuando el clic cae en un campo de texto, copiar cuando hay
+   selección, abrir/guardar enlaces externos y recargar la página.
+   ========================================================= */
+function construirMenuContextual(win, params = {}) {
+    const plantilla = [];
+    const agregar = item => plantilla.push(item);
+
+    if (params.isEditable) {
+        agregar({ label: 'Deshacer', role: 'undo' });
+        agregar({ label: 'Rehacer', role: 'redo' });
+        agregar({ type: 'separator' });
+        agregar({ label: 'Cortar', role: 'cut' });
+        agregar({ label: 'Copiar', role: 'copy' });
+        agregar({ label: 'Pegar', role: 'paste' });
+        agregar({ label: 'Seleccionar todo', role: 'selectAll' });
+    } else if (params.selectionText && String(params.selectionText).trim()) {
+        agregar({ label: 'Copiar', role: 'copy' });
+    }
+
+    if (params.linkURL) {
+        if (plantilla.length) agregar({ type: 'separator' });
+        agregar({
+            label: 'Copiar dirección del enlace',
+            click: () => clipboard.writeText(params.linkURL)
+        });
+        agregar({
+            label: 'Abrir enlace en el navegador',
+            click: () => { shell.openExternal(params.linkURL).catch(() => {}); }
+        });
+    }
+
+    if (params.misspelledWord && params.dictionarySuggestions?.length) {
+        if (plantilla.length) agregar({ type: 'separator' });
+        params.dictionarySuggestions.slice(0, 5).forEach(sugerencia => agregar({
+            label: sugerencia,
+            click: () => win.webContents.replaceMisspelling(sugerencia)
+        }));
+    }
+
+    if (plantilla.length) agregar({ type: 'separator' });
+    agregar({ label: 'Recargar', click: () => { if (!win.isDestroyed()) win.webContents.reload(); } });
+    if (process.env.NODE_ENV === 'development') {
+        agregar({
+            label: 'Inspeccionar elemento',
+            click: () => {
+                if (win.isDestroyed()) return;
+                const wc = win.webContents;
+                if (wc.isDevToolsOpened()) wc.closeDevTools();
+                else wc.openDevTools({ mode: 'detach' });
+            }
+        });
+    }
+
+    return Menu.buildFromTemplate(plantilla);
+}
+
+function registrarMenuContextual(win) {
+    win.webContents.on('context-menu', (_evento, params) => {
+        if (!win || win.isDestroyed()) return;
+        construirMenuContextual(win, params).popup({ window: win });
+    });
+}
+
+/* =========================================================
    FÁBRICA DE VENTANAS
    ========================================================= */
 function crearVentana(nombre, archivo, opciones = {}) {
@@ -442,6 +508,7 @@ function crearVentana(nombre, archivo, opciones = {}) {
         win.setEnabled(false);
     }
     win.loadFile(path.join(basePath, archivo));
+    registrarMenuContextual(win);
 
     if (opciones.maximizar !== false) {
         win.once('ready-to-show', () => { win.maximize(); win.show(); win.focus(); });
@@ -1321,17 +1388,27 @@ ipcMain.handle('inventario-ip:listar', async () => {
     const err = requerirSesion('equipos:listado:ver'); if (err) return err;
     return await inventarioIPDB.listar();
 });
-ipcMain.handle('inventario-ip:catalogos', async () => {
+ipcMain.handle('inventario-ip:catalogos', async (_e, origen) => {
     const err = requerirSesion('equipos:listado:ver'); if (err) return err;
-    return await inventarioIPDB.listarCatalogos();
+    return await inventarioIPDB.listarCatalogos(origen);
 });
-ipcMain.handle('inventario-ip:catalogo:crear', async (_e, tipo, nombre) => {
+ipcMain.handle('inventario-ip:catalogo:crear', async (_e, tipo, nombre, origen) => {
     const err = requerirSesion('equipos:crear'); if (err) return err;
-    return await inventarioIPDB.guardarCatalogo(tipo, nombre);
+    return await inventarioIPDB.guardarCatalogo(tipo, nombre, null, origen);
 });
-ipcMain.handle('inventario-ip:catalogo:actualizar', async (_e, id, tipo, nombre) => {
+ipcMain.handle('inventario-ip:catalogo:actualizar', async (_e, id, tipo, nombre, origen) => {
     const err = requerirSesion('equipos:editar'); if (err) return err;
-    return await inventarioIPDB.guardarCatalogo(tipo, nombre, id);
+    return await inventarioIPDB.guardarCatalogo(tipo, nombre, id, origen);
+});
+/* Preferencias de la pantalla guardadas en la base (color de los
+   dispositivos del control general, etc.). */
+ipcMain.handle('inventario-ip:preferencias', async () => {
+    const err = requerirSesion('equipos:listado:ver'); if (err) return err;
+    return await inventarioIPDB.listarPreferencias();
+});
+ipcMain.handle('inventario-ip:preferencia:guardar', async (_e, clave, valor) => {
+    const err = requerirSesion('equipos:editar'); if (err) return err;
+    return await inventarioIPDB.guardarPreferencia(clave, valor);
 });
 ipcMain.handle('inventario-ip:catalogo:eliminar', async (_e, id) => {
     const err = requerirSesion('equipos:eliminar'); if (err) return err;

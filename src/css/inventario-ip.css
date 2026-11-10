@@ -229,7 +229,10 @@ input:focus, select:focus { outline: 2px solid #a99a6380; border-color: var(--ip
 /* =========================================================
    TABLA
    ========================================================= */
-.table-wrap { overflow: auto; max-height: 72vh; }
+/* Sin tope de alto: la tabla crece con el contenido y la página es la única
+   que se desplaza. Antes el tope de 72vh cortaba las últimas filas dentro de
+   un scroll anidado que escondía los registros. */
+.table-wrap { overflow: auto; max-height: none; }
 
 table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 th, td { padding: 11px 10px; border-bottom: 1px solid #ecebe5; text-align: left; }
@@ -332,6 +335,45 @@ td { font-size: .84rem; }
    colores del catálogo. */
 
 /* =========================================================
+   BOTÓN DE COLOR DEL CONTROL GENERAL
+   La columna Cliente de los registros que no pertenecen a ningún
+   cliente lleva su propio botón para elegir el tono con el que se
+   pintan sus etiquetas.
+   ========================================================= */
+.cliente-celda-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    justify-content: flex-start;
+}
+.color-general-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 3px 8px;
+    border: 1px dashed #c9c7bc;
+    border-radius: 7px;
+    background: #f7f6f1;
+    color: var(--ip-texto-secundario);
+    font: inherit;
+    font-size: .72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+}
+.color-general-btn:hover {
+    border-color: var(--ip-oliva);
+    background: var(--ip-oliva-suave);
+    color: var(--ip-oliva-oscuro);
+}
+.color-general-btn:focus-visible {
+    outline: 2px solid var(--ip-oliva);
+    outline-offset: 1px;
+}
+
+/* =========================================================
    PAGINACIÓN
    ========================================================= */
 .paginacion {
@@ -362,28 +404,9 @@ td { font-size: .84rem; }
 .edicion-cliente-grid > label { display: grid; gap: 5px; }
 .edicion-cliente-grid .wide { grid-column: 1 / -1; }
 
-/* Site como switch dentro del aviso de datos complementarios */
-.edicion-site {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px 14px;
-    padding: 10px 12px;
-    border: 1px solid var(--ip-borde);
-    border-radius: var(--ip-radius);
-    background: var(--ip-superficie-suave);
-}
-.edicion-site-etiqueta {
-    font-size: .78rem;
-    font-weight: 700;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    color: var(--ip-texto-suave);
-}
-.edicion-site .switch-site { flex: 0 0 auto; }
-.edicion-site-select {
-    flex: 1 1 160px;
-    min-width: 0;
+/* El Switch de los datos complementarios es un desplegable más del
+   formulario: comparte el estilo de los demás <select> de la rejilla. */
+.edicion-cliente-grid > label select {
     padding: 6px 9px;
     border: 1px solid var(--ip-borde);
     border-radius: 8px;
@@ -392,7 +415,7 @@ td { font-size: .84rem; }
     font-size: .78rem;
     color: var(--ip-texto);
 }
-.edicion-site-select:focus { outline: 2px solid #a99a6380; border-color: var(--ip-oro); }
+.edicion-cliente-grid > label select:focus { outline: 2px solid #a99a6380; border-color: var(--ip-oro); }
 
 /* =========================================================
    CATÁLOGOS EDITABLES (MODAL)
@@ -406,54 +429,10 @@ td { font-size: .84rem; }
 .catalog-status { color: var(--ip-oliva-oscuro); font-weight: 600; }
 .catalog-status.inactivo { color: var(--ip-rojo); }
 
-/* Clientes dentro del catálogo: nombre + muestra del color editable */
-.cliente-catalogo-nombre {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-.cliente-catalogo-codigo {
-    flex: 0 0 auto;
-    padding: 2px 7px;
-    border: 1px solid var(--ip-borde);
-    border-radius: 6px;
-    background: var(--ip-superficie-suave);
-    color: var(--ip-texto-suave);
-    font-size: .72rem;
-    font-weight: 700;
-    letter-spacing: .03em;
-}
-.cliente-catalogo-nombre-texto {
-    overflow: hidden;
-    color: var(--ip-texto);
-    font-weight: 500;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.cliente-catalogo-color {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
-}
-.muestra-color {
-    width: 26px;
-    height: 20px;
-    border: 1px solid var(--ip-borde-fuerte, #cfc7b2);
-    border-radius: 6px;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .55);
-}
-.cliente-catalogo-hex {
-    color: var(--ip-texto-suave);
-    font-family: var(--ip-font-mono, monospace);
-    font-size: .74rem;
-    text-transform: uppercase;
-}
-
 /* =========================================================
-   SELECTOR DE COLOR DEL CLIENTE (aviso SweetAlert)
-   Mismo patrón que Catálogos del Sistema y Plano visual.
+   SELECTOR DE COLOR (aviso SweetAlert)
+   Sólo se usa para el color del control general; el color de los
+   equipos de cada cliente se define en Catálogos del Sistema.
    ========================================================= */
 .color-cliente-form { display: grid; gap: 12px; text-align: left; }
 .color-cliente-titulo {
@@ -767,8 +746,8 @@ td { font-size: .84rem; }
 }
 .tabla-ip tbody tr:nth-child(even) { background: #fbfaf6; }
 .tabla-ip tbody tr:hover { background: var(--ip-oliva-suave); }
-/* Ancho mínimo para que las 13 columnas respiren; el .table-wrap scrollea. */
-.tabla-ip { min-width: 1180px; }
+/* Ancho mínimo para que las columnas respiren; el .table-wrap scrollea. */
+.tabla-ip { min-width: 1080px; }
 /* IP libres: no existen en la base de datos, se muestran atenuadas. */
 .tabla-ip tbody tr.fila-libre td { color: #8b8b80; }
 .tabla-ip tbody tr.fila-libre .ip-badge.ip { border-color: #e2e0d6; background: #f7f6f1; color: #74756a; }
@@ -777,58 +756,6 @@ td { font-size: .84rem; }
 .tabla-ip tbody tr:last-child td { border-bottom: 0; }
 
 
-
-/* =========================================================
-   SWITCH
-   ========================================================= */
-.switch-celda { min-width: 140px; }
-.switch-site {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-size: .76rem;
-    font-weight: 600;
-    color: var(--ip-texto-secundario);
-}
-.switch-site:has(.switch-input:disabled) { cursor: default; opacity: .85; }
-.switch-input {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    min-height: 0;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    border: 0;
-    white-space: nowrap;
-}
-.switch-track {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    width: 36px;
-    height: 20px;
-    flex: 0 0 auto;
-    padding: 2px;
-    border-radius: 999px;
-    background: #d8d6cb;
-    transition: background .18s ease;
-}
-.switch-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 1px 3px #0000002e;
-    transition: transform .18s ease;
-}
-.switch-input:checked + .switch-track { background: var(--ip-oliva); }
-.switch-input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
-.switch-input:focus-visible + .switch-track { outline: 2px solid var(--ip-oro); outline-offset: 2px; }
-.switch-input:disabled + .switch-track { background: #cfd0c6; }
-.switch-texto { white-space: nowrap; }
 
 /* =========================================================
    MODAL DE CATÁLOGOS Y EXPORTACIÓN

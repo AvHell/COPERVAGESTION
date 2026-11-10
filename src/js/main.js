@@ -17,6 +17,7 @@ const pisosDB      = require('./db/pisos');
 const rangosDB     = require('./db/rangos');
 const equiposDB    = require('./db/equipos');
 const inventarioIPDB = require('./db/inventario-ip');
+const inventarioIPImportacion = require('./importacion-inventario-ip');
 const planoDB      = require('./db/plano');
 const usuariosDB   = require('./db/usuarios');
 const historicosDB = require('./db/historicos');
@@ -1590,6 +1591,19 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
         console.error('[InventarioIP] Error exportando Excel:', error);
         return { ok: false, mensaje: `No se pudo exportar a Excel: ${error.message}` };
     }
+});
+
+/* Importación inteligente: el proceso principal lee el Excel (SheetJS),
+   reconoce las columnas por encabezado en todas las hojas y valida antes
+   de escribir. El renderer sólo revisa el resumen y confirma. */
+ipcMain.handle('inventario-ip:importarExcel', async (evento) => {
+    const err = requerirSesion('equipos:crear'); if (err) return err;
+    const ventana = BrowserWindow.fromWebContents(evento.sender);
+    return await inventarioIPImportacion.seleccionarYAnalizar(ventana);
+});
+ipcMain.handle('inventario-ip:importarAplicar', async (_e, registros, opciones) => {
+    const err = requerirSesion('equipos:crear'); if (err) return err;
+    return await inventarioIPImportacion.aplicarImportacion(registros, opciones);
 });
 
 /* =========================================================

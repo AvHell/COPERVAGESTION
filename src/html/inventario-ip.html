@@ -17,8 +17,9 @@
         </div>
         <div class="header-actions">
             <button id="btn-catalogos" type="button" class="button secondary" data-permiso="equipos:listado:ver">Catálogos</button>
+            <button id="btn-color-general" type="button" class="button secondary" data-permiso="equipos:editar">Asignar color</button>
             <button id="btn-exportar" type="button" class="button secondary" data-permiso="equipos:listado:exportar">Exportar a Excel</button>
-            <button id="btn-recargar" type="button" class="button secondary" data-permiso="equipos:listado:ver">Actualizar</button>
+            <button id="btn-importar" type="button" class="button secondary" data-permiso="equipos:crear">Importar Excel</button>
         </div>
     </header>
 
@@ -105,7 +106,7 @@
             </div>
             <form id="form-ip" class="form-grid">
                 <label>IP
-                    <input id="ip" name="ip" type="text" maxlength="45" placeholder="10.17.0.67">
+                    <input id="ip" name="ip" type="text" maxlength="15" placeholder="10.17.0.67" inputmode="decimal" autocomplete="off">
                 </label>
                 <p id="hint-rango-ip" class="ayuda-rango oculto" role="status" aria-live="polite"></p>
                 <label>Tipo de IP
@@ -150,7 +151,7 @@
             <div class="modal-heading">
                 <div>
                     <h2 id="modal-catalogos-titulo">Catálogos editables</h2>
-                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP. El color de las etiquetas de los equipos de cada cliente se ajusta en Catálogos del Sistema; los registros del control general tienen su propio color, que se asigna desde el botón <b>Asignar color</b> de la columna Cliente.</p>
+                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP. El color de las etiquetas de los equipos de cada cliente se ajusta en Catálogos del Sistema; los registros del control general tienen su propio color, que se asigna con el botón <b>Asignar color</b> del encabezado.</p>
                 </div>
                 <button id="btn-cerrar-catalogos" type="button" class="button secondary" aria-label="Cerrar">Cerrar</button>
             </div>

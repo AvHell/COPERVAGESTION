@@ -1464,21 +1464,34 @@ const menuAcciones = document.getElementById('menu-acciones');
 const accionesPorPanel = new Map();
 
 /**
- * Guarda el buscador y el botón "Nuevo" de cada sección para poder
- * moverlos al menú superior y devolverlos a su panel original.
+ * Guarda TODAS las acciones de cada sección (buscador, filtros y botón
+ * "Nuevo") para poder moverlas al menú superior y devolverlas a su panel
+ * original. Se guardan todas: si Dominios o Config. de Red dejaran aquí sus
+ * selects, el panel quedaría con un encabezado a medias.
  */
 function capturarAcciones() {
     document.querySelectorAll('.tab-panel').forEach(panel => {
         const contenedor = panel.querySelector('.panel-actions');
         if (!contenedor) return;
-        const elementos = [...contenedor.querySelectorAll(':scope > .buscador, :scope > .btn-primary')];
+        const elementos = [...contenedor.children];
         if (elementos.length) accionesPorPanel.set(contenedor, elementos);
     });
+}
+
+/**
+ * Marca el contenedor cuando se queda sin acciones propias (Clientes,
+ * Pisos, Roles). Se usa una clase y no :empty porque los nodos de texto
+ * del HTML impiden que :empty coincida de forma fiable.
+ */
+function marcarAccionesVacias(contenedor) {
+    if (!contenedor) return;
+    contenedor.classList.toggle('sin-acciones', !contenedor.querySelector('*'));
 }
 
 function devolverAcciones() {
     accionesPorPanel.forEach((elementos, contenedor) => {
         elementos.forEach(el => contenedor.appendChild(el));
+        marcarAccionesVacias(contenedor);
     });
 }
 
@@ -1487,7 +1500,10 @@ function moverAcciones(nombre) {
     const panel = document.querySelector(`.tab-panel[data-tab-panel="${nombre}"]`);
     const contenedor = panel ? panel.querySelector('.panel-actions') : null;
     const elementos = contenedor ? accionesPorPanel.get(contenedor) : null;
-    if (elementos) elementos.forEach(el => menuAcciones.appendChild(el));
+    if (elementos) {
+        elementos.forEach(el => menuAcciones.appendChild(el));
+        marcarAccionesVacias(contenedor);
+    }
 }
 
 function abrirMenu(abrir) {

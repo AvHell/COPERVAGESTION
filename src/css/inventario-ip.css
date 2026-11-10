@@ -335,10 +335,10 @@ td { font-size: .84rem; }
    colores del catálogo. */
 
 /* =========================================================
-   BOTÓN DE COLOR DEL CONTROL GENERAL
-   La columna Cliente de los registros que no pertenecen a ningún
-   cliente lleva su propio botón para elegir el tono con el que se
-   pintan sus etiquetas.
+   COLOR DEL CONTROL GENERAL
+   El color de los registros generales se asigna desde el botón
+   "Asignar color" del encabezado. La celda de la columna Cliente
+   sólo muestra la etiqueta resultante.
    ========================================================= */
 .cliente-celda-inner {
     display: flex;
@@ -347,31 +347,64 @@ td { font-size: .84rem; }
     gap: 7px;
     justify-content: flex-start;
 }
-.color-general-btn {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
-    padding: 3px 8px;
-    border: 1px dashed #c9c7bc;
-    border-radius: 7px;
-    background: #f7f6f1;
+
+/* =========================================================
+   RESUMEN DE IMPORTACIÓN (dentro de SweetAlert)
+   ========================================================= */
+.importar-resumen {
+    text-align: left;
+    font-size: .84rem;
+    line-height: 1.45;
     color: var(--ip-texto-secundario);
-    font: inherit;
-    font-size: .72rem;
-    font-weight: 600;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+    max-height: 60vh;
+    overflow-y: auto;
 }
-.color-general-btn:hover {
-    border-color: var(--ip-oliva);
-    background: var(--ip-oliva-suave);
+.importar-resumen .importar-totales {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin: 0 0 12px;
+}
+.importar-resumen .importar-totales .ok { color: #2f7d4f; }
+.importar-resumen .importar-totales .alerta { color: #b26a12; }
+.importar-resumen details {
+    margin-bottom: 10px;
+    border: 1px solid #e5e2d8;
+    border-radius: 9px;
+    padding: 8px 11px;
+    background: #faf9f5;
+}
+.importar-resumen summary {
+    cursor: pointer;
+    font-weight: 600;
     color: var(--ip-oliva-oscuro);
 }
-.color-general-btn:focus-visible {
-    outline: 2px solid var(--ip-oliva);
-    outline-offset: 1px;
+.importar-resumen ul {
+    margin: 8px 0 2px;
+    padding-left: 20px;
 }
+.importar-resumen li { margin-bottom: 3px; }
+.importar-resumen li small { color: var(--ip-texto-suave); }
+.importar-resumen .importar-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0;
+    font-weight: 600;
+}
+.importar-resumen .importar-nota {
+    margin: 8px 0 0;
+    font-size: .76rem;
+    color: var(--ip-texto-suave);
+}
+/* Avisos (no bloquean la importación) y filas omitidas. */
+.importar-resumen details.importar-avisos {
+    border-color: #e8d7b6;
+    background: #fdf8ec;
+}
+.importar-resumen details.importar-avisos summary { color: #b26a12; }
+.importar-resumen details.importar-avisos li { color: var(--ip-texto-secundario); }
+.importar-resumen .importar-omitidas { color: var(--ip-texto-suave); }
 
 /* =========================================================
    PAGINACIÓN

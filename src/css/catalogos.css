@@ -262,6 +262,22 @@ body {
 .menu-acciones .buscador { margin: 0; }
 .menu-acciones .btn-primary { white-space: nowrap; }
 
+/* Las secciones Dominios y Config. de Red tienen filtros además del buscador:
+   viajan con él al menú superior, así que aquí van en línea y compactos para
+   no engordar la barra (en su panel original siguen siendo label + select). */
+.menu-acciones .filtro-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.menu-acciones .filtro-group label { white-space: nowrap; }
+.menu-acciones .filtro-group select {
+    height: 44px;
+    min-width: 150px;
+    max-width: 220px;
+}
+
 .tab-btn {
     display: flex;
     align-items: center;
@@ -359,11 +375,18 @@ body {
 
 .panel-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 20px;
+    gap: 16px 24px;
     flex-wrap: wrap;
     margin-bottom: 22px;
+}
+/* El bloque de título/subtítulo ocupa el espacio disponible y queda
+   correctamente alineado aunque el buscador y el botón "Nuevo" se muevan
+   al menú superior (moverAcciones). Se evita que el texto se desborde. */
+.panel-title {
+    min-width: 0;
+    flex: 1 1 auto;
 }
 .panel-title h2 {
     font-family: var(--font-display);
@@ -376,6 +399,8 @@ body {
 .panel-title p {
     font-size: 0.86rem;
     color: var(--gray-500);
+    line-height: 1.5;
+    max-width: 68ch;
 }
 
 .panel-actions {
@@ -383,6 +408,14 @@ body {
     gap: 10px;
     align-items: flex-end;
     flex-wrap: wrap;
+}
+
+/* moverAcciones() se lleva el buscador y los botones al menú superior:
+   cuando el contenedor queda vacío no debe seguir ocupando espacio ni
+   desplazar el título del panel (Clientes, Pisos, Roles...). */
+.panel-header .panel-actions:empty,
+.panel-header .panel-actions.sin-acciones {
+    display: none;
 }
 
 /* Buscador */

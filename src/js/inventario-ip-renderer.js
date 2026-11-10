@@ -35,6 +35,31 @@ function escaparHTML(valor) {
     })[caracter]);
 }
 
+/* IPv4 estricta: cuatro octetos 0-255 separados por puntos. */
+function validarIPv4(valor) {
+    const octetos = String(valor || '').trim().split('.');
+    return octetos.length === 4 &&
+        octetos.every(octeto => /^\d{1,3}$/.test(octeto) && Number(octeto) <= 255);
+}
+
+/* MAC: 12 dígitos hexadecimales, SIEMPRE en formato 00:11:22:33:44:55.
+   Devuelve '' si viene vacía, null si es inválida y la cadena normalizada
+   (con dos puntos) cuando es correcta. */
+function normalizarMAC(valor) {
+    const texto = String(valor || '').trim();
+    if (!texto) return '';
+    const hex = texto.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+    if (hex.length !== 12) return null;
+    return hex.match(/.{2}/g).join(':');
+}
+
+/* Da formato progresivo mientras se escribe: agrupa en pares con ":" y
+   limita a 12 dígitos (17 caracteres con separadores). */
+function formatearEntradaMAC(valor) {
+    const hex = String(valor || '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase().slice(0, 12);
+    return hex.match(/.{1,2}/g)?.join(':') || '';
+}
+
 function badge(valor, clase, vacio = '—') {
     return `<span class="ip-badge ${clase}${valor ? '' : ' vacio'}">${escaparHTML(valor || vacio)}</span>`;
 }
@@ -76,16 +101,6 @@ function badgeCliente(registro) {
     return `<span class="ip-badge cliente badge-cliente" data-color="${escaparHTML(codigo)}"${estilo}${titulo}>`
         + `<span class="nombre">${escaparHTML(etiqueta)}</span>`
         + '</span>';
-}
-
-/* Botón "Asignar color" de la columna Cliente. Sólo aparece en los registros
-   que entran directo por el control general: no pertenecen a ningún cliente,
-   así que su color se administra desde esta pantalla. */
-function botonColorGeneral(registro) {
-    if (String(registro?.Origen || '') !== 'General') return '';
-    return '<button type="button" class="color-general-btn" data-color-general'
-        + ' data-permiso="equipos:editar"'
-        + ' title="Asignar el color de los registros del control general">Asignar color</button>';
 }
 
 /* =========================================================
@@ -627,7 +642,7 @@ function pintarTabla() {
             <td>${badge(item.Dispositivo, 'dato')}</td>
             <td>${badge(item.TipoEquipo, 'dato')}</td>
             <td>${badge(item.Piso, 'dato')}</td>
-            <td class="cliente-celda"><div class="cliente-celda-inner">${badgeCliente(item)}${botonColorGeneral(item)}</div></td>
+            <td class="cliente-celda"><div class="cliente-celda-inner">${badgeCliente(item)}</div></td>
             <td>${badge(item.PuertoFortinet, 'dato')}</td>
             <td class="descripcion-celda">${badge(item.Descripcion, 'dato')}</td>`;
 
@@ -1090,6 +1105,113 @@ async function exportarExcel() {
 }
 
 /* =========================================================
+   IMPORTACIÓN INTELIGENTE DE EXCEL
+   El análisis y el mapeo de columnas los hace el proceso principal
+   (main) porque ahí vive SheetJS. Aquí sólo se muestra el resumen y
+   se confirma la escritura. La lectura es multi-hoja y reconoce las
+   columnas por su encabezado, sin importar el orden.
+   ========================================================= */
+
+function construirResumenImportacion(resultado, hayFaltantes) {
+    const { resumen, hojas } = resultado;
+    const bloqueHojas = (hojas || []).map(hoja => hoja.omitida
+        ? `<li><b>${escaparHTML(hoja.hoja)}</b>: omitida (${escaparHTML(hoja.motivo || 'sin encabezados')})</li>`
+        : `<li><b>${escaparHTML(hoja.hoja)}</b>: ${hoja.filas} fila(s) · columnas: ${escaparHTML((hoja.columnas || []).join(', '))}</li>`
+    ).join('');
+
+    const faltantes = (resumen.faltantesCatalogo || []).slice(0, 20).map(item =>
+        `<li><b>${escaparHTML(item.tipo)}</b>: ${escaparHTML(item.valor)} <small>(${item.filas} fila/s)</small></li>`
+    ).join('');
+
+    const ejemplos = (resumen.ejemplosErrores || []).slice(0, 15).map(texto =>
+        `<li>${escaparHTML(texto)}</li>`
+    ).join('');
+
+    /* Avisos: no impiden importar, pero el usuario debe verlos
+       (MAC repetida, IP en rango de un cliente, cliente desconocido...). */
+    const avisos = (resumen.avisos || []).slice(0, 15).map(texto =>
+        `<li>${escaparHTML(texto)}</li>`
+    ).join('');
+
+    return `
+        <div class="importar-resumen">
+            <p class="importar-totales">
+                <span><b>${resumen.total}</b> fila(s)</span>
+                <span class="ok"><b>${resumen.listos}</b> listas</span>
+                <span class="alerta"><b>${resumen.conErrores}</b> con problemas</span>
+                ${resumen.requierenCatalogo ? `<span class="alerta"><b>${resumen.requierenCatalogo}</b> requieren catálogo</span>` : ''}
+                ${resumen.duplicados ? `<span class="alerta"><b>${resumen.duplicados}</b> duplicado(s)</span>` : ''}
+                ${resumen.omitidas ? `<span class="importar-omitidas">${resumen.omitidas} fila(s) del segmento omitida(s)</span>` : ''}
+            </p>
+            <details open>
+                <summary>Hojas y columnas detectadas</summary>
+                <ul>${bloqueHojas || '<li>Sin hojas procesadas.</li>'}</ul>
+            </details>
+            ${faltantes ? `
+            <details open>
+                <summary>Catálogos que faltan crear</summary>
+                <ul>${faltantes}</ul>
+            </details>` : ''}
+            ${ejemplos ? `
+            <details>
+                <summary>Ejemplos de filas con problemas</summary>
+                <ul>${ejemplos}</ul>
+            </details>` : ''}
+            ${avisos ? `
+            <details class="importar-avisos" open>
+                <summary>Avisos a revisar</summary>
+                <ul>${avisos}</ul>
+            </details>` : ''}
+            ${hayFaltantes ? `
+            <label class="importar-check">
+                <input type="checkbox" id="importar-crear-catalogos" checked>
+                Crear automáticamente los catálogos que falten
+            </label>` : ''}
+            <p class="importar-nota">
+                Las filas con errores (IP/MAC inválidas, duplicados o datos incompletos) se omiten.
+                La columna Cliente se conserva como referencia, pero los registros entran al control general.
+            </p>
+        </div>`;
+}
+
+async function importarExcel() {
+    const resultado = await window.api.inventarioIP.importarExcel();
+    if (resultado?.cancelado) return;
+    if (!resultado?.ok) return mostrarError(resultado?.mensaje);
+    if (!resultado.resumen || !resultado.resumen.total) {
+        return mostrarError('El archivo no contiene filas reconocibles. Verifica que tenga encabezados como IP, Hostname, MAC, Cliente, Piso, Switch, etc.');
+    }
+
+    const hayFaltantes = Array.isArray(resultado.resumen.faltantesCatalogo) && resultado.resumen.faltantesCatalogo.length > 0;
+    const revision = await fireSwal({
+        title: 'Revisión de importación',
+        html: construirResumenImportacion(resultado, hayFaltantes),
+        width: 780,
+        showCancelButton: true,
+        confirmButtonText: 'Importar registros',
+        cancelButtonText: 'Cancelar',
+        preConfirm: () => ({
+            crearCatalogos: hayFaltantes
+                ? Boolean(document.getElementById('importar-crear-catalogos')?.checked)
+                : false
+        })
+    });
+    if (!revision.isConfirmed) return;
+
+    const aplicado = await window.api.inventarioIP.aplicarImportacion(resultado.registros, revision.value || {});
+    if (!aplicado?.ok) return mostrarError(aplicado?.mensaje);
+    await cargar();
+
+    const detalle = [`<b>${aplicado.insertados || 0}</b> registro(s) importado(s).`];
+    if (aplicado.omitidos) detalle.push(`${aplicado.omitidos} omitido(s).`);
+    if (aplicado.catalogosCreados) detalle.push(`${aplicado.catalogosCreados} catálogo(s) creado(s).`);
+    if (Array.isArray(aplicado.errores) && aplicado.errores.length) {
+        detalle.push(`<br><small>${aplicado.errores.slice(0, 10).map(escaparHTML).join('<br>')}</small>`);
+    }
+    fireSwal({ icon: 'success', title: 'Importación completada', html: detalle.join(' ') });
+}
+
+/* =========================================================
    CARGA
    ========================================================= */
 
@@ -1147,6 +1269,18 @@ formIP.addEventListener('submit', async event => {
         idSite: $('switchRed').value,
         idTipoIP: $('tipoIP').value
     };
+    /* Validación estricta de IP y MAC antes de tocar la base de datos. */
+    if (datos.ip && !validarIPv4(datos.ip)) {
+        return mostrarError('La IP no es válida. Usa cuatro números separados por puntos, por ejemplo 192.168.0.10.');
+    }
+    if (datos.mac) {
+        const macNormalizada = normalizarMAC(datos.mac);
+        if (macNormalizada === null) {
+            return mostrarError('La MAC debe tener 12 dígitos hexadecimales en formato 00:11:22:33:44:55.');
+        }
+        datos.mac = macNormalizada;
+    }
+
     const button = $('btn-guardar');
     button.disabled = true;
     try {
@@ -1201,12 +1335,20 @@ $('btn-nueva-opcion').addEventListener('click', () => abrirModalCatalogo());
 $('btn-cerrar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('btn-cancelar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('btn-exportar').addEventListener('click', () => exportarExcel().catch(error => mostrarError(error.message)));
+$('btn-color-general').addEventListener('click', () => editarColorGeneral().catch(error => mostrarError(error.message)));
+$('btn-importar').addEventListener('click', () => importarExcel().catch(error => mostrarError(error.message)));
 
-/* El botón "Asignar color" del control general se dibuja dentro de cada fila
-   de la tabla, así que su clic se atiende por delegación. */
-$('tabla-ip').addEventListener('click', event => {
-    if (!event.target.closest('[data-color-general]')) return;
-    editarColorGeneral().catch(error => mostrarError(error.message));
+/* La MAC se captura siempre con dos puntos y 12 dígitos hexadecimales
+   (17 caracteres con separadores); se forma sola mientras se escribe. */
+$('mac').addEventListener('input', event => {
+    const formateada = formatearEntradaMAC(event.target.value);
+    if (formateada !== event.target.value) event.target.value = formateada;
+});
+
+/* La IP sólo admite dígitos y puntos mientras se escribe. */
+$('ip').addEventListener('input', event => {
+    const limpia = String(event.target.value || '').replace(/[^\d.]/g, '');
+    if (limpia !== event.target.value) event.target.value = limpia;
 });
 
 
@@ -1233,7 +1375,6 @@ $('pagina-siguiente').addEventListener('click', () => {
     renderizarTabla();
 });
 tipoCatalogo.addEventListener('change', renderizarCatalogos);
-$('btn-recargar').addEventListener('click', () => cargar().catch(error => mostrarError(error.message)));
 $('btn-volver').addEventListener('click', () => window.api.navegarModulo('equipos'));
 
 (async () => {

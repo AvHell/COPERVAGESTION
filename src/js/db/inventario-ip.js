@@ -54,6 +54,19 @@ function normalizarIPv4(ip) {
 }
 
 /**
+ * Normaliza una MAC al formato 00:11:22:33:44:55.
+ * Acepta guiones, puntos, espacios o los 12 dígitos pegados.
+ * @returns {string|null} '' si viene vacía, null si no tiene 12 hex válidos.
+ */
+function normalizarMAC(mac) {
+    const texto = String(mac === null || mac === undefined ? '' : mac).trim();
+    if (!texto) return '';
+    const hex = texto.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+    if (hex.length !== 12) return null;
+    return hex.match(/.{2}/g).join(':');
+}
+
+/**
  * ¿Hay que validar la IP contra los rangos de los clientes?
  * Al editar solo se valida si la IP cambia: así un registro histórico no
  * queda bloqueado por una norma posterior.
@@ -296,7 +309,8 @@ async function listar() {
 
 async function actualizarDatosEquipoCliente(idEquipo, datos) {
     const equipo = validarIdCatalogo(idEquipo);
-    const mac = String(datos?.mac || '').trim() || null;
+    const macNormalizada = normalizarMAC(datos?.mac);
+    const mac = macNormalizada || null;
     const descripcion = String(datos?.descripcion || '').trim() || null;
     const puertoFortinet = String(datos?.puertoFortinet || '').trim() || null;
     const ids = {
@@ -306,7 +320,7 @@ async function actualizarDatosEquipoCliente(idEquipo, datos) {
     };
     if (!equipo || Object.entries(ids).some(([campo, valor]) =>
         datos?.[`id${campo[0].toUpperCase()}${campo.slice(1)}`] && !valor
-    ) || (mac && mac.length > 17) || (descripcion && descripcion.length > 500) ||
+    ) || macNormalizada === null || (descripcion && descripcion.length > 500) ||
         (puertoFortinet && puertoFortinet.length > 100)) {
         return { ok: false, mensaje: 'Revisa los catálogos y la longitud de los campos.' };
     }
@@ -371,7 +385,11 @@ async function guardar(datos, id = null) {
     const idInventario = id === null ? null : validarIdCatalogo(id);
     let ip = String(datos?.ip || '').trim() || null;
     const hostname = String(datos?.hostname || '').trim() || null;
-    const mac = String(datos?.mac || '').trim() || null;
+    /* La MAC se guarda siempre normalizada (00:11:22:33:44:55): la pantalla
+       la formatea mientras se captura y aquí se valida otra vez, así una
+       importación o una llamada directa no meten formatos distintos. */
+    const macNormalizada = normalizarMAC(datos?.mac);
+    const mac = macNormalizada || null;
     const descripcion = String(datos?.descripcion || '').trim() || null;
     const puertoFortinet = String(datos?.puertoFortinet || '').trim() || null;
     const ids = {
@@ -386,7 +404,7 @@ async function guardar(datos, id = null) {
     if ((id !== null && !idInventario) ||
         (ip && !validarIPv4(ip)) ||
         Object.values(ids).some(valor => !valor) ||
-        (mac && mac.length > 17) ||
+        macNormalizada === null ||
         (hostname && hostname.length > 255) ||
         (descripcion && descripcion.length > 500) ||
         (puertoFortinet && puertoFortinet.length > 100)) {
@@ -510,6 +528,142 @@ async function guardar(datos, id = null) {
     }
 }
 
+/* =========================================================
+   IMPORTACIÓN MASIVA
+   Se reutilizan las mismas reglas de IP/MAC que usa el alta manual,
+   pero se agrupan las consultas para que un archivo de cientos de
+   filas no castigue la base.
+   ========================================================= */
+
+/** Todas las IP que ya están tomadas (control general + equipos estáticos). */
+async function listarIPsOcupadas() {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+        SELECT LTRIM(RTRIM(IP)) AS IP
+        FROM dbo.InventarioGeneralIP
+        WHERE NULLIF(LTRIM(RTRIM(IP)), '') IS NOT NULL
+        UNION
+        SELECT LTRIM(RTRIM(E.IP)) AS IP
+        FROM dbo.Equipos E
+        WHERE E.TipoIP = 'Estatica'
+          AND E.Activo = 1
+          AND NULLIF(LTRIM(RTRIM(E.IP)), '') IS NOT NULL
+    `);
+    return result.recordset
+        .map(fila => String(fila.IP || '').trim())
+        .filter(Boolean);
+}
+
+/**
+ * MACs que ya existen en el sistema (control general + datos de equipos de
+ * clientes). Se usan para avisar de posibles incoherencias al importar; el
+ * formato varía según el origen, así que aquí sólo se devuelven crudas y el
+ * importador las normaliza con normalizarMAC().
+ */
+async function listarMACsRegistradas() {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+        SELECT LTRIM(RTRIM(MAC)) AS MAC
+        FROM dbo.InventarioGeneralIP
+        WHERE NULLIF(LTRIM(RTRIM(MAC)), '') IS NOT NULL
+        UNION
+        SELECT LTRIM(RTRIM(Datos.MAC)) AS MAC
+        FROM dbo.EquiposControlGeneralIP Datos
+        WHERE NULLIF(LTRIM(RTRIM(Datos.MAC)), '') IS NOT NULL
+    `);
+    return result.recordset
+        .map(fila => String(fila.MAC || '').trim())
+        .filter(Boolean);
+}
+
+/**
+ * Inserta registros ya validados por el importador.
+ * Devuelve { insertados, errores[] } sin abortar todo el lote: una fila
+ * con problemas (IP duplicada, catálogo borrado) se reporta y se sigue.
+ */
+async function insertarImportados(filas = []) {
+    const pool = await getPool();
+    let insertados = 0;
+    const errores = [];
+
+    /* Nombres de TipoIP: se usan para la misma regla del alta manual
+       (una IP estática/dinámica necesita IP capturada). */
+    const tiposIP = await pool.request().query(`
+        SELECT IdCatalogoIP, Nombre
+        FROM dbo.CatalogosInventarioIP
+        WHERE TipoCatalogo = 'TipoIP'
+    `);
+    const nombreTipoIP = new Map(
+        (tiposIP.recordset || []).map(item =>
+            [Number(item.IdCatalogoIP), String(item.Nombre || '').trim().toUpperCase()])
+    );
+
+    for (const fila of filas) {
+        const referencia = String(fila?.hostname || fila?.ip || 'fila').trim();
+        const ip = String(fila?.ip || '').trim() || null;
+        const macNormalizada = normalizarMAC(fila?.mac);
+        const hostname = String(fila?.hostname || '').trim() || null;
+        const descripcion = String(fila?.descripcion || '').trim() || null;
+        const puertoFortinet = String(fila?.puertoFortinet || '').trim() || null;
+        const ids = {
+            estado: validarIdCatalogo(fila?.idEstado),
+            dispositivo: validarIdCatalogo(fila?.idDispositivo),
+            tipoEquipo: validarIdCatalogo(fila?.idTipoEquipo),
+            piso: validarIdCatalogo(fila?.idPiso),
+            site: validarIdCatalogo(fila?.idSite),
+            tipoIP: validarIdCatalogo(fila?.idTipoIP)
+        };
+
+        if ((ip && !validarIPv4(ip)) || macNormalizada === null ||
+            Object.values(ids).some(valor => !valor) ||
+            (hostname && hostname.length > 255) ||
+            (descripcion && descripcion.length > 500) ||
+            (puertoFortinet && puertoFortinet.length > 100)) {
+            errores.push(`${referencia}: datos incompletos o con formato inválido.`);
+            continue;
+        }
+        /* Misma regla que el alta manual: sólo DHCP puede quedar sin IP. */
+        if (!ip && (nombreTipoIP.get(ids.tipoIP) || '') !== 'DHCP') {
+            errores.push(`${referencia}: sin IP pero el tipo de asignación no es DHCP.`);
+            continue;
+        }
+
+        try {
+            await pool.request()
+                .input('IP', sql.VarChar(45), ip ? normalizarIPv4(ip) : null)
+                .input('Hostname', sql.NVarChar(255), hostname)
+                .input('MAC', sql.VarChar(17), macNormalizada || null)
+                .input('Descripcion', sql.NVarChar(500), descripcion)
+                .input('PuertoFortinet', sql.NVarChar(100), puertoFortinet)
+                .input('IdEstado', sql.Int, ids.estado)
+                .input('IdDispositivo', sql.Int, ids.dispositivo)
+                .input('IdTipoEquipo', sql.Int, ids.tipoEquipo)
+                .input('IdPiso', sql.Int, ids.piso)
+                .input('IdSite', sql.Int, ids.site)
+                .input('IdTipoIP', sql.Int, ids.tipoIP)
+                .query(`
+                    INSERT INTO dbo.InventarioGeneralIP
+                        (IP, Hostname, MAC, Descripcion, PuertoFortinet, IdEstado,
+                         IdDispositivo, IdTipoEquipo, IdPiso, IdSite, IdTipoIP)
+                    VALUES
+                        (@IP, @Hostname, @MAC, @Descripcion, @PuertoFortinet, @IdEstado,
+                         @IdDispositivo, @IdTipoEquipo, @IdPiso, @IdSite, @IdTipoIP)
+                `);
+            insertados += 1;
+        } catch (error) {
+            if (error.number === 2627 || error.number === 2601) {
+                errores.push(`${referencia}: la IP ya está registrada en el control general.`);
+            } else if (error.number === 547) {
+                errores.push(`${referencia}: un catálogo asociado ya no existe.`);
+            } else {
+                errores.push(`${referencia}: ${error.message}`);
+            }
+        }
+    }
+
+    return { insertados, errores };
+}
+
 async function eliminar(id) {
     const idInventario = validarIdCatalogo(id);
     if (!idInventario) return { ok: false, mensaje: 'El registro seleccionado no es válido.' };
@@ -531,5 +685,11 @@ module.exports = {
     listar,
     actualizarDatosEquipoCliente,
     guardar,
-    eliminar
+    eliminar,
+    listarIPsOcupadas,
+    listarMACsRegistradas,
+    insertarImportados,
+    validarIPv4,
+    normalizarIPv4,
+    normalizarMAC
 };

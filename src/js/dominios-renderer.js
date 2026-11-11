@@ -107,6 +107,19 @@ const tabla          = document.getElementById('tabla-dominios');
 const filtroCliente  = document.getElementById('filtro-cliente');
 const filtroBusqueda = document.getElementById('filtro-busqueda');
 
+/* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+   Paginador no se cargó, recortar() devuelve la lista completa. */
+const pagDominios = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-dominios'), {
+        alCambiar: () => pintarTabla()
+    })
+    : {
+        recortar: lista => lista,
+        reiniciar() {},
+        mostrar() {},
+        contenedor: null
+    };
+
 /* =========================================================
    UTILIDADES
    ========================================================= */
@@ -183,10 +196,13 @@ function pintarTabla() {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td colspan="5" class="estado-vacio">Sin dominios registrados</td>`;
         tabla.appendChild(tr);
+        pagDominios.mostrar(false);
         return;
     }
 
-    dominios.forEach(d => {
+    pagDominios.mostrar(true);
+
+    pagDominios.recortar(dominios).forEach(d => {
         const tr = document.createElement('tr');
         const claseCodigo = claseCodigoCliente(d.ClienteCodigo);
 
@@ -253,12 +269,18 @@ function pintarTabla() {
 /* =========================================================
    FILTROS
    ========================================================= */
-filtroCliente.addEventListener('change', cargarDominios);
+filtroCliente.addEventListener('change', () => {
+    pagDominios.reiniciar();
+    cargarDominios();
+});
 
 let debounceBusqueda = null;
 filtroBusqueda.addEventListener('input', () => {
     clearTimeout(debounceBusqueda);
-    debounceBusqueda = setTimeout(cargarDominios, 250);
+    debounceBusqueda = setTimeout(() => {
+        pagDominios.reiniciar();
+        cargarDominios();
+    }, 250);
 });
 
 /* =========================================================

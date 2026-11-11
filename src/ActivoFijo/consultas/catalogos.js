@@ -220,94 +220,185 @@ const CATALOGOS_RESPONSIVAS = [
     { tabla: 'ActivoFijoResponsivasPuestosEntrega', pk: 'IdPuestoEntregaResponsiva', longitud: 100, origen: 'PuestoEntrega' }
 ];
 
+/* Tabla puente equipo ↔ accesorios. Un activo guarda varios conjuntos de
+   accesorios (antes iban todos en una sola celda de texto: violación de
+   1FN), así que la relación es N:M y necesita esta tabla. */
+const TABLA_ACCESORIOS_EQUIPO = 'ActivoFijoEquiposAccesorios';
+
+/* Columnas FK que agrega la normalización 3FN. Se crean aquí de forma
+   defensiva para que la aplicación funcione aunque el script
+   scripts/activo-fijo-3fn.sql todavía no se haya ejecutado en la base:
+   el script se encarga del respaldo de datos, las FK y las vistas. */
+const COLUMNAS_3FN = [
+    ['ActivoFijoEquipos',    'IdModelo'],
+    ['ActivoFijoEquipos',    'IdProcesador'],
+    ['ActivoFijoEquipos',    'IdMemoriaRAM'],
+    ['ActivoFijoEquipos',    'IdAlmacenamiento'],
+    ['ActivoFijoEquipos',    'IdSistemaOperativo'],
+    ['ActivoFijoEquipos',    'IdUsuarioAsignado'],
+    ['ActivoFijoResponsivas', 'IdMotivoResponsiva'],
+    ['ActivoFijoResponsivas', 'IdProyectoResponsiva'],
+    ['ActivoFijoResponsivas', 'IdDescripcionResponsiva'],
+    ['ActivoFijoResponsivas', 'IdAreaEntregaResponsiva'],
+    ['ActivoFijoResponsivas', 'IdPuestoEntregaResponsiva'],
+    ['ActivoFijoResponsivas', 'IdUsuarioEntrega'],
+    ['ActivoFijoResponsivas', 'IdUsuarioRecibe']
+];
+
+/* DDL del catálogo (idempotente) y siembra desde la columna de texto. */
+function crearCatalogo(cfg) {
+    return `
+        IF OBJECT_ID(N'dbo.${cfg.tabla}', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.${cfg.tabla} (
+                ${cfg.pk} INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                Nombre NVARCHAR(${cfg.longitud}) NOT NULL,
+                Activo BIT NOT NULL CONSTRAINT DF_${cfg.pk}_Activo DEFAULT (1)
+            );
+        END;
+    `;
+}
+
+function sembrarCatalogo(cfg, tabla, alias) {
+    return `
+        INSERT INTO dbo.${cfg.tabla} (Nombre)
+        SELECT DISTINCT LTRIM(RTRIM(${alias}.${cfg.origen}))
+        FROM dbo.${tabla} ${alias}
+        WHERE ${alias}.${cfg.origen} IS NOT NULL
+          AND LTRIM(RTRIM(${alias}.${cfg.origen})) <> ''
+          AND NOT EXISTS (
+              SELECT 1
+              FROM dbo.${cfg.tabla} c
+              WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(${alias}.${cfg.origen})))
+          );
+    `;
+}
+
 let inicializacionExtendida;
 
 async function asegurarCatalogosExtendidos() {
     if (!inicializacionExtendida) {
         inicializacionExtendida = (async () => {
             const pool = await getPool();
-            for (const cfg of CATALOGOS_ESPECIFICACIONES) {
-                await pool.request().query(`
-                    IF OBJECT_ID(N'dbo.${cfg.tabla}', N'U') IS NULL
-                    BEGIN
-                        CREATE TABLE dbo.${cfg.tabla} (
-                            ${cfg.pk} INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                            Nombre NVARCHAR(${cfg.longitud}) NOT NULL,
-                            Activo BIT NOT NULL CONSTRAINT DF_${cfg.pk}_Activo DEFAULT (1)
-                        );
-                    END;
 
-                    INSERT INTO dbo.${cfg.tabla} (Nombre)
-                    SELECT DISTINCT LTRIM(RTRIM(a.${cfg.origen}))
-                    FROM dbo.ActivoFijoEquipos a
-                    WHERE a.${cfg.origen} IS NOT NULL
-                      AND LTRIM(RTRIM(a.${cfg.origen})) <> ''
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM dbo.${cfg.tabla} c
-                          WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(a.${cfg.origen})))
-                      );
+            /* 1. Columnas FK de la normalización (idempotente). */
+            for (const [tabla, columna] of COLUMNAS_3FN) {
+                await pool.request().query(`
+                    IF OBJECT_ID(N'dbo.${tabla}', N'U') IS NOT NULL
+                       AND COL_LENGTH(N'dbo.${tabla}', N'${columna}') IS NULL
+                        ALTER TABLE dbo.${tabla} ADD ${columna} INT NULL;
                 `);
             }
 
-            for (const cfg of CATALOGOS_RESPONSIVAS) {
-                await pool.request().query(`
-                    IF OBJECT_ID(N'dbo.${cfg.tabla}', N'U') IS NULL
-                    BEGIN
-                        CREATE TABLE dbo.${cfg.tabla} (
-                            ${cfg.pk} INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                            Nombre NVARCHAR(${cfg.longitud}) NOT NULL,
-                            Activo BIT NOT NULL CONSTRAINT DF_${cfg.pk}_Activo DEFAULT (1)
-                        );
-                    END;
+            /* Las columnas de texto de origen pueden haber sido eliminadas
+               por la fase 2 del script 3FN: sólo se siembra el catálogo si
+               la columna sigue existiendo. */
+            const origenesEquipo = await columnasExistentes(
+                'ActivoFijoEquipos',
+                CATALOGOS_ESPECIFICACIONES.map(c => c.origen)
+            );
+            const origenesResponsiva = await columnasExistentes(
+                'ActivoFijoResponsivas',
+                [...CATALOGOS_RESPONSIVAS.map(c => c.origen), 'NombreRecibe', 'PuestoRecibe']
+            );
 
-                    INSERT INTO dbo.${cfg.tabla} (Nombre)
-                    SELECT DISTINCT LTRIM(RTRIM(r.${cfg.origen}))
-                    FROM dbo.ActivoFijoResponsivas r
-                    WHERE r.${cfg.origen} IS NOT NULL
-                      AND LTRIM(RTRIM(r.${cfg.origen})) <> ''
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM dbo.${cfg.tabla} c
-                          WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(r.${cfg.origen})))
-                      );
+            for (const cfg of CATALOGOS_ESPECIFICACIONES) {
+                await pool.request().query(
+                    crearCatalogo(cfg) +
+                    (origenesEquipo.has(cfg.origen)
+                        ? sembrarCatalogo(cfg, 'ActivoFijoEquipos', 'a')
+                        : '')
+                );
+            }
+
+            for (const cfg of CATALOGOS_RESPONSIVAS) {
+                await pool.request().query(
+                    crearCatalogo(cfg) +
+                    (origenesResponsiva.has(cfg.origen)
+                        ? sembrarCatalogo(cfg, 'ActivoFijoResponsivas', 'r')
+                        : '')
+                );
+            }
+
+            /* Tabla puente de accesorios. Se crea aquí (sin FK: las agrega
+               scripts/activo-fijo-3fn.sql) para que la aplicación funcione
+               incluso si el script todavía no se ejecutó. */
+            await pool.request().query(`
+                IF OBJECT_ID(N'dbo.${TABLA_ACCESORIOS_EQUIPO}', N'U') IS NULL
+                   AND OBJECT_ID(N'dbo.ActivoFijoEquipos', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'dbo.ActivoFijoAccesorios', N'U') IS NOT NULL
+                    CREATE TABLE dbo.${TABLA_ACCESORIOS_EQUIPO} (
+                        IdEquipoAccesorio INT IDENTITY(1,1) NOT NULL
+                            CONSTRAINT PK_${TABLA_ACCESORIOS_EQUIPO} PRIMARY KEY,
+                        IdActivoFijoEQ INT NOT NULL,
+                        IdAccesorio    INT NOT NULL,
+                        CONSTRAINT UQ_${TABLA_ACCESORIOS_EQUIPO}
+                            UNIQUE (IdActivoFijoEQ, IdAccesorio)
+                    );
+            `);
+
+            /* Respaldo: los accesorios que sólo existían como texto pasan a
+               la tabla puente. Idempotente. */
+            if (origenesEquipo.has('Accesorios')) {
+                await pool.request().query(`
+                    ;WITH objetivo AS (
+                        SELECT af.IdActivoFijoEQ, MIN(c.IdAccesorio) AS IdAccesorio
+                        FROM dbo.ActivoFijoEquipos af
+                        INNER JOIN dbo.ActivoFijoAccesorios c
+                                ON UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(af.Accesorios)))
+                        WHERE af.Accesorios IS NOT NULL
+                          AND LTRIM(RTRIM(af.Accesorios)) <> ''
+                        GROUP BY af.IdActivoFijoEQ
+                    )
+                    INSERT INTO dbo.${TABLA_ACCESORIOS_EQUIPO} (IdActivoFijoEQ, IdAccesorio)
+                    SELECT o.IdActivoFijoEQ, o.IdAccesorio
+                    FROM objetivo o
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM dbo.${TABLA_ACCESORIOS_EQUIPO} ea
+                        WHERE ea.IdActivoFijoEQ = o.IdActivoFijoEQ
+                          AND ea.IdAccesorio    = o.IdAccesorio
+                    );
                 `);
             }
 
             // Coherencia con responsivas: quién recibe se administra desde el
             // catálogo "Usuarios asignados", así que los nombres históricos
             // de las responsivas se integran a ese catálogo.
-            await pool.request().query(`
-                IF OBJECT_ID(N'dbo.ActivoFijoResponsivas', N'U') IS NOT NULL
-                   AND OBJECT_ID(N'dbo.ActivoFijoUsuariosAsignados', N'U') IS NOT NULL
-                BEGIN
-                    INSERT INTO dbo.ActivoFijoUsuariosAsignados (Nombre)
-                    SELECT DISTINCT LTRIM(RTRIM(r.NombreRecibe))
-                    FROM dbo.ActivoFijoResponsivas r
-                    WHERE r.NombreRecibe IS NOT NULL
-                      AND LTRIM(RTRIM(r.NombreRecibe)) <> ''
+            if (origenesResponsiva.has('NombreRecibe')) {
+                await pool.request().query(`
+                    IF OBJECT_ID(N'dbo.ActivoFijoResponsivas', N'U') IS NOT NULL
+                       AND OBJECT_ID(N'dbo.ActivoFijoUsuariosAsignados', N'U') IS NOT NULL
+                    BEGIN
+                        INSERT INTO dbo.ActivoFijoUsuariosAsignados (Nombre)
+                        SELECT DISTINCT LTRIM(RTRIM(r.NombreRecibe))
+                        FROM dbo.ActivoFijoResponsivas r
+                        WHERE r.NombreRecibe IS NOT NULL
+                          AND LTRIM(RTRIM(r.NombreRecibe)) <> ''
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM dbo.ActivoFijoUsuariosAsignados c
+                              WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(r.NombreRecibe)))
+                          );
+                    END;
+                `);
+            }
+
+            if (origenesResponsiva.has('PuestoRecibe')) {
+                await pool.request().query(`
+                    INSERT INTO dbo.ActivoFijoPuestos (Nombre)
+                    SELECT DISTINCT LTRIM(RTRIM(p.Puesto))
+                    FROM (
+                        SELECT PuestoRecibe AS Puesto FROM dbo.ActivoFijoResponsivas
+                    ) p
+                    WHERE p.Puesto IS NOT NULL
+                      AND LTRIM(RTRIM(p.Puesto)) <> ''
                       AND NOT EXISTS (
                           SELECT 1
-                          FROM dbo.ActivoFijoUsuariosAsignados c
-                          WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(r.NombreRecibe)))
+                          FROM dbo.ActivoFijoPuestos c
+                          WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(p.Puesto)))
                       );
-                END;
-            `);
-
-            await pool.request().query(`
-                INSERT INTO dbo.ActivoFijoPuestos (Nombre)
-                SELECT DISTINCT LTRIM(RTRIM(p.Puesto))
-                FROM (
-                    SELECT PuestoRecibe AS Puesto FROM dbo.ActivoFijoResponsivas
-                ) p
-                WHERE p.Puesto IS NOT NULL
-                  AND LTRIM(RTRIM(p.Puesto)) <> ''
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM dbo.ActivoFijoPuestos c
-                      WHERE UPPER(c.Nombre) = UPPER(LTRIM(RTRIM(p.Puesto)))
-                  );
-            `);
+                `);
+            }
 
             await pool.request().query(`
                 UPDATE dbo.ActivoFijoEstatus SET Activo = 1
@@ -375,18 +466,29 @@ function tipoSql(tipo, longitud) {
 
 /* =========================================================
    LISTAR
-   - filtros.soloEliminados = true  → Activo = 0
-   - si no                          → Activo = 1
+   - filtros.soloEliminados = true     → sólo Activo = 0
+   - filtros.incluirInactivos = true   → activos + inactivos
+     (la vista normal del catálogo los muestra juntos para poder
+      activar/desactivar con un clic, sin cambiar de pestaña)
+   - por omisión                        → sólo Activo = 1
    ========================================================= */
 async function listar(clave, filtros = {}) {
     await asegurarCatalogosExtendidos();
     const { tabla, pk } = getConfig(clave);
     const pool = await getPool();
 
-    const where = filtros.soloEliminados ? 'WHERE Activo = 0' : 'WHERE Activo = 1';
+    let where = 'WHERE Activo = 1';
+    if (filtros.soloEliminados) {
+        where = 'WHERE Activo = 0';
+    } else if (filtros.incluirInactivos) {
+        where = '';
+    }
+
+    /* Los inactivos se muestran al final para no romper el orden natural. */
+    const orden = filtros.incluirInactivos ? `Activo DESC, ${pk}` : pk;
 
     const result = await pool.request().query(
-        `SELECT * FROM ${tabla} ${where} ORDER BY ${pk}`
+        `SELECT * FROM ${tabla} ${where} ORDER BY ${orden}`
     );
     return result.recordset;
 }
@@ -581,6 +683,184 @@ async function restaurar(clave, id) {
     }
 }
 
+/* =========================================================
+   ELIMINAR DEFINITIVAMENTE (purga física)
+   ---------------------------------------------------------
+   Complemento del soft delete: sólo se permite sobre registros
+   que ya están dados de baja (Activo = 0) y que ninguna otra
+   tabla referencia. Las referencias se descubren en el catálogo
+   del sistema (sys.foreign_keys) para no quedar desfasadas si
+   mañana se añade otra FK a alguno de los catálogos.
+   ========================================================= */
+const ETIQUETAS_REFERENCIA = {
+    ActivoFijoEquipos:           'activo(s) del inventario',
+    ActivoFijoEquiposAccesorios: 'equipo(s) con este accesorio',
+    ActivoFijoResponsivas:       'responsiva(s)',
+    ActivoFijoHistoricos:        'movimiento(s) de histórico'
+};
+
+function etiquetaReferencia(tabla) {
+    return ETIQUETAS_REFERENCIA[tabla] || `registro(s) de ${tabla}`;
+}
+
+/* Tablas cuyas FK apuntan a la tabla indicada. */
+async function referenciasDeTabla(tx, tabla) {
+    const r = await new sql.Request(tx).query(`
+        SELECT OBJECT_NAME(fk.parent_object_id)                     AS Tabla,
+               COL_NAME(fkc.parent_object_id, fkc.parent_column_id) AS Columna
+        FROM sys.foreign_keys fk
+        INNER JOIN sys.foreign_key_columns fkc
+                ON fkc.constraint_object_id = fk.object_id
+        WHERE fk.referenced_object_id = OBJECT_ID(N'dbo.${tabla}')
+    `);
+    return r.recordset;
+}
+
+async function eliminarDefinitivo(clave, id) {
+    try {
+        await asegurarCatalogosExtendidos();
+        const cfg = getConfig(clave);
+        const pool = await getPool();
+        const tx = new sql.Transaction(pool);
+        await tx.begin();
+
+        try {
+            const actual = await new sql.Request(tx)
+                .input('Id', sql.Int, id)
+                .query(`
+                    SELECT *
+                    FROM ${cfg.tabla} WITH (UPDLOCK, HOLDLOCK)
+                    WHERE ${cfg.pk} = @Id
+                `);
+
+            if (actual.recordset.length === 0) {
+                await tx.rollback();
+                return { ok: false, mensaje: 'El registro ya no existe.' };
+            }
+
+            if (actual.recordset[0].Activo) {
+                await tx.rollback();
+                return {
+                    ok: false,
+                    mensaje: 'Sólo se pueden eliminar definitivamente los registros dados de baja. Desactívalo primero.'
+                };
+            }
+
+            /* ¿Algo lo está usando? Se informa cuánto y no se borra nada. */
+            const referencias = await referenciasDeTabla(tx, cfg.tabla);
+            const usos = [];
+            for (const ref of referencias) {
+                if (!ref.Tabla || !ref.Columna) continue;
+                const conteo = await new sql.Request(tx)
+                    .input('Id', sql.Int, id)
+                    .query(`SELECT COUNT(*) AS Total FROM dbo.${ref.Tabla} WHERE ${ref.Columna} = @Id`);
+                const total = conteo.recordset[0]?.Total || 0;
+                if (total > 0) usos.push(`${total} ${etiquetaReferencia(ref.Tabla)}`);
+            }
+
+            if (usos.length > 0) {
+                await tx.rollback();
+                return {
+                    ok: false,
+                    mensaje: `No se puede eliminar definitivamente: lo usan ${usos.join(', ')}.`
+                };
+            }
+
+            const borrado = await new sql.Request(tx)
+                .input('Id', sql.Int, id)
+                .query(`DELETE FROM ${cfg.tabla} WHERE ${cfg.pk} = @Id AND Activo = 0`);
+
+            if (borrado.rowsAffected[0] === 0) {
+                await tx.rollback();
+                return { ok: false, mensaje: 'El registro ya no existe o volvió a estar activo.' };
+            }
+
+            await tx.commit();
+            return { ok: true, mensaje: 'Registro eliminado definitivamente.' };
+        } catch (err) {
+            try { await tx.rollback(); } catch (_) { /* la transacción ya estaba cerrada */ }
+            throw err;
+        }
+    } catch (err) {
+        if (err.number === 547) {
+            return { ok: false, mensaje: 'No se puede eliminar definitivamente: hay registros que lo usan.' };
+        }
+        return { ok: false, mensaje: 'Error al eliminar definitivamente: ' + err.message };
+    }
+}
+
+/* =========================================================
+   RESOLVER ID DE CATÁLOGO (get-or-create)
+   Convierte un nombre capturado en texto libre al Id de su
+   catálogo. Es la pieza que permite que el formulario de activos
+   registre "usuario asignado", modelo, procesador, etc. sin
+   obligar al usuario a ir a Catálogos primero.
+
+   Reglas:
+     - Compara sin distinguir mayúsculas ni espacios sobrantes,
+       así "HP", "hp" y "  Hp " son el mismo registro.
+     - Si el registro existe pero está dado de baja, lo REACTIVA
+       automáticamente: es justo el caso "lo vuelvo a necesitar"
+       y no tiene sentido mandar al usuario a la pestaña
+       Eliminados a restaurarlo a mano.
+     - Si no existe, lo crea.
+   Devuelve null si el texto viene vacío.
+   ========================================================= */
+async function resolverId(clave, nombre) {
+    if (nombre === null || nombre === undefined) return null;
+
+    const cfg = getConfig(clave);
+
+    /* Nombre es único por catálogo, salvo en subtipos (único por
+       Grupo + Nombre): ahí no se puede resolver sólo con el nombre. */
+    if (clave === 'subtipos') {
+        throw new Error('resolverId no admite el catálogo "subtipos": use Grupo + Nombre.');
+    }
+
+    const campoNombre = cfg.campos.find(c => c.nombre === 'Nombre') || {};
+    const longitud = campoNombre.longitud || 100;
+
+    /* Se recorta al largo real de la columna para no provocar un
+       error de truncamiento si el texto viene más largo. */
+    const texto = String(nombre).trim().slice(0, longitud);
+    if (!texto) return null;
+
+    await asegurarCatalogosExtendidos();
+    const pool = await getPool();
+
+    const buscar = () =>
+        pool.request()
+            .input('Nombre', sql.NVarChar(300), texto)
+            .query(`
+                SELECT TOP 1 ${cfg.pk} AS Id, Activo
+                FROM ${cfg.tabla}
+                WHERE UPPER(LTRIM(RTRIM(Nombre))) = UPPER(LTRIM(RTRIM(@Nombre)))
+                ORDER BY ${cfg.pk}
+            `);
+
+    const existente = await buscar();
+
+    if (existente.recordset.length > 0) {
+        const fila = existente.recordset[0];
+        if (!fila.Activo) {
+            await pool.request()
+                .input('Id', sql.Int, fila.Id)
+                .query(`UPDATE ${cfg.tabla} SET Activo = 1 WHERE ${cfg.pk} = @Id`);
+        }
+        return fila.Id;
+    }
+
+    const insertado = await pool.request()
+        .input('Nombre', tipoSql('NVarChar', longitud), texto)
+        .query(`
+            INSERT INTO ${cfg.tabla} (Nombre, Activo)
+            OUTPUT INSERTED.${cfg.pk} AS Id
+            VALUES (@Nombre, 1)
+        `);
+
+    return insertado.recordset[0].Id;
+}
+
 async function esValorActivo(clave, nombre) {
     if (!nombre) return false;
     await asegurarCatalogosExtendidos();
@@ -601,7 +881,215 @@ async function listarEspecificaciones() {
     return Object.fromEntries(resultados.map(item => [item.clave, item.registros]));
 }
 
+/* =========================================================
+   LECTURA 3FN — NOMBRES DESDE EL CATÁLOGO
+   ---------------------------------------------------------
+   Las columnas de texto originales (Modelo, MotivoSalida, ...) se
+   conservan como respaldo hasta que la fase 2 de
+   scripts/activo-fijo-3fn.sql las elimine. Estas utilidades arman los
+   JOIN y las columnas del SELECT en un solo lugar para que cada módulo
+   de consultas no repita la misma lógica.
+   ========================================================= */
+const cacheColumnas = new Map();
+
+/* Qué columnas de texto siguen existiendo en la tabla. Se recuerda por
+   tabla: el esquema no cambia mientras la app está abierta. */
+async function columnasExistentes(tabla, columnas) {
+    const lista = columnas.filter(Boolean);
+    if (lista.length === 0) return new Set();
+
+    const llave = `${tabla}|${lista.join(',')}`;
+    if (cacheColumnas.has(llave)) return cacheColumnas.get(llave);
+
+    const pool = await getPool();
+    const r = await pool.request().query(`
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = N'dbo'
+          AND TABLE_NAME   = N'${tabla}'
+          AND COLUMN_NAME IN (${lista.map(c => `N'${c}'`).join(', ')})
+    `);
+    const set = new Set(r.recordset.map(f => f.COLUMN_NAME));
+    cacheColumnas.set(llave, set);
+    return set;
+}
+
+/* ¿Existe la tabla? Se recuerda igual que las columnas. */
+const cacheTablas = new Map();
+
+async function tablaExiste(tabla) {
+    if (cacheTablas.has(tabla)) return cacheTablas.get(tabla);
+    const pool = await getPool();
+    const r = await pool.request().query(
+        `SELECT OBJECT_ID(N'dbo.${tabla}', N'U') AS IdObjeto`);
+    const existe = r.recordset[0]?.IdObjeto != null;
+    cacheTablas.set(tabla, existe);
+    return existe;
+}
+
+/* Accesorios del equipo leídos como UNA columna de texto, igual que antes
+   (el renderer no cambia): se agregan los conjuntos de la tabla puente y,
+   mientras la columna de respaldo siga existiendo, se usa como respaldo de
+   las filas que aún no tienen filas puente. */
+async function prepararAccesoriosEquipo(aliasOrigen = 'af', tablaOrigen = 'ActivoFijoEquipos') {
+    const [conPuente, columnasTexto] = await Promise.all([
+        tablaExiste(TABLA_ACCESORIOS_EQUIPO),
+        columnasExistentes(tablaOrigen, ['Accesorios'])
+    ]);
+    const hayTexto = columnasTexto.has('Accesorios');
+
+    const agregado = `(
+        SELECT STRING_AGG(ca.Nombre, N', ') WITHIN GROUP (ORDER BY ca.Nombre)
+        FROM dbo.${TABLA_ACCESORIOS_EQUIPO} ea
+        INNER JOIN dbo.ActivoFijoAccesorios ca ON ca.IdAccesorio = ea.IdAccesorio
+        WHERE ea.IdActivoFijoEQ = ${aliasOrigen}.IdActivoFijoEQ
+    )`;
+
+    let expresion;
+    if (conPuente && hayTexto) expresion = `COALESCE(${agregado}, ${aliasOrigen}.Accesorios)`;
+    else if (conPuente)        expresion = agregado;
+    else if (hayTexto)         expresion = `${aliasOrigen}.Accesorios`;
+    else                       expresion = 'CAST(NULL AS NVARCHAR(300))';
+
+    return {
+        joins: [],
+        columnas: [`${expresion} AS AccesoriosCatalogo`],
+        aplicar: fila => {
+            if (!fila) return fila;
+            fila.Accesorios = fila.AccesoriosCatalogo ?? fila.Accesorios ?? null;
+            delete fila.AccesoriosCatalogo;
+            return fila;
+        }
+    };
+}
+
+/* Deja la tabla puente igual a lo capturado en el formulario: el texto se
+   registra (o reactiva) en el catálogo de accesorios y se reemplazan las
+   filas del equipo. Sin la migración aplicada no hace nada. */
+async function sincronizarAccesoriosEquipo(idEquipo, textoAccesorios) {
+    if (!idEquipo) return;
+    if (!(await tablaExiste(TABLA_ACCESORIOS_EQUIPO))) return;
+
+    const texto = String(textoAccesorios ?? '').trim();
+    const pool = await getPool();
+
+    await pool.request()
+        .input('Id', sql.Int, idEquipo)
+        .query(`DELETE FROM dbo.${TABLA_ACCESORIOS_EQUIPO} WHERE IdActivoFijoEQ = @Id`);
+
+    if (!texto) return;
+
+    const IdAccesorio = await resolverId('accesorios', texto);
+    if (!IdAccesorio) return;
+
+    await pool.request()
+        .input('Id', sql.Int, idEquipo)
+        .input('IdAccesorio', sql.Int, IdAccesorio)
+        .query(`
+            IF NOT EXISTS (
+                SELECT 1 FROM dbo.${TABLA_ACCESORIOS_EQUIPO}
+                WHERE IdActivoFijoEQ = @Id AND IdAccesorio = @IdAccesorio
+            )
+                INSERT INTO dbo.${TABLA_ACCESORIOS_EQUIPO} (IdActivoFijoEQ, IdAccesorio)
+                VALUES (@Id, @IdAccesorio);
+        `);
+}
+
+/* campos: [{ campo, tabla, pk, fk, alias }]
+     campo = columna de texto de origen (la que ya lee el renderer)
+     fk    = columna FK en la tabla que se está consultando
+   Devuelve { joins, columnas, aplicar }: las dos primeras se inyectan en
+   el SQL y `aplicar` deja cada fila con las claves de siempre, así los
+   renderers no cambian. */
+async function prepararNombresCatalogo(tablaOrigen, aliasOrigen, campos) {
+    const existentes = await columnasExistentes(tablaOrigen, campos.map(c => c.campo));
+
+    const joins = campos.map(c =>
+        `LEFT JOIN ${c.tabla} ${c.alias} ON ${c.alias}.${c.pk} = ${aliasOrigen}.${c.fk}`);
+
+    const columnas = campos.map(c => {
+        const nombre = `${c.alias}.Nombre`;
+        return existentes.has(c.campo)
+            ? `COALESCE(${nombre}, ${aliasOrigen}.${c.campo}) AS ${c.campo}Catalogo`
+            : `${nombre} AS ${c.campo}Catalogo`;
+    });
+
+    const aplicar = fila => {
+        if (!fila) return fila;
+        for (const c of campos) {
+            const clave = `${c.campo}Catalogo`;
+            fila[c.campo] = fila[clave] ?? fila[c.campo] ?? null;
+            delete fila[clave];
+        }
+        return fila;
+    };
+
+    return { joins, columnas, aplicar };
+}
+
+/* Une varias lecturas (p. ej. especificaciones del equipo + catálogos de
+   la responsiva) en un solo juego de JOINs y columnas. */
+function unirNombresCatalogo(...lecturas) {
+    const validas = lecturas.filter(Boolean);
+    return {
+        joins:    validas.flatMap(l => l.joins),
+        columnas: validas.flatMap(l => l.columnas),
+        aplicar:  fila => validas.reduce((f, l) => l.aplicar(f), fila)
+    };
+}
+
+/* Descriptor de un campo que pasó de texto a FK, tomando la tabla y la PK
+   de la configuración del catálogo. */
+function campoCatalogo(campo, clave, fk) {
+    const cfg = getConfig(clave);
+    return { campo, tabla: cfg.tabla, pk: cfg.pk, fk, alias: 'cat' + fk.replace(/^Id/, '') };
+}
+
+/* Especificaciones del activo que ya son FK. Accesorios queda fuera:
+   guarda varios valores en una celda y sigue siendo texto libre. */
+function camposEspecificaciones3FN() {
+    return CATALOGOS_ESPECIFICACIONES
+        .filter(c => c.clave !== 'accesorios')
+        .map(c => campoCatalogo(c.origen, c.clave, c.pk));
+}
+
+/* Catálogos de la responsiva (motivo, proyecto, descripción, área, puesto
+   de entrega y usuario que recibe). */
+function camposResponsiva3FN() {
+    const campos = CATALOGOS_RESPONSIVAS.map(c => ({
+        campo: c.origen,
+        tabla: c.tabla,
+        pk:    c.pk,
+        fk:    c.pk,
+        alias: 'cat' + c.pk.replace(/^Id/, '')
+    }));
+
+    campos.push({
+        campo: 'NombreRecibe',
+        tabla: 'ActivoFijoUsuariosAsignados',
+        pk:    'IdUsuarioAsignado',
+        fk:    'IdUsuarioRecibe',
+        alias: 'catUsuarioRecibe'
+    });
+
+    /* El puesto de quien recibe también se normalizó (FK IdPuesto). */
+    campos.push({
+        campo: 'PuestoRecibe',
+        tabla: 'ActivoFijoPuestos',
+        pk:    'IdPuesto',
+        fk:    'IdPuesto',
+        alias: 'catPuestoRecibe'
+    });
+
+    return campos;
+}
+
 module.exports = {
-    listar, crear, actualizar, eliminar, restaurar, CATALOGOS,
-    asegurarCatalogosExtendidos, esValorActivo, listarEspecificaciones
+    listar, crear, actualizar, eliminar, restaurar, eliminarDefinitivo, CATALOGOS,
+    asegurarCatalogosExtendidos, esValorActivo, listarEspecificaciones,
+    resolverId,
+    prepararNombresCatalogo, unirNombresCatalogo, columnasExistentes,
+    camposEspecificaciones3FN, camposResponsiva3FN,
+    tablaExiste, prepararAccesoriosEquipo, sincronizarAccesoriosEquipo,
+    TABLA_ACCESORIOS_EQUIPO
 };

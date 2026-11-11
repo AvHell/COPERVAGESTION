@@ -1,0 +1,92 @@
+/* =========================================================
+   PAGINADOR — Estilos compartidos por las tablas del sistema
+   ---------------------------------------------------------
+   Se carga junto a la hoja de la página; cada módulo puede
+   ajustar los tonos con las variables --paginador-* sin
+   duplicar reglas.
+   ========================================================= */
+.paginacion {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 14px 2px 0;
+    color: var(--paginador-texto, #6d6a5f);
+    font-size: .82rem;
+}
+
+/* Estado oculto propio (mostrar(false)), para no depender de que la
+   hoja de la página defina `.oculto`. El módulo marca con `.oculto`
+   el contenedor donde se inyecta el control («paginador-contenedor»),
+   por eso se cubren las dos variantes. */
+.paginador-contenedor.oculto,
+.paginacion.oculto {
+    display: none !important;
+}
+
+.paginacion label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.paginacion select.paginador-tamano {
+    width: auto;
+    min-width: 70px;
+    min-height: 32px;
+    padding: 4px 8px;
+    border: 1px solid var(--paginador-borde, #d8d2c4);
+    border-radius: 8px;
+    background: #fff;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.paginador-resumen {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.paginador-acciones {
+    display: flex;
+    gap: 7px;
+}
+
+.paginador-acciones button {
+    min-height: 32px;
+    padding: 5px 12px;
+    border: 1px solid var(--paginador-borde, #d8d2c4);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--paginador-texto, #4c4a42);
+    font: inherit;
+    font-size: .78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, opacity .15s ease;
+}
+
+.paginador-acciones button:hover:not(:disabled) {
+    background: var(--paginador-hover, #f2eee4);
+    border-color: var(--paginador-borde-fuerte, #c3bba8);
+}
+
+.paginador-acciones button:disabled {
+    opacity: .45;
+    cursor: default;
+}
+
+.paginador-acciones button:focus-visible,
+.paginacion select.paginador-tamano:focus-visible {
+    outline: 2px solid var(--paginador-foco, #8a9a5b);
+    outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+    .paginacion {
+        justify-content: space-between;
+        gap: 10px;
+    }
+}

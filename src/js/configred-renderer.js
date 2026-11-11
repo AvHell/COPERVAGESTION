@@ -137,6 +137,16 @@ const filtroCliente    = document.getElementById('filtro-cliente');
 const filtroTipo       = document.getElementById('filtro-tipo');
 const filtroBusqueda   = document.getElementById('filtro-busqueda');
 
+/* Paginación por grupos (un registro = un cliente con sus configuraciones):
+   sólo se vuelcan al DOM los grupos de la página vigente. Si el módulo
+   Paginador no se cargó, recortar() devuelve la lista completa. */
+const pagConfigred = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-configred'), {
+        alCambiar: () => pintarTabla()
+    })
+    : { recortar: lista => lista, reiniciar() {}, mostrar() {} };
+
+
 /* =========================================================
    UTILIDADES
    ========================================================= */
@@ -212,9 +222,11 @@ function pintarTabla() {
 
     if (!configs || configs.length === 0) {
         sinResultados.classList.remove('oculto');
+        pagConfigred.mostrar(false);
         return;
     }
     sinResultados.classList.add('oculto');
+    pagConfigred.mostrar(true);
 
     /* Agrupar por código de cliente */
     const porCliente = new Map();
@@ -233,7 +245,7 @@ function pintarTabla() {
     const clientesOrdenados = Array.from(porCliente.values())
         .sort((a, b) => a.codigo.localeCompare(b.codigo));
 
-    clientesOrdenados.forEach(grupoCliente => {
+    pagConfigred.recortar(clientesOrdenados).forEach(grupoCliente => {
         const divCliente = document.createElement('div');
         // ✅ CLIENTE: cerrado por defecto, pero respeta lo que el usuario abrió
         divCliente.className = gruposExpandidos.has(grupoCliente.codigo)
@@ -348,13 +360,22 @@ function pintarTabla() {
 /* =========================================================
    FILTROS
    ========================================================= */
-filtroCliente.addEventListener('change', cargarConfigs);
-filtroTipo.addEventListener('change', cargarConfigs);
+filtroCliente.addEventListener('change', () => {
+    pagConfigred.reiniciar();
+    cargarConfigs();
+});
+filtroTipo.addEventListener('change', () => {
+    pagConfigred.reiniciar();
+    cargarConfigs();
+});
 
 let debounceBusqueda = null;
 filtroBusqueda.addEventListener('input', () => {
     clearTimeout(debounceBusqueda);
-    debounceBusqueda = setTimeout(cargarConfigs, 250);
+    debounceBusqueda = setTimeout(() => {
+        pagConfigred.reiniciar();
+        cargarConfigs();
+    }, 250);
 });
 
 /* =========================================================

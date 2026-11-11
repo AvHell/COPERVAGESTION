@@ -13,7 +13,8 @@
     {
       label: 'Activo Fijo',
       modulos: [
-        { key: 'activofijo_catalogos', label: 'Catálogos de activo fijo', permiso: 'activofijo_catalogos', icon: '▤' },
+        /* Los catálogos ya no tienen entrada propia: viven como pestaña
+           dentro de activos.html (Inventario de activo fijo). */
         { key: 'activofijo_activos', label: 'Inventario de activo fijo', permiso: 'activofijo_activos', icon: '▣' },
         { key: 'activofijo_responsivas', label: 'Responsivas', permiso: 'activofijo_responsivas', icon: '▧' },
         { key: 'activofijo_reportes', label: 'Reportes', permiso: 'activofijo_reportes', icon: '▥' },
@@ -196,16 +197,18 @@
   };
 
   const REGLAS_ACTIVOFIJO = {
-    'catalogos.html': {
-      '#btn-nuevo': 'af-cat:crear',
-      '#btn-guardar': 'af-cat:crear|af-cat:editar',
-      '#card-tabla': 'af-cat:listado:ver'
-    },
+    /* activos.html contiene las DOS vistas: inventario y catálogos.
+       Por eso las reglas del inventario van sin prefijo y las de los
+       catálogos usan los ids reservados cat-*. */
     'activos.html': {
       '#btn-nuevo': 'af-act:crear',
       '#btn-guardar': 'af-act:crear|af-act:editar',
       '#btn-exportar': 'af-act:listado:ver',
-      '#card-tabla': 'af-act:listado:ver'
+      '#card-tabla': 'af-act:listado:ver',
+      '#cat-btn-nuevo': 'af-cat:crear',
+      '#cat-btn-guardar': 'af-cat:crear|af-cat:editar',
+      '#cat-card-tabla': 'af-cat:listado:ver',
+      '#cat-panel-ayuda': 'af-cat:listado:ver'
     },
     'responsivas.html': {
       '#btn-nuevo': 'af-resp:crear',
@@ -352,15 +355,8 @@
   };
 
   const CONTEXTOS_ACTIVOFIJO = {
-    'catalogos.html': {
-      ver: 'af-cat:listado:ver',
-      crear: 'af-cat:crear',
-      editar: 'af-cat:editar',
-      eliminar: 'af-cat:eliminar',
-      guardar: 'af-cat:crear|af-cat:editar',
-      exportar: 'af-cat:listado:ver',
-      gestionar: 'activofijo_catalogos'
-    },
+    /* Los catálogos ya no son una página aparte: viven dentro de
+       activos.html, donde sus botones declaran el permiso af-cat:*. */
     'activos.html': {
       ver: 'af-act:listado:ver',
       crear: 'af-act:crear',
@@ -409,8 +405,8 @@
 
   /* Acciones detectables por selector genérico (filas de tabla, etc.). */
   const SELECTORES_ACCION = {
-    editar: '.btn-accion.editar, button.editar, [data-accion="editar"], [data-editar], table button.secundario, .data-table button.secundario, .acciones-tabla button.secundario',
-    eliminar: '.btn-accion.eliminar, button.eliminar, button.peligro, button.danger, [data-accion="eliminar"], [data-eliminar], table button.peligro, .acciones-tabla button.peligro',
+    editar: '.btn-accion.editar, button.editar, [data-accion="editar"], [data-editar], .btn-accion.estado.activar, table button.secundario, .data-table button.secundario, .acciones-tabla button.secundario',
+    eliminar: '.btn-accion.eliminar, button.eliminar, button.peligro, button.danger, [data-accion="eliminar"], [data-eliminar], .btn-accion.estado.desactivar, table button.peligro, .acciones-tabla button.peligro',
     crear: '.btn-accion.crear, button.crear, [data-accion="crear"], [data-agregar]',
     guardar: '[data-accion="guardar"], [data-guardar]',
     exportar: '[data-accion="exportar"], [data-exportar]',

@@ -47,6 +47,25 @@ const filtroEstatus    = document.getElementById('filtro-estatus');
 const filtroCartera    = document.getElementById('filtro-cartera');
 
 /* =========================================================
+   PAGINACIÓN
+   ---------------------------------------------------------
+   Un reporte puede traer cientos de filas: se cortan en páginas
+   para no volcar todo al DOM. Si el módulo compartido no está
+   disponible, recortar() devuelve la lista completa y la página
+   funciona igual.
+   ========================================================= */
+const pagReportes = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-reportes'), {
+          alCambiar: () => renderBody(COLUMNAS[vistaActual] || [])
+      })
+    : {
+          recortar: (lista) => (Array.isArray(lista) ? lista : []),
+          reiniciar: () => {},
+          mostrar: () => {}
+      };
+
+
+/* =========================================================
    UTILIDADES
    ========================================================= */
 function escaparHTML(str) {
@@ -276,6 +295,7 @@ function setCargando(v) {
     if (v) {
         cardTabla.classList.add('oculto');
         sinResultados.classList.add('oculto');
+        pagReportes.mostrar(false);
     }
 }
 
@@ -318,7 +338,7 @@ async function cargarVista() {
 /* =========================================================
    FILTRADO COMBINADO
    ========================================================= */
-function aplicarFiltrosYRender() {
+function filtrarDatos() {
     const cols = COLUMNAS[vistaActual] || [];
 
     datosFiltrados = datosActuales.filter(r => {
@@ -333,8 +353,14 @@ function aplicarFiltrosYRender() {
         }
         return true;
     });
+}
 
-    renderTabla(cols);
+function aplicarFiltrosYRender() {
+    /* Cada vez que cambian los datos o los filtros el resultado es otro:
+       la página vigente ya no aplica. */
+    pagReportes.reiniciar();
+    filtrarDatos();
+    renderTabla(COLUMNAS[vistaActual] || []);
 }
 
 /* =========================================================
@@ -367,6 +393,10 @@ function renderTabla(cols) {
             }
             const hay = Object.values(filtrosColumna).some(v => v && String(v).trim() !== '');
             btnLimpiarFiltCol.classList.toggle('oculto', !hay);
+            /* Se refiltra y se repinta sólo el cuerpo para no perder el foco
+               del input mientras se escribe. */
+            pagReportes.reiniciar();
+            filtrarDatos();
             renderBody(cols);
         });
     });
@@ -392,6 +422,7 @@ function renderBody(cols) {
 function pintarBody(cols) {
     if (datosFiltrados.length === 0) {
         cardTabla.classList.add('oculto');
+        pagReportes.mostrar(false);
         sinResultados.classList.remove('oculto');
         sinResultadosTxt.textContent = datosActuales.length === 0
             ? 'No hay datos para mostrar en este reporte.'
@@ -402,9 +433,11 @@ function pintarBody(cols) {
 
     sinResultados.classList.add('oculto');
     cardTabla.classList.remove('oculto');
+    pagReportes.mostrar(true);
 
     tablaBody.innerHTML = '';
-    datosFiltrados.forEach(r => {
+    /* Sólo se dibujan las filas de la página vigente. */
+    pagReportes.recortar(datosFiltrados).forEach(r => {
         const tr = document.createElement('tr');
         tr.innerHTML = cols.map(c => {
             const clase = claseParaTipo(c.tipo);
@@ -413,6 +446,7 @@ function pintarBody(cols) {
         }).join('');
         tablaBody.appendChild(tr);
     });
+
 
     tablaCount.textContent = datosFiltrados.length === datosActuales.length
         ? `${datosActuales.length} registros`

@@ -54,6 +54,15 @@ const modalLugar       = document.getElementById('modal-lugar');
 const modalTitulo      = document.getElementById('modal-lugar-titulo');
 const listaClientesCheck = document.getElementById('lista-clientes-check');
 
+/* Paginación de la tabla de pisos: sólo se vuelcan al DOM las filas de la
+   página vigente. Si el módulo Paginador no se cargó, recortar() devuelve
+   la lista completa y la página sigue funcionando. */
+const pagLugares = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-lugares'), {
+        alCambiar: () => pintarTabla()
+    })
+    : { recortar: lista => lista, reiniciar() {}, mostrar() {} };
+
 function escaparHTML(str) {
     return String(str ?? '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -114,12 +123,14 @@ async function cargarPisos() {
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+    pagLugares.reiniciar();
     renderTabla();
 });
 btnLimpiarBusq.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagLugares.reiniciar();
     renderTabla();
     inputBusqueda.focus();
 });
@@ -127,6 +138,7 @@ btnLimpiarFiltro.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagLugares.reiniciar();
     renderTabla();
 });
 
@@ -156,9 +168,11 @@ function pintarTabla() {
 
     if (listaFiltrada.length === 0) {
         sinResultados.classList.remove('oculto');
+        pagLugares.mostrar(false);
         return;
     }
     sinResultados.classList.add('oculto');
+    pagLugares.mostrar(true);
 
     const tabla = document.createElement('table');
     tabla.className = 'tabla-lugares';
@@ -176,7 +190,7 @@ function pintarTabla() {
     `;
     const tbody = tabla.querySelector('tbody');
 
-    listaFiltrada.forEach(p => {
+    pagLugares.recortar(listaFiltrada).forEach(p => {
         const tr = document.createElement('tr');
 
         const chipsClientes = (p.clientes || []).map(c => {

@@ -58,6 +58,35 @@ const btnLimpiarVacio  = document.getElementById('btn-limpiar-busqueda-vacio');
 const modal            = document.getElementById('modal-activo');
 const modalTitulo      = document.getElementById('modal-titulo');
 
+/* Contenedores de las dos vistas que viven en esta misma página:
+   el inventario y los catálogos (ya no son módulos separados). */
+const seccionInventario  = document.getElementById('vista-inventario');
+const seccionCatalogos   = document.getElementById('vista-catalogos');
+const buscadorInventario = document.getElementById('buscador-inventario');
+const accionesInventario = document.getElementById('acciones-inventario');
+const tituloPagina       = document.getElementById('titulo-pagina');
+const subtituloPagina    = document.getElementById('subtitulo-pagina');
+
+/* Textos originales del hero: se restauran al volver al inventario. */
+const HERO_INVENTARIO = {
+    titulo: tituloPagina ? tituloPagina.textContent : '',
+    subtitulo: subtituloPagina ? subtituloPagina.textContent : ''
+};
+
+/* Paginación de la tabla: el inventario se dibuja por páginas para no
+   volcar cientos de filas al DOM. Si el módulo no se cargó, recortar()
+   devuelve la lista completa y la página sigue funcionando igual. */
+const pagInventario = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-inventario'), {
+        alCambiar: () => renderTabla()
+    })
+    : {
+        recortar: lista => lista,
+        reiniciar() {},
+        mostrar() {},
+        contenedor: null
+    };
+
 const selTipo          = document.getElementById('tipo');
 const selMarca         = document.getElementById('marca');
 const selEstado        = document.getElementById('estado');
@@ -96,6 +125,16 @@ function escaparHTML(str) {
 function puedeAcceder(clave) {
     if (esAdmin) return true;
     return !!permisosUsuario[clave];
+}
+
+/* ¿Puede ver el inventario? Quien sólo tiene permiso de catálogos abre
+   esta página directamente en la vista de Catálogos. */
+function permiteInventario() {
+    return puedeAcceder('af-act:listado:ver');
+}
+
+function permiteCatalogos() {
+    return puedeAcceder('activofijo_catalogos');
 }
 
 async function aplicarPermisos() {
@@ -304,6 +343,7 @@ function pintarTabla() {
     tablaBody.innerHTML = '';
 
     if (listaFiltrada.length === 0) {
+        pagInventario.mostrar(false);
         sinResultados.classList.remove('oculto');
         if (cardTabla) cardTabla.style.display = 'none';
         if (sinResultadosTit) sinResultadosTit.textContent = filtroBusqueda ? 'Sin coincidencias' : 'Sin registros';
@@ -324,7 +364,11 @@ function pintarTabla() {
 
     const esVistaEliminados = (vistaActual === 'eliminados');
 
-    listaFiltrada.forEach(a => {
+    /* Sólo se vuelcan las filas de la página vigente. */
+    const filasVisibles = pagInventario.recortar(listaFiltrada);
+    pagInventario.mostrar(true);
+
+    filasVisibles.forEach(a => {
         const tr = document.createElement('tr');
 
         const identificadores = [];
@@ -391,6 +435,25 @@ function pintarTabla() {
                 btnRestaurar.addEventListener('click', () => restaurarActivo(a.IdActivoFijoEQ, a.NoSerie));
                 celda.appendChild(btnRestaurar);
             }
+
+            /* Purga física: sólo tiene sentido aquí, en Eliminados. */
+            if (puedeAcceder('af-act:eliminar')) {
+                const btnDefinitivo = document.createElement('button');
+                btnDefinitivo.type = 'button';
+                btnDefinitivo.className = 'btn-accion definitivo';
+                btnDefinitivo.setAttribute('data-tooltip', 'Eliminar definitivamente');
+                btnDefinitivo.setAttribute('data-permiso', 'af-act:eliminar');
+                btnDefinitivo.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                        <path d="M14.5 9.5l-5 5M9.5 9.5l5 5"></path>
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                    </svg>`;
+                btnDefinitivo.addEventListener('click', () => eliminarDefinitivoActivo(a.IdActivoFijoEQ, a.NoSerie));
+                celda.appendChild(btnDefinitivo);
+            }
+
 
             tablaBody.appendChild(tr);
             return;
@@ -726,28 +789,81 @@ function verActivo(id) {
     });
 }
 
-tabsVista.addEventListener('click', (e) => {
-    const btn = e.target.closest('.tab-vista');
-    if (!btn || btn.classList.contains('activo')) return;
+/* =========================================================
+   CAMBIO DE VISTA · INVENTARIO ⇄ CATÁLOGOS
+   Las dos vistas conviven en esta página; aquí sólo se muestra
+   una y se refresca con datos frescos al entrar.
+   ========================================================= */
+function aplicarEstadoVista() {
+    const enCatalogos = (vistaActual === 'catalogos');
 
-    tabsVista.querySelectorAll('.tab-vista').forEach(t => t.classList.remove('activo'));
-    btn.classList.add('activo');
+    if (seccionInventario) seccionInventario.classList.toggle('oculto', enCatalogos);
+    if (seccionCatalogos)  seccionCatalogos.classList.toggle('oculto', !enCatalogos);
 
-    vistaActual = btn.dataset.vista;
+    /* Buscador y acciones del header son del inventario: en catálogos
+       se ocultan porque esa vista trae su propio buscador y su botón. */
+    if (buscadorInventario) buscadorInventario.classList.toggle('oculto', enCatalogos);
+    if (accionesInventario) accionesInventario.classList.toggle('oculto', enCatalogos);
 
-    btnNuevo.disabled = (vistaActual === 'eliminados');
-    btnNuevo.style.opacity = (vistaActual === 'eliminados') ? '0.5' : '';
+    if (btnNuevo) {
+        const bloqueado = (vistaActual === 'eliminados');
+        btnNuevo.disabled = bloqueado;
+        btnNuevo.style.opacity = bloqueado ? '0.5' : '';
+    }
+
+    tabsVista.querySelectorAll('.tab-vista').forEach(t => {
+        t.classList.toggle('activo', t.dataset.vista === vistaActual);
+    });
+}
+
+async function cambiarVista(vista, opciones = {}) {
+    const nueva = (vista === 'catalogos') ? 'catalogos'
+        : (vista === 'eliminados') ? 'eliminados'
+        : 'activos';
+
+    const saliendoDeCatalogos = (vistaActual === 'catalogos' && nueva !== 'catalogos');
+    vistaActual = nueva;
+    aplicarEstadoVista();
+
+    /* El hash permite abrir la página directamente en catálogos. */
+    try {
+        history.replaceState(null, '', nueva === 'catalogos' ? '#catalogos' : '#inventario');
+    } catch (_) { /* file:// sin historial disponible */ }
+
+    if (nueva === 'catalogos') {
+        CatalogosUI.mostrar();
+        return;
+    }
+
+    CatalogosUI.ocultar();
 
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagInventario.reiniciar();
 
-    cargarActivos();
+    /* Si se editó algún catálogo, los selects del formulario y los nombres
+       ya pintados en la tabla quedan viejos: se refresca todo al volver. */
+    if (saliendoDeCatalogos && CatalogosUI.huboCambios()) {
+        CatalogosUI.limpiarCambios();
+        if (opciones.permiteInventario) await cargarCatalogos();
+    }
+
+    if (opciones.permiteInventario) await cargarActivos();
+    else renderTabla();
+}
+
+tabsVista.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-vista');
+    if (!btn || btn.classList.contains('activo')) return;
+
+    cambiarVista(btn.dataset.vista, { permiteInventario: permiteInventario() });
 });
 
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+    pagInventario.reiniciar();
     renderTabla();
 });
 
@@ -755,6 +871,7 @@ function limpiarBusqueda() {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagInventario.reiniciar();
     renderTabla();
     inputBusqueda.focus();
 }
@@ -1212,6 +1329,48 @@ async function restaurarActivo(id, noSerie) {
     }
 }
 
+/* Purga física del activo. Sólo aparece en la pestaña Eliminados y el
+   backend la vuelve a validar (estatus BAJA + sin responsivas). */
+async function eliminarDefinitivoActivo(id, noSerie) {
+    const nombre = noSerie || ('#' + id);
+
+    const resultado = await Swal.fire({
+        icon: 'error',
+        title: '¿Eliminar definitivamente?',
+        html: `
+            <div>Se borrará del sistema <strong>${escaparHTML(nombre)}</strong>
+            junto con su histórico, sus accesorios y sus asignaciones.</div>
+            <div style="margin-top:.65rem;"><strong>Esta acción no se puede deshacer.</strong><br>
+            Si sólo querías ocultarlo, cancela y usa <em>Restaurar</em>.</div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar definitivamente',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        focusCancel: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    });
+
+    if (!resultado.isConfirmed) return;
+
+    try {
+        const res = await window.api.activoFijo.activos.eliminarDefinitivo(id);
+        if (res && res.ok) {
+            await cargarActivos();
+            toastExito(res.mensaje || 'Activo eliminado definitivamente');
+        } else {
+            toastError('No se pudo eliminar', res?.mensaje || 'Error desconocido');
+        }
+    } catch (err) {
+        toastError('Error al eliminar', err.message);
+    }
+}
+
 async function verHistorico(id, noSerie) {
     try {
         const movs = await window.api.activoFijo.activos.historico(id);
@@ -1293,8 +1452,1266 @@ document.getElementById('btn-volver').addEventListener('click', () => {
     window.api.volverMenu();
 });
 
+/* =========================================================
+   MÓDULO DE CATÁLOGOS (misma página, sin módulos aparte)
+   ---------------------------------------------------------
+   Todo vive dentro de esta IIFE con estado y nombres propios,
+   así no choca con el inventario (tablaBody, formulario, modal,
+   vistaActual, abrirEdicion...). Sólo expone tres métodos:
+   inicializar(), mostrar() y ocultar().
+   ========================================================= */
+const CatalogosUI = (() => {
+    'use strict';
+
+    const $ = (id) => document.getElementById(id);
+
+    /* =========================================================
+       GRUPOS DE SUBTIPO
+       ========================================================= */
+    const GRUPOS_SUBTIPO = [
+        { valor: 'DIADEMA',         etiqueta: 'Diadema' },
+        { valor: 'MOUSE',           etiqueta: 'Mouse' },
+        { valor: 'TECLADO',         etiqueta: 'Teclado' },
+        { valor: 'CARGADOR',        etiqueta: 'Cargador' },
+        { valor: 'ADAPTADOR_VIDEO', etiqueta: 'Adaptador de Video' },
+        { valor: 'ALMACENAMIENTO',  etiqueta: 'Almacenamiento' }
+    ];
+
+    /* Requisitos mostrados como chips en la tabla de tipos */
+    const REQUISITOS_TIPO = [
+        { key: 'RequiereResponsiva',        label: 'Responsiva' },
+        { key: 'RequiereIMEI',              label: 'IMEI' },
+        { key: 'RequiereTelefono',          label: 'Teléfono' },
+        { key: 'RequiereSitio',             label: 'Sitio' },
+        { key: 'RequiereSubtipo',           label: 'Subtipo' },
+        { key: 'RequiereClasificacion',     label: 'Clasificación' },
+        { key: 'RequiereTamanio',           label: 'Tamaño' },
+        { key: 'RequiereCapacidad',         label: 'Capacidad' },
+        { key: 'RequiereVoltaje',           label: 'Voltaje' },
+        { key: 'RequiereUsuarioAsignado',   label: 'Usuario' },
+        { key: 'RequierePrecio',            label: 'Precio' },
+        { key: 'RequiereEspecificaciones',  label: 'Specs' },
+        { key: 'RequiereAccesorios',        label: 'Accesorios' }
+    ];
+
+    /* =========================================================
+       CONFIGURACIÓN FRONTEND DE LOS CATÁLOGOS
+       ========================================================= */
+    const CATALOGOS_FRONT = {
+        marcas: {
+            titulo: 'Marcas',
+            tituloSingular: 'marca',
+            pk: 'IdMarca',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+                  hint: 'Fabricante del equipo. Ej. HP, Dell, Lenovo, Apple.' }
+            ]
+        },
+        tipos: {
+            titulo: 'Tipos de Equipo',
+            tituloSingular: 'tipo',
+            pk: 'IdTipo',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+                  hint: 'Nombre del tipo de activo. Ej. LAPTOP, MOUSE, SSD NVME.' },
+                { nombre: 'GrupoSubtipo', etiqueta: 'Grupo de subtipo', tipo: 'select',
+                  opciones: [{ valor: '', etiqueta: '— Sin grupo —' }, ...GRUPOS_SUBTIPO],
+                  hint: 'Los subtipos que se ofrecerán al capturar un activo de este tipo.' },
+                { nombre: 'RequiereResponsiva',      etiqueta: 'Requiere responsiva',       tipo: 'bool' },
+                { nombre: 'RequiereIMEI',            etiqueta: 'Requiere IMEI',             tipo: 'bool' },
+                { nombre: 'RequiereTelefono',        etiqueta: 'Requiere teléfono',         tipo: 'bool' },
+                { nombre: 'RequiereSitio',           etiqueta: 'Requiere sitio',            tipo: 'bool' },
+                { nombre: 'RequiereSubtipo',         etiqueta: 'Requiere subtipo',          tipo: 'bool' },
+                { nombre: 'RequiereClasificacion',   etiqueta: 'Requiere clasificación',    tipo: 'bool' },
+                { nombre: 'RequiereTamanio',         etiqueta: 'Requiere tamaño',           tipo: 'bool' },
+                { nombre: 'RequiereCapacidad',       etiqueta: 'Requiere capacidad',        tipo: 'bool' },
+                { nombre: 'RequiereVoltaje',         etiqueta: 'Requiere voltaje',          tipo: 'bool' },
+                { nombre: 'RequiereUsuarioAsignado', etiqueta: 'Requiere usuario asignado', tipo: 'bool' },
+                { nombre: 'RequierePrecio',          etiqueta: 'Requiere precio',           tipo: 'bool' },
+                { nombre: 'RequiereEspecificaciones',etiqueta: 'Requiere especificaciones', tipo: 'bool' },
+                { nombre: 'RequiereAccesorios',      etiqueta: 'Requiere accesorios',       tipo: 'bool' }
+            ]
+        },
+        estados: {
+            titulo: 'Estados',
+            tituloSingular: 'estado',
+            pk: 'IdEstado',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+                  hint: 'Condición física del activo. Ej. USO, NUEVO, VALIDAR, DAÑADO.' }
+            ]
+        },
+        estatus: {
+            titulo: 'Estatus',
+            tituloSingular: 'estatus',
+            pk: 'IdEstatus',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+                  hint: 'Situación operativa. Los activos nuevos inician como DISPONIBLE y ASIGNADO se controla con responsivas.' }
+            ]
+        },
+        carteras: {
+            titulo: 'Carteras',
+            tituloSingular: 'cartera',
+            pk: 'IdCartera',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+                  hint: 'Área o responsable del activo. Ej. SOPORTE TI, RECURSOS HUMANOS.' }
+            ]
+        },
+        puestos: {
+            titulo: 'Puestos',
+            tituloSingular: 'puesto',
+            pk: 'IdPuesto',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+                  hint: 'Puesto del usuario asignado. Ej. GERENTE, ANALISTA.' }
+            ]
+        },
+        sitios: {
+            titulo: 'Sitios',
+            tituloSingular: 'sitio',
+            pk: 'IdSitio',
+            campos: [
+                { nombre: 'Nombre',      etiqueta: 'Nombre',      tipo: 'text', requerido: true, max: 100,
+                  hint: 'Ubicación física. Ej. CORPORATIVO, SUCURSAL NORTE.' },
+                { nombre: 'Descripcion', etiqueta: 'Descripción', tipo: 'text', max: 200,
+                  hint: 'Detalle opcional (dirección, piso, referencia).' }
+            ]
+        },
+        subtipos: {
+            titulo: 'Subtipos',
+            tituloSingular: 'subtipo',
+            pk: 'IdSubtipo',
+            campos: [
+                { nombre: 'Grupo',       etiqueta: 'Grupo',       tipo: 'select', requerido: true,
+                  opciones: [{ valor: '', etiqueta: '— Seleccionar —' }, ...GRUPOS_SUBTIPO],
+                  hint: 'Grupo al que pertenece. No se puede cambiar una vez creado.',
+                  esGrupoInmutable: true },
+                { nombre: 'Nombre',      etiqueta: 'Nombre',      tipo: 'text',   requerido: true, max: 100,
+                  hint: 'Nombre del subtipo. Ej. INALÁMBRICO, 8GB DDR4, 240W.' },
+                { nombre: 'Descripcion', etiqueta: 'Descripción', tipo: 'text',   max: 200,
+                  hint: 'Detalle opcional.' }
+            ]
+        },
+        voltajes: {
+            titulo: 'Voltajes',
+            tituloSingular: 'voltaje',
+            pk: 'IdVoltaje',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+                  hint: 'Ej. 110V, 220V, 5V.' }
+            ]
+        },
+        clasificaciones: {
+            titulo: 'Clasificaciones',
+            tituloSingular: 'clasificación',
+            pk: 'IdClasificacion',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+                  hint: 'Ej. INTERNO, EXTERNO. La regla de "Usuario asignado" depende de EXTERNO.' }
+            ]
+        },
+        tamanios: {
+            titulo: 'Tamaños',
+            tituloSingular: 'tamaño',
+            pk: 'IdTamanio',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+                  hint: 'Ej. CHICO, MEDIANO, 15", 24".' }
+            ]
+        },
+        capacidades: {
+            titulo: 'Capacidades',
+            tituloSingular: 'capacidad',
+            pk: 'IdCapacidad',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+                  hint: 'Ej. 240 GB, 480 GB, 8 GB, 16 GB.' }
+            ]
+        },
+        modelos: {
+            titulo: 'Modelos',
+            tituloSingular: 'modelo',
+            pk: 'IdModelo',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 150,
+                  hint: 'Modelo comercial del equipo. Ej. ThinkPad T14, ProDesk 400 G4.' }
+            ]
+        },
+        procesadores: {
+            titulo: 'Procesadores',
+            tituloSingular: 'procesador',
+            pk: 'IdProcesador',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 150,
+                  hint: 'Procesadores disponibles para los equipos.' }
+            ]
+        },
+        memoriasRam: {
+            titulo: 'Memorias RAM',
+            tituloSingular: 'memoria RAM',
+            pk: 'IdMemoriaRAM',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+                  hint: 'Capacidades y tipo de memoria. Ej. 8 GB DDR4.' }
+            ]
+        },
+        almacenamientos: {
+            titulo: 'Almacenamientos',
+            tituloSingular: 'almacenamiento',
+            pk: 'IdAlmacenamiento',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 50,
+                  hint: 'Capacidad y tipo. Ej. 512 GB SSD.' }
+            ]
+        },
+        sistemasOperativos: {
+            titulo: 'Sistemas operativos',
+            tituloSingular: 'sistema operativo',
+            pk: 'IdSistemaOperativo',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
+                  hint: 'Ej. Windows 11 Pro.' }
+            ]
+        },
+        accesorios: {
+            titulo: 'Accesorios',
+            tituloSingular: 'accesorio',
+            pk: 'IdAccesorio',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 300,
+                  hint: 'Conjunto o accesorio frecuente. Ej. Cargador, mouse y teclado.' }
+            ]
+        },
+        usuariosAsignados: {
+            titulo: 'Usuarios asignados',
+            tituloSingular: 'usuario asignado',
+            pk: 'IdUsuarioAsignado',
+            campos: [
+                { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 200,
+                  hint: 'Usuarios externos o responsables reutilizados en la captura.' }
+            ]
+        }
+    };
+
+    /* =========================================================
+       AYUDA CONTEXTUAL
+       ========================================================= */
+    const AYUDA_CATALOGO = {
+        marcas: {
+            resumen: 'Catálogo simple de fabricantes. Cada activo puede tener una marca (opcional).',
+            tips: [
+                'No se puede repetir el mismo nombre entre marcas activas.',
+                'Dar de baja una marca NO afecta a los activos que ya la usan.'
+            ]
+        },
+        tipos: {
+            resumen: 'Define la "plantilla" de cada tipo de activo. Los switches controlan qué campos aparecerán al capturar un activo de ese tipo.',
+            tips: [
+                '<b>Grupo de subtipo:</b> si lo defines, al capturar un activo se ofrecerán los Subtipos que pertenezcan a ese grupo.',
+                '<b>Precio / Especificaciones / Accesorios:</b> apagarlos no borra los datos ya guardados en activos existentes.',
+                '<b>Usuario Asignado:</b> en tipos SSD/DISCO solo se pide si la clasificación es EXTERNO.',
+                'Dar de baja un Tipo NO afecta a los activos existentes, pero impide crear nuevos con ese tipo.'
+            ]
+        },
+        estados: {
+            resumen: 'Condición física del activo (USO, NUEVO, VALIDAR, DAÑADO).',
+            tips: ['Se usa como filtro en el inventario.', 'No confundir con Estatus (situación operativa).']
+        },
+        estatus: {
+            resumen: 'Situación operativa del activo (DISPONIBLE, ASIGNADO, BAJA, etc.).',
+            tips: [
+                'El estatus <b>BAJA</b> dispara el soft delete y mueve el activo a Eliminados.',
+                'Los activos creados o importados inician como DISPONIBLE.',
+                'ASIGNADO se establece al crear una responsiva y se libera al devolverla o cancelarla.'
+            ]
+        },
+        carteras: {
+            resumen: 'Área o responsable del activo. Ej. SOPORTE TI, RECURSOS HUMANOS.',
+            tips: ['Es un filtro transversal del inventario.', 'Un activo puede no tener cartera.']
+        },
+        puestos: {
+            resumen: 'Puesto del usuario al que se asigna un activo.',
+            tips: ['Informativo. No bloquea nada del inventario.']
+        },
+        sitios: {
+            resumen: 'Ubicaciones físicas donde puede estar un activo.',
+            tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Sitio" activo.']
+        },
+        subtipos: {
+            resumen: 'Sub-clasificación dentro de un grupo (MOUSE, TECLADO, ALMACENAMIENTO, etc.).',
+            tips: [
+                '<b>El campo Grupo NO se puede cambiar una vez creado</b> (los activos lo referencian).',
+                'Para que un subtipo aparezca, el Tipo del activo debe tener el mismo "Grupo de subtipo" que el subtipo.'
+            ]
+        },
+        voltajes: {
+            resumen: 'Voltajes eléctricos posibles. Ej. 110V, 220V, 5V.',
+            tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Voltaje" activo.']
+        },
+        clasificaciones: {
+            resumen: 'Clasificación del activo. Ej. INTERNO, EXTERNO.',
+            tips: [
+                'La clasificación <b>EXTERNO</b> activa la petición de "Usuario asignado" en tipos de almacenamiento.',
+                'Si renombras "EXTERNO" a otra cosa, esa regla dejará de aplicar.'
+            ]
+        },
+        tamanios: {
+            resumen: 'Tamaños posibles. Ej. CHICO, MEDIANO, 15", 24".',
+            tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Tamaño" activo.']
+        },
+        capacidades: {
+            resumen: 'Capacidades posibles. Ej. 240 GB, 480 GB, 8 GB, 16 GB.',
+            tips: ['El campo solo aparece al capturar activos cuyo Tipo tenga "Requiere Capacidad" activo.']
+        },
+        modelos: { resumen: 'Modelos disponibles para asociar a los activos.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+        procesadores: { resumen: 'Procesadores disponibles para completar las especificaciones.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+        memoriasRam: { resumen: 'Opciones de memoria RAM utilizadas en los activos.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+        almacenamientos: { resumen: 'Opciones de almacenamiento disponibles.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+        sistemasOperativos: { resumen: 'Sistemas operativos disponibles para los equipos.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+        accesorios: { resumen: 'Conjuntos de accesorios reutilizables.', tips: ['Los valores históricos fueron precargados automáticamente.'] },
+        usuariosAsignados: { resumen: 'Usuarios reutilizables para activos que no se asignan mediante responsiva.', tips: ['Los valores históricos fueron precargados automáticamente.'] }
+    };
+
+    /* =========================================================
+       ESTADO PROPIO (prefijado para no chocar con el inventario)
+       ========================================================= */
+    let catalogoActual = 'marcas';
+    let vistaCatalogo  = 'activos';   // 'activos' | 'eliminados'
+    let registros      = [];
+    let editando       = false;
+    let idEditando     = null;
+    let guardando      = false;
+    let busqueda       = '';
+    let ayudaAbierta   = true;
+    /* ¿Se creó/editó/activó algún registro? Sirve para refrescar los
+       selects del inventario al volver a esa vista. */
+    let huboCambios    = false;
+    let cargado        = false;
+
+    /* =========================================================
+       REFERENCIAS DOM (todas con prefijo cat-)
+       ========================================================= */
+    const elTabs             = $('cat-tabs');
+    const elMenuToggle       = $('cat-menu-toggle');
+    const elMenuDropdown     = $('cat-menu-dropdown');
+    const elMenuIcono        = $('cat-menu-icon');
+    const elMenuTitulo       = $('cat-menu-titulo');
+    const elTabsVista        = $('cat-tabs-vista');
+    const elTablaHead        = $('cat-tabla-head');
+    const elTablaBody        = $('cat-tabla-body');
+    const elCardTabla        = $('cat-card-tabla');
+    const elPaginacionCat    = $('paginacion-catalogos');
+    const elFormulario       = $('cat-formulario');
+    const elCamposForm       = $('cat-campos-form');
+    const elMensaje          = $('cat-mensaje');
+    const elBtnGuardar       = $('cat-btn-guardar');
+    const elBtnNuevo         = $('cat-btn-nuevo');
+    const elBtnNuevoTexto    = $('cat-btn-nuevo-texto');
+    const elPanelTitulo      = $('cat-panel-titulo');
+    const elPanelDescripcion = $('cat-panel-descripcion');
+    const elSinResultados    = $('cat-sin-resultados');
+    const elSinResultadosTit = $('cat-sin-resultados-titulo');
+    const elSinResultadosTxt = $('cat-sin-resultados-texto');
+    const elInputBusqueda    = $('cat-input-busqueda');
+    const elBtnLimpiarBusq   = $('cat-btn-limpiar-busqueda');
+    const elBtnLimpiarFiltro = $('cat-btn-limpiar-filtro');
+    const elModal            = $('cat-modal');
+    const elModalTitulo      = $('cat-modal-titulo');
+    const elAvisoModal       = $('cat-aviso-modal');
+    const elBtnModalCerrar   = $('cat-modal-cerrar');
+    const elPanelAyuda       = $('cat-panel-ayuda');
+    const elPanelAyudaTitulo = $('cat-panel-ayuda-titulo');
+    const elPanelAyudaBody   = $('cat-panel-ayuda-body');
+    const elBtnToggleAyuda   = $('cat-btn-toggle-ayuda');
+
+    /* Cada catálogo puede traer cientos de filas: la tabla se dibuja por
+       páginas. Si el módulo Paginador no está cargado, recortar() devuelve
+       la lista completa y todo sigue funcionando como antes. */
+    const pagCatalogo = window.Paginador
+        ? window.Paginador.crear(elPaginacionCat, { alCambiar: () => renderTabla() })
+        : {
+            recortar: lista => lista,
+            reiniciar() {},
+            mostrar() {},
+            contenedor: null
+        };
+
+    /* =========================================================
+       UTILIDADES
+       ========================================================= */
+    /* escaparHTML() se reutiliza del módulo de inventario (misma página). */
+
+    function mensajeCat(texto, tipo) {
+        if (!elMensaje) return;
+        elMensaje.textContent = texto;
+        elMensaje.className = 'alert ' + tipo;
+        elMensaje.classList.remove('oculto');
+    }
+
+    function ocultarMensajeCat() {
+        if (!elMensaje) return;
+        elMensaje.className = 'alert oculto';
+        elMensaje.textContent = '';
+    }
+
+    function mostrarAvisoModal(html) {
+        if (!elAvisoModal) return;
+        if (!html) {
+            elAvisoModal.classList.add('oculto');
+            elAvisoModal.innerHTML = '';
+            return;
+        }
+        elAvisoModal.innerHTML = `<div class="aviso-texto">${html}</div>`;
+        elAvisoModal.classList.remove('oculto');
+    }
+
+    function setGuardandoCat(v) {
+        guardando = v;
+        if (!elBtnGuardar) return;
+        elBtnGuardar.disabled = v;
+        const txt = elBtnGuardar.querySelector('.btn-text');
+        const spin = elBtnGuardar.querySelector('.btn-spinner');
+        if (txt) txt.textContent = v ? 'Guardando...' : 'Guardar';
+        if (spin) spin.classList.toggle('oculto', !v);
+    }
+
+    function etiquetaSelect(campo, valor) {
+        if (!campo || !campo.opciones) return valor ?? '';
+        const op = campo.opciones.find(o => o.valor === valor);
+        return op ? op.etiqueta : (valor ?? '');
+    }
+
+    /* =========================================================
+       ALERTAS MODALES
+       ========================================================= */
+    function alertaExito(titulo, texto = '') {
+        return Swal.fire({
+            icon: 'success',
+            title: titulo,
+            html: texto ? `<p style="margin:0;">${texto}</p>` : undefined,
+            timer: 2100,
+            timerProgressBar: true,
+            showConfirmButton: false,
+            showCloseButton: true,
+            customClass: { popup: 'cl-alert' }
+        });
+    }
+
+    function alertaError(titulo, texto = '') {
+        return Swal.fire({
+            icon: 'error',
+            title: titulo,
+            html: texto ? `<p style="margin:0;">${texto}</p>` : undefined,
+            confirmButtonText: 'Entendido',
+            showCloseButton: true,
+            buttonsStyling: false,
+            customClass: {
+                popup: 'cl-alert',
+                confirmButton: 'swal2-confirm swal2-styled'
+            }
+        });
+    }
+
+    /* =========================================================
+       PANEL DE AYUDA
+       ========================================================= */
+    function renderAyuda() {
+        const ayuda = AYUDA_CATALOGO[catalogoActual];
+        const cfg   = CATALOGOS_FRONT[catalogoActual];
+        if (!ayuda || !elPanelAyudaBody || !elPanelAyudaTitulo || !cfg) return;
+
+        elPanelAyudaTitulo.textContent = `Cómo funciona "${cfg.titulo}"`;
+
+        const tips = (ayuda.tips || []).map(t => `<li>${t}</li>`).join('');
+        elPanelAyudaBody.innerHTML = `
+            <p class="ayuda-resumen">${ayuda.resumen}</p>
+            ${tips ? `<ul class="ayuda-tips">${tips}</ul>` : ''}
+        `;
+
+        if (elPanelAyuda) elPanelAyuda.classList.remove('oculto');
+    }
+
+    function aplicarEstadoAyuda() {
+        if (!elPanelAyudaBody || !elPanelAyuda) return;
+        elPanelAyudaBody.style.display = ayudaAbierta ? '' : 'none';
+        elPanelAyuda.classList.toggle('colapsado', !ayudaAbierta);
+    }
+
+    /* =========================================================
+       ACTUALIZAR UI DEL CATÁLOGO ACTIVO
+       ========================================================= */
+    function actualizarUIDeCatalogo() {
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        if (!cfg) return;
+
+        const enEliminados = (vistaCatalogo === 'eliminados');
+
+        if (elPanelTitulo) elPanelTitulo.textContent = cfg.titulo;
+        if (elPanelDescripcion) {
+            elPanelDescripcion.textContent = enEliminados
+                ? 'Registros dados de baja · Puedes restaurarlos individualmente'
+                : 'Gestiona los registros activos del catálogo';
+        }
+
+        if (elBtnNuevoTexto) elBtnNuevoTexto.textContent = `Nuevo ${cfg.tituloSingular}`;
+        if (elBtnNuevo) {
+            elBtnNuevo.disabled = enEliminados;
+            elBtnNuevo.title = enEliminados ? 'No disponible en la vista de Eliminados' : '';
+        }
+
+        /* Hero compartido con el inventario: refleja el catálogo abierto. */
+        if (tituloPagina) tituloPagina.textContent = `Catálogos · ${cfg.titulo}`;
+        if (subtituloPagina) subtituloPagina.textContent = 'Configuración maestra del inventario';
+
+        actualizarMenuCatalogo();
+        renderAyuda();
+        aplicarEstadoAyuda();
+    }
+
+    /* =========================================================
+       MENÚ DESPLEGABLE DE CATÁLOGOS
+       ========================================================= */
+    function abrirMenuCatalogo(abrir) {
+        if (!elMenuToggle || !elMenuDropdown) return;
+        const visible = typeof abrir === 'boolean' ? abrir : elMenuDropdown.hidden;
+        elMenuDropdown.hidden = !visible;
+        elMenuToggle.setAttribute('aria-expanded', String(visible));
+    }
+
+    function actualizarMenuCatalogo() {
+        if (!elMenuDropdown) return;
+        const btn = elMenuDropdown.querySelector(`.tab-btn[data-catalogo="${catalogoActual}"]`);
+        if (!btn) return;
+
+        const iconoOrigen = btn.querySelector('.tab-icon');
+        if (elMenuIcono && iconoOrigen) elMenuIcono.innerHTML = iconoOrigen.innerHTML;
+        if (elMenuTitulo) elMenuTitulo.textContent = btn.querySelector('.tab-title')?.textContent || '';
+    }
+
+    /* =========================================================
+       CARGA DE DATOS
+       ========================================================= */
+    async function cargarCatalogo() {
+        try {
+            /* La vista normal trae activos e inactivos juntos: así el botón
+               Activar/Desactivar de cada fila funciona con un solo clic.
+               La pestaña "Eliminados" sigue mostrando sólo los inactivos. */
+            const filtros = vistaCatalogo === 'eliminados'
+                ? { soloEliminados: true }
+                : { incluirInactivos: true };
+            registros = await window.api.activoFijo.catalogos.listar(catalogoActual, filtros);
+            cargado = true;
+            renderTabla();
+        } catch (err) {
+            alertaError('No se pudieron cargar los datos', err.message);
+        }
+    }
+
+    /* Un registro está activo salvo que la columna Activo venga en 0/false. */
+    function estaActivo(registro) {
+        return registro.Activo !== 0 && registro.Activo !== false;
+    }
+
+    /* =========================================================
+       RENDER DE LA TABLA (en vivo con Vivo.js)
+       ========================================================= */
+    function renderTabla() {
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        if (!cfg || !elTablaHead || !elTablaBody) return;
+
+        if (window.Vivo) {
+            window.Vivo.enVivo(elTablaBody, () => pintarTabla(cfg));
+            return;
+        }
+        pintarTabla(cfg);
+    }
+
+    /* ---------- Acciones de fila ---------- */
+    const ICONO_EDITAR = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>`;
+
+    const ICONO_RESTAURAR = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+        </svg>`;
+
+    const ICONO_ESTADO = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+            <line x1="12" y1="2" x2="12" y2="12"></line>
+        </svg>`;
+
+    /* Purga física: mismo icono que en el inventario, para que las dos
+       pestañas "Eliminados" se lean igual. */
+    const ICONO_PAPELERA = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+            <path d="M14.5 9.5l-5 5M9.5 9.5l5 5"></path>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+        </svg>`;
+
+    /* El permiso se declara en el propio botón: PermisosUI lo respeta y no
+       lo deduce como si fuera una acción del inventario (af-act:*). */
+    function crearBotonAccion(clase, tooltip, svg, alHacerClic, permiso) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `btn-accion ${clase}`;
+        btn.setAttribute('data-tooltip', tooltip);
+        if (permiso) btn.setAttribute('data-permiso', permiso);
+        btn.innerHTML = svg;
+        btn.addEventListener('click', alHacerClic);
+        return btn;
+    }
+
+    /* Un solo lugar para las acciones: en "Eliminados" se restaura y en
+       la vista normal se edita o se activa/desactiva sin cambiar de
+       pestaña (la fila queda atenuada y marcada como Inactivo). */
+    function crearAccionesFila(celda, cfg, registro) {
+        if (!celda) return;
+        const id = registro[cfg.pk];
+
+        if (vistaCatalogo === 'eliminados') {
+            celda.appendChild(crearBotonAccion('restaurar', 'Restaurar', ICONO_RESTAURAR,
+                () => cambiarEstadoRegistro(id, true), 'af-cat:editar'));
+
+            /* Purga física: sólo tiene sentido aquí, en Eliminados. */
+            const nombre = registro.Nombre || `#${id}`;
+            celda.appendChild(crearBotonAccion('definitivo', 'Eliminar definitivamente', ICONO_PAPELERA,
+                () => eliminarDefinitivoRegistro(id, nombre), 'af-cat:eliminar'));
+            return;
+        }
+
+        celda.appendChild(crearBotonAccion('editar', 'Editar', ICONO_EDITAR,
+            () => abrirEdicionCat(id), 'af-cat:editar'));
+
+        const activo = estaActivo(registro);
+        celda.appendChild(crearBotonAccion(
+            `estado ${activo ? 'desactivar' : 'activar'}`,
+            activo ? 'Desactivar' : 'Activar',
+            ICONO_ESTADO,
+            () => cambiarEstadoRegistro(id, !activo),
+            activo ? 'af-cat:eliminar' : 'af-cat:editar'
+        ));
+    }
+
+    /* Atenúa la fila inactiva y le pone su distintivo.
+       En la pestaña "Eliminados" no hace falta: todas las filas lo son. */
+    function marcarFilaInactiva(tr, registro) {
+        if (vistaCatalogo === 'eliminados') return;
+        if (estaActivo(registro)) return;
+        tr.classList.add('fila-inactiva');
+        const primeraCelda = tr.querySelector('td');
+        if (!primeraCelda) return;
+        const badge = document.createElement('span');
+        badge.className = 'badge-estado inactivo';
+        badge.textContent = 'Inactivo';
+        primeraCelda.appendChild(badge);
+    }
+
+    function pintarTabla(cfg) {
+        const listaFiltrada = registros.filter(r => {
+            if (!busqueda) return true;
+            const texto = cfg.campos
+                .map(c => {
+                    if (c.tipo === 'select') return etiquetaSelect(c, r[c.nombre]);
+                    if (c.tipo === 'bool') return r[c.nombre] ? 'si yes' : 'no';
+                    return String(r[c.nombre] ?? '');
+                })
+                .join(' ').toLowerCase();
+            return texto.includes(busqueda);
+        });
+
+        elTablaBody.innerHTML = '';
+
+        /* ---------- ESTADO VACÍO ---------- */
+        if (listaFiltrada.length === 0) {
+            const hayBusqueda = !!busqueda;
+            pagCatalogo.mostrar(false);
+            if (elSinResultados) elSinResultados.classList.remove('oculto');
+            if (elCardTabla) elCardTabla.style.display = 'none';
+
+            if (elSinResultadosTit) {
+                elSinResultadosTit.textContent = hayBusqueda ? 'Sin coincidencias' : 'Sin registros';
+            }
+            if (elSinResultadosTxt) {
+                if (hayBusqueda) {
+                    elSinResultadosTxt.textContent = `Ningún registro coincide con "${elInputBusqueda?.value || ''}".`;
+                } else if (vistaCatalogo === 'eliminados') {
+                    elSinResultadosTxt.textContent = `Aún no hay ${cfg.titulo.toLowerCase()} dados de baja.`;
+                } else {
+                    elSinResultadosTxt.textContent = `Aún no hay ${cfg.titulo.toLowerCase()} registrados. Crea el primero con el botón de arriba.`;
+                }
+            }
+            if (elBtnLimpiarFiltro) {
+                elBtnLimpiarFiltro.style.display = hayBusqueda ? '' : 'none';
+            }
+            return;
+        }
+
+        if (elSinResultados) elSinResultados.classList.add('oculto');
+        if (elCardTabla) elCardTabla.style.display = '';
+
+        /* Sólo se vuelcan las filas de la página vigente del catálogo. */
+        const filasVisibles = pagCatalogo.recortar(listaFiltrada);
+        pagCatalogo.mostrar(true);
+
+        /* ---------- RENDER ESPECIAL: TIPOS ---------- */
+        if (catalogoActual === 'tipos') {
+            elTablaHead.innerHTML = `
+                <tr>
+                    <th style="width:22%;">Nombre</th>
+                    <th style="width:15%;">Grupo</th>
+                    <th>Requisitos</th>
+                    <th style="width:100px; text-align:right;">Acciones</th>
+                </tr>
+            `;
+
+            const campoTipoGrupo = cfg.campos.find(c => c.nombre === 'GrupoSubtipo');
+
+            filasVisibles.forEach(r => {
+                const tr = document.createElement('tr');
+
+                const grupoLabel = r.GrupoSubtipo
+                    ? etiquetaSelect(campoTipoGrupo, r.GrupoSubtipo)
+                    : null;
+                const grupoHTML = grupoLabel
+                    ? `<span class="badge-grupo">${escaparHTML(grupoLabel)}</span>`
+                    : `<span class="badge-grupo vacio">Sin grupo</span>`;
+
+                const reqsActivos = REQUISITOS_TIPO.filter(req => r[req.key]);
+                const reqsHTML = reqsActivos.length
+                    ? reqsActivos.map(req => `<span class="chip-requisito">${escaparHTML(req.label)}</span>`).join('')
+                    : `<span class="chip-requisito vacio">Sin requisitos</span>`;
+
+                tr.innerHTML = `
+                    <td data-label="Nombre"><span class="badge-nombre">${escaparHTML(r.Nombre ?? '')}</span></td>
+                    <td data-label="Grupo">${grupoHTML}</td>
+                    <td data-label="Requisitos" class="celda-requisitos">
+                        <div class="chips-wrap">${reqsHTML}</div>
+                    </td>
+                    <td data-label="Acciones" class="acciones-tabla"></td>
+                `;
+
+                crearAccionesFila(tr.querySelector('.acciones-tabla'), cfg, r);
+                marcarFilaInactiva(tr, r);
+
+                elTablaBody.appendChild(tr);
+            });
+            return;
+        }
+
+        /* ---------- RENDER NORMAL ---------- */
+        const headers = cfg.campos.map(c => `<th>${escaparHTML(c.etiqueta)}</th>`);
+        headers.push('<th style="width:100px; text-align:right;">Acciones</th>');
+        elTablaHead.innerHTML = `<tr>${headers.join('')}</tr>`;
+
+        filasVisibles.forEach(r => {
+            const tr = document.createElement('tr');
+            const celdas = cfg.campos.map(c => {
+                const val = r[c.nombre];
+                const labelAttr = `data-label="${escaparHTML(c.etiqueta)}"`;
+                if (c.tipo === 'bool') {
+                    return `<td ${labelAttr}><span class="badge-boolean ${val ? 'si' : 'no'}">${val ? 'Sí' : 'No'}</span></td>`;
+                }
+                if (c.tipo === 'select') {
+                    return `<td ${labelAttr}><span class="badge-nombre">${escaparHTML(etiquetaSelect(c, val))}</span></td>`;
+                }
+                return `<td ${labelAttr}><span class="badge-nombre">${escaparHTML(val ?? '')}</span></td>`;
+            });
+            tr.innerHTML = celdas.join('') + `<td data-label="Acciones" class="acciones-tabla"></td>`;
+
+            crearAccionesFila(tr.querySelector('.acciones-tabla'), cfg, r);
+            marcarFilaInactiva(tr, r);
+
+            elTablaBody.appendChild(tr);
+        });
+    }
+
+    /* =========================================================
+       MODAL
+       ========================================================= */
+    function abrirModalCat() {
+        if (!elModal) return;
+        elModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function cerrarModalCat() {
+        if (!elModal) return;
+        elModal.style.display = 'none';
+        document.body.style.overflow = '';
+        ocultarMensajeCat();
+        mostrarAvisoModal(null);
+        editando = false;
+        idEditando = null;
+    }
+
+    /* =========================================================
+       CONSTRUIR FORMULARIO DEL CATÁLOGO
+       ========================================================= */
+    function construirFormulario(datos = {}) {
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        if (!cfg || !elCamposForm) return;
+
+        elCamposForm.innerHTML = '';
+
+        const camposNormales = [];
+        const camposBool     = [];
+
+        cfg.campos.forEach(c => {
+            if (c.tipo === 'bool') camposBool.push(c);
+            else camposNormales.push(c);
+        });
+
+        camposNormales.forEach(c => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'campo-item';
+            const esFull = (c.tipo === 'select' || c.nombre === 'Descripcion');
+            if (esFull) wrapper.classList.add('campo-full');
+
+            const reqMark = c.requerido ? '<span class="req">*</span>' : '';
+            const hintHTML = c.hint ? `<small class="field-hint">${escaparHTML(c.hint)}</small>` : '';
+
+            if (c.tipo === 'select') {
+                const bloqueado = (editando && c.esGrupoInmutable);
+                const opcionesHtml = (c.opciones || []).map(op => {
+                    const sel = String(datos[c.nombre] ?? '') === String(op.valor) ? 'selected' : '';
+                    return `<option value="${escaparHTML(op.valor)}" ${sel}>${escaparHTML(op.etiqueta)}</option>`;
+                }).join('');
+
+                wrapper.innerHTML = `
+                    <label for="cat-campo-${c.nombre}">${escaparHTML(c.etiqueta)}${reqMark}</label>
+                    <select id="cat-campo-${c.nombre}" ${c.requerido ? 'required' : ''} ${bloqueado ? 'disabled' : ''}>
+                        ${opcionesHtml}
+                    </select>
+                    ${bloqueado ? `<small class="campo-nota">El grupo no se puede cambiar una vez creado.</small>` : hintHTML}
+                `;
+            } else {
+                wrapper.innerHTML = `
+                    <label for="cat-campo-${c.nombre}">${escaparHTML(c.etiqueta)}${reqMark}</label>
+                    <input type="text" id="cat-campo-${c.nombre}" maxlength="${c.max || ''}"
+                           value="${escaparHTML(datos[c.nombre] ?? '')}"
+                           ${c.requerido ? 'required' : ''}>
+                    ${hintHTML}
+                `;
+            }
+            elCamposForm.appendChild(wrapper);
+        });
+
+        if (camposBool.length > 0) {
+            const grupo = document.createElement('div');
+            grupo.className = 'grupo-switches campo-full';
+
+            const titulo = document.createElement('div');
+            titulo.className = 'grupo-titulo';
+            titulo.textContent = '¿Qué campos pedirá este tipo al capturar un activo?';
+            grupo.appendChild(titulo);
+
+            const subtitulo = document.createElement('div');
+            subtitulo.className = 'grupo-subtitulo';
+            subtitulo.textContent = 'Cada switch activa un campo del formulario. Apagarlo no borra datos ya capturados en activos existentes.';
+            grupo.appendChild(subtitulo);
+
+            const fila = document.createElement('div');
+            fila.className = 'fila-switches';
+
+            camposBool.forEach(c => {
+                const item = document.createElement('label');
+                item.className = 'switch';
+                item.innerHTML = `
+                    <input type="checkbox" id="cat-campo-${c.nombre}" ${datos[c.nombre] ? 'checked' : ''}>
+                    <span class="slider"></span>
+                    <span class="label-txt">${escaparHTML(c.etiqueta)}</span>`;
+                fila.appendChild(item);
+            });
+
+            grupo.appendChild(fila);
+            elCamposForm.appendChild(grupo);
+        }
+    }
+
+    /* =========================================================
+       NUEVO / EDITAR
+       ========================================================= */
+    /* El botón Guardar sirve para crear y para editar: se declara el
+       permiso que corresponde a cada modo y PermisosUI lo re-evalúa. */
+    function aplicarPermisoGuardar(clave) {
+        if (!elBtnGuardar) return;
+        elBtnGuardar.setAttribute('data-permiso', clave);
+        window.PermisosUI?.aplicar();
+    }
+
+    function abrirNuevoRegistro() {
+        if (vistaCatalogo === 'eliminados') return;
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        if (!cfg) return;
+
+        editando = false;
+        idEditando = null;
+        aplicarPermisoGuardar('af-cat:crear');
+        if (elModalTitulo) elModalTitulo.textContent = `Nuevo ${cfg.tituloSingular}`;
+        construirFormulario();
+        ocultarMensajeCat();
+        mostrarAvisoModal(null);
+        abrirModalCat();
+
+        const primerInput = elCamposForm ? elCamposForm.querySelector('input[type="text"], select') : null;
+        if (primerInput) primerInput.focus();
+    }
+
+    function abrirEdicionCat(id) {
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        if (!cfg) return;
+        const r = registros.find(x => x[cfg.pk] === id);
+        if (!r) { alertaError('Registro no encontrado'); return; }
+
+        editando = true;
+        idEditando = id;
+        aplicarPermisoGuardar('af-cat:editar');
+        if (elModalTitulo) elModalTitulo.textContent = `Editar ${cfg.tituloSingular}`;
+        construirFormulario(r);
+        ocultarMensajeCat();
+        mostrarAvisoModal(null);
+
+        if (catalogoActual === 'tipos') {
+            mostrarAvisoModal(`
+                Si cambias el <b>Grupo de subtipo</b>, los activos actuales seguirán apuntando a sus subtipos,
+                pero al crear/editar activos de este tipo ya no aparecerán esos subtipos si no coinciden con el nuevo grupo.
+            `);
+        } else if (catalogoActual === 'subtipos') {
+            mostrarAvisoModal(`
+                El campo <b>Grupo</b> no se puede cambiar una vez creado (los activos lo referencian).
+                Si necesitas moverlo, crea un subtipo nuevo y da de baja el anterior.
+            `);
+        }
+
+        abrirModalCat();
+        const primerInput = elCamposForm ? elCamposForm.querySelector('input[type="text"], select:not([disabled])') : null;
+        if (primerInput) { primerInput.focus(); primerInput.select?.(); }
+    }
+
+    /* =========================================================
+       GUARDAR
+       ========================================================= */
+    async function guardarRegistro(e) {
+        e.preventDefault();
+        if (guardando) return;
+
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        if (!cfg) return;
+
+        const datos = {};
+
+        for (const c of cfg.campos) {
+            const el = $(`cat-campo-${c.nombre}`);
+            if (!el) continue;
+
+            if (c.tipo === 'bool') {
+                datos[c.nombre] = el.checked;
+            } else {
+                if (editando && c.esGrupoInmutable) continue;
+
+                const val = el.value.trim();
+                if (c.requerido && !val) {
+                    mensajeCat(`${c.etiqueta} es obligatorio.`, 'error');
+                    el.focus();
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                }
+                datos[c.nombre] = val || null;
+            }
+        }
+
+        if (catalogoActual === 'tipos') {
+            const elReqSubtipo = $('cat-campo-RequiereSubtipo');
+            const elGrupo      = $('cat-campo-GrupoSubtipo');
+            const reqSubtipo   = elReqSubtipo ? elReqSubtipo.checked : false;
+            const grupo        = elGrupo ? elGrupo.value : '';
+            if (reqSubtipo && !grupo) {
+                mensajeCat('Si el tipo requiere subtipo, debes indicar un Grupo de subtipo.', 'error');
+                if (elGrupo) {
+                    elGrupo.focus();
+                    elGrupo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return;
+            }
+        }
+
+        setGuardandoCat(true);
+        try {
+            let res;
+            if (editando && idEditando !== null) {
+                res = await window.api.activoFijo.catalogos.actualizar(catalogoActual, idEditando, datos);
+            } else {
+                res = await window.api.activoFijo.catalogos.crear(catalogoActual, datos);
+            }
+
+            if (res && res.ok) {
+                const mensajeRes = res.mensaje || (editando ? 'Registro actualizado.' : 'Registro creado.');
+                cerrarModalCat();
+                huboCambios = true;
+                await cargarCatalogo();
+                await alertaExito('Guardado correctamente', mensajeRes);
+            } else {
+                mensajeCat(res?.mensaje || 'No se pudo guardar.', 'error');
+            }
+        } catch (err) {
+            mensajeCat('Error: ' + err.message, 'error');
+        } finally {
+            setGuardandoCat(false);
+        }
+    }
+
+    /* =========================================================
+       ACTIVAR / DESACTIVAR
+       Una sola acción para los dos sentidos: deja de existir el
+       rodeo "dar de baja → pestaña Eliminados → restaurar".
+       Es reversible y de un solo clic, así que no pide confirmación:
+       el aviso posterior informa qué se hizo.
+       ========================================================= */
+    async function cambiarEstadoRegistro(id, activar) {
+        const cfg = CATALOGOS_FRONT[catalogoActual];
+        if (!cfg) return;
+        const r = registros.find(x => x[cfg.pk] === id);
+        const nombre = r ? (r.Nombre || `#${id}`) : `#${id}`;
+
+        try {
+            const res = activar
+                ? await window.api.activoFijo.catalogos.restaurar(catalogoActual, id)
+                : await window.api.activoFijo.catalogos.eliminar(catalogoActual, id);
+
+            if (res && res.ok) {
+                huboCambios = true;
+                await cargarCatalogo();
+                await alertaExito(
+                    activar ? 'Registro activado' : 'Registro desactivado',
+                    `<strong>${escaparHTML(nombre)}</strong> ${activar
+                        ? 'vuelve a estar disponible en los formularios.'
+                        : 'ya no aparecerá en los formularios de activos.'}`
+                );
+            } else {
+                await alertaError(
+                    activar ? 'No se pudo activar' : 'No se pudo desactivar',
+                    escaparHTML(res?.mensaje || 'Ocurrió un error inesperado.')
+                );
+            }
+        } catch (err) {
+            await alertaError('Error al cambiar el estado', escaparHTML(err.message));
+        }
+    }
+
+    /* =========================================================
+       PURGA FÍSICA DE UN REGISTRO DE CATÁLOGO
+       El backend vuelve a validar (Activo = 0 + sin referencias) y
+       devuelve el motivo exacto si algo lo está usando.
+       ========================================================= */
+    async function eliminarDefinitivoRegistro(id, nombre) {
+        if (!CATALOGOS_FRONT[catalogoActual]) return;
+
+        const resultado = await Swal.fire({
+            icon: 'error',
+            title: '¿Eliminar definitivamente?',
+            html: `
+                <div>Se borrará de la base de datos <strong>${escaparHTML(nombre)}</strong>.</div>
+                <div style="margin-top:.65rem;"><strong>Esta acción no se puede deshacer.</strong><br>
+                Si sólo querías ocultarlo de los formularios, cancela y usa <em>Restaurar</em>.</div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, eliminar definitivamente',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            focusCancel: true,
+            buttonsStyling: false,
+            customClass: {
+                popup: 'cl-confirm',
+                confirmButton: 'swal2-confirm swal2-styled cl-peligro',
+                cancelButton: 'swal2-cancel swal2-styled'
+            }
+        });
+
+        if (!resultado.isConfirmed) return;
+
+        try {
+            const res = await window.api.activoFijo.catalogos.eliminarDefinitivo(catalogoActual, id);
+
+            if (res && res.ok) {
+                huboCambios = true;
+                await cargarCatalogo();
+                await alertaExito('Registro eliminado', `<strong>${escaparHTML(nombre)}</strong> ya no existe en la base de datos.`);
+            } else {
+                await alertaError('No se pudo eliminar', escaparHTML(res?.mensaje || 'Ocurrió un error inesperado.'));
+            }
+        } catch (err) {
+            await alertaError('Error al eliminar', escaparHTML(err.message));
+        }
+    }
+
+    /* =========================================================
+       BUSCADOR DEL CATÁLOGO
+       ========================================================= */
+    function limpiarBusquedaCat() {
+        if (elInputBusqueda) elInputBusqueda.value = '';
+        busqueda = '';
+        if (elBtnLimpiarBusq) elBtnLimpiarBusq.classList.add('oculto');
+        pagCatalogo.reiniciar();
+        renderTabla();
+    }
+
+    /* =========================================================
+       LISTENERS
+       ========================================================= */
+    function conectarEventos() {
+        if (elMenuToggle) {
+            elMenuToggle.addEventListener('click', () => abrirMenuCatalogo());
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.menu-seccion')) abrirMenuCatalogo(false);
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            abrirMenuCatalogo(false);
+            if (elModal && elModal.style.display === 'flex') cerrarModalCat();
+        });
+
+        if (elTabs) {
+            elTabs.addEventListener('click', (e) => {
+                const btn = e.target.closest('.tab-btn');
+                if (!btn) return;
+
+                abrirMenuCatalogo(false);
+                if (btn.classList.contains('activo')) return;
+
+                elTabs.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('activo'));
+                btn.classList.add('activo');
+
+                catalogoActual = btn.dataset.catalogo;
+                if (elInputBusqueda) elInputBusqueda.value = '';
+                busqueda = '';
+                if (elBtnLimpiarBusq) elBtnLimpiarBusq.classList.add('oculto');
+                /* Otro catálogo, otro listado: se vuelve a la página 1. */
+                pagCatalogo.reiniciar();
+
+                actualizarUIDeCatalogo();
+                cargarCatalogo();
+            });
+        }
+
+        if (elTabsVista) {
+            elTabsVista.addEventListener('click', (e) => {
+                const btn = e.target.closest('.tab-vista');
+                if (!btn || btn.classList.contains('activo')) return;
+
+                elTabsVista.querySelectorAll('.tab-vista').forEach(t => t.classList.remove('activo'));
+                btn.classList.add('activo');
+
+                vistaCatalogo = btn.dataset.vista;
+                pagCatalogo.reiniciar();
+
+                if (elInputBusqueda) elInputBusqueda.value = '';
+                busqueda = '';
+                if (elBtnLimpiarBusq) elBtnLimpiarBusq.classList.add('oculto');
+
+                actualizarUIDeCatalogo();
+                cargarCatalogo();
+            });
+        }
+
+        if (elInputBusqueda) {
+            elInputBusqueda.addEventListener('input', () => {
+                busqueda = elInputBusqueda.value.trim().toLowerCase();
+                if (elBtnLimpiarBusq) elBtnLimpiarBusq.classList.toggle('oculto', !busqueda);
+                /* Nuevo filtro: la página vigente ya no aplica. */
+                pagCatalogo.reiniciar();
+                renderTabla();
+            });
+        }
+
+        if (elBtnLimpiarBusq) {
+            elBtnLimpiarBusq.addEventListener('click', () => {
+                limpiarBusquedaCat();
+                if (elInputBusqueda) elInputBusqueda.focus();
+            });
+        }
+
+        if (elBtnLimpiarFiltro) {
+            elBtnLimpiarFiltro.addEventListener('click', limpiarBusquedaCat);
+        }
+
+        if (elBtnToggleAyuda) {
+            elBtnToggleAyuda.addEventListener('click', () => {
+                ayudaAbierta = !ayudaAbierta;
+                aplicarEstadoAyuda();
+            });
+        }
+
+        if (elBtnNuevo) elBtnNuevo.addEventListener('click', abrirNuevoRegistro);
+
+        if (elBtnModalCerrar) elBtnModalCerrar.addEventListener('click', cerrarModalCat);
+        if (elModal) {
+            elModal.addEventListener('click', (e) => { if (e.target === elModal) cerrarModalCat(); });
+        }
+
+        if (elFormulario) elFormulario.addEventListener('submit', guardarRegistro);
+    }
+
+    /* =========================================================
+       API PÚBLICA
+       ========================================================= */
+    function inicializar() {
+        if (!CATALOGOS_FRONT[catalogoActual]) return;
+        conectarEventos();
+        actualizarUIDeCatalogo();
+    }
+
+    /* Al entrar a la vista: se refresca el catálogo abierto. */
+    function mostrar() {
+        actualizarUIDeCatalogo();
+        return cargarCatalogo();
+    }
+
+    function ocultar() {
+        if (tituloPagina) tituloPagina.textContent = HERO_INVENTARIO.titulo;
+        if (subtituloPagina) subtituloPagina.textContent = HERO_INVENTARIO.subtitulo;
+    }
+
+    return {
+        inicializar,
+        mostrar,
+        ocultar,
+        huboCambios: () => huboCambios,
+        limpiarCambios: () => { huboCambios = false; },
+        estaCargado: () => cargado
+    };
+})();
+
+/* =========================================================
+   ARRANQUE
+   ========================================================= */
 (async () => {
     await aplicarPermisos();
-    await cargarCatalogos();
-    await cargarActivos();
+
+    CatalogosUI.inicializar();
+
+    const puedeVerInventario = permiteInventario();
+    const puedeVerCatalogos  = permiteCatalogos();
+
+    /* El hash permite abrir la página directamente en Catálogos
+       (es lo que hace el menú lateral con el módulo de catálogos). */
+    const hashPideCatalogos = (location.hash.replace('#', '').toLowerCase() === 'catalogos');
+    const vistaInicial = (hashPideCatalogos && puedeVerCatalogos) || !puedeVerInventario
+        ? 'catalogos'
+        : 'activos';
+
+    if (puedeVerInventario) await cargarCatalogos();
+
+    await cambiarVista(vistaInicial, { permiteInventario: puedeVerInventario });
 })();

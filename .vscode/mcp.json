@@ -1,0 +1,20 @@
+{
+  "servers": {
+    "mssql-bsite": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@qodalis/mcp-sqlserver"
+      ],
+      "env": {
+        "SQLSERVER_HOST": "sql.bsite.net",
+        "SQLSERVER_PORT": "49758",
+        "SQLSERVER_DATABASE": "copervaservicios_",
+        "SQLSERVER_USER": "copervaservicios_",
+        "SQLSERVER_PASSWORD": "Yn@zaqXSW#28",
+        "SQLSERVER_ENCRYPT": "true",
+        "SQLSERVER_TRUST_CERT": "true"
+      }
+    }
+  }
+}

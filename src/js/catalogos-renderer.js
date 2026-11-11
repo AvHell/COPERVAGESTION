@@ -183,6 +183,13 @@ const TabClientes = (() => {
     const mensaje = $('cli-mensaje');
     const btnGuardar = $('cli-guardar');
 
+    /* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+       Paginador no se cargó, recortar() devuelve la lista completa. */
+    const pagCli = window.Paginador
+        ? window.Paginador.crear($('paginacion-cli'), { alCambiar: () => pintar() })
+        : { recortar: lista => lista, reiniciar() {}, mostrar() {}, contenedor: null };
+
+
     function mostrarMensaje(texto, tipo) {
         mensaje.textContent = texto;
         mensaje.className = 'alert ' + tipo;
@@ -227,11 +234,13 @@ const TabClientes = (() => {
 
         if (lista.length === 0) {
             sinResultados.classList.remove('oculto');
+            pagCli.mostrar(false);
             return;
         }
         sinResultados.classList.add('oculto');
+        pagCli.mostrar(true);
 
-        lista.forEach(c => {
+        pagCli.recortar(lista).forEach(c => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td data-label="Código">${renderBadgeCliente(c.Codigo)}</td>
@@ -339,6 +348,7 @@ const TabClientes = (() => {
         inputBusqueda.addEventListener('input', () => {
             filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
             btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+            pagCli.reiniciar();
             render();
         });
 
@@ -346,6 +356,7 @@ const TabClientes = (() => {
             inputBusqueda.value = '';
             filtroBusqueda = '';
             btnLimpiarBusq.classList.add('oculto');
+            pagCli.reiniciar();
             render();
             inputBusqueda.focus();
         });
@@ -413,6 +424,13 @@ const TabPisos = (() => {
     const mensaje = $('pis-mensaje');
     const btnGuardar = $('pis-guardar');
 
+    /* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+       Paginador no se cargó, recortar() devuelve la lista completa. */
+    const pagPis = window.Paginador
+        ? window.Paginador.crear($('paginacion-pis'), { alCambiar: () => pintar() })
+        : { recortar: lista => lista, reiniciar() {}, mostrar() {}, contenedor: null };
+
+
     function mostrarMensaje(texto, tipo) {
         mensaje.textContent = texto;
         mensaje.className = 'alert ' + tipo;
@@ -477,9 +495,11 @@ const TabPisos = (() => {
 
         if (lista.length === 0) {
             sinResultados.classList.remove('oculto');
+            pagPis.mostrar(false);
             return;
         }
         sinResultados.classList.add('oculto');
+        pagPis.mostrar(true);
 
         const tabla = document.createElement('table');
         tabla.className = 'data-table';
@@ -496,7 +516,7 @@ const TabPisos = (() => {
         `;
         const tbody = tabla.querySelector('tbody');
 
-        lista.forEach(p => {
+        pagPis.recortar(lista).forEach(p => {
             const tr = document.createElement('tr');
 
             const chips = (p.clientes || []).map(c =>
@@ -609,6 +629,7 @@ const TabPisos = (() => {
         inputBusqueda.addEventListener('input', () => {
             filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
             btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+            pagPis.reiniciar();
             render();
         });
 
@@ -616,6 +637,7 @@ const TabPisos = (() => {
             inputBusqueda.value = '';
             filtroBusqueda = '';
             btnLimpiarBusq.classList.add('oculto');
+            pagPis.reiniciar();
             render();
             inputBusqueda.focus();
         });
@@ -689,6 +711,13 @@ const TabRoles = (() => {
     const mensaje = $('rol-mensaje');
     const btnGuardar = $('rol-guardar');
 
+    /* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+       Paginador no se cargó, recortar() devuelve la lista completa. */
+    const pagRol = window.Paginador
+        ? window.Paginador.crear($('paginacion-rol'), { alCambiar: () => pintar() })
+        : { recortar: lista => lista, reiniciar() {}, mostrar() {}, contenedor: null };
+
+
     function mostrarMensaje(texto, tipo) {
         mensaje.textContent = texto;
         mensaje.className = 'alert ' + tipo;
@@ -733,11 +762,13 @@ const TabRoles = (() => {
 
         if (lista.length === 0) {
             sinResultados.classList.remove('oculto');
+            pagRol.mostrar(false);
             return;
         }
         sinResultados.classList.add('oculto');
+        pagRol.mostrar(true);
 
-        lista.forEach(r => {
+        pagRol.recortar(lista).forEach(r => {
             const tr = document.createElement('tr');
             const descHTML = (r.Descripcion && r.Descripcion.trim())
                 ? `<span class="badge-desc">${escaparHTML(r.Descripcion)}</span>`
@@ -846,6 +877,7 @@ const TabRoles = (() => {
         inputBusqueda.addEventListener('input', () => {
             filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
             btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+            pagRol.reiniciar();
             render();
         });
 
@@ -853,6 +885,7 @@ const TabRoles = (() => {
             inputBusqueda.value = '';
             filtroBusqueda = '';
             btnLimpiarBusq.classList.add('oculto');
+            pagRol.reiniciar();
             render();
             inputBusqueda.focus();
         });
@@ -907,6 +940,12 @@ const TabDominios = (() => {
     const filtroCliente = $('dom-filtro-cliente');
     const filtroBusqueda = $('dom-filtro-busqueda');
 
+    /* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+       Paginador no se cargó, recortar() devuelve la lista completa. */
+    const pagDom = window.Paginador
+        ? window.Paginador.crear($('paginacion-dom'), { alCambiar: () => pintar() })
+        : { recortar: lista => lista, reiniciar() {}, mostrar() {}, contenedor: null };
+
     async function cargar() {
         try {
             const filtros = {
@@ -914,6 +953,7 @@ const TabDominios = (() => {
                 busqueda: filtroBusqueda.value.trim() || null
             };
             dominios = await window.api.dominios.listarTodas(filtros);
+            pagDom.reiniciar();
             render();
         } catch (err) {
             alertaError('No se pudieron cargar los dominios', err.message);
@@ -935,10 +975,12 @@ const TabDominios = (() => {
             const tr = document.createElement('tr');
             tr.innerHTML = `<td colspan="5" class="empty-td" style="text-align:center;color:#a8a08a;padding:40px;font-style:italic;font-size:0.88rem;">Sin dominios registrados</td>`;
             tbody.appendChild(tr);
+            pagDom.mostrar(false);
             return;
         }
+        pagDom.mostrar(true);
 
-        dominios.forEach(d => {
+        pagDom.recortar(dominios).forEach(d => {
             const tr = document.createElement('tr');
             const tienePass = d.Password && d.Password.length > 0;
             const passHTML = tienePass

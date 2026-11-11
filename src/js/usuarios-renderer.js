@@ -109,6 +109,19 @@ const ayudaPassword   = document.getElementById('ayuda-password');
 const modalUsuario    = document.getElementById('modal-usuario');
 const modalTitulo     = document.getElementById('modal-usuario-titulo');
 
+/* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+   Paginador no se cargó, recortar() devuelve la lista completa. */
+const pagUsuarios = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-usuarios'), {
+        alCambiar: () => pintarTabla()
+    })
+    : {
+        recortar: lista => lista,
+        reiniciar() {},
+        mostrar() {},
+        contenedor: null
+    };
+
 const modalPermisos   = document.getElementById('modal-permisos');
 const permisosTabs    = document.getElementById('permisos-tabs');
 const permisosTbody   = document.getElementById('permisos-tbody');
@@ -300,11 +313,13 @@ function pintarTabla() {
 
     if (!usuarios || usuarios.length === 0) {
         sinResultados.classList.remove('oculto');
+        pagUsuarios.mostrar(false);
         return;
     }
     sinResultados.classList.add('oculto');
+    pagUsuarios.mostrar(true);
 
-    usuarios.forEach(u => {
+    pagUsuarios.recortar(usuarios).forEach(u => {
         const tr = document.createElement('tr');
 
         const estadoHTML = u.Activo

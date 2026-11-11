@@ -431,49 +431,81 @@ async function importar(datos, idUsuario) {
                 }
             }
 
-            const result = await pool.request()
-                .input('IdCartera',        sql.Int,           IdCartera              || null)
-                .input('IdMarca',          sql.Int,           IdMarca                || null)
-                .input('Modelo',           sql.NVarChar(150), modelo                 || null)
-                .input('IdTipo',           sql.Int,           IdTipo)
-                .input('NoSerie',          sql.NVarChar(150), noSerie                || null)
-                .input('IMEI1',            sql.NVarChar(50),  imei1                  || null)
-                .input('IMEI2',            sql.NVarChar(50),  imei2                  || null)
-                .input('NoTelefono',       sql.NVarChar(50),  noTelefono             || null)
-                .input('IdEstado',         sql.Int,           IdEstadoDefault)
-                .input('IdEstatus',        sql.Int,           IdEstatusDefault)
-                .input('IdSitio',          sql.Int,           IdSitio                || null)
-                .input('IdSubtipo',        sql.Int,           IdSubtipo              || null)
-                .input('IdClasificacion',  sql.Int,           IdClasificacion        || null)
-                .input('IdTamanio',        sql.Int,           IdTamanio              || null)
-                .input('IdCapacidad',      sql.Int,           IdCapacidad            || null)
-                .input('IdVoltaje',        sql.Int,           IdVoltaje              || null)
-                .input('UsuarioAsignado',  sql.NVarChar(200), usuarioAsignado        || null)
-                .input('PrecioActivo',     sql.Decimal(18,2), precioNum)
-                .input('Procesador',       sql.NVarChar(150), procesador             || null)
-                .input('MemoriaRAM',       sql.NVarChar(50),  ram                    || null)
-                .input('Almacenamiento',   sql.NVarChar(50),  almacenamiento         || null)
-                .input('SistemaOperativo', sql.NVarChar(100), so                     || null)
-                .input('Accesorios',       sql.NVarChar(300), accesorios             || null)
-                .input('IdUsuario',        sql.Int,           idUsuario              || null)
-                .query(`
-                    INSERT INTO ActivoFijoEquipos (
-                        IdCartera, IdMarca, Modelo, IdTipo, NoSerie, IMEI1, IMEI2, NoTelefono,
-                        IdEstado, IdEstatus, IdSitio, IdSubtipo, IdClasificacion, IdTamanio,
-                        IdCapacidad, IdVoltaje, UsuarioAsignado, PrecioActivo, Procesador,
-                        MemoriaRAM, Almacenamiento, SistemaOperativo, Accesorios, IdUsuarioCreacion
-                    ) VALUES (
-                        @IdCartera, @IdMarca, @Modelo, @IdTipo, @NoSerie, @IMEI1, @IMEI2, @NoTelefono,
-                        @IdEstado, @IdEstatus, @IdSitio, @IdSubtipo, @IdClasificacion, @IdTamanio,
-                        @IdCapacidad, @IdVoltaje, @UsuarioAsignado, @PrecioActivo, @Procesador,
-                        @MemoriaRAM, @Almacenamiento, @SistemaOperativo, @Accesorios, @IdUsuario
-                    );
-                    SELECT SCOPE_IDENTITY() AS Id;
-                `);
+            /* El esquema puede estar ya en 3FN (sin las columnas de texto) o
+               todavía con ellas: cada columna se escribe sólo si existe y las
+               especificaciones van siempre por su FK del catálogo. */
+            const existentes = await catalogosDB.columnasExistentes('ActivoFijoEquipos', [
+                'IdCartera', 'IdMarca', 'IdModelo', 'Modelo', 'IdTipo', 'NoSerie',
+                'IMEI1', 'IMEI2', 'NoTelefono', 'IdEstado', 'IdEstatus', 'IdSitio',
+                'IdSubtipo', 'IdClasificacion', 'IdTamanio', 'IdCapacidad', 'IdVoltaje',
+                'IdUsuarioAsignado', 'UsuarioAsignado', 'PrecioActivo',
+                'IdProcesador', 'Procesador', 'IdMemoriaRAM', 'MemoriaRAM',
+                'IdAlmacenamiento', 'Almacenamiento', 'IdSistemaOperativo',
+                'SistemaOperativo', 'Accesorios', 'IdUsuarioCreacion'
+            ]);
+            const IdModelo          = await catalogosDB.resolverId('modelos',          modelo);
+            const IdProcesador      = await catalogosDB.resolverId('procesadores',      procesador);
+            const IdMemoriaRAM      = await catalogosDB.resolverId('memoriasRam',       ram);
+            const IdAlmacenamiento  = await catalogosDB.resolverId('almacenamientos',   almacenamiento);
+            const IdSistemaOperativo = await catalogosDB.resolverId('sistemasOperativos', so);
+            const IdUsuarioAsignado = await catalogosDB.resolverId('usuariosAsignados', usuarioAsignado);
+
+            const request  = pool.request();
+            const columnas = [];
+            const valores  = [];
+            const agregar = (columna, tipo, valor) => {
+                if (!existentes.has(columna)) return;
+                const param = `p${columnas.length}`;
+                request.input(param, tipo, valor);
+                columnas.push(columna);
+                valores.push('@' + param);
+            };
+
+            agregar('IdCartera',         sql.Int,           IdCartera              || null);
+            agregar('IdMarca',           sql.Int,           IdMarca                || null);
+            agregar('IdModelo',          sql.Int,           IdModelo               || null);
+            agregar('Modelo',            sql.NVarChar(150), modelo                 || null);
+            agregar('IdTipo',            sql.Int,           IdTipo);
+            agregar('NoSerie',           sql.NVarChar(150), noSerie                || null);
+            agregar('IMEI1',             sql.NVarChar(50),  imei1                  || null);
+            agregar('IMEI2',             sql.NVarChar(50),  imei2                  || null);
+            agregar('NoTelefono',        sql.NVarChar(50),  noTelefono             || null);
+            agregar('IdEstado',          sql.Int,           IdEstadoDefault);
+            agregar('IdEstatus',         sql.Int,           IdEstatusDefault);
+            agregar('IdSitio',           sql.Int,           IdSitio                || null);
+            agregar('IdSubtipo',         sql.Int,           IdSubtipo              || null);
+            agregar('IdClasificacion',   sql.Int,           IdClasificacion        || null);
+            agregar('IdTamanio',         sql.Int,           IdTamanio              || null);
+            agregar('IdCapacidad',       sql.Int,           IdCapacidad            || null);
+            agregar('IdVoltaje',         sql.Int,           IdVoltaje              || null);
+            agregar('IdUsuarioAsignado', sql.Int,           IdUsuarioAsignado      || null);
+            agregar('UsuarioAsignado',   sql.NVarChar(200), usuarioAsignado        || null);
+            agregar('PrecioActivo',      sql.Decimal(18,2), precioNum);
+            agregar('IdProcesador',      sql.Int,           IdProcesador           || null);
+            agregar('Procesador',        sql.NVarChar(150), procesador             || null);
+            agregar('IdMemoriaRAM',      sql.Int,           IdMemoriaRAM           || null);
+            agregar('MemoriaRAM',        sql.NVarChar(50),  ram                    || null);
+            agregar('IdAlmacenamiento',  sql.Int,           IdAlmacenamiento       || null);
+            agregar('Almacenamiento',    sql.NVarChar(50),  almacenamiento         || null);
+            agregar('IdSistemaOperativo', sql.Int,          IdSistemaOperativo     || null);
+            agregar('SistemaOperativo',  sql.NVarChar(100), so                     || null);
+            agregar('Accesorios',        sql.NVarChar(300), accesorios             || null);
+            agregar('IdUsuarioCreacion', sql.Int,           idUsuario              || null);
+
+            const result = await request.query(`
+                INSERT INTO ActivoFijoEquipos (${columnas.join(', ')})
+                VALUES (${valores.join(', ')});
+                SELECT SCOPE_IDENTITY() AS Id;
+            `);
+
+            const idInsertado = result.recordset[0].Id;
+
+            /* Accesorios en la tabla puente (N:M), igual que el alta manual. */
+            await catalogosDB.sincronizarAccesoriosEquipo(idInsertado, accesorios);
 
             insertados.push({
                 fila: numFila,
-                id: result.recordset[0].Id,
+                id: idInsertado,
                 noSerie,
                 marca: marcaNombre
             });

@@ -384,7 +384,8 @@ const RUTAS_MODULOS = {
     mantenimientos: { basePath: HTML, archivo: 'mantenimientos.html', permiso: 'mantenimientos', titulo: 'Mantenimientos' },
     usuarios: { basePath: HTML, archivo: 'usuarios.html', permiso: 'usuarios', titulo: 'Usuarios' },
     roles: { basePath: HTML, archivo: 'roles.html', permiso: 'catalogos', titulo: 'Roles' },
-    activofijo_catalogos: { basePath: HTML_AF, archivo: 'catalogos.html', permiso: 'activofijo_catalogos', titulo: 'Catálogos - Activo Fijo' },
+    /* Los catálogos no tienen módulo propio: son una pestaña de activos.html
+       (#catalogos) junto al inventario. */
     activofijo_activos: { basePath: HTML_AF, archivo: 'activos.html', permiso: 'activofijo_activos', titulo: 'Inventario - Activo Fijo' },
     activofijo_responsivas: { basePath: HTML_AF, archivo: 'responsivas.html', permiso: 'activofijo_responsivas', titulo: 'Responsivas - Activo Fijo' },
     activofijo_reportes: { basePath: HTML_AF, archivo: 'reportes.html', permiso: 'activofijo_reportes', titulo: 'Reportes - Activo Fijo' },
@@ -399,7 +400,12 @@ async function navegarModuloEnVentana(win, modulo) {
     if (!win || win.isDestroyed()) return { ok: false, mensaje: 'La ventana actual ya no está disponible.' };
 
     win.setTitle(ruta.titulo);
-    await win.loadFile(path.join(ruta.basePath, ruta.archivo));
+    /* El hash permite abrir una vista concreta de la misma página
+       (p. ej. activos.html#catalogos). */
+    await win.loadFile(
+        path.join(ruta.basePath, ruta.archivo),
+        ruta.hash ? { hash: ruta.hash } : undefined
+    );
     win.focus();
     return { ok: true };
 }
@@ -874,7 +880,7 @@ ipcMain.handle('ventana:cerrar-actual', (e) => {
 /* =========================================================
    IPC: ACTIVO FIJO — abrir ventanas
    ========================================================= */
-ipcMain.handle('abrir-activofijo-catalogos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_catalogos'));
+
 ipcMain.handle('abrir-activofijo-activos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_activos'));
 ipcMain.handle('abrir-activofijo-responsivas', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_responsivas'));
 ipcMain.handle('abrir-activofijo-reportes', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_reportes'));
@@ -888,6 +894,7 @@ ipcMain.handle('af-catalogos-crear',      async (_e, clave, datos)     => { cons
 ipcMain.handle('af-catalogos-actualizar', async (_e, clave, id, datos) => { const err = requerirSesion('af-cat:editar');      if (err) return err; return await activoFijoCatalogosDB.actualizar(clave, id, datos); });
 ipcMain.handle('af-catalogos-eliminar',   async (_e, clave, id)        => { const err = requerirSesion('af-cat:eliminar');    if (err) return err; return await activoFijoCatalogosDB.eliminar(clave, id); });
 ipcMain.handle('af-catalogos-restaurar',  async (_e, clave, id)        => { const err = requerirSesion('af-cat:restaurar');   if (err) return err; return await activoFijoCatalogosDB.restaurar(clave, id); });
+ipcMain.handle('af-catalogos-eliminar-definitivo', async (_e, clave, id) => { const err = requerirSesion('af-cat:eliminar');  if (err) return err; return await activoFijoCatalogosDB.eliminarDefinitivo(clave, id); });
 
 /* =========================================================
    IPC: ACTIVOS AF
@@ -898,6 +905,8 @@ ipcMain.handle('af-activos-crear',      async (_e, datos)     => { const err = r
 ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => { const err = requerirSesion('af-act:editar');      if (err) return err; return await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario); });
 ipcMain.handle('af-activos-eliminar',   async (_e, id, motivo)=> { const err = requerirSesion('af-act:eliminar');    if (err) return err; return await activoFijoActivosDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
 ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo)=> { const err = requerirSesion('af-act:restaurar');   if (err) return err; return await activoFijoActivosDB.restaurar(id, usuarioActual?.IdUsuario, motivo || null); });
+/* Purga física: sólo activos en BAJA y sin responsivas (lo valida el módulo). */
+ipcMain.handle('af-activos-eliminar-definitivo', async (_e, id) => { const err = requerirSesion('af-act:eliminar'); if (err) return err; return await activoFijoActivosDB.eliminarDefinitivo(id, usuarioActual?.IdUsuario); });
 ipcMain.handle('af-activos-historico',  async (_e, id)        => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.historico(id); });
 
 /* --- NUEVO: Exportar Excel Activos --- */
@@ -935,6 +944,7 @@ ipcMain.handle('af-resp-crear',               async (_e, datos)      => { const 
 ipcMain.handle('af-resp-actualizar',          async (_e, id, datos)  => { const err = requerirSesion('af-resp:editar');      if (err) return err; return await activoFijoResponsivasDB.actualizar(id, datos, usuarioActual?.IdUsuario); });
 ipcMain.handle('af-resp-devolver',            async (_e, id, f, obs) => { const err = requerirSesion('af-resp:devolver');    if (err) return err; return await activoFijoResponsivasDB.devolver(id, f, obs, usuarioActual?.IdUsuario); });
 ipcMain.handle('af-resp-eliminar',            async (_e, id, motivo) => { const err = requerirSesion('af-resp:eliminar');    if (err) return err; return await activoFijoResponsivasDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
+ipcMain.handle('af-resp-eliminar-definitivo', async (_e, id)         => { const err = requerirSesion('af-resp:eliminar');    if (err) return err; return await activoFijoResponsivasDB.eliminarDefinitivo(id, usuarioActual?.IdUsuario); });
 ipcMain.handle('af-resp-lista-carteras',      async ()               => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarCarteras(); });
 ipcMain.handle('af-resp-lista-puestos',       async ()               => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarPuestos(); });
 ipcMain.handle('af-resp-lista-catalogo',      async (_e, clave)      => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarCatalogoResponsiva(clave); });

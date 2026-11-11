@@ -10,15 +10,46 @@ const fs = require('fs');
 const { dialog } = require('electron');
 const catalogosDB = require('./catalogos');
 
+/* Campos que en la tabla eran texto y ahora son FK al catálogo:
+   [campo del formulario, clave de catálogo, columna FK, longitud del texto] */
 const CAMPOS_CATALOGO_ESPECIFICACIONES = [
-    ['Modelo', 'modelos'],
-    ['Procesador', 'procesadores'],
-    ['MemoriaRAM', 'memoriasRam'],
-    ['Almacenamiento', 'almacenamientos'],
-    ['SistemaOperativo', 'sistemasOperativos'],
-    ['Accesorios', 'accesorios'],
-    ['UsuarioAsignado', 'usuariosAsignados']
+    ['Modelo',           'modelos',           'IdModelo',           150],
+    ['Procesador',       'procesadores',      'IdProcesador',       150],
+    ['MemoriaRAM',       'memoriasRam',       'IdMemoriaRAM',       50],
+    ['Almacenamiento',   'almacenamientos',   'IdAlmacenamiento',   50],
+    ['SistemaOperativo', 'sistemasOperativos', 'IdSistemaOperativo', 100],
+    ['UsuarioAsignado',  'usuariosAsignados', 'IdUsuarioAsignado',  200]
 ];
+
+/* Accesorios es una relación N:M: un activo lleva varios conjuntos del
+   catálogo, así que vive en la tabla puente ActivoFijoEquiposAccesorios
+   (ver catalogos.js). La celda de texto anterior queda sólo como respaldo
+   de las filas viejas. */
+const CAMPO_ACCESORIOS = 'Accesorios';
+
+/* Columnas de texto que la fase 2 de scripts/activo-fijo-3fn.sql elimina
+   en cuanto su FK las respalda. Las escrituras las piden sólo si siguen
+   existiendo, así el alta y la edición funcionan antes y después de la
+   limpieza. */
+const TEXTOS_RESPALDO_EQUIPO = new Set([
+    ...CAMPOS_CATALOGO_ESPECIFICACIONES.map(c => c[0]),
+    CAMPO_ACCESORIOS
+]);
+
+async function columnasTextoEquipo() {
+    return catalogosDB.columnasExistentes('ActivoFijoEquipos', [...TEXTOS_RESPALDO_EQUIPO]);
+}
+
+/* JOINs y columnas para leer las especificaciones por catálogo (3FN). La
+   regla "nombre del catálogo, con el texto como respaldo mientras la columna
+   siga existiendo" vive en catalogos.js, que la comparte con responsivas. */
+async function prepararLecturaEspecificaciones() {
+    return catalogosDB.prepararNombresCatalogo(
+        'ActivoFijoEquipos',
+        'af',
+        catalogosDB.camposEspecificaciones3FN()
+    );
+}
 
 /* =========================================================
    HELPERS
@@ -31,15 +62,27 @@ async function getIdPorNombre(pool, tabla, pk, nombre) {
     return r.recordset[0]?.[pk] ?? null;
 }
 
-async function validarCatalogosEspecificaciones(datos, valoresAnteriores = {}) {
-    for (const [campo, clave] of CAMPOS_CATALOGO_ESPECIFICACIONES) {
-        const valor = datos[campo];
-        if (valor === undefined || valor === null || String(valor).trim() === '') continue;
-        if (await catalogosDB.esValorActivo(clave, valor)) continue;
-        if (String(valoresAnteriores[campo] ?? '').trim() === String(valor).trim()) continue;
-        return `El valor "${valor}" de ${campo} no existe en su catálogo activo.`;
+/* Resuelve cada campo de catálogo a su Id.
+   Devuelve { ids, textos }:
+     - ids:    { IdModelo: 12, ... }  sólo las claves presentes en los datos
+     - textos: { Modelo: 'HP', ... }  el texto recortado
+   Si el valor no existe en el catálogo se da de alta; si estaba dado
+   de baja, se reactiva. Eso es lo que permite capturar un usuario
+   asignado nuevo directo en el formulario del activo, sin tener que
+   ir antes a Catálogos a crearlo ni a restaurarlo. */
+async function resolverEspecificaciones(datos) {
+    const ids = {};
+    const textos = {};
+
+    for (const [campo, clave, fk] of CAMPOS_CATALOGO_ESPECIFICACIONES) {
+        if (datos[campo] === undefined) continue;
+
+        const texto = datos[campo] === null ? '' : String(datos[campo]).trim();
+        textos[campo] = texto || null;
+        ids[fk] = texto ? await catalogosDB.resolverId(clave, texto) : null;
     }
-    return null;
+
+    return { ids, textos };
 }
 
 /* =========================================================
@@ -47,6 +90,7 @@ async function validarCatalogosEspecificaciones(datos, valoresAnteriores = {}) {
    ========================================================= */
 async function listar(filtros = {}) {
     const pool = await getPool();
+    await catalogosDB.asegurarCatalogosExtendidos();
     const request = pool.request();
 
     let where = '1=1';
@@ -64,6 +108,11 @@ async function listar(filtros = {}) {
         where += " AND st.Nombre <> 'BAJA'";
     }
 
+    const lectura = catalogosDB.unirNombresCatalogo(
+        await prepararLecturaEspecificaciones(),
+        await catalogosDB.prepararAccesoriosEquipo('af')
+    );
+
     const result = await request.query(`
         SELECT
             af.IdActivoFijoEQ,
@@ -71,7 +120,6 @@ async function listar(filtros = {}) {
             c.Nombre        AS Cartera,
             af.IdMarca,
             m.Nombre        AS Marca,
-            af.Modelo,
             af.IdTipo,
             t.Nombre        AS Tipo,
             t.RequiereResponsiva,
@@ -92,11 +140,6 @@ async function listar(filtros = {}) {
             af.IMEI1,
             af.IMEI2,
             af.NoTelefono,
-            af.Procesador,
-            af.MemoriaRAM,
-            af.Almacenamiento,
-            af.SistemaOperativo,
-            af.Accesorios,
             af.PrecioActivo,
             af.IdEstado,
             es.Nombre       AS Estado,
@@ -116,10 +159,10 @@ async function listar(filtros = {}) {
             cap.Nombre      AS Capacidad,
             af.IdVoltaje,
             vol.Nombre      AS Voltaje,
-            af.UsuarioAsignado,
             af.Observaciones,
             af.FechaCreacion,
-            af.FechaModificacion
+            af.FechaModificacion,
+            ${lectura.columnas.join(',\n            ')}
         FROM ActivoFijoEquipos af
         LEFT  JOIN ActivoFijoCarteras       c   ON c.IdCartera       = af.IdCartera
         LEFT  JOIN ActivoFijoMarcas         m   ON m.IdMarca         = af.IdMarca
@@ -132,10 +175,11 @@ async function listar(filtros = {}) {
         LEFT  JOIN ActivoFijoTamanios       tam ON tam.IdTamanio     = af.IdTamanio
         LEFT  JOIN ActivoFijoCapacidades    cap ON cap.IdCapacidad   = af.IdCapacidad
         LEFT  JOIN ActivoFijoVoltajes       vol ON vol.IdVoltaje     = af.IdVoltaje
+        ${lectura.joins.join('\n        ')}
         WHERE ${where}
         ORDER BY af.IdActivoFijoEQ DESC
     `);
-    return result.recordset;
+    return result.recordset.map(lectura.aplicar);
 }
 
 /* =========================================================
@@ -143,6 +187,11 @@ async function listar(filtros = {}) {
    ========================================================= */
 async function obtener(id) {
     const pool = await getPool();
+    await catalogosDB.asegurarCatalogosExtendidos();
+    const lectura = catalogosDB.unirNombresCatalogo(
+        await prepararLecturaEspecificaciones(),
+        await catalogosDB.prepararAccesoriosEquipo('af')
+    );
     const r = await pool.request()
         .input('Id', sql.Int, id)
         .query(`
@@ -159,7 +208,8 @@ async function obtener(id) {
                 cla.Nombre AS Clasificacion,
                 tam.Nombre AS Tamanio,
                 cap.Nombre AS Capacidad,
-                vol.Nombre AS Voltaje
+                vol.Nombre AS Voltaje,
+                ${lectura.columnas.join(',\n                ')}
             FROM ActivoFijoEquipos af
             LEFT  JOIN ActivoFijoCarteras       c   ON c.IdCartera       = af.IdCartera
             LEFT  JOIN ActivoFijoMarcas         m   ON m.IdMarca         = af.IdMarca
@@ -172,9 +222,10 @@ async function obtener(id) {
             LEFT  JOIN ActivoFijoTamanios       tam ON tam.IdTamanio     = af.IdTamanio
             LEFT  JOIN ActivoFijoCapacidades    cap ON cap.IdCapacidad   = af.IdCapacidad
             LEFT  JOIN ActivoFijoVoltajes       vol ON vol.IdVoltaje     = af.IdVoltaje
+            ${lectura.joins.join('\n            ')}
             WHERE af.IdActivoFijoEQ = @Id
         `);
-    return r.recordset[0] ?? null;
+    return lectura.aplicar(r.recordset[0] ?? null);
 }
 
 /* =========================================================
@@ -185,8 +236,9 @@ async function crear(datos, idUsuario) {
         const pool = await getPool();
         await catalogosDB.asegurarCatalogosExtendidos();
 
-        const errorCatalogo = await validarCatalogosEspecificaciones(datos);
-        if (errorCatalogo) return { ok: false, mensaje: errorCatalogo };
+        /* Resuelve (y crea/reactiva si hace falta) los catálogos de
+           especificaciones y del usuario asignado. */
+        const { ids: idsCatalogo, textos } = await resolverEspecificaciones(datos);
 
         if (datos.NoSerie) {
             const dup = await pool.request()
@@ -239,53 +291,66 @@ async function crear(datos, idUsuario) {
         const IdEstatus = await getIdPorNombre(pool, 'ActivoFijoEstatus', 'IdEstatus', 'DISPONIBLE');
         if (!IdEstatus) return { ok: false, mensaje: 'No existe el estatus DISPONIBLE en el catálogo.' };
 
-        const result = await pool.request()
-            .input('IdCartera',        sql.Int,           datos.IdCartera || null)
-            .input('IdMarca',          sql.Int,           datos.IdMarca || null)
-            .input('Modelo',           sql.NVarChar(150), datos.Modelo || null)
-            .input('IdTipo',           sql.Int,           datos.IdTipo)
-            .input('NoSerie',          sql.NVarChar(150), datos.NoSerie || null)
-            .input('IMEI1',            sql.NVarChar(50),  datos.IMEI1 || null)
-            .input('IMEI2',            sql.NVarChar(50),  datos.IMEI2 || null)
-            .input('NoTelefono',       sql.NVarChar(50),  datos.NoTelefono || null)
-            .input('Procesador',       sql.NVarChar(150), datos.Procesador || null)
-            .input('MemoriaRAM',       sql.NVarChar(50),  datos.MemoriaRAM || null)
-            .input('Almacenamiento',   sql.NVarChar(50),  datos.Almacenamiento || null)
-            .input('SistemaOperativo', sql.NVarChar(100), datos.SistemaOperativo || null)
-            .input('Accesorios',       sql.NVarChar(300), datos.Accesorios || null)
-            .input('PrecioActivo',     sql.Decimal(18,2), datos.PrecioActivo ?? null)
-            .input('IdEstado',         sql.Int,           IdEstado)
-            .input('IdEstatus',        sql.Int,           IdEstatus)
-            .input('IdLugarCliente',   sql.Int,           datos.IdLugarCliente || null)
-            .input('IdSitio',          sql.Int,           datos.IdSitio || null)
-            .input('IdSubtipo',        sql.Int,           datos.IdSubtipo || null)
-            .input('IdClasificacion',  sql.Int,           datos.IdClasificacion || null)
-            .input('IdTamanio',        sql.Int,           datos.IdTamanio || null)
-            .input('IdCapacidad',      sql.Int,           datos.IdCapacidad || null)
-            .input('IdVoltaje',        sql.Int,           datos.IdVoltaje || null)
-            .input('UsuarioAsignado',  sql.NVarChar(200), datos.UsuarioAsignado || null)
-            .input('Observaciones',    sql.NVarChar(500), datos.Observaciones || null)
-            .input('IdUsuario',        sql.Int,           idUsuario || null)
-            .query(`
-                INSERT INTO ActivoFijoEquipos (
-                    IdCartera, IdMarca, Modelo, IdTipo, NoSerie, IMEI1, IMEI2, NoTelefono,
-                    Procesador, MemoriaRAM, Almacenamiento, SistemaOperativo, Accesorios,
-                    PrecioActivo, IdEstado, IdEstatus, IdLugarCliente,
-                    IdSitio, IdSubtipo, IdClasificacion, IdTamanio, IdCapacidad, IdVoltaje,
-                    UsuarioAsignado,
-                    Observaciones, IdUsuarioCreacion
-                ) VALUES (
-                    @IdCartera, @IdMarca, @Modelo, @IdTipo, @NoSerie, @IMEI1, @IMEI2, @NoTelefono,
-                    @Procesador, @MemoriaRAM, @Almacenamiento, @SistemaOperativo, @Accesorios,
-                    @PrecioActivo, @IdEstado, @IdEstatus, @IdLugarCliente,
-                    @IdSitio, @IdSubtipo, @IdClasificacion, @IdTamanio, @IdCapacidad, @IdVoltaje,
-                    @UsuarioAsignado,
-                    @Observaciones, @IdUsuario
-                );
-                SELECT SCOPE_IDENTITY() AS Id;
-            `);
+        /* Columnas de texto legado: sólo se escriben si aún existen. */
+        const hayTexto = await columnasTextoEquipo();
 
-        return { ok: true, mensaje: 'Activo creado correctamente.', id: result.recordset[0].Id };
+        const request  = pool.request();
+        const columnas = [];
+        const valores  = [];
+
+        const agregar = (columna, tipo, valor) => {
+            if (TEXTOS_RESPALDO_EQUIPO.has(columna) && !hayTexto.has(columna)) return;
+            const param = `p${columnas.length}`;
+            request.input(param, tipo, valor);
+            columnas.push(columna);
+            valores.push('@' + param);
+        };
+
+        agregar('IdCartera',           sql.Int,           datos.IdCartera || null);
+        agregar('IdMarca',             sql.Int,           datos.IdMarca || null);
+        agregar('IdModelo',            sql.Int,           idsCatalogo.IdModelo ?? null);
+        agregar('Modelo',              sql.NVarChar(150), textos.Modelo ?? null);
+        agregar('IdProcesador',        sql.Int,           idsCatalogo.IdProcesador ?? null);
+        agregar('Procesador',          sql.NVarChar(150), textos.Procesador ?? null);
+        agregar('IdMemoriaRAM',        sql.Int,           idsCatalogo.IdMemoriaRAM ?? null);
+        agregar('MemoriaRAM',          sql.NVarChar(50),  textos.MemoriaRAM ?? null);
+        agregar('IdAlmacenamiento',    sql.Int,           idsCatalogo.IdAlmacenamiento ?? null);
+        agregar('Almacenamiento',      sql.NVarChar(50),  textos.Almacenamiento ?? null);
+        agregar('IdSistemaOperativo',  sql.Int,           idsCatalogo.IdSistemaOperativo ?? null);
+        agregar('SistemaOperativo',    sql.NVarChar(100), textos.SistemaOperativo ?? null);
+        agregar('IdUsuarioAsignado',   sql.Int,           idsCatalogo.IdUsuarioAsignado ?? null);
+        agregar('UsuarioAsignado',     sql.NVarChar(200), textos.UsuarioAsignado ?? null);
+        agregar('IdTipo',              sql.Int,           datos.IdTipo);
+        agregar('NoSerie',             sql.NVarChar(150), datos.NoSerie || null);
+        agregar('IMEI1',               sql.NVarChar(50),  datos.IMEI1 || null);
+        agregar('IMEI2',               sql.NVarChar(50),  datos.IMEI2 || null);
+        agregar('NoTelefono',          sql.NVarChar(50),  datos.NoTelefono || null);
+        agregar(CAMPO_ACCESORIOS,      sql.NVarChar(300), datos.Accesorios || null);
+        agregar('PrecioActivo',        sql.Decimal(18,2), datos.PrecioActivo ?? null);
+        agregar('IdEstado',            sql.Int,           IdEstado);
+        agregar('IdEstatus',           sql.Int,           IdEstatus);
+        agregar('IdLugarCliente',      sql.Int,           datos.IdLugarCliente || null);
+        agregar('IdSitio',             sql.Int,           datos.IdSitio || null);
+        agregar('IdSubtipo',           sql.Int,           datos.IdSubtipo || null);
+        agregar('IdClasificacion',     sql.Int,           datos.IdClasificacion || null);
+        agregar('IdTamanio',           sql.Int,           datos.IdTamanio || null);
+        agregar('IdCapacidad',         sql.Int,           datos.IdCapacidad || null);
+        agregar('IdVoltaje',           sql.Int,           datos.IdVoltaje || null);
+        agregar('Observaciones',       sql.NVarChar(500), datos.Observaciones || null);
+        agregar('IdUsuarioCreacion',   sql.Int,           idUsuario || null);
+
+        const result = await request.query(`
+            INSERT INTO ActivoFijoEquipos (${columnas.join(', ')})
+            VALUES (${valores.join(', ')});
+            SELECT SCOPE_IDENTITY() AS Id;
+        `);
+
+        const idNuevo = result.recordset[0].Id;
+
+        /* Accesorios: se guardan en la tabla puente (N:M). */
+        await catalogosDB.sincronizarAccesoriosEquipo(idNuevo, datos[CAMPO_ACCESORIOS]);
+
+        return { ok: true, mensaje: 'Activo creado correctamente.', id: idNuevo };
     } catch (err) {
         if (err.number === 2627 || err.number === 2601) {
             return { ok: false, mensaje: 'Ya existe un activo con ese valor único.' };
@@ -310,9 +375,7 @@ async function actualizar(id, datos, idUsuario) {
                            SELECT 1 FROM ActivoFijoResponsivas r
                            WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
                              AND r.EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
-                       ) THEN 1 ELSE 0 END AS TieneResponsivaActiva,
-                       af.Modelo, af.Procesador, af.MemoriaRAM, af.Almacenamiento,
-                       af.SistemaOperativo, af.Accesorios, af.UsuarioAsignado
+                       ) THEN 1 ELSE 0 END AS TieneResponsivaActiva
                 FROM ActivoFijoEquipos af
                 LEFT JOIN ActivoFijoEstatus st ON st.IdEstatus = af.IdEstatus
                 WHERE af.IdActivoFijoEQ = @Id
@@ -323,8 +386,12 @@ async function actualizar(id, datos, idUsuario) {
         }
 
         const current = actual.recordset[0];
-        const errorCatalogo = await validarCatalogosEspecificaciones(datos, current);
-        if (errorCatalogo) return { ok: false, mensaje: errorCatalogo };
+
+        /* Igual que en crear(): convierte lo capturado en catálogos de
+           especificaciones / usuario asignado a su FK, creando o
+           reactivando el registro si no existía. Devuelve además el
+           texto legible que se conserva en la columna de respaldo. */
+        const { ids: idsCatalogo, textos } = await resolverEspecificaciones(datos);
 
         if (datos.NoSerie !== undefined && datos.NoSerie) {
             const dup = await pool.request()
@@ -397,6 +464,9 @@ async function actualizar(id, datos, idUsuario) {
             return { ok: false, mensaje: 'No se puede cambiar el estatus mientras exista una responsiva activa. Registra primero la devolución o cancelación.' };
         }
 
+        /* Columnas de texto legado: sólo se actualizan si aún existen. */
+        const hayTexto = await columnasTextoEquipo();
+
         const request = pool.request();
         request.input('Id',         sql.Int, id);
         request.input('IdTipo',     sql.Int, IdTipo);
@@ -416,15 +486,10 @@ async function actualizar(id, datos, idUsuario) {
         const camposOpcionales = [
             ['IdCartera',       'IdCartera',        sql.Int,       null],
             ['IdMarca',         'IdMarca',          sql.Int,       null],
-            ['Modelo',          'Modelo',           sql.NVarChar,  150],
             ['NoSerie',         'NoSerie',          sql.NVarChar,  150],
             ['IMEI1',           'IMEI1',            sql.NVarChar,  50],
             ['IMEI2',           'IMEI2',            sql.NVarChar,  50],
             ['NoTelefono',      'NoTelefono',       sql.NVarChar,  50],
-            ['Procesador',      'Procesador',       sql.NVarChar,  150],
-            ['MemoriaRAM',      'MemoriaRAM',       sql.NVarChar,  50],
-            ['Almacenamiento',  'Almacenamiento',   sql.NVarChar,  50],
-            ['SistemaOperativo','SistemaOperativo', sql.NVarChar,  100],
             ['Accesorios',      'Accesorios',       sql.NVarChar,  300],
             ['PrecioActivo',    'PrecioActivo',     'Decimal',     null],
             ['IdLugarCliente',  'IdLugarCliente',   sql.Int,       null],
@@ -434,12 +499,12 @@ async function actualizar(id, datos, idUsuario) {
             ['IdTamanio',       'IdTamanio',        sql.Int,       null],
             ['IdCapacidad',     'IdCapacidad',      sql.Int,       null],
             ['IdVoltaje',       'IdVoltaje',        sql.Int,       null],
-            ['UsuarioAsignado', 'UsuarioAsignado',  sql.NVarChar,  200],
             ['Observaciones',   'Observaciones',    sql.NVarChar,  500]
         ];
 
         for (const [jsKey, colName, tipoSqlFn, longitud] of camposOpcionales) {
             if (datos[jsKey] === undefined) continue;
+            if (TEXTOS_RESPALDO_EQUIPO.has(colName) && !hayTexto.has(colName)) continue;
 
             const paramName = 'p_' + colName;
             let sqlType;
@@ -449,6 +514,20 @@ async function actualizar(id, datos, idUsuario) {
 
             request.input(paramName, sqlType, datos[jsKey]);
             sets.push(`${colName} = @${paramName}`);
+        }
+
+        /* Especificaciones y usuario asignado: se escriben el texto legible
+           y su FK al catálogo (3FN). Sólo se tocan las claves enviadas, así
+           que un PATCH parcial no borra el resto. */
+        for (const [campo, , fk, longitud] of CAMPOS_CATALOGO_ESPECIFICACIONES) {
+            if (datos[campo] === undefined) continue;
+
+            request.input('fk_' + fk,  sql.Int,           idsCatalogo[fk] ?? null);
+            request.input('p_' + campo, sql.NVarChar(longitud), textos[campo] ?? null);
+            sets.push(`${fk} = @fk_${fk}`);
+
+            /* El texto de respaldo ya no existe tras la fase 2 del script 3FN. */
+            if (hayTexto.has(campo)) sets.push(`${campo} = @p_${campo}`);
         }
 
         const result = await request.query(
@@ -475,6 +554,13 @@ async function actualizar(id, datos, idUsuario) {
         if (result.rowsAffected[0] === 0) {
             return { ok: false, mensaje: 'No se pudo actualizar: el activo no existe o su estatus está protegido por una responsiva activa.' };
         }
+
+        /* Accesorios: sólo se reemplaza la tabla puente si el campo vino en
+           los datos, para no borrarlos en un PATCH parcial. */
+        if (datos[CAMPO_ACCESORIOS] !== undefined) {
+            await catalogosDB.sincronizarAccesoriosEquipo(id, datos[CAMPO_ACCESORIOS]);
+        }
+
         return { ok: true, mensaje: 'Activo actualizado correctamente.' };
     } catch (err) {
         if (err.number === 2627 || err.number === 2601) {
@@ -607,6 +693,105 @@ async function restaurar(id, idUsuario, motivo = null) {
         return { ok: true, mensaje: 'Activo restaurado. Vuelve al inventario activo.' };
     } catch (err) {
         return { ok: false, mensaje: 'Error al restaurar: ' + err.message };
+    }
+}
+
+/* =========================================================
+   ELIMINAR DEFINITIVAMENTE (purga física)
+
+   Sólo para activos que ya están en BAJA y que no tienen ninguna
+   responsiva: la responsiva es un documento firmado y jamás se borra
+   en cascada. Las filas hijas se descubren en el catálogo del sistema
+   (sys.foreign_keys) para no quedar desfasadas si mañana se añade otra
+   tabla que apunte a ActivoFijoEquipos.
+   ========================================================= */
+async function tablasHijasEquipo(tx) {
+    const r = await new sql.Request(tx).query(`
+        SELECT OBJECT_NAME(fk.parent_object_id)                         AS Tabla,
+               COL_NAME(fkc.parent_object_id, fkc.parent_column_id)     AS Columna
+        FROM sys.foreign_keys fk
+        INNER JOIN sys.foreign_key_columns fkc
+                ON fkc.constraint_object_id = fk.object_id
+        WHERE fk.referenced_object_id = OBJECT_ID(N'dbo.ActivoFijoEquipos')
+    `);
+    return r.recordset;
+}
+
+async function eliminarDefinitivo(id, idUsuario) {
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+    try {
+        const activo = await new sql.Request(tx)
+            .input('Id', sql.Int, id)
+            .query(`
+                SELECT af.IdActivoFijoEQ, st.Nombre AS Estatus
+                FROM ActivoFijoEquipos af WITH (UPDLOCK, HOLDLOCK)
+                LEFT JOIN ActivoFijoEstatus st ON st.IdEstatus = af.IdEstatus
+                WHERE af.IdActivoFijoEQ = @Id
+            `);
+        if (activo.recordset.length === 0) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'El activo ya no existe.' };
+        }
+
+        const estatus = String(activo.recordset[0].Estatus || '').toUpperCase();
+        if (estatus !== 'BAJA') {
+            await tx.rollback();
+            return { ok: false, mensaje: 'Sólo se pueden eliminar definitivamente los activos dados de baja.' };
+        }
+
+        const responsivas = await new sql.Request(tx)
+            .input('Id', sql.Int, id)
+            .query('SELECT COUNT(*) AS Total FROM ActivoFijoResponsivas WHERE IdActivoFijoEQ = @Id');
+        const totalResp = responsivas.recordset[0].Total;
+        if (totalResp > 0) {
+            await tx.rollback();
+            return {
+                ok: false,
+                mensaje: `No se puede eliminar definitivamente: el activo tiene ${totalResp} responsiva(s) en el historial.`
+            };
+        }
+
+        const hijas = await tablasHijasEquipo(tx);
+        const borradas = {};
+        for (const h of hijas) {
+            if (!h.Tabla || !h.Columna) continue;
+            const r = await new sql.Request(tx)
+                .input('Id', sql.Int, id)
+                .query(`
+                    DELETE FROM dbo.${h.Tabla}
+                    WHERE ${h.Columna} = @Id
+                `);
+            borradas[h.Tabla] = (borradas[h.Tabla] || 0) + (r.rowsAffected[0] || 0);
+        }
+
+        const r = await new sql.Request(tx)
+            .input('Id', sql.Int, id)
+            .query('DELETE FROM dbo.ActivoFijoEquipos WHERE IdActivoFijoEQ = @Id');
+
+        if (r.rowsAffected[0] === 0) {
+            await tx.rollback();
+            return { ok: false, mensaje: 'El activo ya no existe.' };
+        }
+
+        await tx.commit();
+
+        const detalle = Object.entries(borradas)
+            .filter(([, n]) => n > 0)
+            .map(([tabla, n]) => `${tabla}: ${n}`)
+            .join(', ');
+        console.log(`🗑️  Activo #${id} eliminado definitivamente` +
+            (idUsuario ? ` por el usuario ${idUsuario}` : '') +
+            (detalle ? ` (${detalle})` : ''));
+
+        return { ok: true, mensaje: 'Activo eliminado definitivamente.' };
+    } catch (err) {
+        try { await tx.rollback(); } catch (_) { /* la transacción ya estaba cerrada */ }
+        if (err.number === 547) {
+            return { ok: false, mensaje: 'No se puede eliminar: hay registros asociados al activo.' };
+        }
+        return { ok: false, mensaje: 'Error al eliminar definitivamente: ' + err.message };
     }
 }
 
@@ -858,7 +1043,8 @@ async function listarCatalogosExtendidos() {
 }
 
 module.exports = {
-    listar, obtener, crear, actualizar, eliminar, restaurar, historico, exportarExcel,
+    listar, obtener, crear, actualizar, eliminar, restaurar, eliminarDefinitivo,
+    historico, exportarExcel,
     listarTipos, listarMarcas, listarEstados, listarEstatus, listarCarteras,
     listarSitios, listarSubtipos, listarVoltajes,
     listarClasificaciones, listarTamanios, listarCapacidades,

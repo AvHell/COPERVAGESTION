@@ -135,6 +135,19 @@ const btnLimpiarFiltro  = document.getElementById('btn-limpiar-filtro');
 const modalCliente      = document.getElementById('modal-cliente');
 const modalTitulo       = document.getElementById('modal-cliente-titulo');
 
+/* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+   Paginador no se cargó, recortar() devuelve la lista completa. */
+const pagClientes = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-clientes'), {
+        alCambiar: () => pintarTabla()
+    })
+    : {
+        recortar: lista => lista,
+        reiniciar() {},
+        mostrar() {},
+        contenedor: null
+    };
+
 /* =========================================================
    UTILIDADES
    ========================================================= */
@@ -239,12 +252,14 @@ function pintarTabla() {
 
     if (listaFiltrada.length === 0) {
         sinResultados.classList.remove('oculto');
+        pagClientes.mostrar(false);
         return;
     }
 
     sinResultados.classList.add('oculto');
+    pagClientes.mostrar(true);
 
-    listaFiltrada.forEach(c => {
+    pagClientes.recortar(listaFiltrada).forEach(c => {
         const tr = document.createElement('tr');
         const claseCodigo = claseCodigoCliente(c.Codigo);
 
@@ -301,6 +316,7 @@ function pintarTabla() {
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+    pagClientes.reiniciar();
     renderTabla();
 });
 
@@ -308,6 +324,7 @@ btnLimpiarBusq.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagClientes.reiniciar();
     renderTabla();
     inputBusqueda.focus();
 });
@@ -316,6 +333,7 @@ btnLimpiarFiltro.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagClientes.reiniciar();
     renderTabla();
 });
 

@@ -44,6 +44,21 @@ const filtroEstatus    = document.getElementById('filtro-estatus');
 const filtroEstatusWrap= document.getElementById('filtro-estatus-wrap');
 const cardTabla        = document.getElementById('card-tabla');
 
+/* Paginación de la tabla: sólo se dibujan las filas de la página vigente
+   para no volcar cientos de responsivas al DOM. Si el módulo Paginador no
+   se cargó, recortar() devuelve la lista completa y nada se rompe. */
+const pagResponsivas = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-responsivas'), {
+        alCambiar: () => pintarTabla()
+    })
+    : {
+        recortar: lista => lista,
+        reiniciar() {},
+        mostrar() {},
+        contenedor: null
+    };
+
+
 const selActivo        = document.getElementById('activo');
 const inpFolio         = document.getElementById('folio');
 const inpTipoResp      = document.getElementById('tipo-responsiva');
@@ -524,6 +539,10 @@ function iconoDevolver() {
 function iconoCancelar() {
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>`;
 }
+/* Purga física: mismo icono que en Activos y catálogos AF. */
+function iconoPapelera() {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M14.5 9.5l-5 5M9.5 9.5l5 5"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>`;
+}
 
 /* =========================================================
    BOTONES DE ACCIÓN (solo icono + tooltip)
@@ -570,15 +589,18 @@ function pintarTabla() {
                 : 'No se encontraron responsivas con ese criterio.';
         }
         cardTabla.style.display = 'none';
+        pagResponsivas.mostrar(false);
         return;
     }
 
     sinResultados.classList.add('oculto');
     cardTabla.style.display = '';
+    pagResponsivas.mostrar(true);
 
     const esVistaCanceladas = (vistaActual === 'canceladas');
+    const paginas = pagResponsivas.recortar(listaFiltrada);
 
-    listaFiltrada.forEach(r => {
+    paginas.forEach(r => {
         const tr = document.createElement('tr');
         const reglas = obtenerReglas({ Tipo: r.Tipo, IMEI1: r.IMEI1, NoTelefono: r.NoTelefono });
 
@@ -618,6 +640,8 @@ function pintarTabla() {
             celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver detalle', 'ver', () => verDetalle(r.IdResponsiva), 'af-resp:listado:ver'));
             celda.appendChild(crearBotonAccion(iconoOjo(), 'Ver PDF', 'ver', () => verPDFResponsiva(r.IdResponsiva, r.FolioTicket), 'af-resp:pdf'));
             celda.appendChild(crearBotonAccion(iconoGuardar(), 'Guardar PDF', 'guardar', () => guardarPDFResponsiva(r.IdResponsiva, r.FolioTicket), 'af-resp:pdf'));
+            /* Purga física: sólo tiene sentido aquí, en Canceladas. */
+            celda.appendChild(crearBotonAccion(iconoPapelera(), 'Eliminar definitivamente', 'definitivo', () => eliminarDefinitivoResponsiva(r.IdResponsiva, r.FolioTicket), 'af-resp:eliminar'));
             tablaBody.appendChild(tr);
             return;
         }
@@ -658,6 +682,7 @@ tabsVista.addEventListener('click', (e) => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagResponsivas.reiniciar();
 
     cargarResponsivas();
 });
@@ -668,6 +693,7 @@ tabsVista.addEventListener('click', (e) => {
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+    pagResponsivas.reiniciar();
     renderTabla();
 });
 
@@ -675,6 +701,7 @@ function limpiarBusqueda() {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagResponsivas.reiniciar();
     renderTabla();
 }
 btnLimpiarBusq.addEventListener('click', limpiarBusqueda);
@@ -682,12 +709,14 @@ btnLimpiarVacio.addEventListener('click', limpiarBusqueda);
 
 filtroEstatus.addEventListener('change', () => {
     filtros.idEstatus = filtroEstatus.value;
+    pagResponsivas.reiniciar();
     cargarResponsivas();
 });
 
 btnLimpiarFiltro.addEventListener('click', () => {
     filtros.idEstatus = '';
     filtroEstatus.value = '';
+    pagResponsivas.reiniciar();
     cargarResponsivas();
 });
 
@@ -1235,6 +1264,52 @@ async function cancelarResponsiva(id, folio) {
         }
     } catch (err) {
         alertaError('Error al cancelar', err.message);
+    }
+}
+
+/* =========================================================
+   ELIMINAR DEFINITIVAMENTE (purga física)
+   Sólo para responsivas ya CANCELADAS. El backend vuelve a validarlo,
+   así que el botón nunca puede borrar una responsiva activa.
+   ========================================================= */
+async function eliminarDefinitivoResponsiva(id, folio) {
+    const nombre = folio || ('#' + id);
+
+    const resultado = await Swal.fire({
+        icon: 'error',
+        title: '¿Eliminar definitivamente?',
+        html: `
+            <div>Se borrará de la base de datos la responsiva <strong>${escaparHTML(nombre)}</strong>
+            junto con su histórico asociado.</div>
+            <div style="margin-top:.65rem;"><strong>Esta acción no se puede deshacer.</strong><br>
+            Si sólo querías conservarla como histórico, cancela y déjala en esta pestaña.</div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar definitivamente',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        focusCancel: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    });
+
+    if (!resultado.isConfirmed) return;
+
+    try {
+        const res = await window.api.activoFijo.responsivas.eliminarDefinitivo(id);
+        if (res && res.ok) {
+            await cargarResponsivas();
+            await cargarActivosDisponibles();
+            await alertaExito('Responsiva eliminada', res.mensaje || 'Se borró definitivamente.');
+        } else {
+            alertaError('No se pudo eliminar', res?.mensaje || 'Error desconocido');
+        }
+    } catch (err) {
+        alertaError('Error al eliminar', err.message);
     }
 }
 

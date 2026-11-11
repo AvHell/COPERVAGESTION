@@ -12,7 +12,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+    <link rel="stylesheet" href="../../css/paginador.css">
     <link rel="stylesheet" href="../css/reportes.css">
+
 </head>
 <body>
 
@@ -302,6 +304,10 @@
         </table>
     </div>
 
+    <!-- PAGINACIÓN (los controles viven fuera de la tabla para no romper el scroll) -->
+    <div id="paginacion-reportes"></div>
+
+    <script src="../../js/paginador.js"></script>
     <script src="../../js/vivo.js"></script>
     <script src="../../js/permisos-ui.js"></script>
     <script src="../js/reportes-renderer.js"></script>

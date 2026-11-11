@@ -132,6 +132,19 @@ const btnLimpiarFiltro = document.getElementById('btn-limpiar-filtro');
 const modalRol         = document.getElementById('modal-rol');
 const modalTitulo      = document.getElementById('modal-rol-titulo');
 
+/* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+   Paginador no se cargó, recortar() devuelve la lista completa. */
+const pagRoles = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-roles'), {
+        alCambiar: () => pintarTabla()
+    })
+    : {
+        recortar: lista => lista,
+        reiniciar() {},
+        mostrar() {},
+        contenedor: null
+    };
+
 /* =========================================================
    UTILIDADES
    ========================================================= */
@@ -236,12 +249,14 @@ function pintarTabla() {
 
     if (listaFiltrada.length === 0) {
         sinResultados.classList.remove('oculto');
+        pagRoles.mostrar(false);
         return;
     }
 
     sinResultados.classList.add('oculto');
+    pagRoles.mostrar(true);
 
-    listaFiltrada.forEach(r => {
+    pagRoles.recortar(listaFiltrada).forEach(r => {
         const tr = document.createElement('tr');
         const claseCodigo = claseCodigoRol(r.Codigo);
 
@@ -303,6 +318,7 @@ function pintarTabla() {
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+    pagRoles.reiniciar();
     renderTabla();
 });
 
@@ -310,6 +326,7 @@ btnLimpiarBusq.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagRoles.reiniciar();
     renderTabla();
     inputBusqueda.focus();
 });
@@ -318,6 +335,7 @@ btnLimpiarFiltro.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagRoles.reiniciar();
     renderTabla();
 });
 

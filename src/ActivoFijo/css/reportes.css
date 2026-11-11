@@ -553,6 +553,20 @@ body {
     -webkit-overflow-scrolling: touch;
 }
 
+/* Controles de paginación: misma caja que la tabla, pero fuera de ella
+   para que el scroll horizontal de .card-tabla no se los lleve. */
+#paginacion-reportes {
+    max-width: var(--container);
+    margin: 0 auto;
+    padding: 0 32px 32px;
+
+    --paginador-texto:        var(--gray-500);
+    --paginador-borde:        var(--gray-200);
+    --paginador-borde-fuerte: var(--gray-300);
+    --paginador-hover:        var(--gray-100);
+    --paginador-foco:         var(--tierra-oliva);
+}
+
 .tabla-reportes {
     width: 100%;
     min-width: 700px; /* Forza ancho mínimo para que no se aplasten las columnas */
@@ -1039,6 +1053,7 @@ body {
     .tabla-toolbar { padding: 14px 20px; }
     .card-tabla { margin: 0 20px 32px; }
     .empty-state { margin: 0 20px 32px; }
+    #paginacion-reportes { padding: 0 20px 28px; }
 }
 
 @media (max-width: 900px) {
@@ -1070,6 +1085,7 @@ body {
     .buscador { max-width: none; }
     .card-tabla { margin: 0 14px 24px; overflow-x: auto; }
     .tabla-reportes { min-width: 600px; }
+    #paginacion-reportes { padding: 0 14px 24px; }
 
     /* Tabla responsive: cards (solo si no hay scroll horizontal) */
     .tabla-reportes th .th-filter { display: none; } /* ocultamos filtros de columna en móvil */

@@ -55,7 +55,6 @@ contextBridge.exposeInMainWorld('api', {
     /* =========================================================
        MÓDULO ACTIVO FIJO
        ========================================================= */
-    abrirActivoFijoCatalogos:   () => ipcRenderer.invoke('abrir-activofijo-catalogos'),
     abrirActivoFijoActivos:     () => ipcRenderer.invoke('abrir-activofijo-activos'),
     abrirActivoFijoResponsivas: () => ipcRenderer.invoke('abrir-activofijo-responsivas'),
     abrirActivoFijoReportes:    () => ipcRenderer.invoke('abrir-activofijo-reportes'),
@@ -280,7 +279,9 @@ contextBridge.exposeInMainWorld('api', {
             crear: (clave, datos) => ipcRenderer.invoke('af-catalogos-crear', clave, datos),
             actualizar: (clave, id, datos) => ipcRenderer.invoke('af-catalogos-actualizar', clave, id, datos),
             eliminar: (clave, id) => ipcRenderer.invoke('af-catalogos-eliminar', clave, id),
-            restaurar: (clave, id) => ipcRenderer.invoke('af-catalogos-restaurar', clave, id)
+            restaurar: (clave, id) => ipcRenderer.invoke('af-catalogos-restaurar', clave, id),
+            /* Purga física desde la pestaña Eliminados (sólo inactivos y sin uso) */
+            eliminarDefinitivo: (clave, id) => ipcRenderer.invoke('af-catalogos-eliminar-definitivo', clave, id)
         },
         activos: {
             listar: filtros => ipcRenderer.invoke('af-activos-listar', filtros),
@@ -289,6 +290,7 @@ contextBridge.exposeInMainWorld('api', {
             actualizar: (id, datos) => ipcRenderer.invoke('af-activos-actualizar', id, datos),
             eliminar: (id, motivo) => ipcRenderer.invoke('af-activos-eliminar', id, motivo),
             restaurar: (id, motivo) => ipcRenderer.invoke('af-activos-restaurar', id, motivo),
+            eliminarDefinitivo: id => ipcRenderer.invoke('af-activos-eliminar-definitivo', id),
             historico: id => ipcRenderer.invoke('af-activos-historico', id),
             exportarExcel: payload => ipcRenderer.invoke('af-activos-exportar-excel', payload),
             listarTipos: () => ipcRenderer.invoke('af-activos-lista-tipos'),
@@ -312,6 +314,7 @@ contextBridge.exposeInMainWorld('api', {
             actualizar: (id, datos) => ipcRenderer.invoke('af-resp-actualizar', id, datos),
             devolver: (id, fecha, obs) => ipcRenderer.invoke('af-resp-devolver', id, fecha, obs),
             eliminar: (id, motivo) => ipcRenderer.invoke('af-resp-eliminar', id, motivo),
+            eliminarDefinitivo: id => ipcRenderer.invoke('af-resp-eliminar-definitivo', id),
             verPDF: id => ipcRenderer.invoke('af-resp-ver-pdf', id),
             guardarPDF: id => ipcRenderer.invoke('af-resp-guardar-pdf', id),
             listarCarteras: () => ipcRenderer.invoke('af-resp-lista-carteras'),

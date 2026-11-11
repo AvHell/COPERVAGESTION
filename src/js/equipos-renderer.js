@@ -191,6 +191,16 @@ const inputBusqueda    = document.getElementById('input-busqueda');
 const btnLimpiarBusq   = document.getElementById('btn-limpiar-busqueda');
 const btnLimpiarFiltro = document.getElementById('btn-limpiar-filtro');
 
+/* Paginación por grupos (un registro = un cliente con sus equipos): sólo se
+   vuelcan al DOM los grupos de la página vigente, así un cliente con cientos
+   de equipos no arrastra a todos los demás. Si el módulo Paginador no se
+   cargó, recortar() devuelve la lista completa y la página sigue igual. */
+const pagEquipos = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-equipos'), {
+        alCambiar: () => pintarTablaEquipos()
+    })
+    : { recortar: lista => lista, reiniciar() {}, mostrar() {} };
+
 const modalEquipo   = document.getElementById('modal-equipo');
 const modalTitulo   = document.getElementById('modal-equipo-titulo');
 
@@ -862,6 +872,7 @@ function actualizarNumeroHost() {
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusq.classList.toggle('oculto', !filtroBusqueda);
+    pagEquipos.reiniciar();
     renderTabla();
 });
 
@@ -932,6 +943,7 @@ btnLimpiarBusq.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagEquipos.reiniciar();
     renderTabla();
     inputBusqueda.focus();
 });
@@ -940,6 +952,7 @@ btnLimpiarFiltro.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroBusqueda = '';
     btnLimpiarBusq.classList.add('oculto');
+    pagEquipos.reiniciar();
     renderTabla();
 });
 
@@ -1004,9 +1017,11 @@ function pintarTablaEquipos() {
 
     if (listaFiltrada.length === 0) {
         sinResultados.classList.remove('oculto');
+        pagEquipos.mostrar(false);
         return;
     }
     sinResultados.classList.add('oculto');
+    pagEquipos.mostrar(true);
 
     const porCliente = new Map();
     listaFiltrada.forEach(e => {
@@ -1022,7 +1037,7 @@ function pintarTablaEquipos() {
 
     const clientesOrdenados = Array.from(porCliente.values()).sort((a, b) => a.codigo.localeCompare(b.codigo));
 
-    clientesOrdenados.forEach(grupoCliente => {
+    pagEquipos.recortar(clientesOrdenados).forEach(grupoCliente => {
         const divCliente = document.createElement('div');
         divCliente.className = gruposExpandidos.has(grupoCliente.codigo)
             ? 'grupo-cliente'

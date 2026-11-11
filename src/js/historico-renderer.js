@@ -87,6 +87,19 @@ const textoSinRes         = document.getElementById('texto-sin-resultados');
 
 const chipsFecha          = document.querySelectorAll('.chip-fecha');
 
+/* Paginación: sólo se dibujan las filas de la página vigente. Si el módulo
+   Paginador no se cargó, recortar() devuelve la lista completa. */
+const pagHistorico = window.Paginador
+    ? window.Paginador.crear(document.getElementById('paginacion-historico'), {
+        alCambiar: () => pintarTabla()
+    })
+    : {
+        recortar: lista => lista,
+        reiniciar() {},
+        mostrar() {},
+        contenedor: null
+    };
+
 /* =========================================================
    ESTADO
    ========================================================= */
@@ -350,6 +363,7 @@ async function cargarHistorico() {
 
     try {
         historicos = await window.api.historicos.listar(idCliente, idPiso);
+        pagHistorico.reiniciar();
         renderTabla();
         actualizarSubtitulo(idCliente, idPiso);
     } catch (err) {
@@ -397,6 +411,11 @@ function mostrarTabla() {
     estadoInicial.classList.add('oculto');
     sinResultados.classList.add('oculto');
     contenedorTabla.classList.remove('oculto');
+}
+
+function mostrarTablaConPaginacion() {
+    mostrarTabla();
+    pagHistorico.mostrar(true);
 }
 
 function actualizarContador(n) {
@@ -454,6 +473,7 @@ function pintarTabla() {
     const filtrados = aplicarFiltros(historicos);
 
     if (!filtrados || filtrados.length === 0) {
+        pagHistorico.mostrar(false);
         if (historicos.length === 0) {
             mostrarSinResultados('No hay movimientos registrados para este cliente o piso.');
         } else {
@@ -465,10 +485,10 @@ function pintarTabla() {
         return;
     }
 
-    mostrarTabla();
+    mostrarTablaConPaginacion();
     actualizarContador(filtrados.length);
 
-    filtrados.forEach(h => {
+    pagHistorico.recortar(filtrados).forEach(h => {
         const { fecha, hora } = formatearFecha(h.Fecha);
         const usuarioCompleto = `${h.NombreUsuario} (${h.Nombres} ${h.Apellidos})`;
         const claseAcc = claseAccion(h.Accion);
@@ -538,6 +558,7 @@ selectLugar.addEventListener('change', () => {
 inputBusqueda.addEventListener('input', () => {
     filtroTexto = inputBusqueda.value.trim().toLowerCase();
     btnLimpiarBusqueda.classList.toggle('oculto', !filtroTexto);
+    pagHistorico.reiniciar();
     if (historicos.length > 0) renderTabla();
 });
 
@@ -545,6 +566,7 @@ btnLimpiarBusqueda.addEventListener('click', () => {
     inputBusqueda.value = '';
     filtroTexto = '';
     btnLimpiarBusqueda.classList.add('oculto');
+    pagHistorico.reiniciar();
     if (historicos.length > 0) renderTabla();
     inputBusqueda.focus();
 });
@@ -570,7 +592,10 @@ chipsFecha.forEach(chip => {
             filtroHasta.value = '';
         }
 
-        if (historicos.length > 0) renderTabla();
+        if (historicos.length > 0) {
+            pagHistorico.reiniciar();
+            renderTabla();
+        }
     });
 });
 
@@ -579,6 +604,7 @@ chipsFecha.forEach(chip => {
    ========================================================= */
 function alCambiarFecha() {
     chipsFecha.forEach(c => c.classList.remove('activo'));
+    pagHistorico.reiniciar();
     if (historicos.length > 0) renderTabla();
 }
 filtroDesde.addEventListener('change', alCambiarFecha);
@@ -604,6 +630,7 @@ btnLimpiarFiltros.addEventListener('click', () => {
     if (selectCliente.value) {
         cargarHistorico();
     } else if (historicos.length > 0) {
+        pagHistorico.reiniciar();
         renderTabla();
     }
 });

@@ -692,6 +692,13 @@ body {
     border-color: var(--rojo-base);
     color: var(--rojo-text);
 }
+/* Purga física: mismo rojo que "Cancelar" pero sólido, para que no se
+   confunda con la cancelación lógica que deja histórico. */
+.btn-accion.definitivo:hover {
+    background: var(--rojo-base);
+    border-color: var(--rojo-base);
+    color: #fff;
+}
 .btn-accion:focus-visible {
     outline: 2px solid var(--tierra-oro);
     outline-offset: 2px;

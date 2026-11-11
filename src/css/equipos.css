@@ -342,14 +342,13 @@ body {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     border: 1px solid var(--gray-200);
-    /* FIX: Overflow para tooltips */
-    overflow-x: hidden;
-    overflow-y: hidden;
-    padding-top: 50px;
-    margin-top: -50px;
-    padding-bottom: 50px;
-    margin-bottom: -50px;
-    -webkit-overflow-scrolling: touch;
+    /* Sin padding/margen negativo: el patrón anterior (-50px de margen con
+       50px de padding) hacía que el fondo y el borde de la tarjeta arrancaran
+       50px más arriba y taparan el toolbar/título de la página. La tarjeta ya
+       empieza en su posición real y los tooltips de acciones
+       (.tooltip-accion-equipos) son position:fixed, así que no los recorta
+       nada. En pantallas angostas el scroll horizontal se activa en el @media. */
+    overflow: visible;
 }
 
 .data-table {

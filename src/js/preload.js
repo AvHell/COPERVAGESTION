@@ -105,6 +105,8 @@ contextBridge.exposeInMainWorld('api', {
         actualizar: (id, datos)             => ipcRenderer.invoke('rangos:actualizar', id, datos),
         eliminar:   (id)                    => ipcRenderer.invoke('rangos:eliminar', id),
         auditar:    (idCliente = null)      => ipcRenderer.invoke('rangos:auditar', idCliente),
+        analizar:   (idCliente = null)      => ipcRenderer.invoke('rangos:analizar', idCliente),
+        aplicarAjuste: (idCliente = null)   => ipcRenderer.invoke('rangos:aplicarAjuste', idCliente),
         validarIP:  (idCliente, idRol, ip)  => ipcRenderer.invoke('rangos:validarIP', idCliente, idRol, ip),
         reservadoIP: (ip)                   => ipcRenderer.invoke('rangos:reservadoIP', ip)
     },

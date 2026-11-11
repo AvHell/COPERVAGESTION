@@ -1266,9 +1266,42 @@ ipcMain.handle('rangos:eliminar', async (_e, id) => {
     return await rangosDB.eliminar(id);
 });
 ipcMain.handle('rangos:auditar', async (_e, idCliente = null) => {
-    const err = requerirPermiso(['equipos:rangos:auditar', 'equipos']);
+    const err = requerirPermiso([
+        'equipos:rangos:auditar', 'catalogos:rangos:auditar',
+        'catalogos:rangos:editar', 'equipos:rangos:editar', 'equipos'
+    ]);
     if (err) return err;
     return await rangosDB.auditar(idCliente);
+});
+/* Análisis del ajuste automático: cruza Equipos + Control general de IP + Plano
+   y devuelve las propuestas de rango (sin escribir en la base de datos). */
+ipcMain.handle('rangos:analizar', async (_e, idCliente = null) => {
+    const err = requerirPermiso([
+        'equipos:rangos:auditar', 'catalogos:rangos:auditar',
+        'catalogos:rangos:editar', 'equipos:rangos:editar',
+        'catalogos', 'equipos'
+    ]);
+    if (err) return err;
+    try {
+        return await rangosDB.analizar(idCliente);
+    } catch (error) {
+        console.error('[Rangos] Error al analizar:', error);
+        return { ok: false, mensaje: error.message || 'No se pudo analizar los rangos.' };
+    }
+});
+/* Aplica el ajuste: crea/amplía rangos y devuelve lo que quedó pendiente. */
+ipcMain.handle('rangos:aplicarAjuste', async (_e, idCliente = null) => {
+    const err = requerirPermiso([
+        'catalogos:rangos:crear', 'catalogos:rangos:editar',
+        'equipos:rangos:crear', 'equipos:rangos:editar'
+    ]);
+    if (err) return err;
+    try {
+        return await rangosDB.aplicarAjuste(idCliente);
+    } catch (error) {
+        console.error('[Rangos] Error al aplicar el ajuste:', error);
+        return { ok: false, mensaje: error.message || 'No se pudo aplicar el ajuste de rangos.' };
+    }
 });
 ipcMain.handle('rangos:validarIP', async (_e, idCliente, idRolEquipo, ip) => {
     const err = requerirSesion('equipos');

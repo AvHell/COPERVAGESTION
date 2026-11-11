@@ -124,6 +124,21 @@
                             <span class="tab-sub">Parámetros técnicos</span>
                         </span>
                     </button>
+
+                    <button type="button" class="tab-btn" data-tab="rangos" role="menuitem">
+                        <span class="tab-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="5" r="2"/>
+                                <circle cx="5" cy="19" r="2"/>
+                                <circle cx="19" cy="19" r="2"/>
+                                <path d="M12 7v4M12 11l-6 6M12 11l6 6"/>
+                            </svg>
+                        </span>
+                        <span class="tab-label">
+                            <span class="tab-title">Rangos IP</span>
+                            <span class="tab-sub">Ajuste automático</span>
+                        </span>
+                    </button>
                 </div>
             </div>
 
@@ -383,6 +398,59 @@
             </div>
 
             <div id="cfg-contenedor-grupos"></div>
+        </section>
+
+        <!-- TAB: RANGOS IP -->
+        <section class="tab-panel" data-tab-panel="rangos">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <h2>Rangos IP</h2>
+                    <p>Se calculan con los equipos de cada cliente, el Control general de IP y el Plano.
+                       Analiza para ver qué falta y ajusta los rangos automáticamente.</p>
+                </div>
+                <div class="panel-actions">
+                    <div class="filtro-group">
+                        <label>Cliente</label>
+                        <select id="rng-filtro-cliente"></select>
+                    </div>
+                    <button type="button" id="rng-btn-analizar" class="btn-outline"
+                            data-permiso="catalogos:rangos:auditar|equipos:rangos:auditar|equipos">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <span>Analizar</span>
+                    </button>
+                    <button type="button" id="rng-btn-aplicar" class="btn-primary" disabled
+                            data-permiso="catalogos:rangos:crear|catalogos:rangos:editar|equipos:rangos:crear|equipos:rangos:editar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5"/>
+                        </svg>
+                        <span>Ajustar automáticamente</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="rng-mensaje" class="alert oculto"></div>
+
+            <div id="rng-resumen" class="rng-resumen oculto"></div>
+
+            <div id="rng-vacio" class="empty-state">
+                <div class="empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="5" r="2"/>
+                        <circle cx="5" cy="19" r="2"/>
+                        <circle cx="19" cy="19" r="2"/>
+                        <path d="M12 7v4M12 11l-6 6M12 11l6 6"/>
+                    </svg>
+                </div>
+                <h3>Sin análisis todavía</h3>
+                <p>Pulsa «Analizar» para revisar los rangos de los clientes.</p>
+            </div>
+
+            <div id="rng-propuestas"></div>
+
+            <div id="rng-avisos"></div>
         </section>
     </main>
 

@@ -1446,6 +1446,348 @@ const TabConfig = (() => {
 })();
 
 /* =========================================================
+   MÓDULO: RANGOS IP — ajuste automático
+   ---------------------------------------------------------
+   El motor vive en src/js/db/rangos.js y cruza las tres fuentes
+   que dependen de los clientes: Equipos (IP estática + perfil),
+   Control general de IP (infraestructura) y Plano (ubicación).
+   Aquí solo se analiza, se muestra el resultado y se aplica el
+   ajuste: nunca se elimina un rango, los conflictos se devuelven
+   como pendientes de revisión manual.
+   ========================================================= */
+const TabRangos = (() => {
+    const $ = id => document.getElementById(id);
+    const filtroCliente = $('rng-filtro-cliente');
+    const btnAnalizar = $('rng-btn-analizar');
+    const btnAplicar = $('rng-btn-aplicar');
+    const resumen = $('rng-resumen');
+    const propuestas = $('rng-propuestas');
+    const avisos = $('rng-avisos');
+    const vacio = $('rng-vacio');
+    const mensaje = $('rng-mensaje');
+
+    let analisis = null;
+    let ocupado = false;
+
+    const ETIQUETA_ACCION = {
+        crear: 'Crear rango',
+        ampliar: 'Ampliar rango',
+        conflicto: 'Revisar a mano'
+    };
+
+    function mostrarMensaje(texto, tipo = 'error') {
+        if (!mensaje) return;
+        mensaje.textContent = texto;
+        mensaje.className = 'alert ' + tipo;
+    }
+
+    function ocultarMensaje() {
+        if (!mensaje) return;
+        mensaje.className = 'alert oculto';
+        mensaje.textContent = '';
+    }
+
+    function idClienteSeleccionado() {
+        const valor = parseInt(filtroCliente?.value || '', 10);
+        return Number.isInteger(valor) && valor > 0 ? valor : null;
+    }
+
+    function pendientesAplicables() {
+        const r = analisis?.resumen;
+        return (r?.crear || 0) + (r?.ampliar || 0);
+    }
+
+    function setEtiqueta(boton, texto) {
+        const span = boton?.querySelector('span');
+        if (span) span.textContent = texto;
+    }
+
+    function actualizarBotonAplicar() {
+        if (!btnAplicar) return;
+        const pendientes = pendientesAplicables();
+        btnAplicar.disabled = ocupado || pendientes === 0;
+        setEtiqueta(btnAplicar, pendientes
+            ? `Ajustar automáticamente (${pendientes})`
+            : 'Ajustar automáticamente');
+    }
+
+    async function refrescarClientes() {
+        if (!filtroCliente) return;
+        const clientes = await Cache.cargarClientes();
+        const actual = filtroCliente.value;
+        filtroCliente.innerHTML = '<option value="">Todos los clientes</option>';
+        clientes.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = String(c.IdCliente);
+            opt.textContent = `${c.Codigo} - ${c.Nombre}`;
+            filtroCliente.appendChild(opt);
+        });
+        if (actual && Array.from(filtroCliente.options).some(o => o.value === actual)) {
+            filtroCliente.value = actual;
+        }
+    }
+
+    /* ---------- Resumen ---------- */
+    function tarjeta(etiqueta, valor, ayuda = '', tono = '') {
+        return `<div class="rng-stat ${tono}">
+                    <span class="rng-stat-valor">${escaparHTML(valor)}</span>
+                    <span class="rng-stat-label">${escaparHTML(etiqueta)}</span>
+                    ${ayuda ? `<span class="rng-stat-hint">${escaparHTML(ayuda)}</span>` : ''}
+                </div>`;
+    }
+
+    function pintarResumen() {
+        if (!resumen) return;
+        if (!analisis) {
+            resumen.innerHTML = '';
+            resumen.classList.add('oculto');
+            return;
+        }
+        const r = analisis.resumen || {};
+        resumen.innerHTML = [
+            tarjeta('Clientes con IP', r.clientes ?? 0, 'Con equipos estáticos'),
+            tarjeta('Equipos con IP', r.equipos ?? 0, `${r.equiposEnPlano ?? 0} ya en el plano`),
+            tarjeta('Rangos actuales', r.rangos ?? 0, `${r.cubiertos ?? 0} bloque(s) ya cubiertos`),
+            tarjeta('Por crear', r.crear ?? 0, 'Rangos nuevos', r.crear ? 'ok' : ''),
+            tarjeta('Por ampliar', r.ampliar ?? 0, 'Rangos existentes', r.ampliar ? 'aviso' : ''),
+            tarjeta('Conflictos', r.conflicto ?? 0, 'Revisión manual', r.conflicto ? 'peligro' : ''),
+            tarjeta('Rangos sin uso', r.sinUso ?? 0, 'Ningún equipo cae dentro', r.sinUso ? 'aviso' : ''),
+            tarjeta('IP fuera de norma', r.violaciones ?? 0,
+                `${r.sinNorma ?? 0} cliente(s) sin rango`, r.violaciones ? 'peligro' : '')
+        ].join('');
+        resumen.classList.remove('oculto');
+    }
+
+    /* ---------- Propuestas ---------- */
+    function pintarPropuestas() {
+        if (!propuestas) return;
+        propuestas.innerHTML = '';
+        const lista = analisis?.propuestas || [];
+        if (!lista.length) return;
+
+        const card = document.createElement('div');
+        card.className = 'card-table';
+
+        const tabla = document.createElement('table');
+        tabla.className = 'data-table';
+        tabla.innerHTML = `
+            <thead>
+                <tr>
+                    <th style="width:150px;">Cliente</th>
+                    <th style="width:160px;">Perfil</th>
+                    <th>Rango propuesto</th>
+                    <th style="width:130px;">Equipos</th>
+                    <th style="width:150px;">Acción</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        `;
+        const tbody = tabla.querySelector('tbody');
+
+        lista.forEach(p => {
+            const tr = document.createElement('tr');
+            const perfil = p.RolCodigo
+                ? renderBadgeRol(p.RolCodigo)
+                : '<span class="badge-desc vacia">Todos los perfiles</span>';
+            const generales = Array.isArray(p.generaGeneral) && p.generaGeneral.length
+                ? `<span class="rng-motivo rng-alerta">Incluye IP del Control general: ${escaparHTML(p.generaGeneral.join(', '))}</span>`
+                : '';
+
+            tr.innerHTML = `
+                <td data-label="Cliente">${renderBadgeCliente(p.ClienteCodigo)}</td>
+                <td data-label="Perfil">${perfil}</td>
+                <td data-label="Rango propuesto">
+                    <span class="valor-tecnico">${escaparHTML(`${p.IPInicio} – ${p.IPFin}`)}</span>
+                    <span class="rng-motivo">${escaparHTML(p.Motivo || '')}</span>
+                    ${generales}
+                </td>
+                <td data-label="Equipos">
+                    <span class="badge-nombre">${p.TotalEquipos ?? 0}</span>
+                    <span class="rng-motivo">${p.EquiposEnPlano ?? 0} en el plano</span>
+                </td>
+                <td data-label="Acción">
+                    <span class="rng-accion ${escaparHTML(p.Accion || '')}">${escaparHTML(ETIQUETA_ACCION[p.Accion] || p.Accion || '')}</span>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        card.appendChild(tabla);
+        propuestas.appendChild(card);
+    }
+
+    /* ---------- Avisos / depuración ---------- */
+    function bloqueAviso(titulo, descripcion, items, tono) {
+        if (!items || !items.length) return '';
+        return `<section class="rng-bloque ${tono}">
+                    <div class="rng-bloque-header">
+                        <h3>${escaparHTML(titulo)}</h3>
+                        <span class="rng-bloque-count">${items.length}</span>
+                    </div>
+                    <p class="rng-bloque-desc">${escaparHTML(descripcion)}</p>
+                    <ul class="rng-lista">${items.map(i => `<li>${i}</li>`).join('')}</ul>
+                </section>`;
+    }
+
+    function pintarAvisos() {
+        if (!avisos) return;
+        if (!analisis) { avisos.innerHTML = ''; return; }
+
+        const sinUso = (analisis.sinUso || []).map(r =>
+            `${renderBadgeCliente(r.ClienteCodigo || '')}
+             <span class="valor-tecnico">${escaparHTML(`${r.IPInicio} – ${r.IPFin}`)}</span>
+             · ${escaparHTML(r.Motivo || '')}`
+        );
+
+        const generales = (analisis.generalesEnRangos || []).map(g =>
+            `<span class="valor-tecnico">${escaparHTML(g.IP)}</span>
+             · ${escaparHTML(g.Hostname || 'sin hostname')}
+             · dentro del rango de ${renderBadgeCliente(g.ClienteCodigo || '')}`
+        );
+
+        const invalidas = (analisis.ipsInvalidas || []).map(e =>
+            `${renderBadgeCliente(e.ClienteCodigo || '')}
+             ${escaparHTML(e.Hostname || 'Sin hostname')}
+             · IP registrada: <span class="valor-tecnico">${escaparHTML(e.IP ?? '')}</span>`
+        );
+
+        const violaciones = (analisis.violaciones || []).map(v =>
+            `${renderBadgeCliente(v.ClienteCodigo || '')}
+             ${escaparHTML(v.Hostname || 'Sin hostname')}
+             · <span class="valor-tecnico">${escaparHTML(v.IP || '')}</span>
+             · ${escaparHTML(v.mensaje || '')}`
+        );
+
+        const sinNorma = (analisis.sinNorma || []).map(e =>
+            `${renderBadgeCliente(e.ClienteCodigo || '')}
+             ${escaparHTML(e.Hostname || 'Sin hostname')}
+             · <span class="valor-tecnico">${escaparHTML(e.IP ?? '')}</span>`
+        );
+
+        avisos.innerHTML = [
+            bloqueAviso('Rangos que ningún equipo usa',
+                'Se conservan tal cual: solo se avisa para que puedas depurarlos.',
+                sinUso, 'aviso'),
+            bloqueAviso('IP del Control general dentro de rangos de cliente',
+                'Esas direcciones son de infraestructura; conviene sacarlas del rango del cliente.',
+                generales, 'aviso'),
+            bloqueAviso('Equipos con IP inválida',
+                'No se pueden ubicar en ningún rango hasta corregir la IP.',
+                invalidas, 'peligro'),
+            bloqueAviso('Equipos fuera de rango',
+                'Se resuelven al aplicar el ajuste automático.',
+                violaciones, 'peligro'),
+            bloqueAviso('Clientes sin ningún rango definido',
+                'Su IP no se puede validar; el ajuste creará el rango que corresponda.',
+                sinNorma, 'peligro')
+        ].join('');
+    }
+
+    function pintarTodo() {
+        pintarResumen();
+        pintarPropuestas();
+        pintarAvisos();
+        if (vacio) vacio.classList.toggle('oculto', !!analisis);
+        actualizarBotonAplicar();
+    }
+
+    /* ---------- Acciones ---------- */
+    async function analizar() {
+        if (ocupado) return;
+        ocupado = true;
+        ocultarMensaje();
+        if (btnAnalizar) btnAnalizar.disabled = true;
+        setEtiqueta(btnAnalizar, 'Analizando...');
+        actualizarBotonAplicar();
+
+        try {
+            const res = await window.api.rangos.analizar(idClienteSeleccionado());
+            if (!res || res.ok === false) {
+                analisis = null;
+                pintarTodo();
+                mostrarMensaje(res?.mensaje || 'No se pudo analizar los rangos.');
+                return;
+            }
+            analisis = res;
+            pintarTodo();
+            if (!pendientesAplicables()) {
+                mostrarMensaje('Los rangos ya cubren todas las IP registradas. No hace falta ajustar nada.', 'ok');
+            }
+        } catch (err) {
+            analisis = null;
+            pintarTodo();
+            mostrarMensaje(err.message || 'Error al analizar los rangos.');
+        } finally {
+            ocupado = false;
+            if (btnAnalizar) btnAnalizar.disabled = false;
+            setEtiqueta(btnAnalizar, 'Analizar');
+            actualizarBotonAplicar();
+        }
+    }
+
+    async function aplicar() {
+        if (ocupado || !pendientesAplicables()) return;
+        const r = analisis.resumen;
+
+        const confirmacion = await Swal.fire({
+            icon: 'question',
+            title: '¿Ajustar los rangos?',
+            html: `<p style="margin:0 0 8px;">Se crearán <strong>${r.crear || 0}</strong> rango(s)
+                   y se ampliarán <strong>${r.ampliar || 0}</strong>.</p>
+                   <p style="margin:0;">Ningún rango se elimina: los conflictos quedan pendientes para revisarlos a mano.</p>`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, ajustar',
+            cancelButtonText: 'Cancelar',
+            showCloseButton: true,
+            buttonsStyling: false,
+            customClass: {
+                popup: 'cl-confirm',
+                confirmButton: 'swal2-confirm swal2-styled',
+                cancelButton: 'swal2-cancel swal2-styled'
+            }
+        });
+        if (!confirmacion.isConfirmed) return;
+
+        ocupado = true;
+        ocultarMensaje();
+        if (btnAnalizar) btnAnalizar.disabled = true;
+        btnAplicar.disabled = true;
+        setEtiqueta(btnAplicar, 'Aplicando...');
+
+        try {
+            const res = await window.api.rangos.aplicarAjuste(idClienteSeleccionado());
+            if (res && res.ok) {
+                analisis = res.analisis || null;
+                pintarTodo();
+                await alertaExito('Rangos ajustados', escaparHTML(res.mensaje || ''));
+            } else {
+                mostrarMensaje(res?.mensaje || 'No se pudo aplicar el ajuste de rangos.');
+            }
+        } catch (err) {
+            mostrarMensaje(err.message || 'Error al aplicar el ajuste de rangos.');
+        } finally {
+            ocupado = false;
+            if (btnAnalizar) btnAnalizar.disabled = false;
+            actualizarBotonAplicar();
+        }
+    }
+
+    function init() {
+        if (btnAnalizar) btnAnalizar.addEventListener('click', () => analizar());
+        if (btnAplicar) btnAplicar.addEventListener('click', aplicar);
+        if (filtroCliente) {
+            filtroCliente.addEventListener('change', () => {
+                analisis = null;
+                pintarTodo();
+                analizar();
+            });
+        }
+    }
+
+    return { init, cargar: analizar, refrescarClientes };
+})();
+
+/* =========================================================
    ORQUESTADOR DE TABS
    ========================================================= */
 const TabsConfig = {
@@ -1453,7 +1795,8 @@ const TabsConfig = {
     pisos:    { cargar: () => TabPisos.cargar() },
     roles:    { cargar: () => TabRoles.cargar() },
     dominios: { cargar: () => TabDominios.cargar() },
-    config:   { cargar: () => TabConfig.cargar() }
+    config:   { cargar: () => TabConfig.cargar() },
+    rangos:   { cargar: () => TabRangos.cargar() }
 };
 
 let tabActivo = 'clientes';
@@ -1570,6 +1913,7 @@ function activarTab(nombre) {
     TabRoles.init();
     TabDominios.init();
     TabConfig.init();
+    TabRangos.init();
 
     actualizarMenu(tabActivo);
 
@@ -1577,6 +1921,7 @@ function activarTab(nombre) {
     await TabClientes.cargar();
     await TabDominios.refrescarClientes();
     await TabConfig.refrescarClientes();
+    await TabRangos.refrescarClientes();
 
     limpiarResiduosSwal();
 })();

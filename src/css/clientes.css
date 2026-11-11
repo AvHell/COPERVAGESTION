@@ -39,6 +39,11 @@ html, body { height: 100%; }
     --cl-sombra-fuerte:   0 20px 60px rgba(15, 23, 42, 0.25);
 
     --cl-fuente: 'Poppins', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+    /* Acento dorado de la cabecera (mismo oro que Catálogos/Equipos) y ancho
+       máximo compartido para que el contenido quede alineado con el resto. */
+    --cl-oro:         #A99A63;
+    --cl-ancho:       1440px;
 }
 
 /* =========================================================
@@ -49,7 +54,9 @@ body {
     font-size: 14px;
     color: #1a202c;
     background-color: var(--cl-gris-fondo);
-    padding: 32px 40px;
+    /* Sin padding global: el ancho y el aire los pone .page-shell, así el
+       hero puede ir a sangre completa como en el resto de páginas. */
+    padding: 0;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -115,8 +122,12 @@ button svg, button .icono-svg {
 .barra-acciones {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 8px;
+    gap: 14px;
+    padding: 14px 16px;
+    background-color: var(--cl-blanco);
+    border: 1px solid var(--cl-gris-borde);
+    border-radius: var(--cl-radio);
+    box-shadow: var(--cl-sombra-suave);
 }
 
 /* =========================================================
@@ -177,16 +188,119 @@ button svg, button .icono-svg {
 }
 
 /* =========================================================
-   TÍTULO
+   HERO (idéntico a Equipos / Catálogos)
    ========================================================= */
-h2 {
+.header-global {
+    position: relative;
+    overflow: hidden;
+    background: var(--cl-azul);
+    color: #fff;
+    border-bottom: 3px solid var(--cl-oro);
+    box-shadow: 0 6px 24px -8px rgba(30, 58, 95, 0.35);
+}
+.header-global::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 42%;
+    background-image: repeating-linear-gradient(
+        90deg,
+        rgba(169, 154, 99, 0.08) 0px,
+        rgba(169, 154, 99, 0.08) 1px,
+        transparent 1px,
+        transparent 28px
+    );
+    pointer-events: none;
+}
+.header-global::after {
+    content: '';
+    position: absolute;
+    top: -90px;
+    right: 40px;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: var(--cl-azul-hover);
+    opacity: 0.28;
+    pointer-events: none;
+}
+
+/* Columnas laterales elásticas y central ajustada al contenido: el título
+   queda centrado y nunca se recorta. */
+.header-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 20px;
+    padding: 26px 32px;
+    max-width: var(--cl-ancho);
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--cl-blanco);
     color: var(--cl-azul);
-    font-size: 22px;
+    border: 1px solid var(--cl-gris-borde);
+    border-radius: 11px;
+    font-family: inherit;
+    font-size: 0.83rem;
     font-weight: 600;
-    letter-spacing: -0.01em;
-    margin: 8px 0 20px;
-    padding-bottom: 12px;
-    border-bottom: 2px solid var(--cl-gris-borde);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    justify-self: start;
+    box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.18);
+}
+.btn-back:hover:not(:disabled) {
+    background: var(--cl-gris-suave);
+    border-color: var(--cl-oro);
+    transform: translateX(-2px);
+}
+.btn-back:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.btn-back svg { width: 16px; height: 16px; }
+
+.header-titles {
+    grid-column: 2;
+    text-align: center;
+    min-width: 0;
+    max-width: 100%;
+}
+.header-titles h1 {
+    color: #fff;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin-bottom: 4px;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-wrap: balance;
+}
+.header-titles p {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.78rem;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.35;
+}
+
+/* =========================================================
+   CONTENEDOR PRINCIPAL
+   ========================================================= */
+.page-shell {
+    max-width: var(--cl-ancho);
+    margin: 0 auto;
+    padding: 24px 32px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
 }
 
 /* =========================================================
@@ -392,6 +506,10 @@ h2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
+}
+/* El selector de color ocupa las dos columnas del formulario. */
+.grid-form .grid-form-full {
+    grid-column: 1 / -1;
 }
 .grid-form label {
     display: block;
@@ -637,9 +755,23 @@ body > .swal2-select-label {
 /* =========================================================
    RESPONSIVE
    ========================================================= */
+@media (max-width: 900px) {
+    .header-inner { padding: 20px 20px; gap: 14px; }
+    .header-titles h1 { font-size: 1.3rem; }
+    .header-titles p { display: none; }
+    .page-shell { padding: 20px 20px 32px; }
+}
+
 @media (max-width: 720px) {
-    body { padding: 20px; }
+    /* En pantallas angostas el hero pasa a dos filas: Volver arriba y el
+       título ocupando todo el ancho, sin recortarse. */
+    .header-inner { display: flex; flex-wrap: wrap; align-items: center; padding: 18px 16px; }
+    .header-titles { flex: 1 1 100%; order: 3; text-align: left; }
+    .header-titles h1 { font-size: 1.2rem; }
+    .page-shell { padding: 18px 16px 28px; gap: 14px; }
     .barra-acciones { flex-wrap: wrap; }
+    .barra-acciones .buscador { flex: 1 1 100%; }
+    .barra-acciones button { flex: 1 1 auto; justify-content: center; }
     .modal-base { max-width: 100%; max-height: 96vh; }
     .grid-form { grid-template-columns: 1fr; }
     .swal2-toast.cl-toast {

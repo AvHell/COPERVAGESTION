@@ -37,6 +37,10 @@ const CATALOGO = {
   'catalogos:roles:eliminar':      { grupo: 'Catálogos',    etiqueta: 'Eliminar rol de equipo' },
   'catalogos:dominios:gestionar':  { grupo: 'Catálogos',    etiqueta: 'Gestionar dominios' },
   'catalogos:config:gestionar':    { grupo: 'Catálogos',    etiqueta: 'Gestionar config. de red' },
+  'catalogos:rangos:crear':        { grupo: 'Catálogos',    etiqueta: 'Crear rango IP por cliente' },
+  'catalogos:rangos:editar':       { grupo: 'Catálogos',    etiqueta: 'Editar rango IP por cliente' },
+  'catalogos:rangos:eliminar':     { grupo: 'Catálogos',    etiqueta: 'Eliminar rango IP por cliente' },
+  'catalogos:rangos:auditar':      { grupo: 'Catálogos',    etiqueta: 'Analizar y ajustar rangos IP' },
 
   /* ---------- EQUIPOS ---------- */
   'equipos:listado:ver':           { grupo: 'Equipos',      etiqueta: 'Ver tabla de equipos' },

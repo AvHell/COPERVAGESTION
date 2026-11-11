@@ -552,14 +552,12 @@ body {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     border: 1px solid var(--gray-200);
-    /* FIX: Overflow para tooltips */
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-top: 50px;
-    margin-top: -50px;
-    padding-bottom: 50px;
-    margin-bottom: -50px;
-    -webkit-overflow-scrolling: touch;
+    /* Sin padding/ margen negativo: antes la tarjeta arrancaba 50px más arriba
+       (-50px) para dejar sitio al tooltip y acababa tapando el título del
+       panel. Ahora la tarjeta empieza en su posición real y los tooltips de
+       las acciones (::after, z-index 100) salen gracias a overflow visible.
+       En pantallas angostas el scroll horizontal se activa en el @media. */
+    overflow: visible;
 }
 
 .data-table {
@@ -1330,6 +1328,208 @@ body {
 }
 
 /* =========================================================
+   BOTÓN SECUNDARIO (contorno)
+   ========================================================= */
+.btn-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: #fff;
+    color: var(--tierra-carbon);
+    border: 1.5px solid var(--tierra-arena);
+    border-radius: 12px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    font-family: var(--font-display);
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.15s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+    height: 46px;
+}
+.btn-outline:hover:not(:disabled) {
+    background: var(--tierra-crema);
+    border-color: var(--tierra-oliva);
+    color: var(--tierra-oliva);
+    transform: translateY(-1px);
+}
+.btn-outline:active:not(:disabled) { transform: translateY(0); }
+.btn-outline:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-outline:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
+.btn-outline svg { width: 16px; height: 16px; }
+
+/* Alertas informativas / éxito */
+.alert.ok {
+    background: #EDF2E4;
+    color: var(--tierra-oliva);
+    border-color: var(--tierra-oliva);
+}
+.alert.info {
+    background: var(--tierra-crema);
+    color: var(--gray-700);
+    border-color: var(--tierra-arena);
+}
+
+/* =========================================================
+   RANGOS IP — ajuste automático
+   ========================================================= */
+.rng-resumen {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    gap: 12px;
+    margin: 0 0 20px;
+}
+.rng-resumen.oculto { display: none; }
+
+.rng-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-left: 4px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs);
+    min-width: 0;
+}
+.rng-stat.ok      { border-left-color: var(--tierra-oliva); }
+.rng-stat.aviso   { border-left-color: var(--tierra-oro); }
+.rng-stat.peligro { border-left-color: var(--rojo-base); }
+
+.rng-stat-valor {
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--tierra-carbon);
+    letter-spacing: -0.03em;
+}
+.rng-stat-label {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+}
+.rng-stat-hint {
+    font-size: 0.72rem;
+    color: var(--gray-400);
+    line-height: 1.35;
+}
+
+/* Detalle bajo cada valor de la tabla de propuestas */
+.rng-motivo {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.74rem;
+    color: var(--gray-500);
+    line-height: 1.45;
+    max-width: 54ch;
+}
+.rng-motivo.rng-alerta { color: var(--rojo-text); font-weight: 600; }
+
+#rng-propuestas .card-table { margin-bottom: 18px; }
+
+.rng-accion {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.rng-accion.crear {
+    background: var(--tierra-crema);
+    color: var(--tierra-oliva);
+    border-color: var(--tierra-arena);
+}
+.rng-accion.ampliar {
+    background: #F6EFD8;
+    color: #7a6a2f;
+    border-color: var(--tierra-oro);
+}
+.rng-accion.conflicto {
+    background: var(--rojo-soft);
+    color: var(--rojo-text);
+    border-color: var(--rojo-base);
+}
+
+/* Bloques de depuración (rangos sin uso, IP inválidas, violaciones...) */
+.rng-bloque {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 18px 20px;
+    margin-bottom: 14px;
+}
+.rng-bloque.aviso   { border-left: 4px solid var(--tierra-oro); }
+.rng-bloque.peligro { border-left: 4px solid var(--rojo-base); }
+
+.rng-bloque-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.rng-bloque-header h3 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--tierra-carbon);
+    letter-spacing: -0.015em;
+}
+.rng-bloque-count {
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--gray-100);
+    color: var(--gray-600);
+    flex-shrink: 0;
+}
+.rng-bloque.aviso .rng-bloque-count   { background: var(--tierra-crema); color: var(--tierra-oliva); }
+.rng-bloque.peligro .rng-bloque-count { background: var(--rojo-soft); color: var(--rojo-text); }
+
+.rng-bloque-desc {
+    font-size: 0.8rem;
+    color: var(--gray-500);
+    line-height: 1.5;
+    margin: 4px 0 10px;
+    max-width: 76ch;
+}
+.rng-lista {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.rng-lista li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    font-size: 0.82rem;
+    color: var(--gray-700);
+    line-height: 1.5;
+}
+
+/* =========================================================
    RESPONSIVE
    ========================================================= */
 @media (max-width: 1024px) {
@@ -1351,6 +1551,9 @@ body {
     .menu-toggle .tab-sub { display: none; }
     .menu-acciones { justify-content: stretch; }
     .menu-acciones .buscador { flex: 1 1 100%; max-width: none; }
+    /* En ventanas angostas la tabla necesita scroll horizontal: aquí sí se
+       recorta el eje vertical (los tooltips no aplican en táctil). */
+    .card-table { overflow-x: auto; }
 }
 @media (max-width: 768px) {
     .field-row { grid-template-columns: 1fr; gap: 0; }

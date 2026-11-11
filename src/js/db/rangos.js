@@ -523,6 +523,506 @@ async function auditar(idCliente = null) {
     };
 }
 
+/* =========================================================
+   AJUSTE AUTOMÁTICO DE RANGOS
+   ---------------------------------------------------------
+   Los rangos deben "abrazar" las IP reales de cada cliente. Este
+   motor cruza tres fuentes que ya existen en la app:
+
+   - Equipos: la IP estática activa de cada equipo y su perfil.
+   - Control General de IP: las direcciones de infraestructura
+     (que un rango de cliente no debería reservar).
+   - Plano: marca qué equipos ya están colocados en un piso.
+
+   Con eso propone, por cliente/perfil/segmento, el rango mínimo
+   que cubre las IP usadas (con holgura configurable) y detecta
+   rangos sin uso, empalmes y direcciones fuera de norma.
+   ========================================================= */
+
+/* Hosts libres que se toleran entre dos IP usadas para que caigan
+   dentro del MISMO rango; si el hueco es mayor se crea otro rango. */
+const HOLGURA_HOSTS = 2;
+/* Hosts extra a cada lado del bloque detectado (se recortan si
+   chocan con el inicio/fin del segmento o con Control General IP). */
+const MARGEN_HOSTS = 1;
+
+function hostDeIP(ip) {
+    const normal = normalizarIPv4(ip);
+    if (!normal) return null;
+    const host = Number(normal.split('.')[3]);
+    return Number.isInteger(host) ? host : null;
+}
+
+function ipDesdeHost(segmento, host) {
+    return `${segmento}.${host}`;
+}
+
+/** Agrupa hosts usados en bloques contiguos (con tolerancia HOLGURA). */
+function agruparHosts(hosts) {
+    const orden = [...new Set(hosts)].sort((a, b) => a - b);
+    const bloques = [];
+    for (const host of orden) {
+        const ultimo = bloques[bloques.length - 1];
+        if (ultimo && host - ultimo[ultimo.length - 1] <= HOLGURA_HOSTS + 1) {
+            ultimo.push(host);
+        } else {
+            bloques.push([host]);
+        }
+    }
+    return bloques;
+}
+
+function rangoCubreIP(rango, valor) {
+    const inicio = ipAEntero(rango?.IPInicio);
+    const fin = ipAEntero(rango?.IPFin);
+    return inicio !== null && fin !== null && valor >= inicio && valor <= fin;
+}
+
+function seEmpalman(iniA, finA, iniB, finB) {
+    return iniA <= finB && iniB <= finA;
+}
+
+function claveGrupo(idCliente, idRolEquipo) {
+    return `${Number(idCliente)}|${Number(idRolEquipo) || 0}`;
+}
+
+/**
+ * Analiza los rangos de un cliente (o de todos) y devuelve propuestas
+ * listas para aplicar. Nunca escribe en la base de datos.
+ */
+async function analizar(idCliente = null) {
+    await verificarEsquema();
+    const pool = await getPool();
+    const clienteNum = Number(idCliente);
+    const filtroCliente = Number.isInteger(clienteNum) && clienteNum > 0;
+
+    const [rangos, equipos, generales] = await Promise.all([
+        listar(filtroCliente ? clienteNum : null),
+        leerEquiposConIP(pool, filtroCliente ? clienteNum : null),
+        leerInventarioGeneral(pool)
+    ]);
+
+    const equiposValidos = [];
+    const ipsInvalidas = [];
+    for (const equipo of equipos) {
+        const normal = normalizarIPv4(equipo.IP);
+        if (!normal) {
+            ipsInvalidas.push({
+                IdEquipo: equipo.IdEquipo,
+                Hostname: equipo.Hostname,
+                IP: equipo.IP,
+                ClienteCodigo: equipo.ClienteCodigo
+            });
+            continue;
+        }
+        equiposValidos.push({ ...equipo, IP: normal, Valor: ipAEntero(normal), Host: hostDeIP(normal) });
+    }
+
+    const generalPorHost = new Map(); // segmento -> Map(host -> registro)
+    for (const general of generales) {
+        const normal = normalizarIPv4(general.IP);
+        if (!normal) continue;
+        const segmento = segmentoDe(normal);
+        if (!generalPorHost.has(segmento)) generalPorHost.set(segmento, new Map());
+        generalPorHost.get(segmento).set(hostDeIP(normal), {
+            IP: normal,
+            Hostname: general.Hostname || ''
+        });
+    }
+
+    const rangosPorCliente = new Map();
+    for (const rango of rangos) {
+        const clave = Number(rango.IdCliente);
+        if (!rangosPorCliente.has(clave)) rangosPorCliente.set(clave, []);
+        rangosPorCliente.get(clave).push(rango);
+    }
+
+    /* --- Grupos cliente + perfil con sus IP por segmento --- */
+    const grupos = new Map();
+    for (const equipo of equiposValidos) {
+        const clave = claveGrupo(equipo.IdCliente, equipo.IdRolEquipo);
+        if (!grupos.has(clave)) {
+            grupos.set(clave, {
+                IdCliente: Number(equipo.IdCliente),
+                ClienteCodigo: equipo.ClienteCodigo || '',
+                ClienteNombre: equipo.ClienteNombre || '',
+                IdRolEquipo: Number(equipo.IdRolEquipo) || null,
+                RolCodigo: equipo.RolCodigo || '',
+                RolNombre: equipo.RolNombre || '',
+                segmentos: new Map()
+            });
+        }
+        const grupo = grupos.get(clave);
+        const segmento = segmentoDe(equipo.IP);
+        if (!grupo.segmentos.has(segmento)) grupo.segmentos.set(segmento, []);
+        grupo.segmentos.get(segmento).push(equipo);
+    }
+
+    const propuestas = [];
+    let cubiertos = 0;
+
+    for (const grupo of grupos.values()) {
+        for (const [segmento, lista] of grupo.segmentos) {
+            const rangosCliente = rangosPorCliente.get(grupo.IdCliente) || [];
+            const aplicables = rangosCliente.filter((r) =>
+                !r.IdRolEquipo || Number(r.IdRolEquipo) === grupo.IdRolEquipo
+            );
+            const generalesSegmento = generalPorHost.get(segmento) || new Map();
+            const hostsUsados = lista.map((e) => e.Host);
+
+            for (const bloque of agruparHosts(hostsUsados)) {
+                const usados = lista
+                    .filter((e) => bloque.includes(e.Host))
+                    .sort((a, b) => a.Host - b.Host);
+                const equiposDetalle = usados.map((e) => ({
+                    IdEquipo: e.IdEquipo,
+                    Hostname: e.Hostname,
+                    IP: e.IP,
+                    PisoNombre: e.PisoNombre || '',
+                    EnPlano: !!e.EnPlano
+                }));
+
+                /* Recorta márgenes para no "reservar" la IP de la red,
+                   la de broadcast ni direcciones del control general. */
+                let hostInicio = Math.max(1, bloque[0] - MARGEN_HOSTS);
+                let hostFin = Math.min(254, bloque[bloque.length - 1] + MARGEN_HOSTS);
+                while (hostInicio < bloque[0] && generalesSegmento.has(hostInicio)) hostInicio += 1;
+                while (hostFin > bloque[bloque.length - 1] && generalesSegmento.has(hostFin)) hostFin -= 1;
+
+                const ipInicio = ipDesdeHost(segmento, hostInicio);
+                const ipFin = ipDesdeHost(segmento, hostFin);
+                const iniValor = ipAEntero(ipInicio);
+                const finValor = ipAEntero(ipFin);
+
+                /* ¿Ya está cubierto por un rango que aplica al perfil? */
+                const cobertura = aplicables.find((r) =>
+                    rangoCubreIP(r, iniValor) && rangoCubreIP(r, finValor)
+                );
+                if (cobertura) {
+                    cubiertos += 1;
+                    continue;
+                }
+
+                /* ¿Un rango existente se solapa parcialmente? Se amplía. */
+                const ampliable = aplicables.find((r) => {
+                    const ini = ipAEntero(r.IPInicio);
+                    const fin = ipAEntero(r.IPFin);
+                    if (ini === null || fin === null) return false;
+                    return seEmpalman(ini, fin, iniValor, finValor);
+                });
+
+                const detalle = {
+                    IdCliente: grupo.IdCliente,
+                    ClienteCodigo: grupo.ClienteCodigo,
+                    ClienteNombre: grupo.ClienteNombre,
+                    IdRolEquipo: grupo.IdRolEquipo,
+                    RolCodigo: grupo.RolCodigo,
+                    RolNombre: grupo.RolNombre,
+                    Segmento: segmento,
+                    IPInicio: ipInicio,
+                    IPFin: ipFin,
+                    HostsUsados: bloque,
+                    Equipos: equiposDetalle,
+                    EquiposEnPlano: equiposDetalle.filter((e) => e.EnPlano).length,
+                    TotalEquipos: equiposDetalle.length,
+                    generaGeneral: [...generalesSegmento.values()]
+                        .filter((g) => {
+                            const valor = ipAEntero(g.IP);
+                            return valor >= iniValor && valor <= finValor;
+                        })
+                        .map((g) => g.IP)
+                };
+
+                if (ampliable) {
+                    const iniUnido = Math.min(ipAEntero(ampliable.IPInicio), iniValor);
+                    const finUnido = Math.max(ipAEntero(ampliable.IPFin), finValor);
+                    const choque = rangosCliente.find((r) => {
+                        if (Number(r.IdRangoIP) === Number(ampliable.IdRangoIP)) return false;
+                        const rIni = ipAEntero(r.IPInicio);
+                        const rFin = ipAEntero(r.IPFin);
+                        if (rIni === null || rFin === null) return false;
+                        return seEmpalman(rIni, rFin, iniUnido, finUnido);
+                    });
+                    if (choque) {
+                        propuestas.push({
+                            ...detalle,
+                            Accion: 'conflicto',
+                            IdRangoIP: null,
+                            IPInicio: enteroAIP(iniUnido) || ipInicio,
+                            IPFin: enteroAIP(finUnido) || ipFin,
+                            Motivo: `Para cubrir estas IPs habría que ampliar el rango ${ampliable.IPInicio} – ${ampliable.IPFin}, pero se empalma con ${choque.IPInicio} – ${choque.IPFin} (${choque.RolNombre || 'general'}). Ajusta ese rango a mano.`,
+                            Rango: null
+                        });
+                        continue;
+                    }
+                    propuestas.push({
+                        ...detalle,
+                        Accion: 'ampliar',
+                        IdRangoIP: ampliable.IdRangoIP,
+                        IPInicio: enteroAIP(iniUnido) || ipInicio,
+                        IPFin: enteroAIP(finUnido) || ipFin,
+                        Motivo: `Ampliar el rango ${ampliable.IPInicio} – ${ampliable.IPFin} para cubrir ${detalle.TotalEquipos} equipo(s).`,
+                        Rango: ampliable
+                    });
+                    continue;
+                }
+
+                /* Rango nuevo: no debe pisar rangos de OTROS clientes. */
+                const ajeno = rangos.find((r) => {
+                    if (Number(r.IdCliente) === grupo.IdCliente) return false;
+                    const ini = ipAEntero(r.IPInicio);
+                    const fin = ipAEntero(r.IPFin);
+                    if (ini === null || fin === null) return false;
+                    return seEmpalman(ini, fin, iniValor, finValor);
+                });
+
+                if (ajeno) {
+                    propuestas.push({
+                        ...detalle,
+                        Accion: 'conflicto',
+                        IdRangoIP: null,
+                        Motivo: `El rango propuesto se empalma con el rango ${ajeno.IPInicio} – ${ajeno.IPFin} del cliente ${ajeno.ClienteCodigo}. Revisa a quién pertenecen realmente esas IPs.`,
+                        Rango: null
+                    });
+                    continue;
+                }
+
+                propuestas.push({
+                    ...detalle,
+                    Accion: 'crear',
+                    IdRangoIP: null,
+                    Motivo: detalle.TotalEquipos === 1
+                        ? 'Primer rango para estas IP: cubre 1 equipo.'
+                        : `Rango nuevo que cubre ${detalle.TotalEquipos} equipos.`,
+                    Rango: null
+                });
+            }
+        }
+    }
+
+    /* Dos propuestas del MISMO cliente no pueden empalmarse entre sí
+       (guardarRango rechaza solapes sin importar el perfil). */
+    for (let i = 0; i < propuestas.length; i += 1) {
+        const a = propuestas[i];
+        if (a.Accion === 'conflicto') continue;
+        const iniA = ipAEntero(a.IPInicio);
+        const finA = ipAEntero(a.IPFin);
+        for (let j = 0; j < i; j += 1) {
+            const b = propuestas[j];
+            if (b.Accion === 'conflicto' || Number(b.IdCliente) !== Number(a.IdCliente)) continue;
+            const iniB = ipAEntero(b.IPInicio);
+            const finB = ipAEntero(b.IPFin);
+            if (iniA === null || finA === null || iniB === null || finB === null) continue;
+            if (!seEmpalman(iniA, finA, iniB, finB)) continue;
+            a.Accion = 'conflicto';
+            a.IdRangoIP = null;
+            a.Rango = null;
+            a.Motivo = `Se empalma con la propuesta de ${b.RolNombre || 'rango general'} (${b.IPInicio} – ${b.IPFin}). Define a mano cuál perfil se queda con cada bloque.`;
+            break;
+        }
+    }
+
+    propuestas.sort((a, b) =>
+        String(a.ClienteCodigo).localeCompare(String(b.ClienteCodigo)) ||
+        String(a.RolNombre || '').localeCompare(String(b.RolNombre || '')) ||
+        (ipAEntero(a.IPInicio) ?? 0) - (ipAEntero(b.IPInicio) ?? 0)
+    );
+
+    /* --- Rangos sin uso: ningún equipo del perfil cae dentro --- */
+    const sinUso = [];
+    for (const rango of rangos) {
+        const equiposPerfil = equiposValidos.filter((e) =>
+            Number(e.IdCliente) === Number(rango.IdCliente) &&
+            (!rango.IdRolEquipo || Number(e.IdRolEquipo) === Number(rango.IdRolEquipo))
+        );
+        if (!equiposPerfil.length) {
+            sinUso.push({ ...rango, Motivo: rango.RolNombre ? `Sin equipos del perfil ${rango.RolNombre}.` : 'El cliente no tiene equipos estáticos con IP.' });
+            continue;
+        }
+        const usados = equiposPerfil.filter((e) => rangoCubreIP(rango, e.Valor));
+        if (!usados.length) {
+            sinUso.push({ ...rango, Motivo: 'Ningún equipo del perfil usa IPs dentro de este rango.' });
+        }
+    }
+
+    /* --- Control General IP: direcciones dentro de rangos de cliente --- */
+    const generalesEnRangos = [];
+    for (const general of generales) {
+        const normal = normalizarIPv4(general.IP);
+        if (!normal) continue;
+        const valor = ipAEntero(normal);
+        const rango = rangos.find((r) => rangoCubreIP(r, valor));
+        if (!rango) continue;
+        generalesEnRangos.push({
+            IP: normal,
+            Hostname: general.Hostname || '',
+            ClienteCodigo: rango.ClienteCodigo,
+            Rango: `${rango.IPInicio} – ${rango.IPFin}`
+        });
+    }
+
+    const conteo = { crear: 0, ampliar: 0, conflicto: 0 };
+    for (const p of propuestas) conteo[p.Accion] = (conteo[p.Accion] || 0) + 1;
+
+    const equiposEnPlano = equiposValidos.filter((e) => e.EnPlano).length;
+    const auditoria = await auditar(filtroCliente ? clienteNum : null);
+    const clientesConEquipos = new Set(equiposValidos.map((e) => Number(e.IdCliente)));
+
+    return {
+        ok: true,
+        alcance: filtroCliente ? clienteNum : null,
+        resumen: {
+            clientes: clientesConEquipos.size,
+            equipos: equiposValidos.length,
+            equiposEnPlano,
+            rangos: rangos.length,
+            cubiertos,
+            crear: conteo.crear,
+            ampliar: conteo.ampliar,
+            conflicto: conteo.conflicto,
+            sinUso: sinUso.length,
+            generalesEnRangos: generalesEnRangos.length,
+            ipsInvalidas: ipsInvalidas.length,
+            violaciones: auditoria.violaciones?.length || 0,
+            sinNorma: auditoria.sinNorma?.length || 0
+        },
+        propuestas,
+        sinUso,
+        generalesEnRangos,
+        ipsInvalidas,
+        violaciones: auditoria.violaciones || [],
+        sinNorma: auditoria.sinNorma || []
+    };
+}
+
+/** Lee los equipos estáticos activos con IP y marca si están en el plano. */
+async function leerEquiposConIP(pool, idCliente = null) {
+    const peticion = pool.request();
+    if (idCliente) peticion.input('IdCliente', sql.Int, idCliente);
+    const resultado = await peticion.query(`
+        SELECT E.IdEquipo,
+               E.IdCliente,
+               E.IdRolEquipo,
+               E.IdPiso,
+               E.Hostname,
+               E.IP,
+               C.Codigo  AS ClienteCodigo,
+               C.Nombre  AS ClienteNombre,
+               RO.Codigo AS RolCodigo,
+               RO.Nombre AS RolNombre,
+               P.Nombre  AS PisoNombre,
+               CASE WHEN EXISTS (
+                        SELECT 1 FROM dbo.PlanoUbicaciones PU WHERE PU.IdEquipo = E.IdEquipo
+                    ) THEN 1 ELSE 0 END AS EnPlano
+        FROM dbo.Equipos E
+        INNER JOIN dbo.Clientes C ON C.IdCliente = E.IdCliente
+        LEFT JOIN dbo.RolesEquipo RO ON RO.IdRolEquipo = E.IdRolEquipo
+        LEFT JOIN dbo.Pisos P ON P.IdPiso = E.IdPiso
+        WHERE E.TipoIP = 'Estatica'
+          AND E.Activo = 1
+          AND NULLIF(LTRIM(RTRIM(E.IP)), '') IS NOT NULL
+          ${idCliente ? 'AND E.IdCliente = @IdCliente' : ''}
+    `);
+    return resultado.recordset || [];
+}
+
+/** Direcciones registradas en el Control General de IP (infraestructura). */
+async function leerInventarioGeneral(pool) {
+    try {
+        const resultado = await pool.request().query(`
+            SELECT IP, Hostname FROM dbo.InventarioGeneralIP WHERE IP IS NOT NULL
+        `);
+        return resultado.recordset || [];
+    } catch (_) {
+        // Si el control general todavía no existe, el ajuste sigue funcionando.
+        return [];
+    }
+}
+
+function enteroAIP(valor) {
+    if (!Number.isInteger(valor) || valor < 0) return null;
+    const a = Math.floor(valor / 16777216) % 256;
+    const b = Math.floor(valor / 65536) % 256;
+    const c = Math.floor(valor / 256) % 256;
+    const d = valor % 256;
+    return `${a}.${b}.${c}.${d}`;
+}
+
+/**
+ * Aplica el ajuste automático: crea los rangos faltantes y amplía los
+ * existentes. Recalcula el análisis en el servidor (nunca confía en las
+ * propuestas que llegan del renderer) y jamás elimina rangos ni toca los
+ * que presentan conflictos: esos se devuelven para revisión manual.
+ */
+async function aplicarAjuste(idCliente = null) {
+    const analisis = await analizar(idCliente);
+    let creados = 0;
+    let ampliados = 0;
+    const omitidos = [];
+    const errores = [];
+
+    for (const propuesta of analisis.propuestas) {
+        if (propuesta.Accion !== 'crear' && propuesta.Accion !== 'ampliar') {
+            if (propuesta.Accion === 'conflicto') {
+                omitidos.push({
+                    ClienteCodigo: propuesta.ClienteCodigo,
+                    RolNombre: propuesta.RolNombre,
+                    IPInicio: propuesta.IPInicio,
+                    IPFin: propuesta.IPFin,
+                    motivo: propuesta.Motivo
+                });
+            }
+            continue;
+        }
+
+        const base = propuesta.Rango || {};
+        const datos = {
+            idCliente: propuesta.IdCliente,
+            idRolEquipo: propuesta.IdRolEquipo,
+            idPiso: base.IdPiso || null,
+            nombre: base.Nombre || (propuesta.RolNombre ? `Rango ${propuesta.RolNombre}` : 'Rango general'),
+            descripcion: 'Ajuste automático (Equipos + Control General IP + Plano)',
+            ipInicio: propuesta.IPInicio,
+            ipFin: propuesta.IPFin
+        };
+
+        const resultado = propuesta.Accion === 'crear'
+            ? await crear(datos)
+            : await actualizar(propuesta.IdRangoIP, datos);
+
+        if (resultado?.ok) {
+            if (propuesta.Accion === 'crear') creados += 1;
+            else ampliados += 1;
+        } else {
+            errores.push({
+                ClienteCodigo: propuesta.ClienteCodigo,
+                RolNombre: propuesta.RolNombre,
+                IPInicio: propuesta.IPInicio,
+                IPFin: propuesta.IPFin,
+                motivo: resultado?.mensaje || 'No se pudo guardar el rango.'
+            });
+        }
+    }
+
+    const partes = [];
+    if (creados) partes.push(`${creados} rango(s) creado(s)`);
+    if (ampliados) partes.push(`${ampliados} rango(s) ampliado(s)`);
+    const pendientes = omitidos.length + errores.length;
+    if (pendientes) partes.push(`${pendientes} pendiente(s) de revisión manual`);
+
+    return {
+        ok: true,
+        creados,
+        ampliados,
+        omitidos,
+        errores,
+        mensaje: partes.length
+            ? `Ajuste aplicado: ${partes.join(', ')}.`
+            : 'Los rangos ya estaban ajustados a las IP registradas.',
+        analisis
+    };
+}
+
 module.exports = {
     verificarEsquema,
     listar,
@@ -531,5 +1031,7 @@ module.exports = {
     eliminar,
     validarIPEnRango,
     rangoReservadoParaIP,
-    auditar
+    auditar,
+    analizar,
+    aplicarAjuste
 };

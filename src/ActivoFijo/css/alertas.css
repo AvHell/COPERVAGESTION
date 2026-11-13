@@ -1,0 +1,151 @@
+/* =========================================================
+   DIÁLOGOS DE CONFIRMACIÓN (cl-confirm)
+   Se carga DESPUÉS de la hoja de cada página, así que sólo
+   contiene los remates del diseño: no repite lo que ya está
+   en activos.css / responsivas.css / reportes.css / importar.css.
+
+   Reglas del diseño pedido:
+   - Nada de botón «Cancelar»: se cierra con la X roja cuadrada
+     de la esquina (o Esc), igual que los avisos de error.
+   - Un único botón de acción, centrado y sin la banda gris de
+     fondo que cuadriculaba el pie del modal.
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   1. Cierre: X roja cuadrada
+   --------------------------------------------------------- */
+.swal2-popup.cl-confirm .swal2-close {
+    position: absolute !important;
+    top: 16px !important;
+    right: 16px !important;
+    width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 10px !important;
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    color: #ffffff !important;
+    background: var(--rojo-base) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 1px 2px rgba(181,68,46,0.30), 0 4px 12px -4px rgba(181,68,46,0.40) !important;
+    transition: background 0.15s ease, transform 0.15s ease !important;
+    outline: none !important;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.swal2-popup.cl-confirm .swal2-close:hover,
+.swal2-popup.cl-confirm .swal2-close:focus-visible {
+    background: var(--rojo-hover) !important;
+    color: #ffffff !important;
+    transform: translateY(-1px);
+    outline: none !important;
+}
+
+/* ---------------------------------------------------------
+   2. Franja superior roja cuando la acción es destructiva
+   (.cl-confirm-peligro lo pone el renderer; si no está, se
+   conserva la franja oliva de la página)
+   --------------------------------------------------------- */
+.swal2-popup.cl-confirm.cl-confirm-peligro::before {
+    background: linear-gradient(90deg, var(--rojo-base) 0%, var(--rojo-hover) 100%) !important;
+}
+
+/* ---------------------------------------------------------
+   3. Aviso de consecuencias (cambio de estatus, pasos que
+      rompen el flujo): cambio anterior → nuevo + explicación
+   --------------------------------------------------------- */
+.swal2-popup.cl-confirm .cl-aviso-cambio {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0.15rem 0 0.85rem;
+    font-size: 0.9rem;
+}
+
+.swal2-popup.cl-confirm .cl-aviso-de,
+.swal2-popup.cl-confirm .cl-aviso-a {
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border: 1px solid var(--gray-300, #cfc7b0);
+    color: var(--gray-600, #575347);
+    background: var(--gray-50, #faf8f2);
+}
+
+.swal2-popup.cl-confirm .cl-aviso-a {
+    border-color: var(--rojo-base);
+    color: var(--rojo-text, #7a2a1b);
+    background: var(--rojo-soft, #f3ded6);
+}
+
+.swal2-popup.cl-confirm .cl-aviso-flecha {
+    color: var(--gray-400, #a8a08a);
+    font-weight: 700;
+}
+
+.swal2-popup.cl-confirm .cl-aviso-consecuencia {
+    padding: 12px 14px;
+    border-left: 3px solid var(--rojo-base);
+    border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
+    background: var(--rojo-soft, #f3ded6);
+    color: var(--rojo-text, #7a2a1b);
+    font-size: 0.86rem;
+    line-height: 1.55;
+    text-align: left;
+}
+
+.swal2-popup.cl-confirm .cl-aviso-nota {
+    margin-top: 0.75rem;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--gray-500, #7a7563);
+}
+
+/* ---------------------------------------------------------
+   4. Pie limpio: un solo botón, centrado, sin banda de fondo
+   --------------------------------------------------------- */
+.swal2-popup.cl-confirm .swal2-actions {
+    background: transparent !important;
+    border-top: none !important;
+    box-shadow: none !important;
+    justify-content: center !important;
+    padding: 2px 34px 32px !important;
+}
+
+.swal2-popup.cl-confirm .swal2-confirm {
+    min-width: 220px !important;
+    max-width: 100% !important;
+}
+
+/* Red de seguridad: si algún diálogo antiguo siguiera pidiendo
+   botón Cancelar, no se muestra y manda la X. */
+.swal2-popup.cl-confirm .swal2-cancel {
+    display: none !important;
+}
+
+/* ---------------------------------------------------------
+   4. Ajustes de pantalla pequeña
+   --------------------------------------------------------- */
+@media (max-width: 600px) {
+    .swal2-popup.cl-confirm .swal2-actions {
+        padding: 2px 22px 26px !important;
+    }
+    .swal2-popup.cl-confirm .swal2-confirm {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+    .swal2-popup.cl-confirm .swal2-close {
+        top: 14px !important;
+        right: 14px !important;
+        width: 32px !important;
+        height: 32px !important;
+    }
+}

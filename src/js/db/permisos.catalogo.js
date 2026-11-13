@@ -94,6 +94,9 @@ const CATALOGO = {
   'af-act:editar':                 { grupo: 'Activo Fijo',  etiqueta: 'Editar activo' },
   'af-act:eliminar':               { grupo: 'Activo Fijo',  etiqueta: 'Eliminar activo' },
   'af-act:restaurar':              { grupo: 'Activo Fijo',  etiqueta: 'Restaurar activo' },
+  /* Cambiar el estatus a mano desincroniza inventario y responsivas:
+     por omisión sólo lo tiene el rol ADMIN. */
+  'af-act:estatus':                { grupo: 'Activo Fijo',  etiqueta: 'Cambiar estatus de activo' },
 
   /* ---------- ACTIVO FIJO: responsivas ---------- */
   'af-resp:listado:ver':           { grupo: 'Activo Fijo',  etiqueta: 'Ver responsivas' },

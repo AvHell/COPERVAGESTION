@@ -279,7 +279,7 @@ async function activosDisponibles() {
         LEFT  JOIN ActivoFijoMarcas  m  ON m.IdMarca = af.IdMarca
         ${lectura.joins.join('\n        ')}
         WHERE t.RequiereResponsiva = 1
-          AND st.Nombre IN ('DISPONIBLE', 'DEVUELTO', 'ASIGNADO')
+          AND st.Nombre IN ('DISPONIBLE', 'DEVUELTO', 'ASIGNADO', 'PENDIENTE')
           AND NOT EXISTS (
               SELECT 1
               FROM ActivoFijoResponsivas r
@@ -492,7 +492,10 @@ async function crear(datos, idUsuario) {
             return { ok: false, mensaje: 'El activo seleccionado no existe.' };
         }
         const estadoActivo = activo.recordset[0];
-        if (estadoActivo.TieneResponsivaActiva || !['DISPONIBLE', 'DEVUELTO', 'ASIGNADO'].includes(estadoActivo.Estatus.toUpperCase())) {
+        /* PENDIENTE entra en la lista porque el trigger deja así al activo
+           cuando la responsiva se captura como pendiente: si esa responsiva
+           se cancela o se borra, el equipo debe volver a poder asignarse. */
+        if (estadoActivo.TieneResponsivaActiva || !['DISPONIBLE', 'DEVUELTO', 'ASIGNADO', 'PENDIENTE'].includes(estadoActivo.Estatus.toUpperCase())) {
             await tx.rollback();
             transaccionAbierta = false;
             return {
@@ -503,12 +506,18 @@ async function crear(datos, idUsuario) {
             };
         }
 
+        /* Mismo criterio que trg_AFR_AfterInsert: una responsiva capturada
+           como PENDIENTE deja el activo en PENDIENTE; el resto, en ASIGNADO.
+           (Antes se forzaba ASIGNADO y se perdía el pendiente.) */
+        const estatusActivo = estatusResponsiva === 'PENDIENTE' ? 'PENDIENTE' : 'ASIGNADO';
         const estatusAsignado = await new sql.Request(tx)
-            .query(`SELECT TOP 1 IdEstatus FROM ActivoFijoEstatus WHERE UPPER(Nombre) = 'ASIGNADO' AND Activo = 1 ORDER BY IdEstatus`);
+            .input('Estatus', sql.NVarChar(50), estatusActivo)
+            .query(`SELECT TOP 1 IdEstatus FROM ActivoFijoEstatus
+                    WHERE UPPER(Nombre) = UPPER(@Estatus) AND Activo = 1 ORDER BY IdEstatus`);
         if (estatusAsignado.recordset.length === 0) {
             await tx.rollback();
             transaccionAbierta = false;
-            return { ok: false, mensaje: 'No existe el estatus ASIGNADO activo en el catálogo.' };
+            return { ok: false, mensaje: `No existe el estatus ${estatusActivo} activo en el catálogo.` };
         }
 
         const entrega = await obtenerDatosEntrega(datos.IdUsuarioEntrega, datos.IdPuestoEntrega, datos.IdAreaEntregaResponsiva);
@@ -678,15 +687,18 @@ async function actualizar(id, datos, idUsuario) {
     }
 }
 
-/* ¿El activo conserva un usuario de inventario asignado? La FK manda;
-   mientras exista la columna de texto se usa como respaldo, porque la
-   fase 2 de scripts/activo-fijo-3fn.sql puede eliminarla. */
-async function sqlTieneUsuarioAsignado(alias = 'af') {
+/* Al liberar un activo, el usuario de inventario debe quedar VACÍO: quien
+   lo tenía ya está registrado en la responsiva cerrada y en
+   ActivoFijoAsignacionesHist, y si se queda pegado el activo aparece como
+   ocupado por alguien que ya lo devolvió (y el tipo impide borrarlo desde
+   el formulario). Mientras exista la columna de texto legado se limpia
+   también, porque la fase 2 de scripts/activo-fijo-3fn.sql puede no
+   haberse aplicado en alguna instalación. */
+async function setsLimpiarUsuarioAsignado() {
     const columnas = await catalogosDB.columnasExistentes('ActivoFijoEquipos', ['UsuarioAsignado']);
-    const porFk = `${alias}.IdUsuarioAsignado IS NOT NULL`;
-    return columnas.has('UsuarioAsignado')
-        ? `(${porFk} OR NULLIF(LTRIM(RTRIM(${alias}.UsuarioAsignado)), '') IS NOT NULL)`
-        : `(${porFk})`;
+    const sets = ['IdUsuarioAsignado = NULL'];
+    if (columnas.has('UsuarioAsignado')) sets.push('UsuarioAsignado = NULL');
+    return sets;
 }
 
 /* =========================================================
@@ -719,8 +731,10 @@ async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
             return { ok: false, mensaje: 'La responsiva ya estaba devuelta, cancelada o no existe.' };
         }
 
-        // Liberar el activo
-        const tieneUsuario = await sqlTieneUsuarioAsignado('af');
+        /* Liberar el activo: vuelve a DISPONIBLE y SIN usuario de inventario.
+           Si otra responsiva sigue abierta (no debería, pero puede pasar en
+           datos viejos) el NOT EXISTS deja el activo intacto. */
+        const limpiarUsuario = await setsLimpiarUsuarioAsignado();
         await pool.request()
             .input('Id', sql.Int, id)
             .input('IdUsuario', sql.Int, idUsuario || null)
@@ -729,13 +743,11 @@ async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
                     IdEstatus = (
                         SELECT TOP 1 IdEstatus
                         FROM ActivoFijoEstatus
-                        WHERE UPPER(Nombre) = CASE
-                            WHEN ${tieneUsuario} THEN 'ASIGNADO'
-                            ELSE 'DISPONIBLE'
-                        END
+                        WHERE UPPER(Nombre) = 'DISPONIBLE'
                           AND Activo = 1
                         ORDER BY IdEstatus
                     ),
+                    ${limpiarUsuario.join(',\n                    ')},
                     IdUsuarioModificacion = @IdUsuario,
                     FechaModificacion = GETDATE()
                 FROM ActivoFijoEquipos af
@@ -750,7 +762,7 @@ async function devolver(id, fechaDevolucionReal, observaciones, idUsuario) {
                   )
             `);
 
-        return { ok: true, mensaje: 'Devolución registrada. El activo queda libre para una nueva responsiva y conserva su usuario de inventario.' };
+        return { ok: true, mensaje: 'Devolución registrada. El activo queda libre y sin usuario de inventario, listo para una nueva responsiva.' };
     } catch (err) {
         return { ok: false, mensaje: 'Error al devolver: ' + err.message };
     }
@@ -801,8 +813,8 @@ async function eliminar(id, idUsuario, motivo = null) {
             return { ok: false, mensaje: 'La responsiva ya estaba cancelada o no existe.' };
         }
 
-        // 3. Liberar el activo (si estaba asignado)
-        const tieneUsuario = await sqlTieneUsuarioAsignado('af');
+        // 3. Liberar el activo (si estaba asignado), sin usuario de inventario
+        const limpiarUsuario = await setsLimpiarUsuarioAsignado();
         await pool.request()
             .input('Id',        sql.Int, id)
             .input('IdUsuario', sql.Int, idUsuario || null)
@@ -811,13 +823,11 @@ async function eliminar(id, idUsuario, motivo = null) {
                     IdEstatus = (
                         SELECT TOP 1 IdEstatus
                         FROM ActivoFijoEstatus
-                        WHERE UPPER(Nombre) = CASE
-                            WHEN ${tieneUsuario} THEN 'ASIGNADO'
-                            ELSE 'DISPONIBLE'
-                        END
+                        WHERE UPPER(Nombre) = 'DISPONIBLE'
                           AND Activo = 1
                         ORDER BY IdEstatus
                     ),
+                    ${limpiarUsuario.join(',\n                    ')},
                     IdUsuarioModificacion = @IdUsuario,
                     FechaModificacion = GETDATE()
                 FROM ActivoFijoEquipos af
@@ -834,7 +844,7 @@ async function eliminar(id, idUsuario, motivo = null) {
 
         return {
             ok: true,
-            mensaje: 'Responsiva cancelada. El activo queda libre para una nueva responsiva y conserva su usuario de inventario. La responsiva queda como histórico.'
+            mensaje: 'Responsiva cancelada. El activo queda libre y sin usuario de inventario, listo para una nueva responsiva. La responsiva queda como histórico.'
         };
     } catch (err) {
         return { ok: false, mensaje: 'Error al cancelar: ' + err.message };
@@ -853,7 +863,10 @@ async function eliminar(id, idUsuario, motivo = null) {
 async function tablasHijasResponsiva(tx) {
     const r = await new sql.Request(tx).query(`
         SELECT OBJECT_NAME(fk.parent_object_id)                         AS Tabla,
-               COL_NAME(fkc.parent_object_id, fkc.parent_column_id)     AS Columna
+               COL_NAME(fkc.parent_object_id, fkc.parent_column_id)     AS Columna,
+               COLUMNPROPERTY(fkc.parent_object_id,
+                              COL_NAME(fkc.parent_object_id, fkc.parent_column_id),
+                              'AllowsNull')                             AS Nulable
         FROM sys.foreign_keys fk
         INNER JOIN sys.foreign_key_columns fkc
                 ON fkc.constraint_object_id = fk.object_id
@@ -861,6 +874,12 @@ async function tablasHijasResponsiva(tx) {
     `);
     return r.recordset;
 }
+
+/* Tablas de histórico: su referencia a la responsiva es un retrato del
+   pasado (y pueden ser movimientos de OTROS activos, porque el histórico
+   guarda la responsiva de origen y la de destino). Se conserva la fila y
+   sólo se suelta el vínculo cuando la columna lo permite. */
+const TABLAS_HISTORIAL = new Set(['ActivoFijoHistoricos', 'ActivoFijoAsignacionesHist']);
 
 async function eliminarDefinitivo(id, idUsuario) {
     const pool = await getPool();
@@ -891,15 +910,29 @@ async function eliminarDefinitivo(id, idUsuario) {
 
         const hijas = await tablasHijasResponsiva(tx);
         const borradas = {};
+        const desvinculadas = {};
         for (const h of hijas) {
             if (!h.Tabla || !h.Columna) continue;
-            const r = await new sql.Request(tx)
-                .input('Id', sql.Int, id)
-                .query(`
-                    DELETE FROM dbo.${h.Tabla}
-                    WHERE ${h.Columna} = @Id
-                `);
-            borradas[h.Tabla] = (borradas[h.Tabla] || 0) + (r.rowsAffected[0] || 0);
+            const esHistorialNulable = TABLAS_HISTORIAL.has(h.Tabla) && h.Nulable === 1;
+            const r = esHistorialNulable
+                ? await new sql.Request(tx)
+                    .input('Id', sql.Int, id)
+                    .query(`
+                        UPDATE dbo.${h.Tabla}
+                        SET ${h.Columna} = NULL
+                        WHERE ${h.Columna} = @Id
+                    `)
+                : await new sql.Request(tx)
+                    .input('Id', sql.Int, id)
+                    .query(`
+                        DELETE FROM dbo.${h.Tabla}
+                        WHERE ${h.Columna} = @Id
+                    `);
+            if (esHistorialNulable) {
+                desvinculadas[h.Tabla] = (desvinculadas[h.Tabla] || 0) + (r.rowsAffected[0] || 0);
+            } else {
+                borradas[h.Tabla] = (borradas[h.Tabla] || 0) + (r.rowsAffected[0] || 0);
+            }
         }
 
         const r = await new sql.Request(tx)
@@ -917,11 +950,23 @@ async function eliminarDefinitivo(id, idUsuario) {
             .filter(([, n]) => n > 0)
             .map(([tabla, n]) => `${tabla}: ${n}`)
             .join(', ');
+        const histDetalle = Object.entries(desvinculadas)
+            .filter(([, n]) => n > 0)
+            .map(([tabla, n]) => `${tabla}: ${n}`)
+            .join(', ');
         console.log(`🗑️  Responsiva #${id} eliminada definitivamente` +
             (idUsuario ? ` por el usuario ${idUsuario}` : '') +
-            (detalle ? ` (${detalle})` : ''));
+            (detalle ? ` (${detalle})` : '') +
+            (histDetalle ? ` [histórico conservado: ${histDetalle}]` : ''));
 
-        return { ok: true, mensaje: 'Responsiva eliminada definitivamente.' };
+        const totalHist = Object.values(desvinculadas).reduce((a, b) => a + b, 0);
+        return {
+            ok: true,
+            mensaje: 'Responsiva eliminada definitivamente.' +
+                (totalHist > 0
+                    ? ` Se conservaron ${totalHist} movimiento(s) de histórico, sólo se desvinculó el folio.`
+                    : '')
+        };
     } catch (err) {
         try { await tx.rollback(); } catch (_) { /* la transacción ya estaba cerrada */ }
         if (err.number === 547) {

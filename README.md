@@ -38,6 +38,13 @@ Si ya ejecutaste la migración anterior, ejecuta también `scripts/plano-futuros
 
 Para editar desde el control general los datos complementarios de las IP que pertenecen a clientes, ejecuta también `scripts/control-general-ip-datos-clientes.sql`. Esa tabla guarda MAC, dispositivo, tipo, site, puerto Fortinet y descripción sin cambiar la IP, hostname, cliente, piso o estado del equipo en `Equipos`.
 
+### Migraciones de Activo Fijo
+
+`scripts/activo-fijo-3fn.sql` normaliza el módulo de Activo Fijo a tercera forma normal (catálogos y tabla puente de accesorios) y es idempotente. Después de ejecutarlo, corre `scripts/fix-responsivas-trigger.sql` (repara el trigger de responsivas) y `scripts/estatus-pendiente.sql`, que crea o reactiva el estatus **PENDIENTE** en `ActivoFijoEstatus`. Sin ese registro, las responsivas creadas con estatus *Pendiente* fallan con el error 515 porque el trigger no encuentra el `IdEstatus`.
+
+Ejecuta también `scripts/responsivas-liberar-activo.sql`, que reescribe el mismo trigger `trg_AFR_AfterUpdate` con la regla correcta de liberación: al **devolver** o **cancelar** una responsiva el activo queda en **DISPONIBLE y sin usuario de inventario** (quién lo tenía queda en la responsiva cerrada y en el histórico de asignaciones), y si una responsiva abierta cambia de receptor el usuario del activo se resincroniza. Sin esta regla el activo devuelto se quedaba marcado *Asignado* a la persona anterior, y como algunos tipos exigen usuario era imposible vaciarlo desde el formulario: la única salida era eliminar el activo. El script termina con una consulta que lista los activos inconsistentes que quedaron de antes (debe devolver 0 filas).
+
+
 La fecha de mantenimiento queda fijada al día actual para los usuarios sin el permiso **Modificar fecha del mantenimiento**. Un administrador puede asignar ese permiso desde la gestión de roles.
 
 ```powershell

@@ -902,7 +902,35 @@ ipcMain.handle('af-catalogos-eliminar-definitivo', async (_e, clave, id) => { co
 ipcMain.handle('af-activos-listar',     async (_e, filtros)   => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.listar(filtros || {}); });
 ipcMain.handle('af-activos-obtener',    async (_e, id)        => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.obtener(id); });
 ipcMain.handle('af-activos-crear',      async (_e, datos)     => { const err = requerirSesion('af-act:crear');       if (err) return err; return await activoFijoActivosDB.crear(datos, usuarioActual?.IdUsuario); });
-ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => { const err = requerirSesion('af-act:editar');      if (err) return err; return await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario); });
+ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => {
+    const err = requerirSesion('af-act:editar');
+    if (err) return err;
+
+    /* El estatus del activo lo escribe el sistema (asignar / devolver /
+       cancelar una responsiva, dar de baja). Cambiarlo a mano desincroniza
+       inventario y responsivas, así que además de editar hace falta el
+       permiso af-act:estatus, que por omisión sólo tiene el rol ADMIN.
+       La UI avisa de las consecuencias antes de mandar el cambio. */
+    if (datos && datos.IdEstatus !== undefined) {
+        try {
+            const actual = await activoFijoActivosDB.obtener(id);
+            if (actual && Number(actual.IdEstatus ?? 0) !== Number(datos.IdEstatus ?? 0)) {
+                const errEstatus = requerirSesion('af-act:estatus');
+                if (errEstatus) {
+                    return {
+                        ok: false,
+                        mensaje: 'Sólo un administrador puede cambiar el estatus de un activo: es el que controla el flujo de responsivas y el inventario disponible.'
+                    };
+                }
+            }
+        } catch (e) {
+            console.error('[Activos] No se pudo validar el estatus antes de actualizar:', e);
+            return { ok: false, mensaje: 'No se pudo validar el estatus del activo. Intenta de nuevo.' };
+        }
+    }
+
+    return await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario);
+});
 ipcMain.handle('af-activos-eliminar',   async (_e, id, motivo)=> { const err = requerirSesion('af-act:eliminar');    if (err) return err; return await activoFijoActivosDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
 ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo)=> { const err = requerirSesion('af-act:restaurar');   if (err) return err; return await activoFijoActivosDB.restaurar(id, usuarioActual?.IdUsuario, motivo || null); });
 /* Purga física: sólo activos en BAJA y sin responsivas (lo valida el módulo). */

@@ -65,6 +65,7 @@ const inpTipoResp      = document.getElementById('tipo-responsiva');
 const inpFechaAsig     = document.getElementById('fecha-asignacion');
 const inpFechaDev      = document.getElementById('fecha-devolucion');
 const selEstatus       = document.getElementById('estatus');
+const notaEstatus      = document.getElementById('nota-estatus');
 const selMotivo        = document.getElementById('motivo');
 const selProyecto      = document.getElementById('proyecto');
 const selDescripcion   = document.getElementById('descripcion');
@@ -78,6 +79,9 @@ const selAreaEntrega   = document.getElementById('area-entrega');
 const inpObservaciones = document.getElementById('observaciones');
 const infoActivo       = document.getElementById('info-activo');
 const btnCatalogosResp = document.getElementById('btn-catalogos-responsiva');
+const inpBuscarActivo        = document.getElementById('buscar-activo');
+const inpBuscarNombreRecibe  = document.getElementById('buscar-nombre-recibe');
+const inpBuscarNombreEntrega = document.getElementById('buscar-nombre-entrega');
 
 /* =========================================================
    UTILIDADES
@@ -120,6 +124,51 @@ function hoyISO() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/* =========================================================
+   BUSCADOR DENTRO DE LOS <select>
+   Oculta las opciones que no coinciden en vez de reconstruir la lista:
+   así se conserva la selección actual y el estado que arma cada carga
+   de catálogo (incluidas las opciones históricas que ya no están activas).
+   ========================================================= */
+function normalizarBusqueda(texto) {
+    return String(texto ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().trim();
+}
+
+function filtrarOpciones(select, texto) {
+    if (!select) return;
+    const q = normalizarBusqueda(texto);
+    for (const op of select.options) {
+        // La opción elegida nunca se oculta, aunque no coincida con el filtro.
+        const visible = !q || op.value === select.value || normalizarBusqueda(op.textContent).includes(q);
+        op.hidden = !visible;
+    }
+}
+
+function limpiarBuscadorSelect(input, select) {
+    if (input) {
+        input.value = '';
+        input.disabled = !!(select && select.disabled);
+    }
+    filtrarOpciones(select, '');
+}
+
+function conectarBuscadorSelect(input, select) {
+    if (!input || !select) return;
+    const aplicar = () => filtrarOpciones(select, input.value);
+    input.addEventListener('input', aplicar);
+    input.addEventListener('search', aplicar);
+    input.addEventListener('keydown', (e) => {
+        // Enter en el buscador filtra, no envía el formulario.
+        if (e.key === 'Enter') { e.preventDefault(); aplicar(); }
+    });
+}
+
+conectarBuscadorSelect(inpBuscarActivo, selActivo);
+conectarBuscadorSelect(inpBuscarNombreRecibe, inpNombreRecibe);
+conectarBuscadorSelect(inpBuscarNombreEntrega, selNombreEntrega);
+
 function mostrarMensaje(texto, tipo) {
     mensaje.textContent = texto;
     mensaje.className = 'alert ' + tipo;
@@ -152,18 +201,17 @@ function alertaExito(titulo, mensaje = '') {
     });
 }
 
+/* Aviso de error: se cierra con la X roja de la esquina. Sin botonera,
+   para que el texto quede centrado y nada se descuadre. */
 function alertaError(titulo, mensaje = '') {
     return Swal.fire({
         icon: 'error',
         title: titulo,
         html: mensaje ? `<p style="margin:0;">${mensaje}</p>` : undefined,
-        confirmButtonText: 'Entendido',
+        showConfirmButton: false,
         showCloseButton: true,
         buttonsStyling: false,
-        customClass: {
-            popup: 'cl-alert',
-            confirmButton: 'swal2-confirm swal2-styled'
-        }
+        customClass: { popup: 'cl-alert cl-alert-error' }
     });
 }
 
@@ -241,6 +289,7 @@ function poblarUsuariosAsignados(valorSeleccionado = '') {
             ? `<option value="${escaparHTML(valor)}" selected>${escaparHTML(valor)} (no está en el catálogo)</option>`
             : '');
     inpNombreRecibe.value = valor;
+    filtrarOpciones(inpNombreRecibe, inpBuscarNombreRecibe?.value);
 }
 
 async function cargarCatalogos() {
@@ -314,6 +363,7 @@ async function cargarCatalogos() {
         selPuestoEntrega.value = seleccionActual.puestoEntrega;
         selAreaEntrega.value = seleccionActual.areaEntrega;
         poblarUsuariosAsignados(seleccionActual.nombreRecibe);
+        filtrarOpciones(selNombreEntrega, inpBuscarNombreEntrega?.value);
     } catch (err) {
         alertaError('No se pudieron cargar los catálogos', err.message);
     }
@@ -495,6 +545,7 @@ async function cargarActivosDisponibles() {
                     : '';
                 return `<option value="${a.IdActivoFijoEQ}">${reglas.icono} [${escaparHTML(a.Tipo)}] ${escaparHTML(id)} — ${escaparHTML(serie)} · Estatus: ${escaparHTML(a.Estatus)}${usuarioInventario}</option>`;
             }).join('');
+        filtrarOpciones(selActivo, inpBuscarActivo?.value);
     } catch (err) {
         alertaError('No se pudieron cargar los activos', err.message);
     }
@@ -790,7 +841,11 @@ function limpiarFormulario() {
     inpTipoResp.value = '';
     inpFechaAsig.value = hoyISO();
     inpFechaDev.value = '';
+    /* En alta el estatus sí se elige (ASIGNADO o PENDIENTE); una vez
+       guardada la responsiva sólo lo mueven Devolver o Cancelar. */
     selEstatus.value = 'ASIGNADO';
+    selEstatus.disabled = false;
+    if (notaEstatus) notaEstatus.classList.add('oculto');
     selMotivo.value = '';
     selProyecto.value = '';
     selDescripcion.value = '';
@@ -813,6 +868,9 @@ function limpiarFormulario() {
     infoActivo.classList.add('oculto');
     infoActivo.innerHTML = '';
     selActivo.disabled = false;
+    limpiarBuscadorSelect(inpBuscarActivo, selActivo);
+    limpiarBuscadorSelect(inpBuscarNombreRecibe, inpNombreRecibe);
+    limpiarBuscadorSelect(inpBuscarNombreEntrega, selNombreEntrega);
     aplicarReglasActivo(null);
 }
 
@@ -853,6 +911,8 @@ async function abrirEdicion(id) {
     }
     selActivo.value = r.IdActivoFijoEQ;
     selActivo.disabled = true;
+    // En edición el activo no se puede cambiar: el buscador también se bloquea.
+    limpiarBuscadorSelect(inpBuscarActivo, selActivo);
 
     const activoParaReglas = existe || {
         Tipo: r.Tipo, Marca: r.Marca, Modelo: r.Modelo, NoSerie: r.NoSerie, IMEI1: r.IMEI1, IMEI2: r.IMEI2,
@@ -864,7 +924,11 @@ async function abrirEdicion(id) {
     inpTipoResp.value      = r.TipoResponsiva ?? r.Tipo ?? '';
     inpFechaAsig.value     = fechaAInput(r.FechaAsignacion);
     inpFechaDev.value      = fechaAInput(r.FechaDevolucionProgramada);
+    /* Una responsiva guardada no se cambia de estatus a mano: el backend lo
+       rechaza y el activo quedaría desincronizado. Sólo Devolver o Cancelar. */
     selEstatus.value       = r.EstatusResponsiva ?? 'ASIGNADO';
+    selEstatus.disabled    = true;
+    if (notaEstatus) notaEstatus.classList.remove('oculto');
     selMotivo.value        = r.MotivoSalida ?? '';
     selProyecto.value      = r.NombreProyecto ?? '';
     selDescripcion.value   = r.DescripcionSolicitud ?? '';
@@ -1226,7 +1290,7 @@ async function cancelarResponsiva(id, folio) {
         confirmButtonText: 'Sí, cancelar',
         buttonsStyling: false,
         customClass: {
-            popup: 'cl-confirm',
+            popup: 'cl-confirm cl-confirm-peligro',
             confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         },
         didOpen: () => {
@@ -1282,18 +1346,14 @@ async function eliminarDefinitivoResponsiva(id, folio) {
             <div>Se borrará de la base de datos la responsiva <strong>${escaparHTML(nombre)}</strong>
             junto con su histórico asociado.</div>
             <div style="margin-top:.65rem;"><strong>Esta acción no se puede deshacer.</strong><br>
-            Si sólo querías conservarla como histórico, cancela y déjala en esta pestaña.</div>
+            Si sólo querías conservarla como histórico, cierra esta ventana y déjala en esta pestaña.</div>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, eliminar definitivamente',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
-        focusCancel: true,
         buttonsStyling: false,
         customClass: {
-            popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-            cancelButton: 'swal2-cancel swal2-styled'
+            popup: 'cl-confirm cl-confirm-peligro',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         }
     });
 

@@ -30,6 +30,10 @@ let catalogosEspecificaciones = {
 };
 let modoEdicion    = false;
 let idEditando     = null;
+/* Estatus con el que se abrió el formulario: sirve para saber si el usuario
+   administrador realmente lo cambió y para poder revertir el select si
+   rechaza la advertencia de consecuencias. */
+let estatusOriginal = null;
 let guardando      = false;
 let filtroBusqueda = '';
 let vistaActual    = 'activos';
@@ -527,15 +531,12 @@ btnExportar.addEventListener('click', async () => {
                 ${opcionesTipo}
             </select>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Generar Excel',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         },
         preConfirm: () => {
             return document.getElementById('swal-tipo-export').value;
@@ -615,15 +616,12 @@ btnExportar.addEventListener('click', async () => {
         icon: 'question',
         title: '¿Generar Excel?',
         html: `Se exportarán <strong>${datosExport.length}</strong> registros con <strong>${columnas.length}</strong> columnas.`,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, generar',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 
@@ -1002,13 +1000,123 @@ function actualizarUsuarioAsignado() {
     document.querySelector('.campo-usuario-asignado')?.classList.toggle('oculto', !esExterno);
 }
 
+/* Un activo está "en uso" mientras tenga una responsiva abierta: su estatus
+   y su usuario de inventario los mueve la responsiva (asignar / devolver),
+   no el formulario. */
+function activoEnUso(estatus) {
+    const nombre = String(estatus ?? '').trim().toUpperCase();
+    return nombre === 'ASIGNADO' || nombre === 'PENDIENTE';
+}
+
+/* Candado del campo "Usuario asignado":
+   - En uso: se bloquea, porque lo escribe la responsiva.
+   - Activo libre: se puede vaciar, que es la forma de devolverlo al
+     inventario sin tener que borrar el activo. */
+function aplicarEstadoUsuarioAsignado(enUso) {
+    if (inpUsuarioAsig) inpUsuarioAsig.disabled = !!enUso;
+    document.getElementById('req-usuario-asignado')?.classList.toggle('oculto', !!enUso);
+    document.getElementById('nota-usuario-asignado')?.classList.toggle('oculto', !enUso);
+}
+
+/* El estatus lo escribe el sistema (asignar / devolver / cancelar una
+   responsiva, dar de baja): tocarlo a mano descuadra inventario y
+   responsivas. Por eso hace falta el permiso af-act:estatus, que por
+   omisión sólo tiene el rol ADMIN. */
+function puedeCambiarEstatus() {
+    return puedeAcceder('af-act:estatus');
+}
+
+/* Candado del campo "Estatus":
+   - En uso: lo mueve la responsiva abierta.
+   - Sin permiso: sólo un administrador puede forzarlo. */
+function aplicarEstadoEstatus(enUso) {
+    const porPermiso = !puedeCambiarEstatus();
+    if (selEstatus) selEstatus.disabled = !!enUso || porPermiso;
+
+    const nota = document.getElementById('nota-estatus');
+    if (!nota) return;
+    nota.classList.toggle('oculto', !(enUso || porPermiso));
+    nota.textContent = enUso
+        ? 'Lo controla la responsiva abierta: el activo se libera solo al registrar la devolución o al cancelarla.'
+        : 'Sólo un administrador puede cambiarlo. El estatus manda el inventario disponible y el flujo de responsivas.';
+}
+
+/* Consecuencias de cada estatus cuando se fuerza a mano. */
+const CONSECUENCIAS_ESTATUS = {
+    ASIGNADO: 'El activo quedará <strong>bloqueado</strong> y saldrá de la lista para asignar, aunque ninguna responsiva lo respalde: el sistema creerá que alguien lo tiene.',
+    PENDIENTE: 'El activo quedará <strong>bloqueado</strong> igual que con una responsiva abierta y saldrá de la lista para asignar hasta que registres una responsiva o lo liberes.',
+    BAJA: 'El activo saldrá del inventario y se moverá a la pestaña <strong>Eliminados</strong>: desaparece de listados, reportes y del selector de responsivas.',
+    DISPONIBLE: 'El activo volverá al inventario para asignarlo <strong>aunque exista una responsiva abierta</strong>: la responsiva quedará desincronizada del inventario.',
+    STOCK: 'El activo volverá al inventario para asignarlo <strong>aunque exista una responsiva abierta</strong>: la responsiva quedará desincronizada del inventario.'
+};
+
+function nombreEstatus(id) {
+    if (id === null || id === undefined || id === '') return '—';
+    const encontrado = estatus.find(x => Number(x.IdEstatus) === Number(id));
+    return encontrado?.Nombre ?? '—';
+}
+
+/* Advertencia explícita antes de forzar el estatus. Devuelve true sólo si el
+   administrador confirma; cerrar la ventana equivale a cancelar el cambio. */
+async function alertaConsecuenciasEstatus(antesId, despuesId) {
+    const antes   = nombreEstatus(antesId);
+    const despues = nombreEstatus(despuesId);
+    const clave   = String(despues).toUpperCase();
+    const detalle = CONSECUENCIAS_ESTATUS[clave]
+        || 'Forzar el estatus a mano deja el activo sin el respaldo de una acción del sistema: inventario y responsivas pueden quedar desincronizados.';
+
+    const resultado = await Swal.fire({
+        icon: 'warning',
+        title: 'Cambiar el estatus a mano rompe el flujo',
+        html: `
+            <div class="cl-aviso-cambio">
+                <span class="cl-aviso-de">${escaparHTML(antes)}</span>
+                <span class="cl-aviso-flecha">→</span>
+                <span class="cl-aviso-a">${escaparHTML(despues)}</span>
+            </div>
+            <div class="cl-aviso-consecuencia">${detalle}</div>
+            <div class="cl-aviso-nota">
+                El estatus lo escribe el sistema al asignar, devolver o dar de baja un activo.
+                Si cierras esta ventana, el activo conserva su estatus actual.
+            </div>
+        `,
+        showCloseButton: true,
+        confirmButtonText: 'Entiendo, cambiar el estatus',
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm cl-confirm-peligro',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
+        }
+    });
+
+    return resultado.isConfirmed === true;
+}
+
+/* Se evalúa en el cambio del select (no al guardar) para que el
+   administrador vea de inmediato qué implica y pueda arrepentirse. */
+selEstatus.addEventListener('change', async () => {
+    if (!modoEdicion) return;
+    const nuevo = selEstatus.value ? parseInt(selEstatus.value, 10) : null;
+    if (Number(nuevo ?? 0) === Number(estatusOriginal ?? 0)) return;
+
+    const aceptado = await alertaConsecuenciasEstatus(estatusOriginal, nuevo);
+    if (!aceptado) {
+        selEstatus.value = estatusOriginal !== null && estatusOriginal !== undefined
+            ? String(estatusOriginal)
+            : '';
+    }
+});
+
 function limpiarFormulario() {
     selTipo.value = '';
     selMarca.value = '';
     selEstado.value = estados[0]?.IdEstado ?? '';
     const estatusDisponible = estatus.find(x => x.Nombre.toUpperCase() === 'DISPONIBLE');
     selEstatus.value = estatusDisponible?.IdEstatus ?? '';
+    /* En alta el estatus lo pone el sistema (DISPONIBLE) y no se toca. */
     selEstatus.disabled = true;
+    estatusOriginal = null;
+    document.getElementById('nota-estatus')?.classList.add('oculto');
     selCartera.value = '';
     selSitio.value = '';
     selSubtipo.innerHTML = '<option value="">— Selecciona un tipo primero —</option>';
@@ -1023,6 +1131,7 @@ function limpiarFormulario() {
     inpIMEI2.value = '';
     inpNoTelefono.value = '';
     inpUsuarioAsig.value = '';
+    aplicarEstadoUsuarioAsignado(false);
     inpProcesador.value = '';
     inpRAM.value = '';
     inpAlmacenamiento.value = '';
@@ -1054,7 +1163,6 @@ function abrirEdicion(id) {
 
     selTipo.value = a.IdTipo != null ? String(a.IdTipo) : '';
     actualizarCamposPorTipo();
-    selEstatus.disabled = false;
 
     selMarca.value         = a.IdMarca   != null ? String(a.IdMarca)   : '';
     selEstado.value        = a.IdEstado  != null ? String(a.IdEstado)  : '';
@@ -1088,7 +1196,14 @@ function abrirEdicion(id) {
     inpObservaciones.value  = a.Observaciones ?? '';
 
     ocultarMensaje();
-    selEstatus.disabled = a.Estatus?.toUpperCase() === 'ASIGNADO';
+    // Con una responsiva abierta (asignada o pendiente) ni el estatus ni el
+    // usuario de inventario se cambian a mano: los mueve la propia responsiva
+    // (asignar / devolver). Sin responsiva abierta el activo es libre y sí se
+    // puede vaciar el usuario, sin tener que borrar el activo.
+    const enUso = activoEnUso(a.Estatus);
+    estatusOriginal = a.IdEstatus != null ? a.IdEstatus : null;
+    aplicarEstadoEstatus(enUso);
+    aplicarEstadoUsuarioAsignado(enUso);
     abrirModal();
     selTipo.focus();
 }
@@ -1139,7 +1254,17 @@ formulario.addEventListener('submit', async (e) => {
     if (tipo.RequiereAccesorios && !inpAccesorios.value) {
         mostrarMensaje('Selecciona los accesorios del catálogo.', 'error'); return;
     }
-    if (tipo.RequiereUsuarioAsignado && !document.querySelector('.campo-usuario-asignado')?.classList.contains('oculto') && !inpUsuarioAsig.value) {
+    /* El usuario asignado es obligatorio al dar de alta y cuando el activo
+       está en uso (responsiva abierta, que es quien lo escribe). En un activo
+       libre se puede dejar vacío: es la forma de quitárselo a quien lo tenía
+       sin tener que eliminar el activo. */
+    const campoUsuarioVisible = !document.querySelector('.campo-usuario-asignado')?.classList.contains('oculto');
+    const activoEditando = (modoEdicion && idEditando !== null)
+        ? activos.find(x => x.IdActivoFijoEQ === idEditando)
+        : null;
+    const usuarioObligatorio = !!tipo.RequiereUsuarioAsignado && campoUsuarioVisible &&
+        (!activoEditando || activoEnUso(activoEditando.Estatus));
+    if (usuarioObligatorio && !inpUsuarioAsig.value.trim()) {
         mostrarMensaje('Selecciona el usuario asignado del catálogo.', 'error'); return;
     }
     if (tipo.RequierePrecio && !inpPrecio.value.trim()) {
@@ -1220,16 +1345,12 @@ async function eliminarActivo(id) {
                 <div class="error-texto">El motivo es obligatorio.</div>
             </div>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, dar de baja',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
-        focusCancel: true,
         buttonsStyling: false,
         customClass: {
-            popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-            cancelButton: 'swal2-cancel swal2-styled'
+            popup: 'cl-confirm cl-confirm-peligro',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         },
         didOpen: () => {
             const ta = document.getElementById('motivo-baja');
@@ -1282,15 +1403,12 @@ async function restaurarActivo(id, noSerie) {
                 <div class="error-texto">El motivo es obligatorio.</div>
             </div>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, restaurar',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         },
         didOpen: () => {
             const ta = document.getElementById('motivo-restaurar');
@@ -1341,18 +1459,14 @@ async function eliminarDefinitivoActivo(id, noSerie) {
             <div>Se borrará del sistema <strong>${escaparHTML(nombre)}</strong>
             junto con su histórico, sus accesorios y sus asignaciones.</div>
             <div style="margin-top:.65rem;"><strong>Esta acción no se puede deshacer.</strong><br>
-            Si sólo querías ocultarlo, cancela y usa <em>Restaurar</em>.</div>
+            Si sólo querías ocultarlo, cierra esta ventana y usa <em>Restaurar</em>.</div>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, eliminar definitivamente',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
-        focusCancel: true,
         buttonsStyling: false,
         customClass: {
-            popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-            cancelButton: 'swal2-cancel swal2-styled'
+            popup: 'cl-confirm cl-confirm-peligro',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         }
     });
 
@@ -1899,18 +2013,17 @@ const CatalogosUI = (() => {
         });
     }
 
+    /* Aviso de error: se cierra con la X roja de la esquina. Sin botonera,
+       para que el texto quede centrado y nada se descuadre. */
     function alertaError(titulo, texto = '') {
         return Swal.fire({
             icon: 'error',
             title: titulo,
             html: texto ? `<p style="margin:0;">${texto}</p>` : undefined,
-            confirmButtonText: 'Entendido',
+            showConfirmButton: false,
             showCloseButton: true,
             buttonsStyling: false,
-            customClass: {
-                popup: 'cl-alert',
-                confirmButton: 'swal2-confirm swal2-styled'
-            }
+            customClass: { popup: 'cl-alert cl-alert-error' }
         });
     }
 
@@ -2521,18 +2634,14 @@ const CatalogosUI = (() => {
             html: `
                 <div>Se borrará de la base de datos <strong>${escaparHTML(nombre)}</strong>.</div>
                 <div style="margin-top:.65rem;"><strong>Esta acción no se puede deshacer.</strong><br>
-                Si sólo querías ocultarlo de los formularios, cancela y usa <em>Restaurar</em>.</div>
+                Si sólo querías ocultarlo de los formularios, cierra esta ventana y usa <em>Restaurar</em>.</div>
             `,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Sí, eliminar definitivamente',
-            cancelButtonText: 'Cancelar',
-            reverseButtons: true,
-            focusCancel: true,
             buttonsStyling: false,
             customClass: {
-                popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-                cancelButton: 'swal2-cancel swal2-styled'
+                popup: 'cl-confirm cl-confirm-peligro',
+                confirmButton: 'swal2-confirm swal2-styled cl-peligro'
             }
         });
 

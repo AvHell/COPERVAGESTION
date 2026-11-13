@@ -370,7 +370,8 @@ async function actualizar(id, datos, idUsuario) {
         const actual = await pool.request()
             .input('Id', sql.Int, id)
             .query(`
-                SELECT af.IdTipo, af.IdEstado, af.IdEstatus, st.Nombre AS Estatus,
+                SELECT af.IdTipo, af.IdEstado, af.IdEstatus, af.IdUsuarioAsignado,
+                       st.Nombre AS Estatus,
                        CASE WHEN EXISTS (
                            SELECT 1 FROM ActivoFijoResponsivas r
                            WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
@@ -462,6 +463,20 @@ async function actualizar(id, datos, idUsuario) {
         }
         if (current.TieneResponsivaActiva && Number(IdEstatus) !== Number(current.IdEstatus)) {
             return { ok: false, mensaje: 'No se puede cambiar el estatus mientras exista una responsiva activa. Registra primero la devolución o cancelación.' };
+        }
+
+        /* El usuario de inventario de un activo con responsiva abierta es el
+           que recibe esa responsiva (lo sincroniza el trigger). Editarlo aquí
+           desincroniza inventario y responsiva, así que se rechaza. */
+        if (current.TieneResponsivaActiva && datos.UsuarioAsignado !== undefined) {
+            const solicitado = idsCatalogo.IdUsuarioAsignado ?? null;
+            const guardado   = current.IdUsuarioAsignado ?? null;
+            if (Number(solicitado ?? 0) !== Number(guardado ?? 0)) {
+                return {
+                    ok: false,
+                    mensaje: 'El usuario asignado lo controla la responsiva abierta. Cámbialo editando la responsiva o registra primero la devolución.'
+                };
+            }
         }
 
         /* Columnas de texto legado: sólo se actualizan si aún existen. */
@@ -705,17 +720,27 @@ async function restaurar(id, idUsuario, motivo = null) {
    (sys.foreign_keys) para no quedar desfasadas si mañana se añade otra
    tabla que apunte a ActivoFijoEquipos.
    ========================================================= */
-async function tablasHijasEquipo(tx) {
-    const r = await new sql.Request(tx).query(`
-        SELECT OBJECT_NAME(fk.parent_object_id)                         AS Tabla,
-               COL_NAME(fkc.parent_object_id, fkc.parent_column_id)     AS Columna
-        FROM sys.foreign_keys fk
-        INNER JOIN sys.foreign_key_columns fkc
-                ON fkc.constraint_object_id = fk.object_id
-        WHERE fk.referenced_object_id = OBJECT_ID(N'dbo.ActivoFijoEquipos')
-    `);
+async function tablasHijasDe(tx, tabla) {
+    const r = await new sql.Request(tx)
+        .input('Tabla', sql.NVarChar(200), `dbo.${tabla}`)
+        .query(`
+            SELECT OBJECT_NAME(fk.parent_object_id)                     AS Tabla,
+                   COL_NAME(fkc.parent_object_id, fkc.parent_column_id) AS Columna,
+                   COLUMNPROPERTY(fkc.parent_object_id,
+                                  COL_NAME(fkc.parent_object_id, fkc.parent_column_id),
+                                  'AllowsNull')                     AS Nulable
+            FROM sys.foreign_keys fk
+            INNER JOIN sys.foreign_key_columns fkc
+                    ON fkc.constraint_object_id = fk.object_id
+            WHERE fk.referenced_object_id = OBJECT_ID(@Tabla)
+        `);
     return r.recordset;
 }
+
+/* Tablas de histórico: su referencia a la responsiva es un retrato del
+   pasado. Si la fila pertenece a OTRO activo no se borra: sólo se suelta
+   el vínculo, para no perder movimientos ajenos a esta purga. */
+const TABLAS_HISTORIAL = new Set(['ActivoFijoHistoricos', 'ActivoFijoAsignacionesHist']);
 
 async function eliminarDefinitivo(id, idUsuario) {
     const pool = await getPool();
@@ -741,30 +766,70 @@ async function eliminarDefinitivo(id, idUsuario) {
             return { ok: false, mensaje: 'Sólo se pueden eliminar definitivamente los activos dados de baja.' };
         }
 
-        const responsivas = await new sql.Request(tx)
+        /* Una responsiva ABIERTA bloquea la purga: es un documento vigente
+           con un activo en manos de alguien. Las cerradas (devueltas o
+           canceladas) son histórico del propio activo y se van con él, tal
+           como avisa el diálogo de confirmación. */
+        const abiertas = await new sql.Request(tx)
             .input('Id', sql.Int, id)
-            .query('SELECT COUNT(*) AS Total FROM ActivoFijoResponsivas WHERE IdActivoFijoEQ = @Id');
-        const totalResp = responsivas.recordset[0].Total;
-        if (totalResp > 0) {
+            .query(`
+                SELECT COUNT(*) AS Total
+                FROM ActivoFijoResponsivas
+                WHERE IdActivoFijoEQ = @Id
+                  AND EstatusResponsiva IN ('ASIGNADO', 'PENDIENTE')
+            `);
+        const totalAbiertas = abiertas.recordset[0].Total;
+        if (totalAbiertas > 0) {
             await tx.rollback();
             return {
                 ok: false,
-                mensaje: `No se puede eliminar definitivamente: el activo tiene ${totalResp} responsiva(s) en el historial.`
+                mensaje: `No se puede eliminar definitivamente: el activo tiene ${totalAbiertas} responsiva(s) activa(s). Cancélala(s) o regístrala(s) como devuelta(s) primero.`
             };
         }
 
-        const hijas = await tablasHijasEquipo(tx);
         const borradas = {};
-        for (const h of hijas) {
-            if (!h.Tabla || !h.Columna) continue;
+        const contar = (tabla, n) => { if (n > 0) borradas[tabla] = (borradas[tabla] || 0) + n; };
+
+        /* Orden de borrado: primero lo que cuelga del equipo (histórico,
+           accesorios, asignaciones), luego lo que cuelga de sus
+           responsivas, después las responsivas cerradas y al final el
+           equipo. Así ninguna FK intermedia apunta a una fila ya borrada. */
+        const hijasEquipo = await tablasHijasDe(tx, 'ActivoFijoEquipos');
+        for (const h of hijasEquipo) {
+            if (!h.Tabla || !h.Columna || h.Tabla === 'ActivoFijoResponsivas') continue;
             const r = await new sql.Request(tx)
                 .input('Id', sql.Int, id)
                 .query(`
                     DELETE FROM dbo.${h.Tabla}
                     WHERE ${h.Columna} = @Id
                 `);
-            borradas[h.Tabla] = (borradas[h.Tabla] || 0) + (r.rowsAffected[0] || 0);
+            contar(h.Tabla, r.rowsAffected[0] || 0);
         }
+
+        const hijasResp = await tablasHijasDe(tx, 'ActivoFijoResponsivas');
+        for (const h of hijasResp) {
+            if (!h.Tabla || !h.Columna) continue;
+            const filtro = `
+                ${h.Columna} IN (
+                    SELECT IdResponsiva
+                    FROM dbo.ActivoFijoResponsivas
+                    WHERE IdActivoFijoEQ = @Id
+                )`;
+            const esHistorialNulable = TABLAS_HISTORIAL.has(h.Tabla) && h.Nulable === 1;
+            const r = esHistorialNulable
+                ? await new sql.Request(tx)
+                    .input('Id', sql.Int, id)
+                    .query(`UPDATE dbo.${h.Tabla} SET ${h.Columna} = NULL WHERE ${filtro}`)
+                : await new sql.Request(tx)
+                    .input('Id', sql.Int, id)
+                    .query(`DELETE FROM dbo.${h.Tabla} WHERE ${filtro}`);
+            contar(h.Tabla, r.rowsAffected[0] || 0);
+        }
+
+        const rResp = await new sql.Request(tx)
+            .input('Id', sql.Int, id)
+            .query('DELETE FROM dbo.ActivoFijoResponsivas WHERE IdActivoFijoEQ = @Id');
+        contar('ActivoFijoResponsivas', rResp.rowsAffected[0] || 0);
 
         const r = await new sql.Request(tx)
             .input('Id', sql.Int, id)

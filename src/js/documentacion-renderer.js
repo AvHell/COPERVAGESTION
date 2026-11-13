@@ -149,7 +149,7 @@ function presentacionArchivo(doc) {
         return { clase: 'tipo-hoja', etiqueta: 'PPT' };
     }
     if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return { clase: 'tipo-zip', etiqueta: 'ZIP' };
-    if (['txt', 'md', 'log', 'json', 'xml', 'sql', 'js', 'py'].includes(ext) || mime.startsWith('text/')) {
+    if (['txt', 'md', 'log', 'json', 'xml', 'sql', 'js', 'drawio','py'].includes(ext) || mime.startsWith('text/')) {
         return { clase: 'tipo-texto', etiqueta: ext ? ext.slice(0, 3).toUpperCase() : 'TXT' };
     }
     if (ext) return { clase: '', etiqueta: ext.slice(0, 3).toUpperCase() };

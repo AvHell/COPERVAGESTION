@@ -14,6 +14,7 @@
 
     <link rel="stylesheet" href="../css/responsivas.css">
     <link rel="stylesheet" href="../../css/paginador.css">
+    <link rel="stylesheet" href="../css/alertas.css">
 </head>
 <body>
 
@@ -165,6 +166,8 @@
 
                     <div class="campo-full">
                         <label for="activo">Activo <span class="req">*</span></label>
+                        <input type="search" id="buscar-activo" class="buscador-select"
+                               placeholder="Filtrar por serie, marca o tipo…" autocomplete="off">
                         <select id="activo" required></select>
                         <div id="info-activo" class="info-activo oculto"></div>
                     </div>
@@ -193,6 +196,7 @@
                             <option value="ASIGNADO">Asignado</option>
                             <option value="PENDIENTE">Pendiente</option>
                         </select>
+                        <small class="field-hint oculto" id="nota-estatus">El estatus de una responsiva ya guardada sólo cambia con <strong>Devolver</strong> o <strong>Cancelar</strong>: así el activo y la responsiva no se desincronizan.</small>
                     </div>
                     <div class="campo-item">
                         <label for="motivo">Motivo de la salida</label>
@@ -211,6 +215,8 @@
 
                     <div class="campo-full">
                         <label for="nombre-recibe">Nombre completo <span class="req">*</span></label>
+                        <input type="search" id="buscar-nombre-recibe" class="buscador-select"
+                               placeholder="Filtrar por nombre…" autocomplete="off">
                         <select id="nombre-recibe" required>
                             <option value="">— Seleccionar usuario —</option>
                         </select>
@@ -237,6 +243,8 @@
 
                     <div class="campo-item">
                         <label for="nombre-entrega">Nombre</label>
+                        <input type="search" id="buscar-nombre-entrega" class="buscador-select"
+                               placeholder="Filtrar por nombre…" autocomplete="off">
                         <select id="nombre-entrega" required><option value="">— Seleccionar usuario —</option></select>
                     </div>
                     <div class="campo-item">

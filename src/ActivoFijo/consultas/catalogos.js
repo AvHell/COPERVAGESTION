@@ -409,6 +409,19 @@ async function asegurarCatalogosExtendidos() {
                 )
                     INSERT INTO dbo.ActivoFijoEstatus (Nombre, Activo) VALUES ('DISPONIBLE', 1);
 
+                /* PENDIENTE: los triggers de responsivas y el formulario ya lo
+                   usan (responsiva capturada pero no entregada). Sin esta fila
+                   el UPDATE del trigger dejaba IdEstatus en NULL y fallaba con
+                   el error 515. Ver scripts/estatus-pendiente.sql. */
+                UPDATE dbo.ActivoFijoEstatus SET Activo = 1
+                WHERE UPPER(Nombre) = 'PENDIENTE' AND Activo = 0;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM dbo.ActivoFijoEstatus WHERE UPPER(Nombre) = 'PENDIENTE'
+                )
+                    INSERT INTO dbo.ActivoFijoEstatus (Nombre, Activo) VALUES ('PENDIENTE', 1);
+
+
                 UPDATE af SET IdEstatus = disponible.IdEstatus
                 FROM dbo.ActivoFijoEquipos af
                 INNER JOIN dbo.ActivoFijoEstatus actual ON actual.IdEstatus = af.IdEstatus
@@ -696,18 +709,29 @@ const ETIQUETAS_REFERENCIA = {
     ActivoFijoEquipos:           'activo(s) del inventario',
     ActivoFijoEquiposAccesorios: 'equipo(s) con este accesorio',
     ActivoFijoResponsivas:       'responsiva(s)',
-    ActivoFijoHistoricos:        'movimiento(s) de histórico'
+    ActivoFijoHistoricos:        'movimiento(s) de histórico',
+    ActivoFijoAsignacionesHist:  'asignación(es) de histórico'
 };
 
 function etiquetaReferencia(tabla) {
     return ETIQUETAS_REFERENCIA[tabla] || `registro(s) de ${tabla}`;
 }
 
+/* Tablas de HISTORIAL. Su referencia es un retrato del pasado (el
+   histórico sigue siendo válido aunque el catálogo desaparezca), así que
+   no impiden la purga: al borrar el registro se desvinculan. Son
+   columnas NULL-ables; si alguna no lo fuera, se bloquea como cualquier
+   referencia viva. */
+const TABLAS_HISTORIAL = new Set(['ActivoFijoHistoricos', 'ActivoFijoAsignacionesHist']);
+
 /* Tablas cuyas FK apuntan a la tabla indicada. */
 async function referenciasDeTabla(tx, tabla) {
     const r = await new sql.Request(tx).query(`
         SELECT OBJECT_NAME(fk.parent_object_id)                     AS Tabla,
-               COL_NAME(fkc.parent_object_id, fkc.parent_column_id) AS Columna
+               COL_NAME(fkc.parent_object_id, fkc.parent_column_id) AS Columna,
+               COLUMNPROPERTY(fkc.parent_object_id,
+                              COL_NAME(fkc.parent_object_id, fkc.parent_column_id),
+                              'AllowsNull')                         AS Nulable
         FROM sys.foreign_keys fk
         INNER JOIN sys.foreign_key_columns fkc
                 ON fkc.constraint_object_id = fk.object_id
@@ -746,16 +770,33 @@ async function eliminarDefinitivo(clave, id) {
                 };
             }
 
-            /* ¿Algo lo está usando? Se informa cuánto y no se borra nada. */
+            /* ¿Algo lo está usando? Se agrupa por tabla porque varias FK
+               de la misma tabla (estatus anterior / estatus nuevo del
+               histórico) apuntan al mismo catálogo y antes se contaban dos
+               veces, duplicando el mensaje. */
             const referencias = await referenciasDeTabla(tx, cfg.tabla);
-            const usos = [];
+            const porTabla = new Map();
             for (const ref of referencias) {
                 if (!ref.Tabla || !ref.Columna) continue;
+                if (!porTabla.has(ref.Tabla)) porTabla.set(ref.Tabla, []);
+                porTabla.get(ref.Tabla).push({ columna: ref.Columna, nulable: ref.Nulable === 1 });
+            }
+
+            const usos    = [];   // referencias vivas: bloquean la purga
+            const enlaces = [];   // referencias de historial: se desvinculan
+            for (const [tabla, cols] of porTabla) {
+                const filtro = cols.map(c => `${c.columna} = @Id`).join(' OR ');
                 const conteo = await new sql.Request(tx)
                     .input('Id', sql.Int, id)
-                    .query(`SELECT COUNT(*) AS Total FROM dbo.${ref.Tabla} WHERE ${ref.Columna} = @Id`);
+                    .query(`SELECT COUNT(*) AS Total FROM dbo.${tabla} WHERE ${filtro}`);
                 const total = conteo.recordset[0]?.Total || 0;
-                if (total > 0) usos.push(`${total} ${etiquetaReferencia(ref.Tabla)}`);
+                if (total === 0) continue;
+
+                if (TABLAS_HISTORIAL.has(tabla) && cols.every(c => c.nulable)) {
+                    enlaces.push({ tabla, cols: cols.map(c => c.columna), total });
+                } else {
+                    usos.push(`${total} ${etiquetaReferencia(tabla)}`);
+                }
             }
 
             if (usos.length > 0) {
@@ -764,6 +805,18 @@ async function eliminarDefinitivo(clave, id) {
                     ok: false,
                     mensaje: `No se puede eliminar definitivamente: lo usan ${usos.join(', ')}.`
                 };
+            }
+
+            /* El historial no estorba: se conserva la fila y sólo se
+               suelta el vínculo con este registro. */
+            let desvinculados = 0;
+            for (const { tabla, cols, total } of enlaces) {
+                const sets   = cols.map(c => `${c} = NULL`).join(', ');
+                const filtro = cols.map(c => `${c} = @Id`).join(' OR ');
+                await new sql.Request(tx)
+                    .input('Id', sql.Int, id)
+                    .query(`UPDATE dbo.${tabla} SET ${sets} WHERE ${filtro}`);
+                desvinculados += total;
             }
 
             const borrado = await new sql.Request(tx)
@@ -776,7 +829,13 @@ async function eliminarDefinitivo(clave, id) {
             }
 
             await tx.commit();
-            return { ok: true, mensaje: 'Registro eliminado definitivamente.' };
+            return {
+                ok: true,
+                mensaje: 'Registro eliminado definitivamente.' +
+                    (desvinculados > 0
+                        ? ` Se conservaron ${desvinculados} movimiento(s) de histórico, ya sin este vínculo.`
+                        : '')
+            };
         } catch (err) {
             try { await tx.rollback(); } catch (_) { /* la transacción ya estaba cerrada */ }
             throw err;

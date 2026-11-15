@@ -631,16 +631,12 @@ btnExportar.addEventListener('click', async () => {
         title: '¿Exportar a Excel?',
         html: `Se exportarán <strong>${filas.length}</strong> registros de <strong>${escaparHTML(cfg.titulo)}</strong>.<br>
                Los filtros aplicados en pantalla se respetarán.`,
-        showCancelButton: true,
         showCloseButton: true,
         confirmButtonText: 'Sí, exportar',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 

@@ -335,15 +335,12 @@ btnImportar.addEventListener('click', async () => {
         icon: 'question',
         title: '¿Confirmar importación?',
         html: `Se van a importar <strong>${filasPreview.length}</strong> fila(s) como <strong>${escaparHTML(layoutInfo.titulo)}</strong>.`,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, importar',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
     if (!conf.isConfirmed) return;

@@ -1636,3 +1636,99 @@ body {
     .swal2-popup .swal2-confirm,
     .swal2-popup .swal2-cancel { width: 100% !important; min-width: 0 !important; }
 }
+
+/* =========================================================
+   AVISO DE ERROR (alertaError)
+   Sin botonera: el mensaje se cierra con la X roja cuadrada de
+   la esquina, así el icono y el texto quedan centrados y nada
+   se descuadra.
+   ========================================================= */
+.swal2-popup.cl-alert.cl-alert-error {
+    width: 460px !important;
+}
+.swal2-popup.cl-alert-error .swal2-actions {
+    display: none !important;
+}
+.swal2-popup.cl-alert-error .swal2-close {
+    position: absolute !important;
+    top: 16px !important;
+    right: 16px !important;
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 10px !important;
+    font-size: 1.35rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    color: #ffffff !important;
+    background: var(--rojo-base) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 1px 2px rgba(181,68,46,0.35), 0 4px 12px -4px rgba(181,68,46,0.45) !important;
+    transition: background 0.15s ease !important;
+    cursor: pointer;
+    z-index: 10;
+}
+.swal2-popup.cl-alert-error .swal2-close:hover,
+.swal2-popup.cl-alert-error .swal2-close:focus-visible {
+    background: var(--rojo-hover) !important;
+    color: #ffffff !important;
+    outline: none !important;
+}
+.swal2-popup.cl-alert-error .swal2-icon {
+    margin: 34px auto 0 !important;
+}
+.swal2-popup.cl-alert-error .swal2-title {
+    padding: 28px 56px 8px !important;
+    text-align: center !important;
+}
+.swal2-popup.cl-alert-error .swal2-html-container {
+    padding: 0 32px 30px !important;
+    text-align: center !important;
+    overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   BUSCADOR DENTRO DE LOS SELECTS (activo / usuarios)
+   Filtra las opciones del <select> sin dejar de ser un select
+   nativo. El borde punteado lo distingue de un campo real.
+   ========================================================= */
+.grid-form .buscador-select {
+    width: 100%;
+    height: 40px;
+    padding: 9px 14px;
+    margin-bottom: 8px;
+    border: 1.5px dashed var(--gray-300);
+    border-radius: 11px;
+    background: var(--gray-50);
+    font-size: 0.84rem;
+    font-family: inherit;
+    color: var(--gray-800);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.grid-form .buscador-select::placeholder { color: var(--gray-400); }
+.grid-form .buscador-select:hover:not(:disabled) { border-color: var(--gray-400); }
+.grid-form .buscador-select:focus {
+    outline: none;
+    background: #fff;
+    border-style: solid;
+    border-color: var(--tierra-oliva);
+    box-shadow: 0 0 0 4px rgba(110,123,91,0.15);
+}
+.grid-form .buscador-select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: var(--gray-100);
+}
+
+/* Nota al pie de un campo bloqueado (p. ej. el estatus de la responsiva,
+   que sólo mueven las acciones Devolver / Cancelar). */
+.field-hint {
+    display: block;
+    font-size: 0.74rem;
+    color: var(--gray-500);
+    line-height: 1.45;
+    margin-top: 1px;
+}

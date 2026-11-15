@@ -37,6 +37,7 @@ const activoFijoActivosDB     = require('../ActivoFijo/consultas/activos');
 const activoFijoResponsivasDB = require('../ActivoFijo/consultas/responsivas');
 const activoFijoReportesDB    = require('../ActivoFijo/consultas/reportes');
 const activoFijoImportacionDB = require('../ActivoFijo/consultas/importacion');
+const activoFijoDetalleDB     = require('../ActivoFijo/consultas/detalle');
 
 /* =========================================================
    RUTAS
@@ -389,7 +390,8 @@ const RUTAS_MODULOS = {
     activofijo_activos: { basePath: HTML_AF, archivo: 'activos.html', permiso: 'activofijo_activos', titulo: 'Inventario - Activo Fijo' },
     activofijo_responsivas: { basePath: HTML_AF, archivo: 'responsivas.html', permiso: 'activofijo_responsivas', titulo: 'Responsivas - Activo Fijo' },
     activofijo_reportes: { basePath: HTML_AF, archivo: 'reportes.html', permiso: 'activofijo_reportes', titulo: 'Reportes - Activo Fijo' },
-    activofijo_importar: { basePath: HTML_AF, archivo: 'importar.html', permiso: 'activofijo_importar', titulo: 'Importar Masivo - Activo Fijo' }
+    activofijo_importar: { basePath: HTML_AF, archivo: 'importar.html', permiso: 'activofijo_importar', titulo: 'Importar Masivo - Activo Fijo' },
+    activofijo_detalle: { basePath: HTML_AF, archivo: 'detalle.html', permiso: 'activofijo_detalle', titulo: 'Detalle del Activo - Activo Fijo' }
 };
 
 async function navegarModuloEnVentana(win, modulo) {
@@ -885,6 +887,7 @@ ipcMain.handle('abrir-activofijo-activos', (e) => navegarModuloEnVentana(Browser
 ipcMain.handle('abrir-activofijo-responsivas', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_responsivas'));
 ipcMain.handle('abrir-activofijo-reportes', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_reportes'));
 ipcMain.handle('abrir-activofijo-importar', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_importar'));
+ipcMain.handle('abrir-activofijo-detalle', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_detalle'));
 
 /* =========================================================
    IPC: CATÁLOGOS AF
@@ -902,12 +905,49 @@ ipcMain.handle('af-catalogos-eliminar-definitivo', async (_e, clave, id) => { co
 ipcMain.handle('af-activos-listar',     async (_e, filtros)   => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.listar(filtros || {}); });
 ipcMain.handle('af-activos-obtener',    async (_e, id)        => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.obtener(id); });
 ipcMain.handle('af-activos-crear',      async (_e, datos)     => { const err = requerirSesion('af-act:crear');       if (err) return err; return await activoFijoActivosDB.crear(datos, usuarioActual?.IdUsuario); });
-ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => { const err = requerirSesion('af-act:editar');      if (err) return err; return await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario); });
+ipcMain.handle('af-activos-actualizar', async (_e, id, datos) => {
+    const err = requerirSesion('af-act:editar');
+    if (err) return err;
+
+    /* El estatus del activo lo escribe el sistema (asignar / devolver /
+       cancelar una responsiva, dar de baja). Cambiarlo a mano desincroniza
+       inventario y responsivas, así que además de editar hace falta el
+       permiso af-act:estatus, que por omisión sólo tiene el rol ADMIN.
+       La UI avisa de las consecuencias antes de mandar el cambio. */
+    if (datos && datos.IdEstatus !== undefined) {
+        try {
+            const actual = await activoFijoActivosDB.obtener(id);
+            if (actual && Number(actual.IdEstatus ?? 0) !== Number(datos.IdEstatus ?? 0)) {
+                const errEstatus = requerirSesion('af-act:estatus');
+                if (errEstatus) {
+                    return {
+                        ok: false,
+                        mensaje: 'Sólo un administrador puede cambiar el estatus de un activo: es el que controla el flujo de responsivas y el inventario disponible.'
+                    };
+                }
+            }
+        } catch (e) {
+            console.error('[Activos] No se pudo validar el estatus antes de actualizar:', e);
+            return { ok: false, mensaje: 'No se pudo validar el estatus del activo. Intenta de nuevo.' };
+        }
+    }
+
+    return await activoFijoActivosDB.actualizar(id, datos, usuarioActual?.IdUsuario);
+});
 ipcMain.handle('af-activos-eliminar',   async (_e, id, motivo)=> { const err = requerirSesion('af-act:eliminar');    if (err) return err; return await activoFijoActivosDB.eliminar(id, usuarioActual?.IdUsuario, motivo || null); });
 ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo)=> { const err = requerirSesion('af-act:restaurar');   if (err) return err; return await activoFijoActivosDB.restaurar(id, usuarioActual?.IdUsuario, motivo || null); });
 /* Purga física: sólo activos en BAJA y sin responsivas (lo valida el módulo). */
 ipcMain.handle('af-activos-eliminar-definitivo', async (_e, id) => { const err = requerirSesion('af-act:eliminar'); if (err) return err; return await activoFijoActivosDB.eliminarDefinitivo(id, usuarioActual?.IdUsuario); });
 ipcMain.handle('af-activos-historico',  async (_e, id)        => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.historico(id); });
+
+/* Piezas conectadas al equipo (monitor, disco, teclado, ratón): el "Ver" del
+   inventario muestra el CPU con lo que tiene colgado. Sólo lectura y sólo lo
+   vigente: son las mismas filas de la pestaña "Conectados" del detalle. */
+ipcMain.handle('af-activos-componentes', async (_e, id) => {
+    const err = requerirSesion('af-act:listado:ver');
+    if (err) return err;
+    return await activoFijoDetalleDB.componentesDeActivo(id);
+});
 
 /* --- NUEVO: Exportar Excel Activos --- */
 ipcMain.handle('af-activos-exportar-excel', async (_e, payload) => {
@@ -933,6 +973,34 @@ ipcMain.handle('af-activos-lista-clasificaciones', async () => { const err = req
 ipcMain.handle('af-activos-lista-tamanios',        async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarTamanios(); });
 ipcMain.handle('af-activos-lista-capacidades',     async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCapacidades(); });
 ipcMain.handle('af-activos-lista-catalogos-especificaciones', async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCatalogosExtendidos(); });
+
+/* =========================================================
+   IPC: DETALLE AF (red, cuentas, programas, puente)
+   ---------------------------------------------------------
+   Todo es de sólo lectura sobre lo que dejó la app A, salvo dos
+   acciones del puente que sí escriben y por eso piden permiso
+   propio: copiar la serie al flujo viejo y marcar una revisión.
+   ========================================================= */
+ipcMain.handle('af-det-estado', async () => { const err = requerirSesion('activofijo_detalle'); if (err) return err; return await activoFijoDetalleDB.estadoFuentes(); });
+ipcMain.handle('af-det-maestro-listar', async (_e, filtros) => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.listarMaestro(filtros || {}); });
+ipcMain.handle('af-det-dominios', async () => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.listarDominios(); });
+ipcMain.handle('af-det-ficha', async (_e, id, opciones) => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.obtenerFicha(id, opciones || {}); });
+ipcMain.handle('af-det-buscar-programa', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarPrograma(filtros || {}); });
+ipcMain.handle('af-det-buscar-cuenta', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarCuenta(filtros || {}); });
+ipcMain.handle('af-det-buscar-host', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarHost(filtros || {}); });
+ipcMain.handle('af-det-buscar-componente', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarComponente(filtros || {}); });
+ipcMain.handle('af-det-puente-resumen', async () => { const err = requerirSesion('activofijo_detalle'); if (err) return err; return await activoFijoDetalleDB.resumenPuente(); });
+ipcMain.handle('af-det-puente-listar', async (_e, filtros) => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.listarPuente(filtros || {}); });
+ipcMain.handle('af-det-puente-completar', async (_e, idEquipo, idActivoFijoEQ, nota) => {
+    const err = requerirSesion('af-det:puente:completar');
+    if (err) return err;
+    return await activoFijoDetalleDB.completarSerie(idEquipo, idActivoFijoEQ, usuarioActual?.IdUsuario, nota);
+});
+ipcMain.handle('af-det-puente-revisar', async (_e, idEquipo, idActivoFijoEQ, nota) => {
+    const err = requerirSesion('af-det:puente:revisar');
+    if (err) return err;
+    return await activoFijoDetalleDB.marcarRevision(idEquipo, idActivoFijoEQ, usuarioActual?.IdUsuario, nota);
+});
 
 /* =========================================================
    IPC: RESPONSIVAS AF

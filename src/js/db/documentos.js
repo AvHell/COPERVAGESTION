@@ -8,6 +8,13 @@ const { getPool, sql } = require('./conexion');
    (VARBINARY(MAX)). NombreGuardado es sólo una clave lógica para
    localizar el archivo; no apunta a ninguna ruta del disco.
 
+   El binario se escribe UNA sola vez por subida: la fila vigente de
+   dbo.Documentos es la dueña del archivo y la fila histórica de la v1
+   sólo guarda metadatos. Duplicarlo dentro de la misma transacción
+   gastaba el doble del registro de transacciones y, con archivos
+   grandes, lo llenaba (error 9002, "transaction log ... is full").
+   Para liberar ese espacio ver scripts/liberar-log-transacciones.sql.
+
    La estructura de las tablas vive en scripts/documentacion.sql
    (se ejecuta una sola vez sobre la base de datos). Este módulo
    sólo contiene código JavaScript: nada de DDL.
@@ -52,6 +59,33 @@ async function rollbackSeguro(tx) {
     } catch (_) {
         /* la transacción ya estaba abortada: se conserva el error original */
     }
+}
+
+/**
+ * SQL Server devuelve los errores de espacio en inglés y sin contexto
+ * ("The transaction log for database 'X' is full due to 'ACTIVE_TRANSACTION'").
+ * Al subir un documento se escriben binarios grandes, así que es justo el
+ * momento en que aparece el problema: se traduce a una indicación accionable
+ * para que quien sube el archivo sepa qué pedir y no reintente en vano.
+ */
+function mensajeBD(err) {
+    const texto = String(err?.message || err || '');
+    const codigo = Number(err?.number ?? err?.originalError?.info?.number ?? err?.originalError?.number);
+
+    if (codigo === 9002 || /transaction log .* is full/i.test(texto)) {
+        return 'el registro de transacciones de la base de datos se llenó. '
+            + 'Ejecuta scripts/liberar-log-transacciones.sql (o pide al administrador que haga '
+            + 'una copia de seguridad del log o lo pase a modelo SIMPLE) y vuelve a intentarlo.';
+    }
+    if (codigo === 1105 || /could not allocate space/i.test(texto)) {
+        return 'la base de datos se quedó sin espacio en disco. '
+            + 'Libera espacio en el servidor o aumenta el tamaño del archivo de datos.';
+    }
+    if (codigo === 701 || /there is insufficient system memory/i.test(texto)) {
+        return 'el servidor no tiene memoria suficiente para procesar el archivo. '
+            + 'Inténtalo de nuevo en unos minutos o sube un archivo más pequeño.';
+    }
+    return texto;
 }
 
 async function etiquetasPorDocumento(pool, ids) {
@@ -323,13 +357,20 @@ async function crear(datos) {
                          @TipoMime, @TamanoBytes, @Hash, 1, @Descripcion, 0, @CreadoEn, @ActualizadoEn)
                 `);
 
+            /* La fila de la v1 se guarda SIN el binario a propósito: la fila del
+               documento (justo arriba) ya lo contiene y comparte el mismo
+               NombreGuardado, así que obtenerArchivo() lo resuelve desde ahí.
+               Escribir el mismo archivo dos veces dentro de esta transacción
+               duplicaba el uso del registro de transacciones (2 x archivo) y
+               con archivos grandes lo llenaba. Cuando se sube una v2, esa
+               versión rellena el Contenido de la v1 antes de reemplazar la
+               vigente (ver agregarVersion). */
             await new sql.Request(tx)
                 .input('Id', sql.NVarChar(40), `ver_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`)
                 .input('DocumentoId', sql.NVarChar(40), id)
                 .input('NumeroVersion', sql.Int, 1)
                 .input('NombreGuardado', sql.NVarChar(260), nombreGuardado)
                 .input('NombreOriginal', sql.NVarChar(260), nombreOriginal)
-                .input('Contenido', sql.VarBinary(sql.MAX), contenido)
                 .input('Hash', sql.Char(64), hash)
                 .input('TamanoBytes', sql.BigInt, tamano)
                 .input('TipoMime', sql.NVarChar(150), tipoMime)
@@ -340,7 +381,7 @@ async function crear(datos) {
                          Contenido, Hash, TamanoBytes, TipoMime, CreadoEn)
                     VALUES
                         (@Id, @DocumentoId, @NumeroVersion, @NombreGuardado, @NombreOriginal,
-                         @Contenido, @Hash, @TamanoBytes, @TipoMime, @CreadoEn)
+                         NULL, @Hash, @TamanoBytes, @TipoMime, @CreadoEn)
                 `);
 
             await tx.commit();
@@ -352,7 +393,7 @@ async function crear(datos) {
         await guardarEtiquetas(pool, id, datos?.etiquetas);
         return { ok: true, mensaje: 'Documento guardado correctamente.', id };
     } catch (err) {
-        return { ok: false, mensaje: 'Error al guardar el documento: ' + err.message };
+        return { ok: false, mensaje: 'Error al guardar el documento: ' + mensajeBD(err) };
     }
 }
 
@@ -459,6 +500,19 @@ async function agregarVersion(documentoId, datos) {
                 .input('TipoMime', sql.NVarChar(150), limpiar(vigente.TipoMime, 150) || tipoMime)
                 .input('CreadoEn', sql.BigInt, ahora)
                 .query(`
+                    /* La v1 creada por crear() sólo tiene metadatos (el binario
+                       vive en la fila del documento). Al subir una versión nueva
+                       esa fila pasa a ser el único sitio donde se conserva el
+                       archivo anterior, así que aquí se rellena su Contenido. */
+                    UPDATE dbo.VersionesDocumento
+                       SET Contenido   = @Contenido,
+                           Hash        = @Hash,
+                           TamanoBytes = @TamanoBytes,
+                           TipoMime    = @TipoMime
+                     WHERE DocumentoId   = @DocumentoId
+                       AND NumeroVersion = @NumeroVersion
+                       AND Contenido IS NULL;
+
                     IF NOT EXISTS (SELECT 1 FROM dbo.VersionesDocumento
                                     WHERE DocumentoId = @DocumentoId AND NumeroVersion = @NumeroVersion)
                         INSERT INTO dbo.VersionesDocumento
@@ -519,7 +573,7 @@ async function agregarVersion(documentoId, datos) {
 
         return { ok: true, mensaje: `Versión ${nuevaVersion} registrada.`, version: nuevaVersion };
     } catch (err) {
-        return { ok: false, mensaje: 'Error al guardar la nueva versión: ' + err.message };
+        return { ok: false, mensaje: 'Error al guardar la nueva versión: ' + mensajeBD(err) };
     }
 }
 
@@ -599,6 +653,7 @@ async function obtenerArchivo(nombreGuardado) {
                 SELECT NombreOriginal, TipoMime, TamanoBytes, Contenido, 1 AS Prioridad
                   FROM dbo.VersionesDocumento
                  WHERE NombreGuardado = @Nombre
+                   AND Contenido IS NOT NULL
             ) AS Archivos
             ORDER BY Prioridad
         `);

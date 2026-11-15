@@ -14,6 +14,7 @@
 
     <link rel="stylesheet" href="../css/activos.css">
     <link rel="stylesheet" href="../../css/paginador.css">
+    <link rel="stylesheet" href="../css/alertas.css">
 </head>
 <body>
 
@@ -127,6 +128,7 @@
                             <th>Tipo</th>
                             <th>Estado</th>
                             <th>Estatus</th>
+                            <th class="col-piezas" title="Monitores, discos, teclados y ratones conectados al equipo. No son activos aparte: el equipo vale 1.">Piezas</th>
                             <th style="width:200px; text-align:right;">Acciones</th>
                         </tr>
                     </thead>
@@ -536,8 +538,9 @@
                             <select id="voltaje"><option value="">— Sin voltaje —</option></select>
                         </div>
                         <div class="campo-item campo-full campo-usuario-asignado oculto">
-                            <label for="usuario-asignado">Usuario asignado</label>
+                            <label for="usuario-asignado">Usuario asignado <span class="req" id="req-usuario-asignado">*</span></label>
                             <select id="usuario-asignado"><option value="">— Seleccionar usuario —</option></select>
+                            <small class="field-hint oculto" id="nota-usuario-asignado">Lo controla la responsiva abierta: para cambiarlo, edita la responsiva o registra primero la devolución.</small>
                         </div>
 
                         <div class="seccion-titulo campo-full">Situación</div>
@@ -549,6 +552,7 @@
                         <div class="campo-item">
                             <label for="estatus">Estatus <span class="req">*</span></label>
                             <select id="estatus" required></select>
+                            <small class="field-hint oculto" id="nota-estatus"></small>
                         </div>
                         <div class="campo-item">
                             <label for="cartera">Cartera</label>

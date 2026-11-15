@@ -30,6 +30,10 @@ let catalogosEspecificaciones = {
 };
 let modoEdicion    = false;
 let idEditando     = null;
+/* Estatus con el que se abrió el formulario: sirve para saber si el usuario
+   administrador realmente lo cambió y para poder revertir el select si
+   rechaza la advertencia de consecuencias. */
+let estatusOriginal = null;
 let guardando      = false;
 let filtroBusqueda = '';
 let vistaActual    = 'activos';
@@ -325,6 +329,46 @@ function renderTabla() {
     pintarTabla();
 }
 
+/* Piezas conectadas (monitor, disco, teclado, ratón): NO son activos,
+   cuelgan del equipo y el inventario las cuenta dentro de él. Se pintan
+   como una insignia con el desglose en el tooltip para que se vea de un
+   golpe que ese CPU vale 1 aunque tenga 5 piezas. */
+const NOMBRE_TIPO_PIEZA = {
+    MONITOR: ['monitor',    'monitores'],
+    DISCO:   ['disco duro', 'discos duros'],
+    TECLADO: ['teclado',    'teclados'],
+    RATON:   ['ratón',      'ratones'],
+    OTRO:    ['otro',       'otros']
+};
+
+/** "1 monitor", "3 discos duros": el número manda en el plural. */
+function pluralPieza(n, tipo) {
+    const par = NOMBRE_TIPO_PIEZA[String(tipo || 'OTRO').toUpperCase()];
+    const nombre = par ? par[Number(n) === 1 ? 0 : 1] : String(tipo).toLowerCase();
+    return `${n} ${nombre}`;
+}
+
+function detallePiezas(a) {
+    return (Array.isArray(a.PiezasTipos) ? a.PiezasTipos : [])
+        .map(t => pluralPieza(Number(t.cuantas) || 0, t.tipo))
+        .join(', ');
+}
+
+function celdaPiezas(a) {
+    const total = Number(a.Piezas) || 0;
+    if (!total) return '<span class="vacio">—</span>';
+    return `<span class="badge badge-piezas" title="${escaparHTML(detallePiezas(a) || 'Piezas conectadas')}">`
+        + `${total} ${total === 1 ? 'pieza' : 'piezas'}</span>`;
+}
+
+/* Misma información en texto plano para el Excel del inventario. */
+function textoPiezas(a) {
+    const total = Number(a.Piezas) || 0;
+    if (!total) return '—';
+    const detalle = detallePiezas(a);
+    return detalle ? `${total} (${detalle})` : String(total);
+}
+
 function pintarTabla() {
     const listaFiltrada = activos.filter(a => {
         if (!filtroBusqueda) return true;
@@ -335,7 +379,9 @@ function pintarTabla() {
             a.Cartera, a.Sitio,
             a.UsuarioAsignado, a.Observaciones,
             a.Procesador, a.MemoriaRAM, a.Almacenamiento, a.SistemaOperativo,
-            a.Accesorios, a.Subtipo, a.Clasificacion, a.Tamanio, a.Capacidad, a.Voltaje
+            a.Accesorios, a.Subtipo, a.Clasificacion, a.Tamanio, a.Capacidad, a.Voltaje,
+            /* Buscar "monitor" o "disco" encuentra el equipo al que cuelgan. */
+            (Array.isArray(a.PiezasTipos) ? a.PiezasTipos.map(t => NOMBRE_TIPO_PIEZA[t.tipo] || t.tipo).join(' ') : '')
         ].filter(Boolean).join(' ').toLowerCase();
         return texto.includes(filtroBusqueda);
     });
@@ -391,6 +437,7 @@ function pintarTabla() {
                 <span class="badge badge-estatus-${escaparHTML(a.Estatus)}">${escaparHTML(a.Estatus)}</span>
                 ${a.UsuarioAsignado ? `<span class="usuario-inventario">Usuario de inventario: ${escaparHTML(a.UsuarioAsignado)}</span>` : ''}
             </td>
+            <td data-label="Piezas" class="col-piezas">${celdaPiezas(a)}</td>
             <td data-label="Acciones" class="acciones-tabla"></td>
         `;
 
@@ -527,15 +574,12 @@ btnExportar.addEventListener('click', async () => {
                 ${opcionesTipo}
             </select>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Generar Excel',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         },
         preConfirm: () => {
             return document.getElementById('swal-tipo-export').value;
@@ -611,19 +655,21 @@ btnExportar.addEventListener('click', async () => {
         ];
     }
 
+    /* Piezas conectadas: una sóla columna, siempre al final, con el
+       desglose en texto. El equipo sigue siendo 1 renglón del Excel. */
+    columnas.push({ header: 'Piezas conectadas', key: 'PiezasTexto', width: 34 });
+    datosExport = datosExport.map(a => ({ ...a, PiezasTexto: textoPiezas(a) }));
+
     const confirm = await Swal.fire({
         icon: 'question',
         title: '¿Generar Excel?',
         html: `Se exportarán <strong>${datosExport.length}</strong> registros con <strong>${columnas.length}</strong> columnas.`,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, generar',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         }
     });
 
@@ -673,9 +719,170 @@ btnExportar.addEventListener('click', async () => {
 /* =========================================================
    RESTO DE FUNCIONES (Ver, Editar, Guardar, Eliminar, Restaurar)
    ========================================================= */
-function verActivo(id) {
+/* =========================================================
+   PIEZAS CONECTADAS DEL EQUIPO (modelo padre / hijo)
+   ---------------------------------------------------------
+   El colector ya NO crea un activo por cada pieza: el CPU, AIO o
+   laptop es el activo (1 fila en ActivoFijoEquipos) y sus monitores,
+   discos, teclados y ratones viven en dbo.ActivoFijoEquiposComponentes
+   colgados de su IdActivoFijoEQ + NoSerie.
+
+   Aquí se leen para MOSTRARLAS dentro del equipo: nunca se listan como
+   activos independientes, por eso el conteo del inventario no cambia.
+   ========================================================= */
+async function respuestaPiezas(id) {
+    try {
+        const res = await window.api.activoFijo.activos.componentes(id);
+        if (res && res.ok !== false && Array.isArray(res.componentes)) return res;
+        return {
+            ok: false,
+            mensaje: (res && res.mensaje) || 'No se pudieron leer las piezas del equipo.',
+            componentes: []
+        };
+    } catch (err) {
+        return { ok: false, mensaje: err.message || 'No se pudieron leer las piezas.', componentes: [] };
+    }
+}
+
+const GRUPOS_PIEZA = [
+    { tipo: 'MONITOR', titulo: 'Monitores' },
+    { tipo: 'DISCO',   titulo: 'Discos duros' },
+    { tipo: 'TECLADO', titulo: 'Teclados' },
+    { tipo: 'RATON',   titulo: 'Ratones / apuntadores' }
+];
+
+/** Suma de unidades: una fila con Cantidad = 2 son dos piezas físicas. */
+function totalPiezas(piezas) {
+    return (Array.isArray(piezas) ? piezas : [])
+        .reduce((n, p) => n + (Number(p.Cantidad) > 0 ? Number(p.Cantidad) : 1), 0);
+}
+
+/** Unidades por tipo: { MONITOR: 1, DISCO: 2, … } */
+function contarPorTipo(piezas) {
+    const cuenta = new Map();
+    for (const p of Array.isArray(piezas) ? piezas : []) {
+        const t = String(p.TipoComponente || 'OTRO').toUpperCase();
+        const n = Number(p.Cantidad) > 0 ? Number(p.Cantidad) : 1;
+        cuenta.set(t, (cuenta.get(t) || 0) + n);
+    }
+    return cuenta;
+}
+
+/** "1 monitor, 2 discos duros" → resumen corto para los avisos de baja. */
+function resumenPiezas(piezas) {
+    const cuenta = contarPorTipo(piezas);
+    const partes = [];
+    for (const g of GRUPOS_PIEZA) {
+        const n = cuenta.get(g.tipo) || 0;
+        if (n) { partes.push(pluralPieza(n, g.tipo)); cuenta.delete(g.tipo); }
+    }
+    for (const [tipo, n] of cuenta) partes.push(pluralPieza(n, tipo));
+    return partes.join(', ');
+}
+
+function claseConfianzaPieza(valor) {
+    const c = String(valor || '').toLowerCase();
+    return (c === 'alta' || c === 'media') ? c : 'baja';
+}
+
+/** Una fila por pieza: marca, modelo y serie son lo que se revisa al auditar. */
+function filaPieza(p) {
+    const conf = String(p.Confianza || 'baja').toLowerCase();
+    return `<tr>
+        <td>${escaparHTML(p.Marca || '—')}</td>
+        <td>${escaparHTML(p.Modelo || '—')}</td>
+        <td class="mono">${escaparHTML(p.Serie || '—')}</td>
+        <td class="mono">${escaparHTML(p.Identificador || '—')}</td>
+        <td><span class="conf-pieza ${claseConfianzaPieza(conf)}">${escaparHTML(conf)}</span></td>
+        <td class="num">${escaparHTML(p.Cantidad === null || p.Cantidad === undefined ? 1 : p.Cantidad)}</td>
+    </tr>`;
+}
+
+/** Sección "Piezas conectadas": agrupada por tipo, dentro del propio equipo. */
+function seccionPiezas(resPiezas, noSerie) {
+    const piezas = Array.isArray(resPiezas && resPiezas.componentes) ? resPiezas.componentes : [];
+    if (!piezas.length) {
+        // Si la tabla puente no existe todavía se avisa; si simplemente no
+        // hay piezas, no se pinta nada (no se inventa contenido).
+        if (resPiezas && resPiezas.fuenteDisponible === false) {
+            return `
+                <div class="ver-seccion">
+                    <div class="ver-seccion-titulo">Piezas conectadas</div>
+                    <div class="ver-aviso">
+                        La tabla <code>dbo.ActivoFijoEquiposComponentes</code> no existe todavía,
+                        así que este equipo no puede mostrar sus piezas.
+                    </div>
+                </div>`;
+        }
+        return '';
+    }
+
+    const porTipo = new Map();
+    for (const p of piezas) {
+        const t = String(p.TipoComponente || 'OTRO').toUpperCase();
+        if (!porTipo.has(t)) porTipo.set(t, []);
+        porTipo.get(t).push(p);
+    }
+
+    const bloques = [];
+    const usados = new Set();
+
+    const bloque = (titulo, lista) => `
+        <div class="ver-piezas-grupo">
+            <div class="ver-piezas-subtitulo">${escaparHTML(titulo)} <span class="pill-mini">${totalPiezas(lista)}</span></div>
+            <table class="ver-piezas-tabla">
+                <thead>
+                    <tr>
+                        <th>Marca</th>
+                        <th>Modelo</th>
+                        <th>No. Serie</th>
+                        <th>Identificador</th>
+                        <th>Confianza</th>
+                        <th class="num">Cant.</th>
+                    </tr>
+                </thead>
+                <tbody>${lista.map(filaPieza).join('')}</tbody>
+            </table>
+        </div>`;
+
+    for (const g of GRUPOS_PIEZA) {
+        const lista = porTipo.get(g.tipo) || [];
+        usados.add(g.tipo);
+        if (lista.length) bloques.push(bloque(g.titulo, lista));
+    }
+    // Cualquier tipo no contemplado (defensivo: nunca se pierde una pieza).
+    for (const [tipo, lista] of porTipo) {
+        if (usados.has(tipo)) continue;
+        bloques.push(bloque('Otros componentes (' + tipo + ')', lista));
+    }
+
+    const total = totalPiezas(piezas);
+    return `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Piezas conectadas (${total})</div>
+            <div class="ver-aviso">
+                Este equipo cuenta como <strong>1</strong> en el inventario.
+                <strong>${total === 1 ? 'Su única pieza cuelga' : `Sus ${total} piezas cuelgan`}</strong>
+                de él${noSerie ? ' por NoSerie <code>' + escaparHTML(noSerie) + '</code>' : ''}
+                y <strong>${total === 1 ? 'no se lista' : 'no se listan'} como activo${total === 1 ? '' : 's'} aparte${total === 1 ? '' : 's'}</strong>
+                (${escaparHTML(resumenPiezas(piezas))}).
+            </div>
+            <div class="ver-piezas">${bloques.join('')}</div>
+            <div class="ver-nota">
+                Sólo da de baja el equipo cuando se reemplace o se deseche: si lo borras antes,
+                sus piezas quedan apuntando a un activo que ya no existe (incongruencia en la BD).
+                Al desconectar una pieza, la siguiente recolección la marca como no vigente sin borrarla.
+            </div>
+        </div>`;
+}
+
+async function verActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     if (!a) { toastError('Activo no encontrado'); return; }
+
+    // Piezas del equipo (monitor, disco, teclado, ratón…). Se piden antes de
+    // abrir el modal para que todo salga en una sola tarjeta coherente.
+    const resPiezas = await respuestaPiezas(id);
 
     const tipo = tipos.find(t => t.IdTipo === a.IdTipo) || {};
 
@@ -769,9 +976,13 @@ function verActivo(id) {
         </div>
     `;
 
+    // Las piezas van al final: primero se lee el equipo y luego lo que cuelga
+    // de él. El bloque se oculta sólo si el equipo no tiene ninguna.
+    const seccionPiezasEquipo = seccionPiezas(resPiezas, a.NoSerie);
+
     Swal.fire({
         title: `Activo #${a.IdActivoFijoEQ} — ${escaparHTML(a.NoSerie || a.IMEI1 || a.NoTelefono || '')}`,
-        width: '820px',
+        width: seccionPiezasEquipo ? '980px' : '820px',
         html: `
             <div class="ver-wrap">
                 ${seccionIdent}
@@ -780,6 +991,7 @@ function verActivo(id) {
                 ${seccionSpec}
                 ${seccionAcc}
                 ${seccionObs}
+                ${seccionPiezasEquipo}
                 ${meta}
             </div>
         `,
@@ -1002,13 +1214,123 @@ function actualizarUsuarioAsignado() {
     document.querySelector('.campo-usuario-asignado')?.classList.toggle('oculto', !esExterno);
 }
 
+/* Un activo está "en uso" mientras tenga una responsiva abierta: su estatus
+   y su usuario de inventario los mueve la responsiva (asignar / devolver),
+   no el formulario. */
+function activoEnUso(estatus) {
+    const nombre = String(estatus ?? '').trim().toUpperCase();
+    return nombre === 'ASIGNADO' || nombre === 'PENDIENTE';
+}
+
+/* Candado del campo "Usuario asignado":
+   - En uso: se bloquea, porque lo escribe la responsiva.
+   - Activo libre: se puede vaciar, que es la forma de devolverlo al
+     inventario sin tener que borrar el activo. */
+function aplicarEstadoUsuarioAsignado(enUso) {
+    if (inpUsuarioAsig) inpUsuarioAsig.disabled = !!enUso;
+    document.getElementById('req-usuario-asignado')?.classList.toggle('oculto', !!enUso);
+    document.getElementById('nota-usuario-asignado')?.classList.toggle('oculto', !enUso);
+}
+
+/* El estatus lo escribe el sistema (asignar / devolver / cancelar una
+   responsiva, dar de baja): tocarlo a mano descuadra inventario y
+   responsivas. Por eso hace falta el permiso af-act:estatus, que por
+   omisión sólo tiene el rol ADMIN. */
+function puedeCambiarEstatus() {
+    return puedeAcceder('af-act:estatus');
+}
+
+/* Candado del campo "Estatus":
+   - En uso: lo mueve la responsiva abierta.
+   - Sin permiso: sólo un administrador puede forzarlo. */
+function aplicarEstadoEstatus(enUso) {
+    const porPermiso = !puedeCambiarEstatus();
+    if (selEstatus) selEstatus.disabled = !!enUso || porPermiso;
+
+    const nota = document.getElementById('nota-estatus');
+    if (!nota) return;
+    nota.classList.toggle('oculto', !(enUso || porPermiso));
+    nota.textContent = enUso
+        ? 'Lo controla la responsiva abierta: el activo se libera solo al registrar la devolución o al cancelarla.'
+        : 'Sólo un administrador puede cambiarlo. El estatus manda el inventario disponible y el flujo de responsivas.';
+}
+
+/* Consecuencias de cada estatus cuando se fuerza a mano. */
+const CONSECUENCIAS_ESTATUS = {
+    ASIGNADO: 'El activo quedará <strong>bloqueado</strong> y saldrá de la lista para asignar, aunque ninguna responsiva lo respalde: el sistema creerá que alguien lo tiene.',
+    PENDIENTE: 'El activo quedará <strong>bloqueado</strong> igual que con una responsiva abierta y saldrá de la lista para asignar hasta que registres una responsiva o lo liberes.',
+    BAJA: 'El activo saldrá del inventario y se moverá a la pestaña <strong>Eliminados</strong>: desaparece de listados, reportes y del selector de responsivas.',
+    DISPONIBLE: 'El activo volverá al inventario para asignarlo <strong>aunque exista una responsiva abierta</strong>: la responsiva quedará desincronizada del inventario.',
+    STOCK: 'El activo volverá al inventario para asignarlo <strong>aunque exista una responsiva abierta</strong>: la responsiva quedará desincronizada del inventario.'
+};
+
+function nombreEstatus(id) {
+    if (id === null || id === undefined || id === '') return '—';
+    const encontrado = estatus.find(x => Number(x.IdEstatus) === Number(id));
+    return encontrado?.Nombre ?? '—';
+}
+
+/* Advertencia explícita antes de forzar el estatus. Devuelve true sólo si el
+   administrador confirma; cerrar la ventana equivale a cancelar el cambio. */
+async function alertaConsecuenciasEstatus(antesId, despuesId) {
+    const antes   = nombreEstatus(antesId);
+    const despues = nombreEstatus(despuesId);
+    const clave   = String(despues).toUpperCase();
+    const detalle = CONSECUENCIAS_ESTATUS[clave]
+        || 'Forzar el estatus a mano deja el activo sin el respaldo de una acción del sistema: inventario y responsivas pueden quedar desincronizados.';
+
+    const resultado = await Swal.fire({
+        icon: 'warning',
+        title: 'Cambiar el estatus a mano rompe el flujo',
+        html: `
+            <div class="cl-aviso-cambio">
+                <span class="cl-aviso-de">${escaparHTML(antes)}</span>
+                <span class="cl-aviso-flecha">→</span>
+                <span class="cl-aviso-a">${escaparHTML(despues)}</span>
+            </div>
+            <div class="cl-aviso-consecuencia">${detalle}</div>
+            <div class="cl-aviso-nota">
+                El estatus lo escribe el sistema al asignar, devolver o dar de baja un activo.
+                Si cierras esta ventana, el activo conserva su estatus actual.
+            </div>
+        `,
+        showCloseButton: true,
+        confirmButtonText: 'Entiendo, cambiar el estatus',
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm cl-confirm-peligro',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
+        }
+    });
+
+    return resultado.isConfirmed === true;
+}
+
+/* Se evalúa en el cambio del select (no al guardar) para que el
+   administrador vea de inmediato qué implica y pueda arrepentirse. */
+selEstatus.addEventListener('change', async () => {
+    if (!modoEdicion) return;
+    const nuevo = selEstatus.value ? parseInt(selEstatus.value, 10) : null;
+    if (Number(nuevo ?? 0) === Number(estatusOriginal ?? 0)) return;
+
+    const aceptado = await alertaConsecuenciasEstatus(estatusOriginal, nuevo);
+    if (!aceptado) {
+        selEstatus.value = estatusOriginal !== null && estatusOriginal !== undefined
+            ? String(estatusOriginal)
+            : '';
+    }
+});
+
 function limpiarFormulario() {
     selTipo.value = '';
     selMarca.value = '';
     selEstado.value = estados[0]?.IdEstado ?? '';
     const estatusDisponible = estatus.find(x => x.Nombre.toUpperCase() === 'DISPONIBLE');
     selEstatus.value = estatusDisponible?.IdEstatus ?? '';
+    /* En alta el estatus lo pone el sistema (DISPONIBLE) y no se toca. */
     selEstatus.disabled = true;
+    estatusOriginal = null;
+    document.getElementById('nota-estatus')?.classList.add('oculto');
     selCartera.value = '';
     selSitio.value = '';
     selSubtipo.innerHTML = '<option value="">— Selecciona un tipo primero —</option>';
@@ -1023,6 +1345,7 @@ function limpiarFormulario() {
     inpIMEI2.value = '';
     inpNoTelefono.value = '';
     inpUsuarioAsig.value = '';
+    aplicarEstadoUsuarioAsignado(false);
     inpProcesador.value = '';
     inpRAM.value = '';
     inpAlmacenamiento.value = '';
@@ -1054,7 +1377,6 @@ function abrirEdicion(id) {
 
     selTipo.value = a.IdTipo != null ? String(a.IdTipo) : '';
     actualizarCamposPorTipo();
-    selEstatus.disabled = false;
 
     selMarca.value         = a.IdMarca   != null ? String(a.IdMarca)   : '';
     selEstado.value        = a.IdEstado  != null ? String(a.IdEstado)  : '';
@@ -1088,7 +1410,14 @@ function abrirEdicion(id) {
     inpObservaciones.value  = a.Observaciones ?? '';
 
     ocultarMensaje();
-    selEstatus.disabled = a.Estatus?.toUpperCase() === 'ASIGNADO';
+    // Con una responsiva abierta (asignada o pendiente) ni el estatus ni el
+    // usuario de inventario se cambian a mano: los mueve la propia responsiva
+    // (asignar / devolver). Sin responsiva abierta el activo es libre y sí se
+    // puede vaciar el usuario, sin tener que borrar el activo.
+    const enUso = activoEnUso(a.Estatus);
+    estatusOriginal = a.IdEstatus != null ? a.IdEstatus : null;
+    aplicarEstadoEstatus(enUso);
+    aplicarEstadoUsuarioAsignado(enUso);
     abrirModal();
     selTipo.focus();
 }
@@ -1139,7 +1468,17 @@ formulario.addEventListener('submit', async (e) => {
     if (tipo.RequiereAccesorios && !inpAccesorios.value) {
         mostrarMensaje('Selecciona los accesorios del catálogo.', 'error'); return;
     }
-    if (tipo.RequiereUsuarioAsignado && !document.querySelector('.campo-usuario-asignado')?.classList.contains('oculto') && !inpUsuarioAsig.value) {
+    /* El usuario asignado es obligatorio al dar de alta y cuando el activo
+       está en uso (responsiva abierta, que es quien lo escribe). En un activo
+       libre se puede dejar vacío: es la forma de quitárselo a quien lo tenía
+       sin tener que eliminar el activo. */
+    const campoUsuarioVisible = !document.querySelector('.campo-usuario-asignado')?.classList.contains('oculto');
+    const activoEditando = (modoEdicion && idEditando !== null)
+        ? activos.find(x => x.IdActivoFijoEQ === idEditando)
+        : null;
+    const usuarioObligatorio = !!tipo.RequiereUsuarioAsignado && campoUsuarioVisible &&
+        (!activoEditando || activoEnUso(activoEditando.Estatus));
+    if (usuarioObligatorio && !inpUsuarioAsig.value.trim()) {
         mostrarMensaje('Selecciona el usuario asignado del catálogo.', 'error'); return;
     }
     if (tipo.RequierePrecio && !inpPrecio.value.trim()) {
@@ -1207,12 +1546,29 @@ async function eliminarActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     const nombre = a ? (a.NoSerie || a.IMEI1 || a.NoTelefono || `#${id}`) : `#${id}`;
 
+    // Una baja con piezas conectadas deja el equipo sin vigencia y las piezas
+    // apuntando a un activo dado de baja: se avisa antes de confirmar.
+    const resPiezas = await respuestaPiezas(id);
+    const piezas = Array.isArray(resPiezas.componentes) ? resPiezas.componentes : [];
+    const cuantas = totalPiezas(piezas);
+    const avisoPiezas = cuantas ? `
+            <div class="ver-aviso ver-aviso-peligro">
+                <strong>⚠ Este equipo tiene ${cuantas} ${cuantas === 1 ? 'pieza conectada' : 'piezas conectadas'}</strong>
+                (${escaparHTML(resumenPiezas(piezas))}).
+                Dar de baja el equipo <strong>no borra ni desliga sus piezas</strong>: sus registros
+                seguirán colgando de este activo y el inventario contará 1 equipo menos con piezas huérfanas.
+                Da de baja sólo cuando el equipo se <strong>reemplazó</strong> o se <strong>desechó</strong>,
+                y reconecta/actualiza sus piezas en la siguiente recolección para no generar
+                incongruencias en la BD.
+            </div>` : '';
+
     const resultado = await Swal.fire({
         icon: 'warning',
         title: '¿Dar de baja este activo?',
         html: `
             <div>Se dará de baja <strong>${escaparHTML(nombre)}</strong>.<br>
             Podrás verlo y restaurarlo desde la pestaña <strong>Eliminados (BAJA)</strong>.</div>
+            ${avisoPiezas}
             <div class="campo-motivo" id="motivo-baja-wrap">
                 <label for="motivo-baja">Motivo de la baja</label>
                 <textarea id="motivo-baja" maxlength="500" rows="3"
@@ -1220,16 +1576,12 @@ async function eliminarActivo(id) {
                 <div class="error-texto">El motivo es obligatorio.</div>
             </div>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, dar de baja',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
-        focusCancel: true,
         buttonsStyling: false,
         customClass: {
-            popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-            cancelButton: 'swal2-cancel swal2-styled'
+            popup: 'cl-confirm cl-confirm-peligro',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         },
         didOpen: () => {
             const ta = document.getElementById('motivo-baja');
@@ -1282,15 +1634,12 @@ async function restaurarActivo(id, noSerie) {
                 <div class="error-texto">El motivo es obligatorio.</div>
             </div>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, restaurar',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled',
-            cancelButton: 'swal2-cancel swal2-styled'
+            confirmButton: 'swal2-confirm swal2-styled'
         },
         didOpen: () => {
             const ta = document.getElementById('motivo-restaurar');
@@ -1334,25 +1683,38 @@ async function restaurarActivo(id, noSerie) {
 async function eliminarDefinitivoActivo(id, noSerie) {
     const nombre = noSerie || ('#' + id);
 
+    // Igual que en la baja: si el equipo tiene piezas ligadas hay que decirlo
+    // explícitamente, porque la purga se las lleva y eso no tiene vuelta atrás.
+    const resPiezas = await respuestaPiezas(id);
+    const piezas = Array.isArray(resPiezas.componentes) ? resPiezas.componentes : [];
+    const cuantas = totalPiezas(piezas);
+    const avisoPiezas = cuantas ? `
+            <div class="ver-aviso ver-aviso-peligro">
+                <strong>⚠ Este equipo tiene ${cuantas} ${cuantas === 1 ? 'pieza conectada' : 'piezas conectadas'}</strong>
+                (${escaparHTML(resumenPiezas(piezas))}):
+                también se ${cuantas === 1 ? 'borrará su registro' : 'borrarán sus registros'} en
+                <code>dbo.ActivoFijoEquiposComponentes</code>.
+                Pulsa eliminar sólo si el equipo se <strong>reemplazó</strong> o se
+                <strong>desechó</strong> definitivamente; si no, quedará una incongruencia
+                entre el hardware instalado y la BD.
+            </div>` : '';
+
     const resultado = await Swal.fire({
         icon: 'error',
         title: '¿Eliminar definitivamente?',
         html: `
             <div>Se borrará del sistema <strong>${escaparHTML(nombre)}</strong>
             junto con su histórico, sus accesorios y sus asignaciones.</div>
+            ${avisoPiezas}
             <div style="margin-top:.65rem;"><strong>Esta acción no se puede deshacer.</strong><br>
-            Si sólo querías ocultarlo, cancela y usa <em>Restaurar</em>.</div>
+            Si sólo querías ocultarlo, cierra esta ventana y usa <em>Restaurar</em>.</div>
         `,
-        showCancelButton: true,
+        showCloseButton: true,
         confirmButtonText: 'Sí, eliminar definitivamente',
-        cancelButtonText: 'Cancelar',
-        reverseButtons: true,
-        focusCancel: true,
         buttonsStyling: false,
         customClass: {
-            popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-            cancelButton: 'swal2-cancel swal2-styled'
+            popup: 'cl-confirm cl-confirm-peligro',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
         }
     });
 
@@ -1899,18 +2261,17 @@ const CatalogosUI = (() => {
         });
     }
 
+    /* Aviso de error: se cierra con la X roja de la esquina. Sin botonera,
+       para que el texto quede centrado y nada se descuadre. */
     function alertaError(titulo, texto = '') {
         return Swal.fire({
             icon: 'error',
             title: titulo,
             html: texto ? `<p style="margin:0;">${texto}</p>` : undefined,
-            confirmButtonText: 'Entendido',
+            showConfirmButton: false,
             showCloseButton: true,
             buttonsStyling: false,
-            customClass: {
-                popup: 'cl-alert',
-                confirmButton: 'swal2-confirm swal2-styled'
-            }
+            customClass: { popup: 'cl-alert cl-alert-error' }
         });
     }
 
@@ -2521,18 +2882,14 @@ const CatalogosUI = (() => {
             html: `
                 <div>Se borrará de la base de datos <strong>${escaparHTML(nombre)}</strong>.</div>
                 <div style="margin-top:.65rem;"><strong>Esta acción no se puede deshacer.</strong><br>
-                Si sólo querías ocultarlo de los formularios, cancela y usa <em>Restaurar</em>.</div>
+                Si sólo querías ocultarlo de los formularios, cierra esta ventana y usa <em>Restaurar</em>.</div>
             `,
-            showCancelButton: true,
+            showCloseButton: true,
             confirmButtonText: 'Sí, eliminar definitivamente',
-            cancelButtonText: 'Cancelar',
-            reverseButtons: true,
-            focusCancel: true,
             buttonsStyling: false,
             customClass: {
-                popup: 'cl-confirm',
-                confirmButton: 'swal2-confirm swal2-styled cl-peligro',
-                cancelButton: 'swal2-cancel swal2-styled'
+                popup: 'cl-confirm cl-confirm-peligro',
+                confirmButton: 'swal2-confirm swal2-styled cl-peligro'
             }
         });
 

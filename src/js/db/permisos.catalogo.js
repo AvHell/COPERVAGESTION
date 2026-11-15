@@ -24,6 +24,7 @@ const CATALOGO = {
   'activofijo_responsivas':        { grupo: 'Activo Fijo',  etiqueta: 'Responsivas' },
   'activofijo_reportes':           { grupo: 'Activo Fijo',  etiqueta: 'Reportes' },
   'activofijo_importar':           { grupo: 'Activo Fijo',  etiqueta: 'Importación masiva' },
+  'activofijo_detalle':            { grupo: 'Activo Fijo',  etiqueta: 'Detalle del activo (red, cuentas, programas)' },
 
   /* ---------- CATÁLOGOS: acciones finas ---------- */
   'catalogos:clientes:crear':      { grupo: 'Catálogos',    etiqueta: 'Crear cliente' },
@@ -94,6 +95,9 @@ const CATALOGO = {
   'af-act:editar':                 { grupo: 'Activo Fijo',  etiqueta: 'Editar activo' },
   'af-act:eliminar':               { grupo: 'Activo Fijo',  etiqueta: 'Eliminar activo' },
   'af-act:restaurar':              { grupo: 'Activo Fijo',  etiqueta: 'Restaurar activo' },
+  /* Cambiar el estatus a mano desincroniza inventario y responsivas:
+     por omisión sólo lo tiene el rol ADMIN. */
+  'af-act:estatus':                { grupo: 'Activo Fijo',  etiqueta: 'Cambiar estatus de activo' },
 
   /* ---------- ACTIVO FIJO: responsivas ---------- */
   'af-resp:listado:ver':           { grupo: 'Activo Fijo',  etiqueta: 'Ver responsivas' },
@@ -102,6 +106,16 @@ const CATALOGO = {
   'af-resp:devolver':              { grupo: 'Activo Fijo',  etiqueta: 'Registrar devolución' },
   'af-resp:eliminar':              { grupo: 'Activo Fijo',  etiqueta: 'Eliminar responsiva' },
   'af-resp:pdf':                   { grupo: 'Activo Fijo',  etiqueta: 'Generar PDF' },
+
+  /* ---------- ACTIVO FIJO: detalle del activo ----------
+     Lectura de lo que captura el colector. Las dos acciones del
+     puente son las únicas que escriben:
+       · completar → copia la serie del activo a dbo.Equipos.NoSerieCPU
+       · revisar   → marca el desajuste como revisado (auditoría) */
+  'af-det:listado:ver':            { grupo: 'Activo Fijo',  etiqueta: 'Ver maestro y ficha del activo' },
+  'af-det:buscar:ver':             { grupo: 'Activo Fijo',  etiqueta: 'Usar buscadores cruzados (programas, cuentas, red)' },
+  'af-det:puente:completar':       { grupo: 'Activo Fijo',  etiqueta: 'Copiar la serie al equipo del flujo anterior' },
+  'af-det:puente:revisar':         { grupo: 'Activo Fijo',  etiqueta: 'Marcar un desajuste de serie como revisado' },
 
   /* ---------- ACTIVO FIJO: reportes / importación ---------- */
   'af-rep:ver':                    { grupo: 'Activo Fijo',  etiqueta: 'Ver reportes' },

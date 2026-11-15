@@ -1,17 +1,26 @@
 {
+  // Un único servidor MCP para las tablas ActivoFijo*.
+  // La contraseña NO se escribe aquí: VS Code la pide una vez (enmascarada) y
+  // la guarda en su almacén de secretos. Este archivo se puede compartir.
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "sqlserver_password",
+      "description": "Contraseña de SQL Server (usuario copervaservicios_)",
+      "password": true
+    }
+  ],
   "servers": {
     "mssql-bsite": {
+      "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@qodalis/mcp-sqlserver"
-      ],
+      "args": ["-y", "@qodalis/mcp-sqlserver"],
       "env": {
         "SQLSERVER_HOST": "sql.bsite.net",
         "SQLSERVER_PORT": "49758",
         "SQLSERVER_DATABASE": "copervaservicios_",
         "SQLSERVER_USER": "copervaservicios_",
-        "SQLSERVER_PASSWORD": "Yn@zaqXSW#28",
+        "SQLSERVER_PASSWORD": "${input:sqlserver_password}",
         "SQLSERVER_ENCRYPT": "true",
         "SQLSERVER_TRUST_CERT": "true"
       }

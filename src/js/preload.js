@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('api', {
     abrirActivoFijoResponsivas: () => ipcRenderer.invoke('abrir-activofijo-responsivas'),
     abrirActivoFijoReportes:    () => ipcRenderer.invoke('abrir-activofijo-reportes'),
     abrirActivoFijoImportar:    () => ipcRenderer.invoke('abrir-activofijo-importar'),
+    abrirActivoFijoDetalle:     () => ipcRenderer.invoke('abrir-activofijo-detalle'),
 
     /* =========================================================
        CLIENTES
@@ -292,6 +293,7 @@ contextBridge.exposeInMainWorld('api', {
             restaurar: (id, motivo) => ipcRenderer.invoke('af-activos-restaurar', id, motivo),
             eliminarDefinitivo: id => ipcRenderer.invoke('af-activos-eliminar-definitivo', id),
             historico: id => ipcRenderer.invoke('af-activos-historico', id),
+            componentes: id => ipcRenderer.invoke('af-activos-componentes', id),
             exportarExcel: payload => ipcRenderer.invoke('af-activos-exportar-excel', payload),
             listarTipos: () => ipcRenderer.invoke('af-activos-lista-tipos'),
             listarMarcas: () => ipcRenderer.invoke('af-activos-lista-marcas'),
@@ -348,6 +350,30 @@ contextBridge.exposeInMainWorld('api', {
             listarLayouts: () => ipcRenderer.invoke('af-import-layouts'),
             obtenerLayout: clave => ipcRenderer.invoke('af-import-layout', clave),
             importar: datos => ipcRenderer.invoke('af-import-procesar', datos)
+        },
+        /* Detalle del activo: maestro, ficha (red / cuentas / programas),
+           buscadores cruzados y bandeja del puente con el flujo viejo. */
+        detalle: {
+            estado: () => ipcRenderer.invoke('af-det-estado'),
+            maestro: {
+                listar: filtros => ipcRenderer.invoke('af-det-maestro-listar', filtros),
+                dominios: () => ipcRenderer.invoke('af-det-dominios')
+            },
+            ficha: (id, opciones) => ipcRenderer.invoke('af-det-ficha', id, opciones),
+            buscarPrograma: filtros => ipcRenderer.invoke('af-det-buscar-programa', filtros),
+            buscarCuenta: filtros => ipcRenderer.invoke('af-det-buscar-cuenta', filtros),
+            buscarHost: filtros => ipcRenderer.invoke('af-det-buscar-host', filtros),
+            /* ¿A qué equipo pertenece esta pieza? (monitor, disco, teclado,
+               ratón): devuelve siempre el activo padre por NoSerie. */
+            buscarComponente: filtros => ipcRenderer.invoke('af-det-buscar-componente', filtros),
+            puente: {
+                resumen: () => ipcRenderer.invoke('af-det-puente-resumen'),
+                listar: filtros => ipcRenderer.invoke('af-det-puente-listar', filtros),
+                completarSerie: (idEquipo, idActivoFijoEQ, nota) =>
+                    ipcRenderer.invoke('af-det-puente-completar', idEquipo, idActivoFijoEQ, nota),
+                marcarRevision: (idEquipo, idActivoFijoEQ, nota) =>
+                    ipcRenderer.invoke('af-det-puente-revisar', idEquipo, idActivoFijoEQ, nota)
+            }
         }
     }
 });

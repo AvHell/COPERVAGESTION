@@ -463,6 +463,27 @@ body {
     border-color: #c2410c !important;
 }
 
+/* Piezas conectadas: el equipo vale 1 en el inventario, sus monitores,
+   discos, teclados y ratones cuelgan de él. Se ve el conteo, el desglose
+   va en el title del badge. */
+.tabla-activos .col-piezas {
+    text-align: center;
+    white-space: nowrap;
+}
+.badge.badge-piezas {
+    background: var(--tierra-oliva) !important;
+    color: var(--tierra-crema) !important;
+    border-color: #55613f !important;
+    cursor: help;
+}
+.badge.badge-piezas:hover { background: #55613f !important; }
+.tabla-activos td.col-piezas .vacio {
+    color: var(--gray-400);
+    font-style: italic;
+    font-size: 0.8rem;
+}
+
+
 /* =========================================================
    BOTONES DE ACCIÓN
    ========================================================= */
@@ -1285,6 +1306,141 @@ body {
     padding-top: 12px;
     border-top: 1px dashed var(--gray-200);
     font-style: italic;
+}
+
+/* =========================================================
+   PIEZAS CONECTADAS DEL EQUIPO (modelo padre / hijo)
+   ---------------------------------------------------------
+   El activo vale 1 en el inventario; sus monitores, discos,
+   teclados y ratones se listan AQUÍ dentro, agrupados por tipo,
+   con marca / modelo / serie. Nunca como activos sueltos.
+   ========================================================= */
+.ver-aviso {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--gray-700);
+    background: var(--tierra-crema);
+    border: 1px solid var(--gray-200);
+    border-left: 3px solid var(--tierra-oliva);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    text-align: left;
+}
+.ver-aviso code {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 4px;
+    padding: 1px 5px;
+    word-break: break-all;
+}
+/* El mismo recuadro dentro de una confirmación destructiva. */
+.ver-aviso-peligro {
+    background: var(--rojo-soft);
+    border-color: #e3bcae;
+    border-left-color: var(--rojo-base);
+    color: var(--rojo-text);
+    margin: 12px 0 4px;
+}
+.ver-aviso-peligro code {
+    border-color: #e3bcae;
+    color: var(--rojo-text);
+}
+
+.ver-piezas { display: flex; flex-direction: column; gap: 14px; }
+
+.ver-piezas-grupo { min-width: 0; }
+
+.ver-piezas-subtitulo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-600);
+    margin-bottom: 6px;
+}
+
+.pill-mini {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    background: var(--tierra-carbon);
+    color: var(--tierra-crema);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+.ver-piezas-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.ver-piezas-tabla th {
+    text-align: left;
+    padding: 7px 10px;
+    background: var(--gray-100);
+    color: var(--gray-600);
+    font-family: var(--font-display);
+    font-size: 0.64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--gray-200);
+}
+.ver-piezas-tabla td {
+    padding: 7px 10px;
+    color: var(--gray-700);
+    border-top: 1px solid var(--gray-100);
+    vertical-align: middle;
+}
+.ver-piezas-tabla tbody tr:first-child td { border-top: 0; }
+.ver-piezas-tabla th.num,
+.ver-piezas-tabla td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ver-piezas-tabla td.mono {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    word-break: break-all;
+}
+
+/* Confianza del identificador de la pieza (alta / media / baja). */
+.conf-pieza {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: 1px solid transparent;
+}
+.conf-pieza.alta  { background: #e6efe1; color: #3f5233; border-color: #c3d5b8; }
+.conf-pieza.media { background: #fdf3d8; color: #7a6220; border-color: #e9d79a; }
+.conf-pieza.baja  { background: var(--rojo-soft); color: var(--rojo-text); border-color: #e3bcae; }
+
+.ver-nota {
+    margin-top: 12px;
+    font-size: 0.74rem;
+    line-height: 1.5;
+    color: var(--gray-500);
+    font-style: italic;
+    text-align: left;
 }
 
 /* =========================================================
@@ -2629,4 +2785,57 @@ tr.fila-inactiva:hover > td.acciones-tabla {
     .tabs-main { padding: 18px 14px 22px; }
     .panel-title h2 { font-size: 1.28rem; }
     .empty-state { padding: 52px 20px; }
+}
+
+/* =========================================================
+   AVISO DE ERROR (alertaError)
+   Sin botonera: el mensaje se cierra con la X roja cuadrada de
+   la esquina, así el icono y el texto quedan centrados y nada
+   se descuadra.
+   ========================================================= */
+.swal2-popup.cl-alert.cl-alert-error {
+    width: 460px !important;
+}
+.swal2-popup.cl-alert-error .swal2-actions {
+    display: none !important;
+}
+.swal2-popup.cl-alert-error .swal2-close {
+    position: absolute !important;
+    top: 16px !important;
+    right: 16px !important;
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 10px !important;
+    font-size: 1.35rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    color: #ffffff !important;
+    background: var(--rojo-base) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 1px 2px rgba(181,68,46,0.35), 0 4px 12px -4px rgba(181,68,46,0.45) !important;
+    transition: background 0.15s ease !important;
+    cursor: pointer;
+    z-index: 10;
+}
+.swal2-popup.cl-alert-error .swal2-close:hover,
+.swal2-popup.cl-alert-error .swal2-close:focus-visible {
+    background: var(--rojo-hover) !important;
+    color: #ffffff !important;
+    outline: none !important;
+}
+.swal2-popup.cl-alert-error .swal2-icon {
+    margin: 34px auto 0 !important;
+}
+.swal2-popup.cl-alert-error .swal2-title {
+    padding: 28px 56px 8px !important;
+    text-align: center !important;
+}
+.swal2-popup.cl-alert-error .swal2-html-container {
+    padding: 0 32px 30px !important;
+    text-align: center !important;
+    overflow-wrap: anywhere;
 }

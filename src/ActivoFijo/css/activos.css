@@ -1257,12 +1257,6 @@ body {
 }
 .swal2-popup.cl-ver .swal2-actions { display: none !important; }
 
-.ver-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    padding: 4px 0 0;
-}
 .ver-seccion {
     background: var(--gray-50);
     border: 1px solid var(--gray-200);
@@ -1314,6 +1308,92 @@ body {
     padding-top: 12px;
     border-top: 1px dashed var(--gray-200);
     font-style: italic;
+}
+
+/* ---------------------------------------------------------
+   FICHA TÉCNICA PAGINADA (modal "Ver" del inventario)
+   ---------------------------------------------------------
+   El contenido se reparte en páginas (Resumen · Red · Cuentas ·
+   Programas · Piezas · Envíos). La barra de páginas se queda fija
+   arriba y cada página tiene su propio scroll corto, así el modal
+   nunca se convierte en una tira larga que hay que bajar entera.
+   Mismo lenguaje visual que las pestañas .det-tab del módulo Detalle.
+   --------------------------------------------------------- */
+.ver-ficha {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ver-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+}
+
+.ver-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--gray-600);
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.ver-tab:hover:not(.activo) { background: #fff; color: var(--tierra-carbon); }
+.ver-tab.activo {
+    background: var(--tierra-carbon);
+    color: var(--tierra-crema);
+    box-shadow: var(--shadow-sm);
+}
+/* El contador de la página activa se invierte para seguir leyéndose. */
+.ver-tab.activo .pill-mini {
+    background: var(--tierra-crema);
+    color: var(--tierra-carbon);
+}
+.ver-tab:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
+
+/* El scroll vive aquí: corto y con la barra de páginas siempre a la vista. */
+.ver-paginas {
+    max-height: min(52vh, 520px);
+    min-height: 180px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+}
+
+.ver-pagina { display: none; }
+.ver-pagina.activo {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+/* Dentro de una página la tabla no necesita su propio scroll vertical:
+   ya lo da el contenedor de páginas (evita dos barras anidadas). La
+   cabecera sticky sigue funcionando contra el scroll de .ver-paginas. */
+.ver-pagina .ver-tabla-scroll,
+.ver-pagina .ver-tabla-scroll.ver-tabla-alta { max-height: none; }
+
+/* Un solo scroll para toda la ficha. El contenedor de SweetAlert ya
+   scrollea por defecto; si además scrollea .ver-paginas aparecen dos
+   barras anidadas y la de arriba se come el título. */
+.swal2-popup.cl-ver.cl-ver-ficha .swal2-html-container {
+    max-height: none;
+    overflow: visible;
 }
 
 /* =========================================================
@@ -1473,6 +1553,167 @@ body {
 .pill-mini.pill-mini-ok {
     background: var(--verde-soft, #e6f0e4);
     color: var(--verde-text, #2f6b3a);
+}
+
+/* Gris tenue para los "No", "Local", "Usuario": hay que verlos pero
+   sin que compitan con los badges de color (estado, estatus, tipo). */
+.pill-mini.pill-mini-tenue {
+    background: var(--gray-100);
+    color: var(--gray-600);
+    border: 1px solid var(--gray-200);
+    font-weight: 600;
+}
+
+/* ---------------------------------------------------------
+   DATOS COPIABLES (No. Serie, hostname, IP, MAC, DNS…)
+   ---------------------------------------------------------
+   Se ven como texto normal, pero son botones: un clic los copia al
+   portapapeles y el tooltip confirma con "¡Copiado!". Sirve igual
+   en la tabla del inventario y dentro de la ficha técnica.
+   --------------------------------------------------------- */
+.copiable {
+    position: relative;
+    display: inline;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: copy;
+    border-radius: 3px;
+}
+.copiable:hover { background: var(--tierra-crema); }
+.copiable:focus-visible {
+    outline: 2px solid var(--tierra-oro);
+    outline-offset: 2px;
+}
+/* Destello brevísimo como confirmación (además del tooltip). */
+.copiable.copiado {
+    background: var(--verde-soft, #e6f0e4);
+    color: var(--verde-text, #2f6b3a);
+}
+.copiable.copiado-error {
+    background: var(--rojo-soft);
+    color: var(--rojo-text);
+}
+
+/* Tooltip: mismo aspecto que el de los botones de acción de la tabla. */
+.copiable[data-tooltip]::after,
+.ver-buscador-limpiar[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    background: var(--tierra-carbon);
+    color: var(--tierra-crema);
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.2;
+    padding: 5px 9px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 100;
+    box-shadow: 0 4px 12px -2px rgba(46,50,40,0.25);
+}
+.copiable[data-tooltip]:hover::after,
+.copiable[data-tooltip]:focus-visible::after,
+.ver-buscador-limpiar[data-tooltip]:hover::after,
+.ver-buscador-limpiar[data-tooltip]:focus-visible::after {
+    opacity: 1;
+    transform: translateY(0);
+}
+/* El botón de limpiar está pegado al borde derecho: su tooltip crece
+   hacia la izquierda para no salirse de la ficha. */
+.ver-buscador-limpiar[data-tooltip]::after {
+    left: auto;
+    right: 0;
+}
+
+/* ---------------------------------------------------------
+   BUSCADOR DENTRO DE LA FICHA (página "Programas")
+   ---------------------------------------------------------
+   Un equipo puede traer 200+ programas: se filtra en vivo en vez de
+   bajar por la tabla. Mismo lenguaje visual que el buscador del
+   inventario, pero compacto para caber dentro del modal.
+   --------------------------------------------------------- */
+.ver-buscador {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    margin-bottom: 10px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ver-buscador:focus-within {
+    border-color: var(--tierra-oliva);
+    box-shadow: 0 0 0 3px rgba(107,124,80,0.14);
+}
+.ver-buscador-icono {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    color: var(--gray-400);
+}
+.ver-buscador-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 0;
+    border: 0;
+    background: transparent;
+    font-family: var(--font-sans);
+    font-size: 0.84rem;
+    color: var(--gray-800);
+}
+.ver-buscador-input:focus { outline: none; }
+.ver-buscador-input::placeholder { color: var(--gray-400); }
+/* La X nativa sobra: ya hay un botón de limpiar propio. */
+.ver-buscador-input::-webkit-search-cancel-button { display: none; }
+
+.ver-buscador-cuenta {
+    flex-shrink: 0;
+    background: var(--gray-100);
+    color: var(--gray-600);
+    border: 1px solid var(--gray-200);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.ver-buscador-limpiar {
+    position: relative;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--gray-100);
+    color: var(--gray-500);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.ver-buscador-limpiar svg { width: 12px; height: 12px; }
+.ver-buscador-limpiar:hover { background: var(--rojo-base); color: #fff; }
+.ver-buscador-limpiar:focus-visible {
+    outline: 2px solid var(--tierra-oro);
+    outline-offset: 2px;
+}
+
+.ver-buscador-vacio {
+    margin-top: 8px;
+    text-align: center;
 }
 
 /* Confianza del identificador de la pieza (alta / media / baja). */
@@ -1724,6 +1965,10 @@ body {
     .ver-grid { grid-template-columns: 1fr; }
     .ver-seccion { padding: 12px 14px; }
     .swal2-popup.cl-ver .swal2-html-container { padding: 0 20px 22px !important; }
+    /* En pantallas bajas la ficha deja más alto al contenido: la barra de
+       páginas pasa a dos renglones y el título ocupa más espacio. */
+    .ver-paginas { max-height: calc(100vh - 300px); min-height: 140px; }
+    .ver-tab { padding: 7px 10px; font-size: 0.74rem; }
     .swal2-popup.cl-historico .swal2-html-container { padding: 0 16px 20px !important; }
 }
 

@@ -178,6 +178,64 @@ function formatearFecha(val) {
     });
 }
 
+/* =========================================================
+   COPIAR AL PORTAPAPELES
+   ---------------------------------------------------------
+   El número de serie, la IP y la MAC se dictan por teléfono y se
+   pegan en otros sistemas: se copian con un clic. Se usa la API
+   moderna y, si la ventana no la expone, se cae al textarea
+   temporal (el clásico execCommand) para que nunca falle.
+   ========================================================= */
+async function copiarAlPortapapeles(texto) {
+    const valor = String(texto ?? '').trim();
+    if (!valor) return false;
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(valor);
+            return true;
+        }
+    } catch (_) { /* sin permiso: se intenta el método clásico */ }
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = valor;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:-1000px;left:-1000px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+    } catch (_) {
+        return false;
+    }
+}
+
+/** Copia y avisa en el propio tooltip del elemento (¡Copiado!). */
+async function copiarConAviso(el, texto) {
+    if (!el) return false;
+    const original = el.getAttribute('data-tooltip') || 'Copiar';
+    const ok = await copiarAlPortapapeles(texto);
+    el.classList.add(ok ? 'copiado' : 'copiado-error');
+    el.setAttribute('data-tooltip', ok ? '¡Copiado!' : 'No se pudo copiar');
+    setTimeout(() => {
+        el.classList.remove('copiado', 'copiado-error');
+        el.setAttribute('data-tooltip', original);
+    }, 1500);
+    return ok;
+}
+
+/* Clic delegado: cualquier elemento con data-copiar-texto copia su valor.
+   Sirve para la tabla y para la ficha sin atar un listener por nodo. */
+function engancharCopiables(contenedor) {
+    if (!contenedor) return;
+    contenedor.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-copiar-texto]');
+        if (!btn) return;
+        e.stopPropagation();
+        copiarConAviso(btn, btn.getAttribute('data-copiar-texto'));
+    });
+}
+
 function mostrarMensaje(texto, tipo) {
     mensaje.textContent = texto;
     mensaje.className = 'alert ' + tipo;
@@ -418,7 +476,9 @@ function pintarTabla() {
         const tr = document.createElement('tr');
 
         const identificadores = [];
-        if (a.NoSerie)    identificadores.push(`<span class="principal">${escaparHTML(a.NoSerie)}</span>`);
+        /* El número de serie se dicta por teléfono y se pega en otros
+           sistemas: un clic lo copia. El tooltip lo dice al pasar el ratón. */
+        if (a.NoSerie)    identificadores.push(`<button type="button" class="principal copiable" data-copiar-texto="${escaparHTML(a.NoSerie)}" data-tooltip="Copiar número de serie">${escaparHTML(a.NoSerie)}</button>`);
         if (a.IMEI1)      identificadores.push(`<span class="secundario">IMEI1: ${escaparHTML(a.IMEI1)}</span>`);
         if (a.IMEI2)      identificadores.push(`<span class="secundario">IMEI2: ${escaparHTML(a.IMEI2)}</span>`);
         if (a.NoTelefono) identificadores.push(`<span class="secundario">Tel: ${escaparHTML(a.NoTelefono)}</span>`);
@@ -914,10 +974,12 @@ function celdaVer(valor, clase) {
     return `<td${clase ? ` class="${clase}"` : ''}>${escaparHTML(v)}</td>`;
 }
 
+/* Sí / No como insignia: el "No" también se pinta como badge tenue para que
+   la columna se lea en vertical de un golpe. La raya sigue en gris. */
 function celdaSiNo(valor, textoSi, textoNo, claseSi) {
-    return valor
-        ? `<td><span class="pill-mini ${claseSi || ''}">${escaparHTML(textoSi)}</span></td>`
-        : `<td><span class="ver-tenue">${escaparHTML(textoNo)}</span></td>`;
+    if (valor) return `<td><span class="pill-mini ${claseSi || ''}">${escaparHTML(textoSi)}</span></td>`;
+    if (textoNo === '—') return `<td><span class="ver-tenue">—</span></td>`;
+    return `<td><span class="pill-mini pill-mini-tenue">${escaparHTML(textoNo)}</span></td>`;
 }
 
 /** Tabla con scroll horizontal: nunca rompe las proporciones del modal. */
@@ -931,19 +993,50 @@ function tablaVer(cabeceras, filasHtml) {
         </div>`;
 }
 
+/* El colector reporta la máscara como prefijo CIDR (/24), pero en el resto
+   del sistema —y en el formulario de equipos— se captura en decimal
+   (255.255.255.0). Aquí se traduce el prefijo a decimal para que la ficha se
+   lea igual que la pantalla de captura; el prefijo se conserva como anotación
+   para no perder información. */
+function prefijoAMascara(prefijo) {
+    const n = Number(prefijo);
+    if (!Number.isInteger(n) || n < 0 || n > 32) return '';
+    const octetos = [];
+    for (let i = 0; i < 4; i++) {
+        const bits = Math.min(Math.max(n - i * 8, 0), 8);
+        octetos.push(256 - Math.pow(2, 8 - bits));
+    }
+    return octetos.join('.');
+}
+
+/** Máscara legible en decimal: "255.255.255.0 (/24)". */
+function mascaraRed(r) {
+    const fila = r || {};
+    const prefijo = (fila.PrefijoRed === null || fila.PrefijoRed === undefined)
+        ? ''
+        : String(fila.PrefijoRed).trim();
+    const decimal = fila.Mascara ? String(fila.Mascara).trim() : prefijoAMascara(prefijo);
+
+    if (decimal && prefijo) return `${decimal} (/${prefijo})`;
+    if (decimal)            return decimal;
+    return prefijo ? `/${prefijo}` : '';
+}
+
+/** DNS tal como se dicta: "8.8.8.8 · 1.1.1.1". */
+function dnsRed(r) {
+    return [r.DNS1, r.DNS2].filter(Boolean).join(' · ');
+}
+
 function filaRed(r) {
     const adaptador = r.NombreAdaptador || r.DescripcionAdaptador || r.Clave || '—';
-    const dns = [r.DNS1, r.DNS2].filter(Boolean).join(' · ');
-    const mascara = r.PrefijoRed !== null && r.PrefijoRed !== undefined && r.PrefijoRed !== ''
-        ? `/${r.PrefijoRed}`
-        : r.Mascara;
     return `<tr>
+        ${celdaVer(r.Hostname, 'mono')}
         ${celdaVer(adaptador)}
         ${celdaVer(r.IP, 'mono')}
         ${celdaVer(r.MAC, 'mono')}
-        ${celdaVer(mascara, 'mono')}
+        ${celdaVer(mascaraRed(r), 'mono')}
         ${celdaVer(r.PuertaEnlace, 'mono')}
-        ${celdaVer(dns, 'mono')}
+        ${celdaVer(dnsRed(r), 'mono')}
         ${celdaSiNo(r.DHCP, 'Sí', 'No')}
         ${celdaVer(r.Dominio)}
         ${celdaSiNo(r.EsPrincipal, 'Principal', '—', 'pill-mini-ok')}
@@ -951,10 +1044,65 @@ function filaRed(r) {
 }
 
 const CABECERAS_RED = [
-    { titulo: 'Adaptador' }, { titulo: 'IP' }, { titulo: 'MAC' },
+    { titulo: 'Hostname' }, { titulo: 'Adaptador' }, { titulo: 'IP' }, { titulo: 'MAC' },
     { titulo: 'Máscara' }, { titulo: 'Puerta de enlace' }, { titulo: 'DNS' },
     { titulo: 'DHCP' }, { titulo: 'Dominio' }, { titulo: 'Principal' }
 ];
+
+/** Adaptador "de cabecera": el principal o, si el colector no lo marcó, el
+    primero (la consulta ya ordena por EsPrincipal y UltimaDeteccion). */
+function adaptadorPrincipal(red) {
+    const lista = Array.isArray(red) ? red : [];
+    return lista.find(r => r.EsPrincipal) || lista[0] || null;
+}
+
+/** Renglones de conexión: hostname, IP, MAC y DNS son lo que se dicta por
+    teléfono, así que van en la ficha y no escondidos en una tabla ancha. */
+function seccionConexion(red) {
+    const p = adaptadorPrincipal(red);
+    const items = [
+        ['Hostname', p ? p.Hostname : ''],
+        ['IP', p ? p.IP : ''],
+        ['MAC', p ? p.MAC : ''],
+        ['Máscara', p ? mascaraRed(p) : ''],
+        ['Puerta de enlace', p ? p.PuertaEnlace : ''],
+        ['DNS', p ? dnsRed(p) : ''],
+        ['DHCP', p ? (p.DHCP ? 'Sí' : 'No') : ''],
+        ['Dominio', p ? p.Dominio : ''],
+        ['Sufijo DNS', p ? p.DNSSufijo : ''],
+        ['Adaptador', p ? (p.NombreAdaptador || p.DescripcionAdaptador || p.Clave) : ''],
+        ['Última detección', p ? formatearFecha(p.UltimaDeteccion) : '']
+    ];
+
+    /* Lo que se copia y pega en otros sistemas: se marca con el cursor de
+       copiar y el aviso en el tooltip (ver CSS .copiable). */
+    const COPIABLES = new Set(['Hostname', 'IP', 'MAC', 'Máscara', 'Puerta de enlace', 'DNS', 'Dominio']);
+
+    const filas = items.map(([etiqueta, valor]) => {
+        const vacio = (valor === null || valor === undefined || valor === '');
+        const texto = vacio ? '—' : String(valor);
+        let contenido;
+
+        if (etiqueta === 'DHCP') {
+            contenido = vacio
+                ? '<span class="ver-tenue">—</span>'
+                : `<span class="pill-mini ${valor === 'Sí' ? 'pill-mini-ok' : 'pill-mini-tenue'}">${escaparHTML(texto)}</span>`;
+        } else if (COPIABLES.has(etiqueta) && !vacio) {
+            contenido = `<button type="button" class="copiable" data-copiar-texto="${escaparHTML(texto)}" data-tooltip="Copiar">${escaparHTML(texto)}</button>`;
+        } else {
+            contenido = escaparHTML(texto);
+        }
+
+        return `<div class="ver-item"><span class="ver-label">${escaparHTML(etiqueta)}</span><span class="ver-valor">${contenido}</span></div>`;
+    }).join('');
+
+    return `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Conexión principal</div>
+            <div class="ver-grid">${filas}</div>
+            ${p ? '' : '<div class="ver-tenue">Sin adaptador principal: el colector todavía no reporta red para este equipo.</div>'}
+        </div>`;
+}
 
 /** Bloque "Red": adaptadores WiFi y Ethernet por separado, en su propia tabla. */
 function seccionRed(res) {
@@ -989,11 +1137,16 @@ function seccionRed(res) {
         </div>` : '');
 
     return `
+        ${seccionConexion(red)}
         <div class="ver-seccion">
-            <div class="ver-seccion-titulo">Red (WiFi y Ethernet)</div>
+            <div class="ver-seccion-titulo">Adaptadores (WiFi y Ethernet)</div>
             <div class="ver-piezas">
                 ${grupo('WiFi', wifi)}
                 ${grupo('Ethernet / cable', cable)}
+            </div>
+            <div class="ver-nota">
+                Datos reportados por el colector en su última recolección.
+                Sólo se muestran los adaptadores vigentes.
             </div>
         </div>`;
 }
@@ -1002,7 +1155,9 @@ function filaCuenta(c) {
     const esDominio = String(c.TipoCuenta || '').toUpperCase() === 'DOMINIO';
     return `<tr>
         ${celdaVer(c.Cuenta, 'mono')}
-        <td>${esDominio ? '<span class="pill-mini">Dominio</span>' : '<span class="ver-tenue">Local</span>'}</td>
+        <td>${esDominio
+            ? '<span class="pill-mini">Dominio</span>'
+            : '<span class="pill-mini pill-mini-tenue">Local</span>'}</td>
         ${celdaVer(c.NombreCompleto)}
         ${celdaSiNo(c.Habilitada, 'Sí', 'No', 'pill-mini-ok')}
         ${celdaVer(formatearFecha(c.UltimoAcceso))}
@@ -1046,19 +1201,24 @@ function seccionCuentas(res) {
 
 function filaPrograma(p) {
     const alcance = String(p.Alcance || '').toUpperCase();
-    return `<tr>
+    /* Texto plano indexable para el filtro: se guarda en la fila para no
+       recorrer las celdas en cada tecla. */
+    const buscar = [p.Programa, p.Version, p.Fabricante, p.Cuenta, alcance]
+        .filter(Boolean).join(' ').toLowerCase();
+    return `<tr data-buscar="${escaparHTML(buscar)}">
         ${celdaVer(p.Programa)}
         ${celdaVer(p.Version, 'mono')}
         ${celdaVer(p.Fabricante)}
         ${celdaVer(formatearFecha(p.FechaInstalacion))}
         <td>${alcance === 'USUARIO'
-            ? '<span class="ver-tenue">Usuario</span>'
+            ? '<span class="pill-mini pill-mini-tenue">Usuario</span>'
             : '<span class="pill-mini">Equipo</span>'}</td>
         ${celdaVer(p.Cuenta, 'mono')}
     </tr>`;
 }
 
-/** Bloque "Programas": el software instalado, con scroll para no estirar el modal. */
+/** Bloque "Programas": el software instalado, con filtro rápido y scroll
+    para no estirar el modal (un equipo puede traer 200+ programas). */
 function seccionProgramas(res) {
     const fuentes = (res && res.fuentes) || {};
     const programas = Array.isArray(res && res.programas) ? res.programas : [];
@@ -1088,23 +1248,221 @@ function seccionProgramas(res) {
     return `
         <div class="ver-seccion">
             <div class="ver-seccion-titulo">Programas (${programas.length})</div>
+            <div class="ver-buscador">
+                <svg class="ver-buscador-icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="search" class="ver-buscador-input"
+                       data-filtro-programas
+                       placeholder="Filtrar por programa, versión, fabricante o cuenta…"
+                       aria-label="Filtrar programas"
+                       autocomplete="off" spellcheck="false">
+                <span class="pill-mini ver-buscador-cuenta" data-filtro-programas-cuenta></span>
+                <button type="button" class="ver-buscador-limpiar oculto"
+                        data-filtro-programas-limpiar data-tooltip="Limpiar filtro" aria-label="Limpiar filtro">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
             <div class="ver-tabla-scroll ver-tabla-alta">
                 <table class="ver-piezas-tabla">
                     <thead><tr>${cabeceras.map(c => `<th>${escaparHTML(c.titulo)}</th>`).join('')}</tr></thead>
-                    <tbody>${programas.map(filaPrograma).join('')}</tbody>
+                    <tbody data-filtro-programas-body>${programas.map(filaPrograma).join('')}</tbody>
                 </table>
             </div>
+            <div class="ver-tenue ver-buscador-vacio oculto" data-filtro-programas-vacio>
+                Ningún programa coincide con el filtro.
+            </div>
         </div>`;
+}
+
+/* =========================================================
+   PÁGINA "ENVÍOS" (lotes del colector)
+   ---------------------------------------------------------
+   Un renglón por LoteEnvio: cuántos adaptadores, cuentas, programas y
+   piezas llegaron en esa recolección y entre qué fechas. Sirve para
+   detectar un equipo que dejó de reportar sin abrir las tablas.
+   ========================================================= */
+function seccionEnvios(res) {
+    const lotes = Array.isArray(res && res.lotes) ? res.lotes : [];
+    if (!lotes.length) {
+        return `
+            <div class="ver-seccion">
+                <div class="ver-seccion-titulo">Envíos del colector</div>
+                <div class="ver-tenue">Sin envíos registrados para este equipo.</div>
+            </div>`;
+    }
+
+    const cabeceras = [
+        { titulo: 'Lote' }, { titulo: 'Red', num: true }, { titulo: 'Cuentas', num: true },
+        { titulo: 'Programas', num: true }, { titulo: 'Piezas', num: true },
+        { titulo: 'Primera detección' }, { titulo: 'Última detección' }
+    ];
+    const numero = (valor) => `<td class="num">${escaparHTML(valor === null || valor === undefined ? 0 : valor)}</td>`;
+    const filas = lotes.map(l => `<tr>
+        ${celdaVer(l.LoteEnvio, 'mono')}
+        ${numero(l.Red)}
+        ${numero(l.Cuentas)}
+        ${numero(l.Programas)}
+        ${numero(l.Componentes)}
+        ${celdaVer(formatearFecha(l.PrimeraDeteccion))}
+        ${celdaVer(formatearFecha(l.UltimaDeteccion))}
+    </tr>`).join('');
+
+    return `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Envíos del colector (${lotes.length})</div>
+            ${tablaVer(cabeceras, filas)}
+            <div class="ver-nota">
+                Cada envío es una recolección completa del equipo: lo que ya no aparece
+                en el envío siguiente queda como no vigente, sin borrarse del histórico.
+            </div>
+        </div>`;
+}
+
+/* =========================================================
+   FICHA TÉCNICA PAGINADA (modal "Ver")
+   ---------------------------------------------------------
+   Todo lo que antes era un scroll larguísimo se reparte en páginas:
+   Resumen · Red · Cuentas · Programas · Piezas · Envíos. La barra de
+   páginas se queda fija y sólo cambia el contenido, así el modal mide
+   siempre lo mismo y la red (hostname, IP, MAC, DNS) o el software
+   quedan a un clic en vez de a media pantalla de distancia.
+   ========================================================= */
+
+/** Contenedor de la ficha: barra de páginas + un panel por página. */
+function htmlFichaTecnica(paginas) {
+    const tabs = paginas.map((p, i) => `
+        <button type="button"
+                class="ver-tab${i === 0 ? ' activo' : ''}"
+                data-ver-pagina="${escaparHTML(p.id)}"
+                role="tab"
+                aria-selected="${i === 0 ? 'true' : 'false'}">
+            ${escaparHTML(p.titulo)}
+            ${p.cuenta ? `<span class="pill-mini">${escaparHTML(p.cuenta)}</span>` : ''}
+        </button>`).join('');
+
+    const paneles = paginas.map((p, i) => `
+        <div class="ver-pagina${i === 0 ? ' activo' : ''}"
+             data-ver-panel="${escaparHTML(p.id)}"
+             role="tabpanel"
+             aria-label="${escaparHTML(p.titulo)}">${p.html}</div>`).join('');
+
+    return `
+        <div class="ver-ficha">
+            <div class="ver-tabs" role="tablist">${tabs}</div>
+            <div class="ver-paginas">${paneles}</div>
+        </div>`;
+}
+
+/** Cambio de página dentro de la ficha: no vuelve a consultar nada. */
+function engancharPaginasFicha(popup) {
+    if (!popup) return;
+    const tabs = Array.from(popup.querySelectorAll('[data-ver-pagina]'));
+    const paneles = Array.from(popup.querySelectorAll('[data-ver-panel]'));
+    const contenedor = popup.querySelector('.ver-paginas');
+
+    const mostrar = (id) => {
+        tabs.forEach(t => {
+            const activo = t.dataset.verPagina === id;
+            t.classList.toggle('activo', activo);
+            t.setAttribute('aria-selected', activo ? 'true' : 'false');
+        });
+        paneles.forEach(p => p.classList.toggle('activo', p.dataset.verPanel === id));
+        /* Cada página arranca desde arriba: nunca hereda el scroll anterior. */
+        if (contenedor) contenedor.scrollTop = 0;
+    };
+
+    tabs.forEach(t => t.addEventListener('click', () => mostrar(t.dataset.verPagina)));
+}
+
+/* =========================================================
+   FILTRO RÁPIDO DE LA PÁGINA "PROGRAMAS"
+   ---------------------------------------------------------
+   Un equipo puede traer 200+ programas y encontrar uno a ojo dentro
+   de la tabla es imposible: se filtra en vivo por programa, versión,
+   fabricante o cuenta. Cada fila ya trae su texto plano en
+   data-buscar (lo escribe filaPrograma), así el filtro no recorre
+   celdas en cada tecla. El contador dice cuántos quedan a la vista.
+   ========================================================= */
+function engancharProgramasFicha(popup) {
+    if (!popup) return;
+    const input = popup.querySelector('[data-filtro-programas]');
+    const cuerpo = popup.querySelector('[data-filtro-programas-body]');
+    if (!input || !cuerpo) return;
+
+    const filas = Array.from(cuerpo.querySelectorAll('tr'));
+    const contador = popup.querySelector('[data-filtro-programas-cuenta]');
+    const limpiar = popup.querySelector('[data-filtro-programas-limpiar]');
+    const vacio = popup.querySelector('[data-filtro-programas-vacio]');
+
+    const aplicar = () => {
+        const q = input.value.trim().toLowerCase();
+        let visibles = 0;
+        filas.forEach(tr => {
+            const coincide = !q || (tr.dataset.buscar || '').includes(q);
+            tr.classList.toggle('oculto', !coincide);
+            if (coincide) visibles++;
+        });
+        if (contador) {
+            contador.textContent = q ? `${visibles} de ${filas.length}` : String(filas.length);
+            contador.classList.toggle('oculto', filas.length === 0);
+        }
+        if (limpiar)  limpiar.classList.toggle('oculto', !q);
+        if (vacio)    vacio.classList.toggle('oculto', visibles > 0);
+    };
+
+    input.addEventListener('input', aplicar);
+    /* Escape limpia el filtro sin cerrar el modal (SweetAlert lo cerraría). */
+    input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        e.stopPropagation();
+        if (input.value) { input.value = ''; aplicar(); }
+    });
+    if (limpiar) {
+        limpiar.addEventListener('click', () => {
+            input.value = '';
+            aplicar();
+            input.focus();
+        });
+    }
+    aplicar();
+}
+
+/** Engancha todo lo interactivo de la ficha en un solo punto. */
+function engancharFicha(popup) {
+    engancharPaginasFicha(popup);
+    engancharProgramasFicha(popup);
+    engancharCopiables(popup);
 }
 
 async function verActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     if (!a) { toastError('Activo no encontrado'); return; }
 
+    /* La ficha es la consulta más pesada del inventario (red, cuentas,
+       programas, piezas y envíos, cada una en su tabla). Se muestra el
+       cargador mientras llega para que el clic en el ojo no parezca muerto;
+       el Swal.fire de abajo reemplaza este mismo cuadro. */
+    Swal.fire({
+        title: 'Leyendo la ficha del equipo…',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        customClass: { popup: 'cl-ver' },
+        didOpen: () => Swal.showLoading()
+    });
+
     // Detalle completo del equipo: piezas conectadas + red (WiFi/Ethernet),
     // cuentas y programas. Se pide ANTES de abrir el modal para que todo salga
     // en una sola tarjeta coherente (la consulta es la misma de la ficha).
     const resPiezas = await respuestaPiezas(id);
+
+    /* Cabecera del activo tal como está en dbo.ActivoFijoEquipos: aquí viene
+       el BuildSO, que no viaja en el listado del inventario. */
+    const equipoFicha = (resPiezas && resPiezas.equipo) || {};
 
     const tipo = tipos.find(t => t.IdTipo === a.IdTipo) || {};
 
@@ -1168,8 +1526,12 @@ async function verActivo(id) {
         if (a.Procesador)       itemsSpec.push(row('Procesador', a.Procesador));
         if (a.MemoriaRAM)       itemsSpec.push(row('Memoria RAM', a.MemoriaRAM));
         if (a.Almacenamiento)   itemsSpec.push(row('Almacenamiento', a.Almacenamiento));
-        if (a.SistemaOperativo) itemsSpec.push(row('Sistema Operativo', a.SistemaOperativo));
     }
+    /* Sistema operativo y su build salen siempre: no dependen del tipo de
+       activo y son lo primero que se revisa al dar soporte. El build llega
+       desde dbo.ActivoFijoEquipos.BuildSO (lo escribe el colector). */
+    if (a.SistemaOperativo)                  itemsSpec.push(row('Sistema Operativo', a.SistemaOperativo));
+    if (equipoFicha && equipoFicha.BuildSO)  itemsSpec.push(row('Build del SO', equipoFicha.BuildSO));
     const seccionSpec = itemsSpec.length ? `
         <div class="ver-seccion">
             <div class="ver-seccion-titulo">Especificaciones técnicas</div>
@@ -1201,39 +1563,57 @@ async function verActivo(id) {
     // Red, cuentas y programas: lo que el colector dejó de ESTE equipo.
     // Cada bloque se pinta siempre (con su aviso si la fuente no existe),
     // para que se note la diferencia entre "no hay datos" y "no se leyó".
-    const seccionRedEquipo      = seccionRed(resPiezas);
-    const seccionCuentasEquipo  = seccionCuentas(resPiezas);
+    const seccionRedEquipo       = seccionRed(resPiezas);
+    const seccionCuentasEquipo   = seccionCuentas(resPiezas);
     const seccionProgramasEquipo = seccionProgramas(resPiezas);
 
     // Las piezas van al final: primero se lee el equipo y luego lo que cuelga
     // de él. El bloque se oculta sólo si el equipo no tiene ninguna.
     const seccionPiezasEquipo = seccionPiezas(resPiezas, a.NoSerie);
 
+    /* Contadores de cada página: el número en la pestaña dice de un vistazo
+       si vale la pena abrirla, sin tener que entrar y bajar. */
+    const nRed       = Array.isArray(resPiezas && resPiezas.red) ? resPiezas.red.length : 0;
+    const nCuentas   = Array.isArray(resPiezas && resPiezas.cuentas) ? resPiezas.cuentas.length : 0;
+    const nProgramas = Array.isArray(resPiezas && resPiezas.programas) ? resPiezas.programas.length : 0;
+    const nPiezas    = totalPiezas(resPiezas && resPiezas.componentes);
+    const nLotes     = Array.isArray(resPiezas && resPiezas.lotes) ? resPiezas.lotes.length : 0;
+
+    /* Una página por bloque: el "Ver" deja de ser una tira larga y pasa a
+       ser una ficha técnica navegable. "Resumen" es la única siempre
+       presente; las demás se crean cuando tienen algo que enseñar. */
+    const paginas = [
+        {
+            id: 'resumen',
+            titulo: 'Resumen',
+            cuenta: '',
+            html: `${seccionIdent}${seccionUbi}${seccionSit}${seccionSpec}${seccionAcc}${seccionObs}${meta}`
+        },
+        { id: 'red',       titulo: 'Red',       cuenta: nRed,       html: seccionRedEquipo },
+        { id: 'cuentas',   titulo: 'Cuentas',   cuenta: nCuentas,   html: seccionCuentasEquipo },
+        { id: 'programas', titulo: 'Programas', cuenta: nProgramas, html: seccionProgramasEquipo }
+    ];
+    if (seccionPiezasEquipo) {
+        paginas.push({ id: 'piezas', titulo: 'Piezas', cuenta: nPiezas, html: seccionPiezasEquipo });
+    }
+    if (nLotes) {
+        paginas.push({ id: 'envios', titulo: 'Envíos', cuenta: nLotes, html: seccionEnvios(resPiezas) });
+    }
+
     /* Con tablas dentro el modal necesita más ancho; el alto lo controla el
-       CSS (scroll interno) para que nunca se salga de la pantalla. */
-    const tieneTablas = !!(seccionRedEquipo || seccionCuentasEquipo ||
-                           seccionProgramasEquipo || seccionPiezasEquipo);
+       CSS (scroll corto dentro de cada página) para que nunca se salga de
+       la pantalla y nunca haya que bajar media ficha. */
+    const tieneTablas = paginas.length > 1;
 
     Swal.fire({
         title: `Activo #${a.IdActivoFijoEQ} — ${escaparHTML(a.NoSerie || a.IMEI1 || a.NoTelefono || '')}`,
-        html: `
-            <div class="ver-wrap">
-                ${seccionIdent}
-                ${seccionUbi}
-                ${seccionSit}
-                ${seccionSpec}
-                ${seccionAcc}
-                ${seccionObs}
-                ${seccionRedEquipo}
-                ${seccionCuentasEquipo}
-                ${seccionProgramasEquipo}
-                ${seccionPiezasEquipo}
-                ${meta}
-            </div>
-        `,
+        html: htmlFichaTecnica(paginas),
         showCloseButton: true,
         showConfirmButton: false,
-        customClass: { popup: tieneTablas ? 'cl-ver cl-ver-datos' : 'cl-ver' }
+        customClass: {
+            popup: tieneTablas ? 'cl-ver cl-ver-ficha cl-ver-datos' : 'cl-ver cl-ver-ficha'
+        },
+        didOpen: (popup) => engancharFicha(popup)
     });
 }
 
@@ -1307,6 +1687,11 @@ tabsVista.addEventListener('click', (e) => {
 
     cambiarVista(btn.dataset.vista, { permiteInventario: permiteInventario() });
 });
+
+/* Una sola vez: el clic sobre el No. Serie (y cualquier dato marcado
+   como copiable) copia al portapapeles. La tabla se repinta entera en
+   cada filtro, así que el listener va en el tbody, no en las filas. */
+engancharCopiables(tablaBody);
 
 inputBusqueda.addEventListener('input', () => {
     filtroBusqueda = inputBusqueda.value.trim().toLowerCase();

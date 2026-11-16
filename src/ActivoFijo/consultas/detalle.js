@@ -432,6 +432,11 @@ async function obtenerFicha(idActivoFijoEQ) {
                     af.IdEstatus,      et.Nombre AS Estatus,
                     af.IdCartera,      ca.Nombre AS Cartera,
                     af.Observaciones,
+                    /* Build del sistema operativo: lo escribe el colector en
+                       ActivoFijoEquipos.BuildSO (nvarchar 20). Sin esta
+                       columna la ficha no puede mostrar la versión exacta
+                       del SO, que es lo que se revisa al dar soporte. */
+                    af.BuildSO,
                     ${esp.columnas.join(',\n                    ')}
                 FROM dbo.ActivoFijoEquipos af
                 LEFT JOIN dbo.ActivoFijoMarcas   ma ON ma.IdMarca   = af.IdMarca
@@ -555,16 +560,26 @@ async function detalleDeActivo(idActivoFijoEQ) {
         return {
             ok: false,
             mensaje: (ficha && ficha.mensaje) || 'No se pudo leer el detalle del activo.',
-            red: [], cuentas: [], programas: [], componentes: [],
+            equipo: null,
+            red: [], cuentas: [], programas: [], componentes: [], lotes: [],
             fuentes: (ficha && ficha.fuentes) || {}
         };
     }
     return {
         ok: true,
+        /* La cabecera viaja con el detalle: ahí viene lo que sólo está en
+           ActivoFijoEquipos y no en el listado (BuildSO y los nombres de
+           catálogo ya resueltos). Así la ficha del inventario muestra el
+           build sin una segunda consulta. */
+        equipo: ficha.equipo || null,
         red: ficha.red || [],
         cuentas: ficha.cuentas || [],
         programas: ficha.programas || [],
         componentes: ficha.componentes || [],
+        /* Envíos del colector (agrupados por LoteEnvio): la ficha del
+           inventario los usa para su página "Envíos", que responde "qué
+           llegó en cada recolección y cuándo" sin abrir la tabla completa. */
+        lotes: ficha.lotes || [],
         fuentes: ficha.fuentes || {}
     };
 }

@@ -1,7 +1,7 @@
 {
   "name": "proyectoequipos",
 
-  "version": "3.9.0",
+  "version": "3.9.1",
 
   "description": "Sistema de inventario de equipos por cliente, piso y rol",
   "main": "src/js/main.js",

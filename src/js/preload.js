@@ -352,7 +352,7 @@ contextBridge.exposeInMainWorld('api', {
             importar: datos => ipcRenderer.invoke('af-import-procesar', datos)
         },
         /* Detalle del activo: maestro, ficha (red / cuentas / programas),
-           buscadores cruzados y bandeja del puente con el flujo viejo. */
+           buscadores cruzados. */
         detalle: {
             estado: () => ipcRenderer.invoke('af-det-estado'),
             maestro: {
@@ -365,15 +365,7 @@ contextBridge.exposeInMainWorld('api', {
             buscarHost: filtros => ipcRenderer.invoke('af-det-buscar-host', filtros),
             /* ¿A qué equipo pertenece esta pieza? (monitor, disco, teclado,
                ratón): devuelve siempre el activo padre por NoSerie. */
-            buscarComponente: filtros => ipcRenderer.invoke('af-det-buscar-componente', filtros),
-            puente: {
-                resumen: () => ipcRenderer.invoke('af-det-puente-resumen'),
-                listar: filtros => ipcRenderer.invoke('af-det-puente-listar', filtros),
-                completarSerie: (idEquipo, idActivoFijoEQ, nota) =>
-                    ipcRenderer.invoke('af-det-puente-completar', idEquipo, idActivoFijoEQ, nota),
-                marcarRevision: (idEquipo, idActivoFijoEQ, nota) =>
-                    ipcRenderer.invoke('af-det-puente-revisar', idEquipo, idActivoFijoEQ, nota)
-            }
+            buscarComponente: filtros => ipcRenderer.invoke('af-det-buscar-componente', filtros)
         }
     }
 });

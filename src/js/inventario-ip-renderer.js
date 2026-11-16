@@ -1,3 +1,5 @@
+(function () {
+
 const $ = id => document.getElementById(id);
 const formIP = $('form-ip');
 const formCatalogo = $('form-catalogo');
@@ -62,6 +64,17 @@ function formatearEntradaMAC(valor) {
 
 function badge(valor, clase, vacio = '—') {
     return `<span class="ip-badge ${clase}${valor ? '' : ' vacio'}">${escaparHTML(valor || vacio)}</span>`;
+}
+
+/* Origen de la fila. Tres fuentes conviven en la tabla:
+     'General' → capturado a mano en el control general
+     'Cliente' → equipo de un cliente (IP estática)
+     'Activo'  → red que reporta el colector para un activo fijo
+   Cada una tiene su color para no confundirlas de un vistazo. */
+function claseOrigen(origen) {
+    if (origen === 'Cliente') return 'origen-cliente';
+    if (origen === 'Activo') return 'origen-activo';
+    return 'origen-general';
 }
 
 /* Contraste legible sobre un color de fondo (mismo criterio que PermisosUI). */
@@ -557,6 +570,12 @@ function pintarSegmentos(lista) {
         if (totales.reservadas) {
             piezas.push(`<span class="dato-reservado"><b>${totales.reservadas}</b> reservadas</span>`);
         }
+        const volatiles = contarVolatiles();
+        if (volatiles && !incluirVolatiles()) {
+            piezas.push('<span class="dato-volatil"'
+                + ' title="IP que asignan un DHCP o un controlador WiFi: pueden cambiar, no son inventario fijo">'
+                + `<b>${volatiles}</b> volátiles ocultas</span>`);
+        }
         resumen.innerHTML = piezas.join('');
     }
 }
@@ -584,6 +603,67 @@ function actualizarCabeceraSegmento() {
    La tabla se acota con el segmento elegido y con el buscador
    general; no lleva filtros por columna.
    ========================================================= */
+
+/* =========================================================
+   PROCEDENCIA DE LA IP (OrigenIP / EsConfiable)
+   ---------------------------------------------------------
+   No todas las direcciones valen lo mismo: una estática capturada a mano
+   es inventario duro; la que entrega un DHCP o, peor, un controlador WiFi
+   puede cambiar en la siguiente reconexión. La base guarda de dónde salió
+   (ver scripts/activo-vivo-unificado.sql) y aquí se pinta la etiqueta.
+   ========================================================= */
+
+const ETIQUETAS_ORIGEN_IP = Object.freeze({
+    Manual: 'Estática',
+    DHCP: 'DHCP',
+    Wifi: 'WiFi',
+    Otro: 'Otro'
+});
+
+/* EsConfiable llega de SQL como BIT, es decir, booleano en JS. */
+function esVolatil(registro) {
+    return registro?.EsConfiable === 0 || registro?.EsConfiable === false;
+}
+
+/* Misma deducción que src/js/db/inventario-ip.js (procedenciaPorTipoIP), aquí
+   en el proceso de la vista para mandar `origenIP` explícito al guardar. */
+function origenIPPorTipoIP(nombreTipoIP) {
+    const nombre = String(nombreTipoIP || '').trim();
+    if (!nombre) return null;
+    if (/^(wifi|wi-fi)/i.test(nombre)) return 'Wifi';
+    if (/^(dhcp|din[aá]mic)/i.test(nombre)) return 'DHCP';
+    return 'Manual';
+}
+
+function badgeOrigenIP(registro) {
+    const origen = String(registro?.OrigenIP || '').trim();
+    const etiqueta = ETIQUETAS_ORIGEN_IP[origen];
+    if (!etiqueta) {
+        return '<span class="ip-badge origen-ip vacio" title="Sin dato de procedencia">—</span>';
+    }
+    if (esVolatil(registro)) {
+        return '<span class="ip-badge origen-ip volatil"'
+            + ' title="IP volátil: la asigna un DHCP o un controlador WiFi y puede cambiar en cada reconexión">'
+            + `${escaparHTML(etiqueta)}</span>`;
+    }
+    return '<span class="ip-badge origen-ip confiable" title="IP fija: inventario verificable">'
+        + `${escaparHTML(etiqueta)}</span>`;
+}
+
+/* Por defecto la tabla sólo muestra direcciones confiables: las volátiles se
+   piden de forma explícita para que no ensucien el inventario. */
+function incluirVolatiles() {
+    const casilla = $('incluir-volatiles');
+    return Boolean(casilla && casilla.checked);
+}
+
+function registrosVisibles() {
+    return incluirVolatiles() ? registros : registros.filter(registro => !esVolatil(registro));
+}
+
+function contarVolatiles() {
+    return registros.filter(registro => esVolatil(registro)).length;
+}
 
 function registrosFiltrados() {
     const termino = $('busqueda').value.trim().toLowerCase();
@@ -634,9 +714,10 @@ function pintarTabla() {
             ? 'estado-reservado'
             : (item.Estado === 'Ocupado' ? 'estado-ocupado' : 'estado-libre');
         fila.innerHTML = `
-            <td>${badge(item.Origen, item.Origen === 'Cliente' ? 'origen-cliente' : 'origen-general')}</td>
+            <td>${badge(item.Origen, claseOrigen(item.Origen))}</td>
             <td>${badge(item.Estado, claseEstado)}</td>
             <td>${badge(item.IP || 'DHCP', 'ip')}</td>
+            <td>${badgeOrigenIP(item)}</td>
             <td>${badgeHostname(item)}</td>
             <td>${badge(item.MAC, 'dato')}</td>
             <td>${badge(item.Dispositivo, 'dato')}</td>
@@ -665,6 +746,16 @@ function pintarTabla() {
             asignar.title = `Registrar ${item.IP} en el control general`;
             asignar.addEventListener('click', () => abrirRegistroLibre(item));
             acciones.append(asignar);
+        } else if (item.Origen === 'Activo') {
+            /* Red que reporta el colector: es de sólo lectura aquí. Se
+               corrige en el equipo de origen, no desde el control general;
+               por eso no se ofrecen Editar/Eliminar (apuntarían a otra
+               tabla y el siguiente lote del colector lo sobrescribiría). */
+            const nota = document.createElement('span');
+            nota.className = 'reservado-nota';
+            nota.textContent = 'Colector';
+            nota.title = 'La red de este activo la reporta el colector; se corrige en el equipo de origen';
+            acciones.append(nota);
         } else if (item.Origen === 'General') {
             const editar = document.createElement('button');
             editar.type = 'button';
@@ -1242,8 +1333,9 @@ async function cargar() {
        quedan reservadas también para el control general. */
     await cargarRangosCliente();
     /* La tabla también muestra las IP libres del segmento, que no viven
-       en la base de datos: se calculan aquí. */
-    filas = construirFilas(registros);
+       en la base de datos: se calculan aquí. Las volátiles quedan fuera
+       salvo que el usuario pida verlas. */
+    filas = construirFilas(registrosVisibles());
     /* Refresca los colores de cliente definidos en Catálogos del Sistema
        para que un alta o cambio de ColorHex se vea al recargar la tabla. */
     await window.PermisosUI?.refrescarColores?.();
@@ -1255,9 +1347,14 @@ async function cargar() {
 
 formIP.addEventListener('submit', async event => {
     event.preventDefault();
+    /* El nombre del TipoIP decide la procedencia: lo estático es inventario
+       duro y lo que entrega un DHCP / controlador WiFi es volátil. Se manda
+       explícito (igual que hará el colector) y la base lo vuelve a validar. */
+    const nombreTipoIP = catalogoPorId($('tipoIP').value)?.Nombre;
     const datos = {
         ip: $('ip').value.trim(),
-        tipoIP: catalogoPorId($('tipoIP').value)?.Nombre,
+        tipoIP: nombreTipoIP,
+        origenIP: origenIPPorTipoIP(nombreTipoIP),
         hostname: $('hostname').value.trim(),
         mac: $('mac').value.trim(),
         descripcion: $('descripcion').value.trim(),
@@ -1357,6 +1454,18 @@ $('busqueda').addEventListener('input', () => {
     renderizarTabla();
 });
 
+/* Mostrar u ocultar las IP volátiles (DHCP / controlador WiFi): al cambiar
+   se recalculan los segmentos, porque una IP que se oculta libera su lugar. */
+const casillaVolatiles = $('incluir-volatiles');
+if (casillaVolatiles) {
+    casillaVolatiles.addEventListener('change', () => {
+        paginaActual = 1;
+        filas = construirFilas(registrosVisibles());
+        renderizarSegmentos();
+        renderizarTabla();
+    });
+}
+
 /* Aviso en línea: mientras se captura la IP, indica si está reservada
    a un cliente o si queda libre para el control general. */
 $('ip').addEventListener('input', programarHintRangoIP);
@@ -1375,7 +1484,8 @@ $('pagina-siguiente').addEventListener('click', () => {
     renderizarTabla();
 });
 tipoCatalogo.addEventListener('change', renderizarCatalogos);
-$('btn-volver').addEventListener('click', () => window.api.navegarModulo('equipos'));
+const btnVolverIP = $('ip-btn-volver');
+if (btnVolverIP) btnVolverIP.addEventListener('click', () => window.api.navegarModulo('equipos'));
 
 (async () => {
     await window.PermisosUI?.init();
@@ -1384,4 +1494,6 @@ $('btn-volver').addEventListener('click', () => window.api.navegarModulo('equipo
     } catch (error) {
         mostrarError(error.message);
     }
+})();
+
 })();

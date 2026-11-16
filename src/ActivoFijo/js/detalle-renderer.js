@@ -1,25 +1,25 @@
 /* =========================================================
    ACTIVO FIJO — DETALLE DEL ACTIVO (renderer)
    ---------------------------------------------------------
-   Maestro de activos, ficha (red / cuentas / programas),
-   buscadores cruzados y bandeja del puente con el flujo viejo.
+   Maestro de activos, ficha (red / cuentas / programas) y
+   buscadores cruzados.
 
    SIN require: todo pasa por window.api.activoFijo.detalle
    (preload.js -> ipcMain de main.js -> consultas/detalle.js).
 
    Reglas que respeta:
-     · Sólo lectura sobre lo que dejó la app A. Las dos únicas
-       escrituras son las acciones de la bandeja del puente
-       (copiar serie / marcar revisión), con permiso propio.
+     · Sólo lectura: este módulo no escribe nada.
      · Paginado en el SERVIDOR: no se traen los ~500 activos ni
        los 200+ programas de un activo de golpe. El control de
        paginación reutiliza el marcado de paginador.css, pero
        pide otra página en vez de recortar un arreglo en memoria.
-     · Vigente = 1 por omisión; el interruptor "Histórico" lo
-       cambia en la ficha y en los buscadores.
+     · Vigente = 1 siempre: ni la ficha ni los buscadores cruzados
+       muestran filas históricas (Vigente = 0).
      · Si el script de base no se aplicó, la página lo explica en
        vez de reventar con "Invalid object name".
    ========================================================= */
+
+(function () {
 
 const Swal = window.Swal;
 const OCULTO = 'oculto';
@@ -29,14 +29,12 @@ const OCULTO = 'oculto';
    ========================================================= */
 const estado = {
     seccion: 'maestro',
-    historico: false,
     fuentes: null,
     maestro: { busqueda: '', dominio: '', filtro: '', pagina: 1, tamano: 50, total: 0, cargando: false },
     programa: { texto: '', version: '', pagina: 1, tamano: 25, total: 0, cargando: false },
     cuenta: { texto: '', tipo: '', pagina: 1, tamano: 25, total: 0, cargando: false },
     host: { texto: '', pagina: 1, tamano: 25, total: 0, cargando: false },
     componente: { texto: '', tipo: '', pagina: 1, tamano: 25, total: 0, cargando: false },
-    puente: { accion: '', busqueda: '', soloSinRevisar: true, pagina: 1, tamano: 50, total: 0, cargando: false },
     ficha: null
 };
 
@@ -47,15 +45,14 @@ const $ = id => document.getElementById(id);
 
 const elBtnVolver    = $('btn-volver');
 const elBtnRecargar  = $('btn-recargar');
-const elChkHistorico = $('chk-historico');
+
 const elAviso        = $('aviso-fuentes');
 const elAvisoTexto   = $('aviso-fuentes-texto');
 
 const elTabs  = $('det-tabs');
 const paneles = {
     maestro: $('panel-maestro'),
-    buscadores: $('panel-buscadores'),
-    puente: $('panel-puente')
+    buscadores: $('panel-buscadores')
 };
 
 /* Maestro */
@@ -96,16 +93,6 @@ const elCardComponente  = $('card-componente');
 const elTbodyComponente = $('tbody-componente');
 
 const elPillBusqueda = $('pill-busqueda');
-
-/* Puente */
-const elGrupoAcciones  = $('grupo-acciones');
-const elChkSinRevisar  = $('chk-solo-sin-revisar');
-const elBusquedaPuente = $('puente-busqueda');
-const elBtnRecargarPte = $('btn-recargar-puente');
-const elTbodyPuente    = $('tbody-puente');
-const elCardPuente     = $('card-puente');
-const elVacioPuente    = $('vacio-puente');
-const elPillPuente     = $('pill-puente');
 
 /* Ficha */
 const elModal          = $('det-modal');
@@ -332,7 +319,6 @@ async function revisarFuentes() {
 
         const faltan = [];
         if (!res.maestro)   faltan.push('dbo.vw_ActivoFijoEquipoInline');
-        if (!res.puente)    faltan.push('dbo.vw_ActivoFijoPuenteEquipos');
         if (!res.red)       faltan.push('dbo.ActivoFijoEquiposRed');
         if (!res.cuentas)   faltan.push('dbo.ActivoFijoEquiposCuentas');
         if (!res.programas) faltan.push('dbo.ActivoFijoEquiposProgramas');
@@ -659,6 +645,7 @@ const NOMBRE_PIEZA = {
     DISCO:   ['disco duro', 'discos duros'],
     TECLADO: ['teclado',    'teclados'],
     RATON:   ['ratón',      'ratones'],
+    DIADEMA: ['diadema',    'diademas'],
     OTRO:    ['otro',       'otros']
 };
 
@@ -689,7 +676,7 @@ function desglosePiezas(filas) {
         const tipo = String(c && c.TipoComponente || 'OTRO').toUpperCase();
         cuenta.set(tipo, (cuenta.get(tipo) || 0) + (Number(c && c.Cantidad) || 1));
     });
-    const orden = ['MONITOR', 'DISCO', 'TECLADO', 'RATON'];
+    const orden = ['MONITOR', 'DISCO', 'TECLADO', 'RATON', 'DIADEMA'];
     const partes = [];
     orden.forEach(tipo => {
         const n = cuenta.get(tipo) || 0;
@@ -709,14 +696,29 @@ function claseConfianzaComponente(confianza) {
     return confianza === 'alta' ? 'alta' : confianza === 'media' ? 'media' : 'baja';
 }
 
+/* Conexión de la pieza: el colector manda ConectadoA ('Bluetooth',
+   'USB-Dongle', 'Jack 3.5'…) y EstadoConexion ('Emparejada'…).
+   Sólo las diademas suelen traerlo; el resto queda vacío. */
+function conexionComponente(c) {
+    const partes = [texto(c.ConectadoA), texto(c.EstadoConexion)].filter(Boolean);
+    return partes.join(' · ');
+}
+
+function bateriaComponente(valor) {
+    if (valor === null || valor === undefined || valor === '') return '';
+    const numero = Number(valor);
+    if (!Number.isFinite(numero)) return String(valor);
+    return `${Math.max(0, Math.min(100, Math.round(numero)))}%`;
+}
+
 function renderComponentes(filas, disponible) {
     if (!elTbodyComponentes) return;
     if (!disponible) {
-        elTbodyComponentes.innerHTML = '<tr><td colspan="10"><span class="sin-dato">La tabla de piezas conectadas aún no existe.</span></td></tr>';
+        elTbodyComponentes.innerHTML = '<tr><td colspan="13"><span class="sin-dato">La tabla de piezas conectadas aún no existe.</span></td></tr>';
         return;
     }
     if (!Array.isArray(filas) || !filas.length) {
-        elTbodyComponentes.innerHTML = '<tr><td colspan="10"><span class="sin-dato">Sin piezas conectadas registradas.</span></td></tr>';
+        elTbodyComponentes.innerHTML = '<tr><td colspan="13"><span class="sin-dato">Sin piezas conectadas registradas.</span></td></tr>';
         return;
     }
     elTbodyComponentes.innerHTML = filas.map(c => `
@@ -727,6 +729,9 @@ function renderComponentes(filas, disponible) {
                 ${celda(c.Serie, 'mono')}
                 ${celda(c.Identificador, 'mono')}
                 ${celda(c.IdentificadorTipo)}
+                ${celda(conexionComponente(c))}
+                ${celda(c.MAC, 'mono')}
+                ${celda(bateriaComponente(c.Bateria), 'mono')}
                 <td><span class="conf ${claseConfianzaComponente(c.Confianza)}">${escaparHTML(texto(c.Confianza) || 'baja')}</span></td>
                 ${celdaNumero(c.Cantidad || 1)}
                 ${celda(formatearFechaHora(c.UltimaDeteccion))}
@@ -798,7 +803,7 @@ async function abrirFicha(idActivo) {
     if (elPillComponentes) elPillComponentes.textContent = '0';
 
     try {
-        const res = await window.api.activoFijo.detalle.ficha(id, { incluirHistorico: estado.historico });
+        const res = await window.api.activoFijo.detalle.ficha(id);
         if (!res || res.ok === false) {
             avisarError(res, 'No se pudo abrir la ficha');
             if (elFichaSub) elFichaSub.textContent = (res && res.mensaje) || 'Error al cargar';
@@ -837,8 +842,7 @@ async function abrirFicha(idActivo) {
         setStatus(
             `Ficha de ${texto(equipo.NoSerie) || `activo ${id}`}`,
             `${red.length} red · ${cuentas.length} cuentas · ${programas.length} programas · ` +
-                `${textoPiezas(piezasTotal)}${desglose ? ` (${desglose})` : ''}` +
-                `${estado.historico ? ' · con histórico' : ''}`
+                `${textoPiezas(piezasTotal)}${desglose ? ` (${desglose})` : ''}`
         );
     } catch (err) {
         console.error('[Detalle AF] abrirFicha:', err);
@@ -928,7 +932,6 @@ async function buscarPrograma() {
         const res = await window.api.activoFijo.detalle.buscarPrograma({
             programa: p.texto,
             version: p.version,
-            incluirHistorico: estado.historico,
             pagina: p.pagina,
             tamano: p.tamano
         });
@@ -972,7 +975,7 @@ async function buscarPrograma() {
         resumenResultado(p.total);
         setStatus(
             `${p.total} instalaciones de "${p.texto}"${p.version ? ` (versión ${p.version})` : ''}`,
-            estado.historico ? 'Con histórico' : 'Vigente = 1'
+            'Sólo lo vigente (Vigente = 1)'
         );
     } catch (err) {
         console.error('[Detalle AF] buscarPrograma:', err);
@@ -999,7 +1002,6 @@ async function buscarCuenta() {
         const res = await window.api.activoFijo.detalle.buscarCuenta({
             cuenta: c.texto,
             tipo: c.tipo,
-            incluirHistorico: estado.historico,
             pagina: c.pagina,
             tamano: c.tamano
         });
@@ -1068,7 +1070,6 @@ async function buscarHost() {
     try {
         const res = await window.api.activoFijo.detalle.buscarHost({
             hostname: h.texto,
-            incluirHistorico: estado.historico,
             pagina: h.pagina,
             tamano: h.tamano
         });
@@ -1116,7 +1117,7 @@ async function buscarHost() {
         resumenResultado(h.total);
         setStatus(
             `${h.total} adaptadores para "${h.texto}"`,
-            estado.historico ? 'Con histórico' : 'Vigente = 1'
+            'Sólo lo vigente (Vigente = 1)'
         );
     } catch (err) {
         console.error('[Detalle AF] buscarHost:', err);
@@ -1166,7 +1167,6 @@ async function buscarComponente() {
         const res = await window.api.activoFijo.detalle.buscarComponente({
             componente: k.texto,
             tipo: k.tipo,
-            incluirHistorico: estado.historico,
             pagina: k.pagina,
             tamano: k.tamano
         });
@@ -1219,7 +1219,7 @@ async function buscarComponente() {
         resumenResultado(k.total);
         setStatus(
             `${textoPiezas(k.total)} para "${k.texto}"`,
-            estado.historico ? 'Con histórico' : 'Vigente = 1'
+            'Sólo lo vigente (Vigente = 1)'
         );
     } catch (err) {
         console.error('[Detalle AF] buscarComponente:', err);
@@ -1228,221 +1228,6 @@ async function buscarComponente() {
         if (elBtnComp) elBtnComp.disabled = false;
     }
 }
-/* =========================================================
-   BANDEJA DEL PUENTE (vw_ActivoFijoPuenteEquipos)
-   ========================================================= */
-const ETIQUETAS_ACCION = {
-    OK: 'Empate correcto',
-    COMPLETAR_SERIE: 'Completar serie',
-    REVISAR_SERIE: 'Revisar serie',
-    PENDIENTE_INVENTARIAR: 'Pendiente de inventariar',
-    SOLO_ACTIVO: 'Solo en el activo'
-};
-
-function claseAccion(accion) {
-    switch (accion) {
-        case 'OK':            return 'tag-ok';
-        case 'REVISAR_SERIE': return 'tag-off';
-        case 'SOLO_ACTIVO':   return 'tag-dominio';
-        default:              return '';
-    }
-}
-
-/** Cómo de fiable es el empate: la serie manda, el hostname ayuda, la IP engaña. */
-function claseConfianza(origen) {
-    switch (String(origen || '').toUpperCase()) {
-        case 'SERIE':    return 'alta';
-        case 'HOSTNAME': return 'media';
-        default:         return 'baja';
-    }
-}
-
-const pagPuente = crearPaginador('paginacion-puente', {
-    tamanos: [50, 100], tamano: 50,
-    alCambiar: (pagina, tamano) => {
-        estado.puente.pagina = pagina;
-        estado.puente.tamano = tamano;
-        cargarPuente();
-    }
-});
-
-async function cargarResumenPuente() {
-    try {
-        const res = await window.api.activoFijo.detalle.puente.resumen();
-        if (!res || res.ok === false) {
-            if (elPillPuente) elPillPuente.textContent = 'Sin datos';
-            return;
-        }
-        if (res.fuenteDisponible === false) {
-            if (elPillPuente) elPillPuente.textContent = 'Sin la vista';
-            return;
-        }
-
-        /* El contador de cada botón de filtro se reescribe con el total
-           real de la vista: se ve qué está pendiente sin abrir nada. */
-        const mapa = new Map((res.acciones || []).map(a => [a.clave, Number(a.total) || 0]));
-        if (elGrupoAcciones) {
-            elGrupoAcciones.querySelectorAll('[data-accion]').forEach(btn => {
-                const clave = btn.dataset.accion;
-                const etiqueta = clave ? (ETIQUETAS_ACCION[clave] || clave) : 'Todas';
-                const total = clave ? (mapa.get(clave) || 0) : (Number(res.total) || 0);
-                btn.textContent = `${etiqueta} (${total})`;
-                btn.classList.toggle('activo', clave === estado.puente.accion);
-            });
-        }
-        if (elPillPuente) elPillPuente.textContent = `${Number(res.total) || 0} renglones`;
-    } catch (err) {
-        console.error('[Detalle AF] cargarResumenPuente:', err);
-    }
-}
-
-function pintarPuente(filas) {
-    if (!elTbodyPuente) return;
-    elTbodyPuente.innerHTML = filas.map(f => {
-        const accion   = texto(f.AccionSugerida) || 'SIN_EMPATE';
-        const idEquipo = Number(f.IdEquipo) || 0;
-        const idActivo = Number(f.IdActivoFijoEQ) || 0;
-        const revisado = texto(f.RevisionAccion);
-
-        /* Sólo COMPLETAR_SERIE escribe NoSerieCPU (y sólo si está vacío);
-           REVISAR_SERIE deja constancia sin tocar el inventario viejo. */
-        const acciones = [];
-        if (accion === 'COMPLETAR_SERIE' && idEquipo && idActivo) {
-            acciones.push(`<button type="button" class="btn-mini principal" data-puente-completar="${idEquipo}" data-activo="${idActivo}" data-serie="${escaparHTML(texto(f.NoSerieActivo))}" title="Copiar la serie del activo a dbo.Equipos.NoSerieCPU">Copiar serie</button>`);
-        }
-        if (idEquipo && accion !== 'OK') {
-            acciones.push(`<button type="button" class="btn-mini" data-puente-revisar="${idEquipo}" data-activo="${idActivo}" title="Dejar constancia de que ya se revisó">Revisar</button>`);
-        }
-
-        return `
-            <tr>
-                <td><span class="tag ${claseAccion(accion)}">${escaparHTML(ETIQUETAS_ACCION[accion] || accion)}</span></td>
-                <td><span class="conf ${claseConfianza(f.OrigenEmpate)}">${escaparHTML(texto(f.OrigenEmpate) || 'SIN_EMPATE')}</span></td>
-                ${celda(f.NoSerieActivo, 'mono')}
-                ${celda(f.NoSerieCPU, 'mono')}
-                ${celda(f.Hostname)}
-                ${celda(f.IP, 'mono')}
-                <td>${revisado
-                    ? `<span class="tag tag-ok" title="${escaparHTML(texto(f.RevisionNota))}">${escaparHTML(revisado)} · ${escaparHTML(formatearFechaHora(f.RevisionFecha))}</span>`
-                    : '<span class="sin-dato">Sin revisar</span>'}</td>
-                <td class="acciones-col">${acciones.join(' ') || '<span class="sin-dato">—</span>'}</td>
-            </tr>`;
-    }).join('');
-}
-
-async function cargarPuente() {
-    const p = estado.puente;
-    if (p.cargando) return;
-    p.cargando = true;
-    setStatus('Consultando el puente con el inventario anterior…');
-
-    try {
-        const res = await window.api.activoFijo.detalle.puente.listar({
-            accion: p.accion,
-            busqueda: p.busqueda,
-            soloSinRevisar: p.soloSinRevisar,
-            incluirHistorico: estado.historico,
-            pagina: p.pagina,
-            tamano: p.tamano
-        });
-
-        if (!res || res.ok === false) {
-            avisarError(res, 'No se pudo cargar la bandeja');
-            if (elTbodyPuente) elTbodyPuente.innerHTML = '';
-            mostrar(elCardPuente, false);
-            mostrar(elVacioPuente, true);
-            pagPuente.mostrar(false);
-            return;
-        }
-        if (res.fuenteDisponible === false) {
-            mostrar(elAviso, true);
-            if (elTbodyPuente) elTbodyPuente.innerHTML = '';
-            mostrar(elCardPuente, false);
-            mostrar(elVacioPuente, false);
-            pagPuente.mostrar(false);
-            if (elPillPuente) elPillPuente.textContent = 'Sin la vista';
-            setStatus(res.mensaje || 'La vista del puente aún no existe.');
-            return;
-        }
-
-        p.total  = Number(res.total) || 0;
-        p.pagina = Number(res.pagina) || 1;
-
-        pintarPuente(Array.isArray(res.filas) ? res.filas : []);
-
-        const hay = p.total > 0;
-        mostrar(elCardPuente, hay);
-        mostrar(elVacioPuente, !hay);
-        pagPuente.pintar(p.total, p.pagina);
-        pagPuente.mostrar(hay);
-
-        setStatus(
-            hay ? `${p.total} renglones en la bandeja` : 'Nada pendiente con este filtro',
-            p.accion ? (ETIQUETAS_ACCION[p.accion] || p.accion) : 'Todas las acciones'
-        );
-    } catch (err) {
-        console.error('[Detalle AF] cargarPuente:', err);
-        toastError('No se pudo cargar la bandeja', err.message || '');
-    } finally {
-        p.cargando = false;
-    }
-}
-
-async function completarSerie(idEquipo, idActivo, noSerie) {
-    if (!Swal) return;
-    const serie = texto(noSerie);
-    const confirmacion = await Swal.fire({
-        icon: 'question',
-        title: '¿Copiar la serie al inventario anterior?',
-        html: `Se escribirá <strong>${escaparHTML(serie || '(sin serie)')}</strong> en <code>dbo.Equipos.NoSerieCPU</code>.<br>
-               Sólo se copia si el equipo todavía no tiene serie: este módulo nunca sobrescribe.`,
-        showCancelButton: true,
-        confirmButtonText: 'Sí, copiar',
-        cancelButtonText: 'Cancelar'
-    });
-    if (!confirmacion.isConfirmed) return;
-
-    try {
-        const res = await window.api.activoFijo.detalle.puente.completarSerie(idEquipo, idActivo, null);
-        if (res && res.ok) {
-            toastExito(res.mensaje || 'Serie copiada');
-            await Promise.all([cargarResumenPuente(), cargarPuente()]);
-        } else {
-            avisarError(res, 'No se pudo copiar la serie');
-        }
-    } catch (err) {
-        console.error('[Detalle AF] completarSerie:', err);
-        toastError('No se pudo copiar la serie', err.message || '');
-    }
-}
-
-async function marcarRevision(idEquipo, idActivo) {
-    if (!Swal) return;
-    const entrada = await Swal.fire({
-        title: 'Marcar como revisado',
-        input: 'textarea',
-        inputLabel: 'Nota de la revisión (opcional)',
-        inputPlaceholder: 'Qué se revisó o por qué no se corrige la serie…',
-        showCancelButton: true,
-        confirmButtonText: 'Registrar revisión',
-        cancelButtonText: 'Cancelar'
-    });
-    if (!entrada.isConfirmed) return;
-
-    try {
-        const res = await window.api.activoFijo.detalle.puente.marcarRevision(idEquipo, idActivo, texto(entrada.value) || null);
-        if (res && res.ok) {
-            toastExito(res.mensaje || 'Revisión registrada');
-            await Promise.all([cargarResumenPuente(), cargarPuente()]);
-        } else {
-            avisarError(res, 'No se pudo marcar la revisión');
-        }
-    } catch (err) {
-        console.error('[Detalle AF] marcarRevision:', err);
-        toastError('No se pudo marcar la revisión', err.message || '');
-    }
-}
-
 /* =========================================================
    SECCIONES Y NAVEGACIÓN
    ========================================================= */
@@ -1454,23 +1239,7 @@ function irASeccion(nombre) {
     Object.entries(paneles).forEach(([clave, panel]) => mostrar(panel, clave === nombre));
 
     if (nombre === 'maestro') cargarMaestro();
-    if (nombre === 'puente')  { cargarResumenPuente(); cargarPuente(); }
-    if (nombre === 'buscadores') setStatus('Buscadores cruzados', 'Vigente = 1 por omisión');
-}
-
-/** Vuelve a pedir lo que esté en pantalla después de cambiar el histórico. */
-function aplicarHistorico() {
-    estado.historico = !!(elChkHistorico && elChkHistorico.checked);
-    if (estado.ficha && estado.ficha.equipo) abrirFicha(estado.ficha.equipo.IdActivoFijoEQ);
-    if (estado.programa.texto) buscarPrograma();
-    if (estado.cuenta.texto)   buscarCuenta();
-    if (estado.host.texto)     buscarHost();
-    if (estado.componente.texto) buscarComponente();
-    setStatus(
-        estado.historico
-            ? 'Mostrando también el histórico (Vigente = 0)'
-            : 'Mostrando sólo lo vigente (Vigente = 1)'
-    );
+    if (nombre === 'buscadores') setStatus('Buscadores cruzados', 'Sólo lo vigente (Vigente = 1)');
 }
 
 /* =========================================================
@@ -1489,12 +1258,10 @@ function enlazarNavegacion() {
         elBtnRecargar.addEventListener('click', async () => {
             await revisarFuentes();
             await cargarDominios();
-            await Promise.all([cargarMaestro(), cargarResumenPuente()]);
+            await cargarMaestro();
             if (estado.ficha && estado.ficha.equipo) abrirFicha(estado.ficha.equipo.IdActivoFijoEQ);
         });
     }
-
-    if (elChkHistorico) elChkHistorico.addEventListener('change', aplicarHistorico);
 }
 
 function enlazarSecciones() {
@@ -1656,68 +1423,13 @@ function enlazarBuscadores() {
     }
 }
 
-function enlazarPuente() {
-    if (elGrupoAcciones) {
-        elGrupoAcciones.addEventListener('click', ev => {
-            const boton = ev.target.closest('[data-accion]');
-            if (!boton) return;
-            estado.puente.accion = boton.dataset.accion || '';
-            estado.puente.pagina = 1;
-            if (elGrupoAcciones) {
-                elGrupoAcciones.querySelectorAll('[data-accion]').forEach(b => b.classList.toggle('activo', b === boton));
-            }
-            pagPuente.reiniciar();
-            cargarPuente();
-        });
-    }
-
-    if (elBusquedaPuente) {
-        elBusquedaPuente.addEventListener('input', debounce(() => {
-            estado.puente.busqueda = texto(elBusquedaPuente.value);
-            estado.puente.pagina = 1;
-            pagPuente.reiniciar();
-            cargarPuente();
-        }, 350));
-    }
-
-    if (elChkSinRevisar) {
-        elChkSinRevisar.addEventListener('change', () => {
-            estado.puente.soloSinRevisar = !!elChkSinRevisar.checked;
-            estado.puente.pagina = 1;
-            pagPuente.reiniciar();
-            cargarPuente();
-        });
-    }
-
-    if (elBtnRecargarPte) {
-        elBtnRecargarPte.addEventListener('click', () => {
-            cargarResumenPuente();
-            cargarPuente();
-        });
-    }
-
-    if (elTbodyPuente) {
-        elTbodyPuente.addEventListener('click', ev => {
-            const completar = ev.target.closest('[data-puente-completar]');
-            if (completar) {
-                completarSerie(Number(completar.dataset.puenteCompletar), Number(completar.dataset.activo), completar.dataset.serie);
-                return;
-            }
-            const revisar = ev.target.closest('[data-puente-revisar]');
-            if (revisar) {
-                marcarRevision(Number(revisar.dataset.puenteRevisar), Number(revisar.dataset.activo));
-            }
-        });
-    }
-}
-
 /* =========================================================
    ARRANQUE
    ========================================================= */
 (async function iniciar() {
     if (!window.api || !window.api.activoFijo || !window.api.activoFijo.detalle) {
         setStatus('Esta página sólo funciona dentro de la aplicación.');
-        if (elAvisoTexto) elAvisoTexto.textContent = 'No se encontró el puente con la aplicación (preload).';
+        if (elAvisoTexto) elAvisoTexto.textContent = 'No se encontró la API de la aplicación (preload).';
         mostrar(elAviso, true);
         return;
     }
@@ -1727,13 +1439,14 @@ function enlazarPuente() {
     enlazarMaestro();
     enlazarFicha();
     enlazarBuscadores();
-    enlazarPuente();
 
-    setStatus('Cargando el maestro de activos…', 'Vigente = 1 por omisión');
+    setStatus('Cargando el maestro de activos…', 'Sólo lo vigente (Vigente = 1)');
 
     await revisarFuentes();
     await cargarDominios();
-    await Promise.all([cargarMaestro(), cargarResumenPuente()]);
+    await cargarMaestro();
+})();
+
 })();
 
 

@@ -974,6 +974,9 @@ body {
 
 .swal2-popup.cl-confirm  { width: 540px !important; }
 .swal2-popup.cl-ver      { width: 820px !important; }
+/* "Ver" con tablas dentro (red, cuentas, programas, piezas): necesita más
+   ancho, pero nunca más que la ventana. El alto lo resuelve el scroll. */
+.swal2-popup.cl-ver.cl-ver-datos { width: min(1180px, 94vw) !important; }
 .swal2-popup.cl-historico{ width: 980px !important; }
 
 .swal2-popup.cl-confirm::before,
@@ -1246,6 +1249,11 @@ body {
 .swal2-popup.cl-ver .swal2-html-container {
     padding: 0 32px 28px !important;
     text-align: left !important;
+    /* El modal se adapta a la ventana: el scroll vive aquí dentro y la
+       cabecera (título y X) nunca se pierde. */
+    max-height: calc(100vh - 190px);
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 .swal2-popup.cl-ver .swal2-actions { display: none !important; }
 
@@ -1416,6 +1424,55 @@ body {
     font-family: var(--font-mono);
     font-size: 0.74rem;
     word-break: break-all;
+}
+
+/* ---------------------------------------------------------
+   RED / CUENTAS / PROGRAMAS dentro del "Ver" del inventario
+   ---------------------------------------------------------
+   Las tablas pueden traer 200+ programas: scroll propio para que
+   el modal conserve sus proporciones y no se estire sin fin.
+   --------------------------------------------------------- */
+.ver-tabla-scroll {
+    width: 100%;
+    max-width: 100%;
+    max-height: 260px;
+    overflow: auto;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--gray-200);
+    background: #fff;
+}
+/* La tabla ya no lleva su propio borde: lo pone el contenedor.
+   overflow visible para que la cabecera sticky use el scroll del contenedor. */
+.ver-tabla-scroll .ver-piezas-tabla {
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+}
+/* IP, MAC y series se leen de un tirón: sin partir el texto a la mitad. */
+.ver-tabla-scroll .ver-piezas-tabla td.mono,
+.ver-tabla-scroll .ver-piezas-tabla th {
+    white-space: nowrap;
+    word-break: normal;
+}
+/* Cabecera fija al hacer scroll vertical. */
+.ver-tabla-scroll .ver-piezas-tabla thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.ver-tabla-scroll.ver-tabla-alta { max-height: 320px; }
+
+/* Texto secundario: "no hay datos" sin robar peso visual. */
+.ver-tenue {
+    font-size: 0.82rem;
+    color: var(--gray-500);
+    font-style: italic;
+}
+
+/* Contador en verde para los "sí" (DHCP, habilitada, principal, sesión). */
+.pill-mini.pill-mini-ok {
+    background: var(--verde-soft, #e6f0e4);
+    color: var(--verde-text, #2f6b3a);
 }
 
 /* Confianza del identificador de la pieza (alta / media / baja). */

@@ -42,6 +42,104 @@ async function hayColumnaOrigen(pool) {
     return columnaOrigenDetectada;
 }
 
+/* =========================================================
+   PROCEDENCIA DE LA IP (OrigenIP / EsConfiable)
+   ---------------------------------------------------------
+   No todas las IP valen lo mismo: una estática capturada a mano es
+   inventario duro; una que entrega un DHCP o, peor, un controlador
+   WiFi puede cambiar en la siguiente reconexión. Por eso se guarda
+   de dónde salió y si es confiable.
+
+   Reglas:
+     · TipoIP "DHCP"             → OrigenIP 'DHCP',  EsConfiable 0
+     · TipoIP "WiFi (controlador)"→ OrigenIP 'Wifi',  EsConfiable 0
+     · cualquier otra (Estatica)  → OrigenIP 'Manual', EsConfiable 1
+   El colector puede mandar `origenIP` explícito: manda en los tipos
+   estáticos, pero un TipoIP volátil (DHCP/WiFi) tiene la última palabra
+   para que lo guardado coincida con lo que deduce la vista unificada.
+   ========================================================= */
+
+const ORIGENES_IP = Object.freeze(['Manual', 'DHCP', 'Wifi', 'Otro']);
+
+/** Devuelve 'Manual' | 'DHCP' | 'Wifi' | 'Otro' | null. */
+function normalizarOrigenIP(origen) {
+    const valor = String(origen ?? '').trim().toLowerCase();
+    if (!valor) return null;
+    return ORIGENES_IP.find(item => item.toLowerCase() === valor) || null;
+}
+
+/** Procedencia implícita según el nombre del catálogo TipoIP. */
+function procedenciaPorTipoIP(nombreTipoIP) {
+    const nombre = String(nombreTipoIP || '').trim();
+    if (!nombre) return { origenIP: null, esConfiable: 1 };
+    if (/^(wifi|wi-fi)/i.test(nombre)) return { origenIP: 'Wifi', esConfiable: 0 };
+    if (/^(dhcp|din[aá]mic)/i.test(nombre)) return { origenIP: 'DHCP', esConfiable: 0 };
+    return { origenIP: 'Manual', esConfiable: 1 };
+}
+
+/**
+ * ¿El TipoIP permite guardar el registro SIN IP?
+ * DHCP, "Dinámica" y "WiFi (controlador)" entregan la dirección después del
+ * alta, así que la fila puede existir vacía o con una IP que cambiará. Un
+ * tipo estático/manual sí la exige. La regla se deduce del mismo criterio de
+ * procedencia (volátil = no confiable) para no comparar texto crudo.
+ */
+function permiteSinIP(nombreTipoIP) {
+    return procedenciaPorTipoIP(nombreTipoIP).esConfiable === 0;
+}
+
+/**
+ * Resuelve la procedencia de un registro.
+ *
+ * Un TipoIP volátil (DHCP / Dinámica / WiFi del controlador) SIEMPRE manda:
+ * si el formulario o el colector mandan `origenIP` contradictorio (p.ej.
+ * 'Manual' sobre un TipoIP WiFi) se ignora, porque la vista unificada deduce
+ * 'Wifi'/'DHCP' del catálogo y quedaría un dato guardado al revés de lo que
+ * se muestra. En tipos estáticos el valor explícito sí manda, para poder
+ * registrar 'Otro' o corregir a mano.
+ * @returns {{origenIP: ?string, esConfiable: number}}
+ */
+function resolverProcedencia(datos, nombreTipoIP) {
+    const explicito = normalizarOrigenIP(datos?.origenIP);
+    const base = procedenciaPorTipoIP(nombreTipoIP);
+    const volatil = base.esConfiable === 0;
+    const origenIP = volatil ? base.origenIP : (explicito || base.origenIP);
+    const esConfiableExplicito = datos?.esConfiable === undefined || datos?.esConfiable === null
+        ? null
+        : (datos.esConfiable ? 1 : 0);
+    /* Un origen volátil nunca es confiable; el resto obedece lo explícito y,
+       si no viene, se deduce del origen ('Manual' = inventario duro). */
+    const esConfiable = volatil
+        ? 0
+        : (esConfiableExplicito !== null
+            ? esConfiableExplicito
+            : (origenIP ? (origenIP === 'Manual' ? 1 : 0) : base.esConfiable));
+    return { origenIP, esConfiable };
+}
+
+/* ¿La base ya tiene las columnas de procedencia y/o la vista unificada?
+   Mismo criterio que hayColumnaOrigen: sin el script aplicado, el módulo
+   trabaja con la estructura anterior en lugar de reventar. */
+let estadoProcedenciaCache = null;
+async function estadoProcedencia(pool) {
+    if (estadoProcedenciaCache) return estadoProcedenciaCache;
+    const result = await pool.request().query(`
+        SELECT
+            CASE WHEN COL_LENGTH(N'dbo.InventarioGeneralIP', N'OrigenIP') IS NULL THEN 0 ELSE 1 END AS OrigenIP,
+            CASE WHEN OBJECT_ID(N'dbo.vw_InventarioIPUnificado', N'V') IS NULL THEN 0 ELSE 1 END AS Vista,
+            CASE WHEN OBJECT_ID(N'dbo.ActivoFijoEquiposRed', N'U') IS NULL THEN 0 ELSE 1 END AS Red
+    `);
+    const fila = (result.recordset && result.recordset[0]) || {};
+    estadoProcedenciaCache = {
+        columnas: !!fila.OrigenIP,
+        vista: !!fila.Vista,
+        /* Red que reporta el colector para cada activo fijo. Sin la tabla,
+           el control general sólo puede mostrar General + Cliente. */
+        red: !!fila.Red
+    };
+    return estadoProcedenciaCache;
+}
+
 function validarIPv4(ip) {
     const octetos = String(ip || '').trim().split('.');
     return octetos.length === 4 && octetos.every(octeto =>
@@ -253,12 +351,126 @@ async function guardarPreferencia(clave, valor) {
 
 async function listar() {
     const pool = await getPool();
+    const estado = await estadoProcedencia(pool);
+
+    /* Con la vista aplicada (scripts/activo-vivo-vistas.sql) la unión de
+       control general + equipos de clientes vive en la base: una sola
+       definición, sin IP/hostnames repetidos en consultas distintas. */
+    if (estado.vista) {
+        try {
+            const result = await pool.request().query(`
+                SELECT Origen, IdInventarioIP, IdEquipo, IP, Hostname, MAC, Descripcion,
+                       PuertoFortinet, Estado, Dispositivo, TipoEquipo, Piso, Site, TipoIP,
+                       ClienteCodigo, ClienteNombre, OrigenIP, EsConfiable, FechaActualizacion,
+                       IdEstado, IdDispositivo, IdTipoEquipo, IdPiso, IdSite, IdTipoIP
+                FROM dbo.vw_InventarioIPUnificado
+                ORDER BY IP, Hostname, Origen
+            `);
+            return result.recordset;
+        } catch (error) {
+            /* Vista desalineada (base de otra versión): se sigue con la
+               consulta directa en lugar de dejar la pantalla en blanco. */
+            console.warn('[InventarioIP] vw_InventarioIPUnificado no se pudo leer:', error.message);
+        }
+    }
+
+    /* Procedencia de la IP. Se calcula exactamente igual que en
+       dbo.vw_InventarioIPUnificado (scripts/activo-vivo-vistas.sql): el
+       TipoIP manda sobre el dato guardado, así lo que entrega un DHCP o un
+       controlador WiFi nunca cuenta como inventario duro. */
+    const procedencia = estado.columnas
+        ? `CASE WHEN TipoIP.Nombre LIKE N'WiFi%'       THEN 'Wifi'
+                WHEN TipoIP.Nombre LIKE N'DHCP%'       THEN 'DHCP'
+                WHEN TipoIP.Nombre LIKE N'Din[aá]mic%' THEN 'DHCP'
+                WHEN I.OrigenIP IS NOT NULL            THEN I.OrigenIP
+                ELSE 'Manual' END AS OrigenIP,
+           CASE WHEN TipoIP.Nombre LIKE N'WiFi%'
+                 OR TipoIP.Nombre LIKE N'DHCP%'
+                 OR TipoIP.Nombre LIKE N'Din[aá]mic%' THEN CAST(0 AS BIT)
+                ELSE ISNULL(I.EsConfiable, 1) END AS EsConfiable`
+        : 'CAST(NULL AS VARCHAR(20)) AS OrigenIP, CAST(1 AS BIT) AS EsConfiable';
+    /* Los equipos de clientes no guardan OrigenIP (no se duplica el dato):
+       su procedencia se deduce del TipoIP que ya vive en dbo.Equipos. */
+    const procedenciaCliente = estado.columnas
+        ? `CASE WHEN E.TipoIP = N'Estatica' THEN 'Manual' ELSE 'DHCP' END AS OrigenIP,
+           CASE WHEN E.TipoIP = N'Estatica' THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS EsConfiable`
+        : 'CAST(NULL AS VARCHAR(20)) AS OrigenIP, CAST(1 AS BIT) AS EsConfiable';
+    /* Tercera fuente: la red que reporta el colector para cada activo fijo
+       (dbo.ActivoFijoEquiposRed). Sin este bloque los equipos capturados
+       por el colector —laptops por WiFi, DHCP, WORKGROUP— no aparecían
+       nunca en el control general, porque su IP no vive en
+       InventarioGeneralIP ni en Equipos. Un solo renglón por tarjeta de red
+       (se agrupa por MAC, o por IP si no hay MAC) para que un equipo
+       registrado dos veces no repita la misma dirección: de cada grupo se
+       toma el adaptador principal vigente y, si ninguno lo está, el último
+       visto.
+       Si la tabla no existe (script de detalle sin aplicar) el bloque se
+       omite en lugar de romper la consulta completa. */
+    const bloqueActivo = estado.red
+        ? `
+
+            UNION ALL
+
+            SELECT N'Activo' AS Origen, CAST(NULL AS INT) AS IdInventarioIP,
+                   CAST(NULL AS INT) AS IdEquipo,
+                   NULLIF(LTRIM(RTRIM(A.IP)), '') AS IP, A.Hostname, A.MAC,
+                   COALESCE(NULLIF(LTRIM(RTRIM(A.DescripcionAdaptador)), N''),
+                            NULLIF(LTRIM(RTRIM(A.NombreAdaptador)), N'')) AS Descripcion,
+                   CAST(NULL AS NVARCHAR(100)) AS PuertoFortinet,
+                   N'Activo' AS Estado,
+                   NULLIF(LTRIM(RTRIM(A.NombreAdaptador)), N'') AS Dispositivo,
+                   COALESCE(NULLIF(LTRIM(RTRIM(A.TipoMedio)), N''),
+                            NULLIF(LTRIM(RTRIM(A.DescripcionAdaptador)), N'')) AS TipoEquipo,
+                   CAST(NULL AS NVARCHAR(150)) AS Piso, CAST(NULL AS NVARCHAR(150)) AS Site,
+                   CASE WHEN A.EsWifi = 1 THEN N'WiFi'
+                        WHEN A.DHCP = 1   THEN N'DHCP'
+                        ELSE N'Estatica' END AS TipoIP,
+                   CAST(NULL AS NVARCHAR(10)) AS ClienteCodigo,
+                   CAST(NULL AS NVARCHAR(150)) AS ClienteNombre,
+                   A.UltimaDeteccion AS FechaActualizacion,
+                   CASE WHEN A.EsWifi = 1 THEN 'Wifi'
+                        WHEN A.DHCP = 1   THEN 'DHCP'
+                        ELSE 'Manual' END AS OrigenIP,
+                   CASE WHEN A.EsWifi = 1 OR A.DHCP = 1 THEN CAST(0 AS BIT)
+                        ELSE CAST(1 AS BIT) END AS EsConfiable,
+                   CAST(NULL AS INT) AS IdEstado, CAST(NULL AS INT) AS IdDispositivo,
+                   CAST(NULL AS INT) AS IdTipoEquipo, CAST(NULL AS INT) AS IdPiso,
+                   CAST(NULL AS INT) AS IdSite, CAST(NULL AS INT) AS IdTipoIP
+            FROM (
+                SELECT R.IdActivoFijoEQ, R.Hostname, R.MAC, R.IP, R.NombreAdaptador,
+                       R.DescripcionAdaptador, R.TipoMedio, R.DHCP, R.UltimaDeteccion,
+                       ROW_NUMBER() OVER (
+                           /* Una tarjeta de red = una MAC (o su IP si no
+                              expone MAC); así la misma IP no sale repetida
+                              cuando el equipo viene registrado dos veces. */
+                           PARTITION BY COALESCE(
+                               NULLIF(LTRIM(RTRIM(R.MAC)), N''),
+                               CONCAT(N'IP:', COALESCE(NULLIF(LTRIM(RTRIM(R.IP)), N''),
+                                                       CONCAT(N'R', R.IdEquipoRed)))
+                           )
+                           ORDER BY CASE WHEN R.IdActivoFijoEQ IS NULL THEN 1 ELSE 0 END,
+                                    R.EsPrincipal DESC, R.UltimaDeteccion DESC, R.IdEquipoRed DESC
+                       ) AS Renglon,
+                       CASE WHEN ISNULL(R.TipoMedio, N'') LIKE N'%Wi%Fi%'
+                              OR ISNULL(R.TipoMedio, N'') LIKE N'%Wireless%'
+                              OR ISNULL(R.TipoMedio, N'') LIKE N'%WLAN%'
+                              OR ISNULL(R.NombreAdaptador, N'') LIKE N'%Wi%Fi%'
+                              OR ISNULL(R.NombreAdaptador, N'') LIKE N'%Wireless%'
+                              OR ISNULL(R.DescripcionAdaptador, N'') LIKE N'%Wi%Fi%'
+                              OR ISNULL(R.DescripcionAdaptador, N'') LIKE N'%Wireless%'
+                            THEN 1 ELSE 0 END AS EsWifi
+                FROM dbo.ActivoFijoEquiposRed R
+                WHERE R.Vigente = 1
+            ) A
+            WHERE A.Renglon = 1`
+        : '';
     const result = await pool.request().query(`
         SELECT Inventario.Origen, Inventario.IdInventarioIP, Inventario.IdEquipo,
                Inventario.IP, Inventario.Hostname, Inventario.MAC, Inventario.Descripcion,
                Inventario.PuertoFortinet, Inventario.Estado, Inventario.Dispositivo,
                Inventario.TipoEquipo, Inventario.Piso, Inventario.Site, Inventario.TipoIP,
                Inventario.ClienteCodigo, Inventario.ClienteNombre, Inventario.FechaActualizacion,
+               Inventario.OrigenIP, Inventario.EsConfiable,
                Inventario.IdEstado, Inventario.IdDispositivo, Inventario.IdTipoEquipo,
                Inventario.IdPiso, Inventario.IdSite, Inventario.IdTipoIP
         FROM (
@@ -269,7 +481,9 @@ async function listar() {
                    TipoIP.Nombre AS TipoIP,
                    CAST(NULL AS NVARCHAR(10)) AS ClienteCodigo,
                    CAST(NULL AS NVARCHAR(150)) AS ClienteNombre,
-                   I.FechaActualizacion, I.IdEstado, I.IdDispositivo, I.IdTipoEquipo,
+                   I.FechaActualizacion,
+                   ${procedencia},
+                   I.IdEstado, I.IdDispositivo, I.IdTipoEquipo,
                    I.IdPiso, I.IdSite, I.IdTipoIP
             FROM dbo.InventarioGeneralIP I
             LEFT JOIN dbo.CatalogosInventarioIP Estado ON Estado.IdCatalogoIP = I.IdEstado
@@ -288,7 +502,9 @@ async function listar() {
                    Dispositivo.Nombre AS Dispositivo, TipoEquipo.Nombre AS TipoEquipo,
                    P.Nombre AS Piso, Site.Nombre AS Site,
                    E.TipoIP, C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
-                   Datos.FechaActualizacion, CAST(NULL AS INT) AS IdEstado,
+                   Datos.FechaActualizacion,
+                   ${procedenciaCliente},
+                   CAST(NULL AS INT) AS IdEstado,
                    Datos.IdDispositivo, Datos.IdTipoEquipo, E.IdPiso, Datos.IdSite,
                    CAST(NULL AS INT) AS IdTipoIP
             FROM dbo.Equipos E
@@ -301,6 +517,7 @@ async function listar() {
             WHERE E.TipoIP = 'Estatica'
               AND E.Activo = 1
               AND NULLIF(LTRIM(RTRIM(E.IP)), '') IS NOT NULL
+            ${bloqueActivo}
         ) Inventario
         ORDER BY Inventario.IP, Inventario.Hostname, Inventario.Origen
     `);
@@ -438,9 +655,20 @@ async function guardar(datos, id = null) {
         return { ok: false, mensaje: 'Uno o más catálogos seleccionados no existen o están inactivos.' };
     }
     const tipoIP = catalogosPorId.get(ids.tipoIP).Nombre;
-    if (tipoIP !== 'DHCP' && !ip) {
-        return { ok: false, mensaje: 'Captura la IP cuando el tipo de asignación no sea DHCP.' };
+    /* DHCP y el controlador WiFi asignan la IP después: pueden quedar sin
+       dirección. Estático/manual sí la exigen. */
+    if (!ip && !permiteSinIP(tipoIP)) {
+        return {
+            ok: false,
+            mensaje: 'Captura la IP: sólo DHCP o WiFi (controlador) pueden quedar sin dirección.'
+        };
     }
+
+    /* Procedencia: lo que mande el formulario (o el colector) tiene
+       prioridad; si no viene, se deduce del TipoIP. Sólo se guarda cuando la
+       base ya tiene las columnas (scripts/activo-vivo-unificado.sql). */
+    const estructura = await estadoProcedencia(pool);
+    const procedenciaIP = resolverProcedencia(datos, tipoIP);
 
     if (ip) {
         const equipoCliente = await pool.request()
@@ -494,6 +722,11 @@ async function guardar(datos, id = null) {
         .input('IdSite', sql.Int, ids.site)
         .input('IdTipoIP', sql.Int, ids.tipoIP);
 
+    if (estructura.columnas) {
+        request.input('OrigenIP', sql.VarChar(20), procedenciaIP.origenIP)
+            .input('EsConfiable', sql.Bit, procedenciaIP.esConfiable);
+    }
+
     try {
         if (idInventario) {
             request.input('IdInventarioIP', sql.Int, idInventario);
@@ -503,6 +736,7 @@ async function guardar(datos, id = null) {
                     PuertoFortinet = @PuertoFortinet, IdEstado = @IdEstado,
                     IdDispositivo = @IdDispositivo, IdTipoEquipo = @IdTipoEquipo,
                     IdPiso = @IdPiso, IdSite = @IdSite, IdTipoIP = @IdTipoIP,
+                    ${estructura.columnas ? 'OrigenIP = @OrigenIP, EsConfiable = @EsConfiable,' : ''}
                     FechaActualizacion = SYSDATETIME()
                 WHERE IdInventarioIP = @IdInventarioIP
             `);
@@ -514,10 +748,10 @@ async function guardar(datos, id = null) {
         await request.query(`
             INSERT INTO dbo.InventarioGeneralIP
                 (IP, Hostname, MAC, Descripcion, PuertoFortinet, IdEstado,
-                 IdDispositivo, IdTipoEquipo, IdPiso, IdSite, IdTipoIP)
+                 IdDispositivo, IdTipoEquipo, IdPiso, IdSite, IdTipoIP${estructura.columnas ? ', OrigenIP, EsConfiable' : ''})
             VALUES
                 (@IP, @Hostname, @MAC, @Descripcion, @PuertoFortinet, @IdEstado,
-                 @IdDispositivo, @IdTipoEquipo, @IdPiso, @IdSite, @IdTipoIP)
+                 @IdDispositivo, @IdTipoEquipo, @IdPiso, @IdSite, @IdTipoIP${estructura.columnas ? ', @OrigenIP, @EsConfiable' : ''})
         `);
         return { ok: true, mensaje: 'Registro general de IP creado.' };
     } catch (error) {
@@ -598,6 +832,10 @@ async function insertarImportados(filas = []) {
             [Number(item.IdCatalogoIP), String(item.Nombre || '').trim().toUpperCase()])
     );
 
+    /* Misma procedencia que el alta manual: cada fila hereda lo que diga el
+       TipoIP (DHCP / WiFi = volátil) salvo que el importador lo especifique. */
+    const estructura = await estadoProcedencia(pool);
+
     for (const fila of filas) {
         const referencia = String(fila?.hostname || fila?.ip || 'fila').trim();
         const ip = String(fila?.ip || '').trim() || null;
@@ -622,14 +860,16 @@ async function insertarImportados(filas = []) {
             errores.push(`${referencia}: datos incompletos o con formato inválido.`);
             continue;
         }
-        /* Misma regla que el alta manual: sólo DHCP puede quedar sin IP. */
-        if (!ip && (nombreTipoIP.get(ids.tipoIP) || '') !== 'DHCP') {
-            errores.push(`${referencia}: sin IP pero el tipo de asignación no es DHCP.`);
+        /* Misma regla que el alta manual: sólo los tipos volátiles
+           (DHCP / WiFi controlador) pueden quedar sin IP. */
+        if (!ip && !permiteSinIP(nombreTipoIP.get(ids.tipoIP))) {
+            errores.push(`${referencia}: sin IP pero el tipo de asignación la exige (usa DHCP o WiFi).`);
             continue;
         }
 
         try {
-            await pool.request()
+            const procedenciaIP = resolverProcedencia(fila, nombreTipoIP.get(ids.tipoIP));
+            const request = pool.request()
                 .input('IP', sql.VarChar(45), ip ? normalizarIPv4(ip) : null)
                 .input('Hostname', sql.NVarChar(255), hostname)
                 .input('MAC', sql.VarChar(17), macNormalizada || null)
@@ -640,15 +880,19 @@ async function insertarImportados(filas = []) {
                 .input('IdTipoEquipo', sql.Int, ids.tipoEquipo)
                 .input('IdPiso', sql.Int, ids.piso)
                 .input('IdSite', sql.Int, ids.site)
-                .input('IdTipoIP', sql.Int, ids.tipoIP)
-                .query(`
-                    INSERT INTO dbo.InventarioGeneralIP
-                        (IP, Hostname, MAC, Descripcion, PuertoFortinet, IdEstado,
-                         IdDispositivo, IdTipoEquipo, IdPiso, IdSite, IdTipoIP)
-                    VALUES
-                        (@IP, @Hostname, @MAC, @Descripcion, @PuertoFortinet, @IdEstado,
-                         @IdDispositivo, @IdTipoEquipo, @IdPiso, @IdSite, @IdTipoIP)
-                `);
+                .input('IdTipoIP', sql.Int, ids.tipoIP);
+            if (estructura.columnas) {
+                request.input('OrigenIP', sql.VarChar(20), procedenciaIP.origenIP)
+                    .input('EsConfiable', sql.Bit, procedenciaIP.esConfiable);
+            }
+            await request.query(`
+                INSERT INTO dbo.InventarioGeneralIP
+                    (IP, Hostname, MAC, Descripcion, PuertoFortinet, IdEstado,
+                     IdDispositivo, IdTipoEquipo, IdPiso, IdSite, IdTipoIP${estructura.columnas ? ', OrigenIP, EsConfiable' : ''})
+                VALUES
+                    (@IP, @Hostname, @MAC, @Descripcion, @PuertoFortinet, @IdEstado,
+                     @IdDispositivo, @IdTipoEquipo, @IdPiso, @IdSite, @IdTipoIP${estructura.columnas ? ', @OrigenIP, @EsConfiable' : ''})
+            `);
             insertados += 1;
         } catch (error) {
             if (error.number === 2627 || error.number === 2601) {
@@ -691,5 +935,11 @@ module.exports = {
     insertarImportados,
     validarIPv4,
     normalizarIPv4,
-    normalizarMAC
+    normalizarMAC,
+    /* Procedencia de la IP: las usa el importador y el colector. */
+    normalizarOrigenIP,
+    procedenciaPorTipoIP,
+    permiteSinIP,
+    resolverProcedencia,
+    estadoProcedencia
 };

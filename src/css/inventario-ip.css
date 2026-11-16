@@ -26,7 +26,12 @@
     --ip-carbon: #2e3228;
     --ip-crema: #fff7e8;
 
-    --ip-font-sans: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+    /* Tipografía compartida con la página Detalle del activo
+       (src/ActivoFijo/css/detalle.css): Inter para el texto, Manrope
+       para los títulos. Las dos se cargan desde Google Fonts en
+       src/html/inventario-ip.html. */
+    --ip-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --ip-font-display: 'Manrope', 'Inter', system-ui, sans-serif;
     --ip-font-mono: 'SF Mono', 'Menlo', 'Consolas', 'Segoe UI Mono', monospace;
 
     --ip-radius: 12px;
@@ -42,6 +47,10 @@
 * { box-sizing: border-box; }
 
 body { margin: 0; font-family: var(--ip-font-sans); }
+
+/* Títulos con la fuente de despliegue (Manrope), igual que en la página
+   Detalle del activo. Los subtítulos y las tablas siguen en Inter. */
+h1, h2, h3, h4, .eyebrow { font-family: var(--ip-font-display); }
 
 /* =========================================================
    HEADER
@@ -267,9 +276,31 @@ td { font-size: .84rem; }
 .ip-badge.vacio { color: #8b8b80; font-weight: 500; }
 .ip-badge.origen-cliente { border-color: #b6d7bd; background: var(--ip-oliva-suave); color: var(--ip-oliva-oscuro); }
 .ip-badge.origen-general { border-color: #c9c7bc; background: #eeede7; color: #515247; }
+/* Red reportada por el colector para un activo fijo: ni infraestructura
+   capturada a mano ni equipo de cliente con IP estática. */
+.ip-badge.origen-activo { border-color: #b7c6d3; background: #e8eff5; color: #3c5568; }
 .ip-badge.estado-ocupado { border-color: #a7d6b1; background: #e5f5e8; color: #25643a; }
 .ip-badge.estado-libre { border-color: #d8d6cb; background: #f2f1ea; color: #6f7066; }
 .ip-badge.estado-reservado { border-color: #d8b49a; background: var(--ip-oro-suave); color: #6b4b25; }
+/* Procedencia de la IP (OrigenIP / EsConfiable). Verde = dirección fija que
+   sirve como inventario; ámbar = la asigna un DHCP o un controlador WiFi y
+   puede cambiar en cada reconexión (se oculta por defecto en la tabla). */
+.ip-badge.origen-ip { font-size: .74rem; letter-spacing: .01em; white-space: nowrap; }
+.ip-badge.origen-ip.confiable { border-color: #b6c7a9; background: var(--ip-oliva-suave); color: var(--ip-oliva-oscuro); }
+.ip-badge.origen-ip.volatil {
+    border-color: #dcc99a;
+    border-style: dashed;
+    background: var(--ip-oro-suave);
+    color: #8a7a42;
+    cursor: help;
+}
+.ip-badge.origen-ip.vacio {
+    border-color: #e0ddd1;
+    border-style: dashed;
+    background: #f7f6f1;
+    color: #8b8b80;
+    font-weight: 500;
+}
 .fila-reservada { background: #fdfaf1; }
 .fila-reservada td { color: var(--ip-texto-secundario); }
 .reservado-nota {
@@ -555,6 +586,15 @@ td { font-size: .84rem; }
 .segmentos-resumen .dato-libre b { color: var(--ip-texto-secundario); }
 .segmentos-resumen .dato-reservado { border-color: #dcc99a; background: var(--ip-oro-suave); color: #8a7a42; }
 .segmentos-resumen .dato-reservado b { color: #8a7a42; }
+/* Aviso de IP volátiles ocultas: se muestran sólo si el usuario las pide. */
+.segmentos-resumen .dato-volatil {
+    border-color: #dcc99a;
+    border-style: dashed;
+    background: #fdf8ea;
+    color: #8a7a42;
+    cursor: help;
+}
+.segmentos-resumen .dato-volatil b { color: #8a7a42; }
 
 .segmentos-lista {
     display: grid;
@@ -752,6 +792,45 @@ td { font-size: .84rem; }
     background: var(--ip-oliva-suave);
     color: var(--ip-oliva-oscuro);
     font-weight: 700;
+}
+
+/* Interruptor "Incluir volátiles (DHCP / WiFi)": la tabla oculta por defecto
+   las IP que no son inventario duro, y este control las trae de vuelta.
+   Deshace el estilo de formulario genérico de {label,input} para que quede
+   como una casilla compacta dentro de la barra del segmento. */
+.segmento-barra .filtro-volatiles {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px;
+    border: 1px solid var(--ip-borde);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ip-texto-secundario);
+    font-size: .74rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+.segmento-barra .filtro-volatiles:hover { background: var(--ip-superficie-suave); border-color: var(--ip-borde-fuerte); }
+.segmento-barra .filtro-volatiles:has(input:checked) {
+    border-color: #dcc99a;
+    background: var(--ip-oro-suave);
+    color: #8a7a42;
+}
+.segmento-barra .filtro-volatiles input {
+    width: 15px;
+    height: 15px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border-radius: 3px;
+    accent-color: var(--ip-oliva);
+    flex: 0 0 auto;
+    cursor: pointer;
 }
 
 /* =========================================================

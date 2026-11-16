@@ -940,13 +940,13 @@ ipcMain.handle('af-activos-restaurar',  async (_e, id, motivo)=> { const err = r
 ipcMain.handle('af-activos-eliminar-definitivo', async (_e, id) => { const err = requerirSesion('af-act:eliminar'); if (err) return err; return await activoFijoActivosDB.eliminarDefinitivo(id, usuarioActual?.IdUsuario); });
 ipcMain.handle('af-activos-historico',  async (_e, id)        => { const err = requerirSesion('af-act:listado:ver'); if (err) return err; return await activoFijoActivosDB.historico(id); });
 
-/* Piezas conectadas al equipo (monitor, disco, teclado, ratón): el "Ver" del
-   inventario muestra el CPU con lo que tiene colgado. Sólo lectura y sólo lo
-   vigente: son las mismas filas de la pestaña "Conectados" del detalle. */
+/* Detalle del equipo en el "Ver" del inventario: piezas conectadas + red
+   (WiFi/Ethernet), cuentas y programas. Sólo lectura y sólo lo vigente:
+   reutiliza la misma consulta de la ficha del módulo Detalle. */
 ipcMain.handle('af-activos-componentes', async (_e, id) => {
     const err = requerirSesion('af-act:listado:ver');
     if (err) return err;
-    return await activoFijoDetalleDB.componentesDeActivo(id);
+    return await activoFijoDetalleDB.detalleDeActivo(id);
 });
 
 /* --- NUEVO: Exportar Excel Activos --- */
@@ -975,11 +975,9 @@ ipcMain.handle('af-activos-lista-capacidades',     async () => { const err = req
 ipcMain.handle('af-activos-lista-catalogos-especificaciones', async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCatalogosExtendidos(); });
 
 /* =========================================================
-   IPC: DETALLE AF (red, cuentas, programas, puente)
+   IPC: DETALLE AF (red, cuentas, programas, piezas)
    ---------------------------------------------------------
-   Todo es de sólo lectura sobre lo que dejó la app A, salvo dos
-   acciones del puente que sí escriben y por eso piden permiso
-   propio: copiar la serie al flujo viejo y marcar una revisión.
+   Todo es de sólo lectura sobre lo que dejó la app A.
    ========================================================= */
 ipcMain.handle('af-det-estado', async () => { const err = requerirSesion('activofijo_detalle'); if (err) return err; return await activoFijoDetalleDB.estadoFuentes(); });
 ipcMain.handle('af-det-maestro-listar', async (_e, filtros) => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.listarMaestro(filtros || {}); });
@@ -989,18 +987,7 @@ ipcMain.handle('af-det-buscar-programa', async (_e, filtros) => { const err = re
 ipcMain.handle('af-det-buscar-cuenta', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarCuenta(filtros || {}); });
 ipcMain.handle('af-det-buscar-host', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarHost(filtros || {}); });
 ipcMain.handle('af-det-buscar-componente', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarComponente(filtros || {}); });
-ipcMain.handle('af-det-puente-resumen', async () => { const err = requerirSesion('activofijo_detalle'); if (err) return err; return await activoFijoDetalleDB.resumenPuente(); });
-ipcMain.handle('af-det-puente-listar', async (_e, filtros) => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.listarPuente(filtros || {}); });
-ipcMain.handle('af-det-puente-completar', async (_e, idEquipo, idActivoFijoEQ, nota) => {
-    const err = requerirSesion('af-det:puente:completar');
-    if (err) return err;
-    return await activoFijoDetalleDB.completarSerie(idEquipo, idActivoFijoEQ, usuarioActual?.IdUsuario, nota);
-});
-ipcMain.handle('af-det-puente-revisar', async (_e, idEquipo, idActivoFijoEQ, nota) => {
-    const err = requerirSesion('af-det:puente:revisar');
-    if (err) return err;
-    return await activoFijoDetalleDB.marcarRevision(idEquipo, idActivoFijoEQ, usuarioActual?.IdUsuario, nota);
-});
+
 
 /* =========================================================
    IPC: RESPONSIVAS AF
@@ -1587,7 +1574,11 @@ ipcMain.handle('inventario-ip:exportarExcel', async (_e, opciones = {}) => {
             }) || null;
         };
         const conReserva = registro => {
-            if (String(registro.Origen || '') === 'Cliente') return registro;
+            /* Cliente y Activo ya tienen dueño: la reserva de cliente sólo
+               aplica a los registros capturados a mano en el control
+               general (y a las IP libres del segmento). */
+            const origen = String(registro.Origen || '');
+            if (origen === 'Cliente' || origen === 'Activo') return registro;
             const rango = rangoDeIP(registro.IP);
             if (!rango) return registro;
             return {

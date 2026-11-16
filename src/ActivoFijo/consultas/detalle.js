@@ -5,7 +5,6 @@
 
    Sólo lectura sobre lo que deja la app A (colector):
      dbo.vw_ActivoFijoEquipoInline   → maestro + ficha
-     dbo.vw_ActivoFijoPuenteEquipos  → empate con dbo.Equipos
      dbo.ActivoFijoEquiposRed        → adaptadores
      dbo.ActivoFijoEquiposCuentas    → cuentas locales / dominio
      dbo.ActivoFijoEquiposProgramas  → software instalado
@@ -15,14 +14,8 @@
                                         cuelgan del activo padre por
                                         IdActivoFijoEQ + NoSerie del CPU.
 
-   Escrituras (las dos únicas de esta área y ambas auditadas en
-   dbo.ActivoFijoPuenteRevision):
-     · completarSerie → rellena dbo.Equipos.NoSerieCPU (nunca
-       sobrescribe una serie ya capturada).
-     · marcarRevision → deja constancia de un REVISAR_SERIE.
-
    Reglas que aplica:
-     · Vigente = 1 por omisión; el histórico se pide explícito.
+     · Sólo se devuelve lo vigente (Vigente = 1).
      · Paginado en el servidor (OFFSET/FETCH): nunca se traen
        los ~500 activos ni los 200+ programas de golpe.
      · Listas de columnas explícitas: sin SELECT * en las vistas
@@ -41,9 +34,7 @@ const TABLA_RED       = 'ActivoFijoEquiposRed';
 const TABLA_CUENTAS   = 'ActivoFijoEquiposCuentas';
 const TABLA_PROGRAMAS = 'ActivoFijoEquiposProgramas';
 const TABLA_COMPONENTES = 'ActivoFijoEquiposComponentes';
-const TABLA_REVISION  = 'ActivoFijoPuenteRevision';
 const VISTA_MAESTRO   = 'vw_ActivoFijoEquipoInline';
-const VISTA_PUENTE    = 'vw_ActivoFijoPuenteEquipos';
 
 const SCRIPT = 'scripts/activo-fijo-detalle.sql';
 const TAMANO_MAX  = 200;
@@ -135,6 +126,36 @@ async function columnasDe(nombre) {
     }
 }
 
+/* =========================================================
+   COLUMNAS DE DIADEMA (opcionales)
+   ---------------------------------------------------------
+   scripts/activo-vivo-unificado.sql agrega MAC, ConectadoA,
+   EstadoConexion y Bateria a ActivoFijoEquiposComponentes para
+   que el colector pueda reportar diademas con su conexión.
+   Si la base todavía no corrió ese script, cada consulta pide
+   NULL en su lugar: la pantalla funciona igual y sólo se ven
+   vacías esas columnas.
+   ========================================================= */
+const COLUMNAS_DIADEMA = [
+    { nombre: 'MAC',             tipo: 'VARCHAR(17)'   },
+    { nombre: 'ConectadoA',      tipo: 'NVARCHAR(300)' },
+    { nombre: 'EstadoConexion',  tipo: 'VARCHAR(30)'   },
+    { nombre: 'Bateria',         tipo: 'TINYINT'       }
+];
+
+async function columnasDiadema(alias = 'cp') {
+    const columnas = await columnasDe(TABLA_COMPONENTES);
+    return COLUMNAS_DIADEMA
+        .map(({ nombre, tipo }) => columnas.has(nombre)
+            ? `${alias}.${nombre}`
+            : `CAST(NULL AS ${tipo}) AS ${nombre}`)
+        .join(', ');
+}
+
+/* Tipos de pieza que el colector puede reportar. DIADEMA lo agrega
+   scripts/activo-vivo-unificado.sql al CHECK de la tabla. */
+const TIPOS_COMPONENTE = ['MONITOR', 'DISCO', 'TECLADO', 'RATON', 'DIADEMA', 'OTRO'];
+
 /* Aviso común cuando una vista quedó de una corrida anterior del script. */
 function mensajeVistaIncompleta(vista, faltan) {
     return `La vista dbo.${vista} está desactualizada (le falta ${faltan.join(', ')}). Vuelve a ejecutar ${SCRIPT}.`;
@@ -143,19 +164,17 @@ function mensajeVistaIncompleta(vista, faltan) {
 /* Estado de las fuentes, para que la UI explique qué falta en vez
    de mostrar una tabla vacía sin motivo. */
 async function estadoFuentes() {
-    const [maestro, puente, red, cuentas, programas, componentes, revision] = await Promise.all([
+    const [maestro, red, cuentas, programas, componentes] = await Promise.all([
         existeObjeto(VISTA_MAESTRO),
-        existeObjeto(VISTA_PUENTE),
         existeObjeto(TABLA_RED),
         existeObjeto(TABLA_CUENTAS),
         existeObjeto(TABLA_PROGRAMAS),
-        existeObjeto(TABLA_COMPONENTES),
-        existeObjeto(TABLA_REVISION)
+        existeObjeto(TABLA_COMPONENTES)
     ]);
     return {
         ok: true,
-        maestro, puente, red, cuentas, programas, componentes, revision,
-        listo: maestro && puente && red && cuentas && programas && componentes,
+        maestro, red, cuentas, programas, componentes,
+        listo: maestro && red && cuentas && programas && componentes,
         script: SCRIPT
     };
 }
@@ -385,12 +404,13 @@ async function listarDominios() {
    resto del inventario) y las tres pestañas del detalle.
    Se carga on demand: el maestro nunca trae este volumen.
    ========================================================= */
-async function obtenerFicha(idActivoFijoEQ, opciones = {}) {
+async function obtenerFicha(idActivoFijoEQ) {
     const id = entero(idActivoFijoEQ);
     if (!id) return { ok: false, mensaje: 'Activo inválido.' };
 
-    const incluirHistorico = opciones.incluirHistorico ? 1 : 0;
-    const ficha = { ok: true, incluirHistorico: !!incluirHistorico, equipo: null, red: [], cuentas: [], programas: [], componentes: [], lotes: [], fuentes: {} };
+    /* Sólo lo vigente: el histórico (Vigente = 0) ya no se muestra en la
+       ficha ni en los buscadores cruzados. */
+    const ficha = { ok: true, equipo: null, red: [], cuentas: [], programas: [], componentes: [], lotes: [], fuentes: {} };
 
     /* --- cabecera --- */
     try {
@@ -436,7 +456,6 @@ async function obtenerFicha(idActivoFijoEQ, opciones = {}) {
         try {
             const r = await pool.request()
                 .input('Id', sql.Int, id)
-                .input('Historico', sql.Bit, incluirHistorico)
                 .query(`
                     SELECT IdEquipoRed, Hostname, Clave, NombreAdaptador, DescripcionAdaptador,
                            TipoMedio, MAC, IP, Mascara, PrefijoRed, PuertaEnlace, DHCP,
@@ -444,7 +463,7 @@ async function obtenerFicha(idActivoFijoEQ, opciones = {}) {
                            Vigente, LoteEnvio, PrimeraDeteccion, UltimaDeteccion
                     FROM dbo.${TABLA_RED}
                     WHERE IdActivoFijoEQ = @Id
-                      AND (@Historico = 1 OR Vigente = 1)
+                      AND Vigente = 1
                     ORDER BY Vigente DESC, EsPrincipal DESC, UltimaDeteccion DESC;
                 `);
             ficha.red = r.recordset;
@@ -456,7 +475,6 @@ async function obtenerFicha(idActivoFijoEQ, opciones = {}) {
         try {
             const r = await pool.request()
                 .input('Id', sql.Int, id)
-                .input('Historico', sql.Bit, incluirHistorico)
                 .query(`
                     SELECT IdEquipoCuenta, TipoCuenta, Cuenta, NombreCompleto, Descripcion,
                            Dominio, DominioDNS, SID, Habilitada, UltimoAcceso, Perfil,
@@ -464,7 +482,7 @@ async function obtenerFicha(idActivoFijoEQ, opciones = {}) {
                            Vigente, LoteEnvio, PrimeraDeteccion, UltimaDeteccion
                     FROM dbo.${TABLA_CUENTAS}
                     WHERE IdActivoFijoEQ = @Id
-                      AND (@Historico = 1 OR Vigente = 1)
+                      AND Vigente = 1
                     ORDER BY Vigente DESC, EsCuentaSesion DESC, TipoCuenta, Cuenta;
                 `);
             ficha.cuentas = r.recordset;
@@ -476,14 +494,13 @@ async function obtenerFicha(idActivoFijoEQ, opciones = {}) {
         try {
             const r = await pool.request()
                 .input('Id', sql.Int, id)
-                .input('Historico', sql.Bit, incluirHistorico)
                 .query(`
                     SELECT IdEquipoPrograma, Programa, Version, Fabricante, FechaInstalacion,
                            Ubicacion, Arquitectura, Alcance, Cuenta,
                            Vigente, LoteEnvio, PrimeraDeteccion, UltimaDeteccion
                     FROM dbo.${TABLA_PROGRAMAS}
                     WHERE IdActivoFijoEQ = @Id
-                      AND (@Historico = 1 OR Vigente = 1)
+                      AND Vigente = 1
                     ORDER BY Vigente DESC, Programa, Version;
                 `);
             ficha.programas = r.recordset;
@@ -496,16 +513,17 @@ async function obtenerFicha(idActivoFijoEQ, opciones = {}) {
        Si la tabla no existe todavía, se devuelve la lista vacía. */
     if (await existeObjeto(TABLA_COMPONENTES)) {
         try {
+            const extras = await columnasDiadema();
             const r = await pool.request()
                 .input('Id', sql.Int, id)
-                .input('Historico', sql.Bit, incluirHistorico)
                 .query(`
                     SELECT IdEquipoComponente, TipoComponente, Clave, Marca, Modelo, Serie,
                            Identificador, IdentificadorTipo, Confianza, Cantidad, Detalles,
-                           Vigente, LoteEnvio, PrimeraDeteccion, UltimaDeteccion
-                    FROM dbo.${TABLA_COMPONENTES}
-                    WHERE IdActivoFijoEQ = @Id
-                      AND (@Historico = 1 OR Vigente = 1)
+                           Vigente, LoteEnvio, PrimeraDeteccion, UltimaDeteccion,
+                           ${extras}
+                    FROM dbo.${TABLA_COMPONENTES} cp
+                    WHERE cp.IdActivoFijoEQ = @Id
+                      AND cp.Vigente = 1
                     ORDER BY Vigente DESC, TipoComponente, Marca, Modelo, IdEquipoComponente;
                 `);
             ficha.componentes = r.recordset;
@@ -524,38 +542,31 @@ async function obtenerFicha(idActivoFijoEQ, opciones = {}) {
 }
 
 /* =========================================================
-   PIEZAS CONECTADAS DE UN ACTIVO (sólo vigentes)
+   DETALLE COMPLETO DE UN ACTIVO (red, cuentas, programas y piezas)
    ---------------------------------------------------------
-   El "Ver" del inventario activo necesita SÓLO las piezas: usar
-   obtenerFicha() traería además red, cuentas, programas y lotes
-   que ese modal no pinta. Devuelve la misma forma de fila que la
-   pestaña "Conectados", así ambas vistas no pueden discrepar.
-   Un equipo vale 1 en el inventario; sus piezas viven aquí.
-   ========================================================= */
-async function componentesDeActivo(idActivoFijoEQ) {
-    const id = entero(idActivoFijoEQ);
-    if (!id) return { ok: false, mensaje: 'Activo inválido.', componentes: [], total: 0 };
-    if (!(await existeObjeto(TABLA_COMPONENTES))) {
-        return { ok: true, fuenteDisponible: false, componentes: [], total: 0 };
+   El "Ver" del inventario activo necesita todo eso junto, así que se
+   reutiliza obtenerFicha() para traer, con la MISMA regla Vigente = 1,
+   la red (WiFi/Ethernet), las cuentas, los programas y las piezas
+   conectadas. Así el modal del inventario y la ficha del módulo
+   Detalle nunca pueden discrepar. */
+async function detalleDeActivo(idActivoFijoEQ) {
+    const ficha = await obtenerFicha(idActivoFijoEQ);
+    if (!ficha || ficha.ok === false) {
+        return {
+            ok: false,
+            mensaje: (ficha && ficha.mensaje) || 'No se pudo leer el detalle del activo.',
+            red: [], cuentas: [], programas: [], componentes: [],
+            fuentes: (ficha && ficha.fuentes) || {}
+        };
     }
-    try {
-        const pool = await getPool();
-        const r = await pool.request()
-            .input('Id', sql.Int, id)
-            .query(`
-                SELECT IdEquipoComponente, TipoComponente, Clave, Marca, Modelo, Serie,
-                       Identificador, IdentificadorTipo, Confianza, Cantidad, Detalles,
-                       PrimeraDeteccion, UltimaDeteccion
-                FROM dbo.${TABLA_COMPONENTES}
-                WHERE IdActivoFijoEQ = @Id
-                  AND Vigente = 1
-                ORDER BY TipoComponente, Marca, Modelo, IdEquipoComponente;
-            `);
-        const componentes = r.recordset || [];
-        return { ok: true, fuenteDisponible: true, componentes, total: componentes.length };
-    } catch (err) {
-        return { ...respuestaError(err, 'componentesDeActivo'), componentes: [], total: 0 };
-    }
+    return {
+        ok: true,
+        red: ficha.red || [],
+        cuentas: ficha.cuentas || [],
+        programas: ficha.programas || [],
+        componentes: ficha.componentes || [],
+        fuentes: ficha.fuentes || {}
+    };
 }
 
 /* Agrupa por LoteEnvio: cuántos adaptadores, cuentas y programas
@@ -610,8 +621,8 @@ async function lotesDeActivo(idActivoFijoEQ) {
    a) ¿En qué equipos está X programa y en qué versión?
    b) ¿Qué cuentas de dominio existen y en qué equipos?
    c) ¿Qué MAC/IP tiene tal hostname?
-   Todos con Vigente = 1 por omisión (interruptor de histórico) y
-   paginados en el servidor.
+   Todos con Vigente = 1 (el histórico no se muestra) y paginados en
+   el servidor.
    ========================================================= */
 async function buscarPrograma(opciones = {}) {
     const nombre = texto(opciones.programa);
@@ -623,7 +634,6 @@ async function buscarPrograma(opciones = {}) {
 
     const { pagina, tamano, offset } = normalizarPaginacion(opciones);
     const patron = `%${nombre}%`;
-    const historico = opciones.incluirHistorico ? 1 : 0;
     const soloNombre = opciones.coincidenciaExacta ? nombre : patron;
     const version = texto(opciones.version);
 
@@ -632,7 +642,6 @@ async function buscarPrograma(opciones = {}) {
         const r = await pool.request()
             .input('Programa', sql.NVarChar(300), soloNombre)
             .input('Version', sql.NVarChar(100), version ? `%${version}%` : null)
-            .input('Historico', sql.Bit, historico)
             .input('Offset', sql.Int, offset)
             .input('Tamano', sql.Int, tamano)
             .query(`
@@ -643,7 +652,7 @@ async function buscarPrograma(opciones = {}) {
                 FROM dbo.${TABLA_PROGRAMAS} p
                 WHERE p.Programa LIKE @Programa
                   AND (@Version IS NULL OR p.Version LIKE @Version)
-                  AND (@Historico = 1 OR p.Vigente = 1)
+                  AND p.Vigente = 1
                 ORDER BY p.Programa, p.Version, p.NoSerie
                 OFFSET @Offset ROWS FETCH NEXT @Tamano ROWS ONLY;
             `);
@@ -656,13 +665,12 @@ async function buscarPrograma(opciones = {}) {
         if (total) {
             const rv = await pool.request()
                 .input('Programa', sql.NVarChar(300), soloNombre)
-                .input('Historico', sql.Bit, historico)
                 .query(`
                     SELECT TOP (30) p.Programa, ISNULL(p.Version, N'(sin versión)') AS Version,
                            COUNT(DISTINCT p.IdActivoFijoEQ) AS Equipos
                     FROM dbo.${TABLA_PROGRAMAS} p
                     WHERE p.Programa LIKE @Programa
-                      AND (@Historico = 1 OR p.Vigente = 1)
+                      AND p.Vigente = 1
                     GROUP BY p.Programa, p.Version
                     ORDER BY COUNT(DISTINCT p.IdActivoFijoEQ) DESC;
                 `);
@@ -692,7 +700,6 @@ async function buscarCuenta(opciones = {}) {
         const r = await pool.request()
             .input('Cuenta', sql.NVarChar(200), patron)
             .input('Tipo', sql.VarChar(10), tipoValido)
-            .input('Historico', sql.Bit, opciones.incluirHistorico ? 1 : 0)
             .input('Offset', sql.Int, offset)
             .input('Tamano', sql.Int, tamano)
             .query(`
@@ -703,7 +710,7 @@ async function buscarCuenta(opciones = {}) {
                 FROM dbo.${TABLA_CUENTAS} c
                 WHERE (c.Cuenta LIKE @Cuenta OR c.NombreCompleto LIKE @Cuenta)
                   AND (@Tipo IS NULL OR c.TipoCuenta = @Tipo)
-                  AND (@Historico = 1 OR c.Vigente = 1)
+                  AND c.Vigente = 1
                 ORDER BY c.Cuenta, c.NoSerie
                 OFFSET @Offset ROWS FETCH NEXT @Tamano ROWS ONLY;
             `);
@@ -731,7 +738,6 @@ async function buscarHost(opciones = {}) {
         const pool = await getPool();
         const r = await pool.request()
             .input('Hostname', sql.NVarChar(100), patron)
-            .input('Historico', sql.Bit, opciones.incluirHistorico ? 1 : 0)
             .input('Offset', sql.Int, offset)
             .input('Tamano', sql.Int, tamano)
             .query(`
@@ -741,7 +747,7 @@ async function buscarHost(opciones = {}) {
                        COUNT(*) OVER() AS Total
                 FROM dbo.${TABLA_RED} r
                 WHERE (r.Hostname LIKE @Hostname OR r.MAC LIKE @Hostname OR r.IP LIKE @Hostname)
-                  AND (@Historico = 1 OR r.Vigente = 1)
+                  AND r.Vigente = 1
                 ORDER BY r.Hostname, r.EsPrincipal DESC, r.UltimaDeteccion DESC
                 OFFSET @Offset ROWS FETCH NEXT @Tamano ROWS ONLY;
             `);
@@ -773,15 +779,14 @@ async function buscarComponente(opciones = {}) {
 
     const { pagina, tamano, offset } = normalizarPaginacion(opciones);
     const tipo = texto(opciones.tipo).toUpperCase();
-    const tipoValido = ['MONITOR', 'DISCO', 'TECLADO', 'RATON', 'OTRO'].includes(tipo) ? tipo : null;
-    const historico = opciones.incluirHistorico ? 1 : 0;
+    const tipoValido = TIPOS_COMPONENTE.includes(tipo) ? tipo : null;
 
     try {
         const pool = await getPool();
+        const extras = await columnasDiadema();
         const r = await pool.request()
             .input('Componente', sql.NVarChar(300), patron)
             .input('Tipo', sql.VarChar(20), tipoValido)
-            .input('Historico', sql.Bit, historico)
             .input('Offset', sql.Int, offset)
             .input('Tamano', sql.Int, tamano)
             .query(`
@@ -790,6 +795,7 @@ async function buscarComponente(opciones = {}) {
                        cp.IdentificadorTipo, cp.Confianza, cp.Cantidad, cp.Detalles,
                        cp.IdActivoFijoEQ, cp.NoSerie, cp.Hostname,
                        cp.Vigente, cp.UltimaDeteccion, cp.LoteEnvio,
+                       ${extras},
                        COUNT(*) OVER() AS Total
                 FROM dbo.${TABLA_COMPONENTES} cp
                 WHERE (cp.Serie LIKE @Componente
@@ -798,7 +804,7 @@ async function buscarComponente(opciones = {}) {
                        OR cp.Modelo LIKE @Componente
                        OR cp.Marca LIKE @Componente)
                   AND (@Tipo IS NULL OR cp.TipoComponente = @Tipo)
-                  AND (@Historico = 1 OR cp.Vigente = 1)
+                  AND cp.Vigente = 1
                 ORDER BY cp.TipoComponente, cp.Marca, cp.Modelo, cp.NoSerie
                 OFFSET @Offset ROWS FETCH NEXT @Tamano ROWS ONLY;
             `);
@@ -812,7 +818,6 @@ async function buscarComponente(opciones = {}) {
         if (total) {
             const rt = await pool.request()
                 .input('Componente', sql.NVarChar(300), patron)
-                .input('Historico', sql.Bit, historico)
                 .query(`
                     SELECT cp.TipoComponente,
                            COUNT(*) AS Piezas,
@@ -823,7 +828,7 @@ async function buscarComponente(opciones = {}) {
                            OR cp.Identificador LIKE @Componente
                            OR cp.Modelo LIKE @Componente
                            OR cp.Marca LIKE @Componente)
-                      AND (@Historico = 1 OR cp.Vigente = 1)
+                      AND cp.Vigente = 1
                     GROUP BY cp.TipoComponente
                     ORDER BY COUNT(*) DESC;
                 `);
@@ -836,259 +841,15 @@ async function buscarComponente(opciones = {}) {
     }
 }
 
-/* =========================================================
-   4. BANDEJA DEL PUENTE
-   ---------------------------------------------------------
-   Sobre vw_ActivoFijoPuenteEquipos, agrupada por AccionSugerida.
-   Se le pega la última marca de revisión para poder ocultar lo ya
-   atendido sin tocar la vista.
-   ========================================================= */
-const ACCIONES_PUENTE = ['OK', 'COMPLETAR_SERIE', 'REVISAR_SERIE', 'PENDIENTE_INVENTARIAR', 'SOLO_ACTIVO'];
-
-/* Columnas que la bandeja necesita de la vista del puente. Se
-   comprueban igual que las del maestro: si la base quedó con una
-   versión anterior se avisa con un mensaje entendible. */
-const CAMPOS_PUENTE = [
-    'IdEquipo', 'IdCliente', 'IdPiso', 'Hostname', 'IP', 'Mascara', 'PuertaEnlace',
-    'DNS1', 'DNS2', 'NoSerieCPU', 'IdActivoFijoEQ', 'NoSerieActivo',
-    'HostnameActivo', 'DominioActivo', 'OrigenEmpate', 'AccionSugerida', 'EsSoloActivo'
-];
-
-async function faltantesPuente() {
-    const columnas = await columnasDe(VISTA_PUENTE);
-    if (!columnas.size) return [];
-    return CAMPOS_PUENTE.filter(c => !columnas.has(c));
-}
-
-async function resumenPuente() {
-    if (!(await existeObjeto(VISTA_PUENTE))) {
-        return { ok: true, acciones: [], fuenteDisponible: false,
-                 mensaje: `La vista dbo.${VISTA_PUENTE} aún no existe. Ejecuta ${SCRIPT}.` };
-    }
-    const faltan = await faltantesPuente();
-    if (faltan.length) {
-        return { ok: true, acciones: [], fuenteDisponible: false,
-                 mensaje: mensajeVistaIncompleta(VISTA_PUENTE, faltan) };
-    }
-    try {
-        const pool = await getPool();
-        const r = await pool.request().query(`
-            SELECT AccionSugerida, COUNT(*) AS Total
-            FROM dbo.${VISTA_PUENTE}
-            GROUP BY AccionSugerida;
-        `);
-        const mapa = new Map(r.recordset.map(f => [f.AccionSugerida, Number(f.Total)]));
-        const acciones = ACCIONES_PUENTE.map(clave => ({ clave, total: mapa.get(clave) || 0 }));
-        return {
-            ok: true, acciones, fuenteDisponible: true,
-            total: acciones.reduce((s, a) => s + a.total, 0)
-        };
-    } catch (err) {
-        return { ...respuestaError(err, 'resumenPuente'), acciones: [] };
-    }
-}
-
-async function listarPuente(opciones = {}) {
-    if (!(await existeObjeto(VISTA_PUENTE))) {
-        return { ok: true, filas: [], total: 0, fuenteDisponible: false,
-                 mensaje: `La vista dbo.${VISTA_PUENTE} aún no existe. Ejecuta ${SCRIPT}.` };
-    }
-    const faltan = await faltantesPuente();
-    if (faltan.length) {
-        return { ok: true, filas: [], total: 0, fuenteDisponible: false,
-                 mensaje: mensajeVistaIncompleta(VISTA_PUENTE, faltan) };
-    }
-
-    const { pagina, tamano, offset } = normalizarPaginacion(opciones);
-    const accion = ACCIONES_PUENTE.includes(texto(opciones.accion)) ? texto(opciones.accion) : null;
-    const busqueda = like(opciones.busqueda);
-    const conRevision = await existeObjeto(TABLA_REVISION);
-
-    /* Sólo la última marca por equipo: así una revisión vieja no oculta
-       un desajuste nuevo. */
-    const joinRevision = conRevision
-        ? `OUTER APPLY (
-               SELECT TOP (1) rev.Accion, rev.Fecha, rev.Nota, rev.IdUsuario
-               FROM dbo.${TABLA_REVISION} rev
-               WHERE rev.IdEquipo = v.IdEquipo
-               ORDER BY rev.Fecha DESC, rev.IdRevision DESC
-           ) rev`
-        : `OUTER APPLY (SELECT CAST(NULL AS VARCHAR(30)) AS Accion, CAST(NULL AS DATETIME2(0)) AS Fecha,
-                               CAST(NULL AS NVARCHAR(400)) AS Nota, CAST(NULL AS INT) AS IdUsuario) rev`;
-
-    try {
-        const pool = await getPool();
-        const r = await pool.request()
-            .input('Accion', sql.VarChar(30), accion)
-            .input('Busqueda', sql.NVarChar(200), busqueda)
-            .input('SinRevisar', sql.Bit, opciones.soloSinRevisar === false ? 0 : 1)
-            .input('Offset', sql.Int, offset)
-            .input('Tamano', sql.Int, tamano)
-            .query(`
-                SELECT v.IdEquipo, v.IdCliente, v.IdPiso, v.Hostname, v.IP, v.Mascara,
-                       v.PuertaEnlace, v.DNS1, v.DNS2, v.NoSerieCPU,
-                       v.IdActivoFijoEQ, v.NoSerieActivo, v.HostnameActivo, v.DominioActivo,
-                       v.OrigenEmpate, v.AccionSugerida, v.EsSoloActivo,
-                       rev.Accion AS RevisionAccion, rev.Fecha AS RevisionFecha, rev.Nota AS RevisionNota,
-                       COUNT(*) OVER() AS Total
-                FROM dbo.${VISTA_PUENTE} v
-                ${joinRevision}
-                WHERE (@Accion IS NULL OR v.AccionSugerida = @Accion)
-                  AND (@Busqueda IS NULL
-                       OR v.NoSerieActivo LIKE @Busqueda
-                       OR v.NoSerieCPU LIKE @Busqueda
-                       OR v.Hostname LIKE @Busqueda
-                       OR v.HostnameActivo LIKE @Busqueda
-                       OR v.IP LIKE @Busqueda)
-                  AND (@SinRevisar = 0
-                       OR rev.Fecha IS NULL
-                       OR rev.Fecha < DATEADD(DAY, -1, GETDATE())
-                       OR rev.Accion <> v.AccionSugerida)
-                ORDER BY CASE v.AccionSugerida
-                             WHEN 'REVISAR_SERIE'        THEN 1
-                             WHEN 'COMPLETAR_SERIE'      THEN 2
-                             WHEN 'PENDIENTE_INVENTARIAR' THEN 3
-                             WHEN 'SOLO_ACTIVO'          THEN 4
-                             ELSE 5 END,
-                         v.NoSerieActivo, v.Hostname
-                OFFSET @Offset ROWS FETCH NEXT @Tamano ROWS ONLY;
-            `);
-        const filas = r.recordset || [];
-        return {
-            ok: true, filas,
-            total: filas.length ? Number(filas[0].Total) : 0,
-            pagina, tamano, fuenteDisponible: true
-        };
-    } catch (err) {
-        return { ...respuestaError(err, 'listarPuente'), filas: [], total: 0 };
-    }
-}
-
-/* =========================================================
-   5. ACCIONES DEL PUENTE (las dos únicas escrituras)
-   --------------------------------------------------------- */
-
-/* COMPLETAR_SERIE: copia la serie que ya capturó la app A en el
-   activo hacia dbo.Equipos.NoSerieCPU. Nunca sobrescribe: si la
-   columna ya tiene valor, se avisa y no se toca. */
-async function completarSerie(idEquipo, idActivoFijoEQ, idUsuario = null, nota = null) {
-    const eq = entero(idEquipo);
-    const af = entero(idActivoFijoEQ);
-    if (!eq || !af) return { ok: false, mensaje: 'No se indicó el equipo o el activo a emparejar.' };
-
-    const pool = await getPool();
-    const transaccion = new sql.Transaction(pool);
-    let iniciada = false;
-
-    try {
-        await transaccion.begin();
-        iniciada = true;
-        const req = new sql.Request(transaccion);
-
-        const serie = await req
-            .input('IdActivo', sql.Int, af)
-            .query(`SELECT NoSerie FROM dbo.ActivoFijoEquipos WHERE IdActivoFijoEQ = @IdActivo;`);
-
-        const NoSerie = texto(serie.recordset[0] && serie.recordset[0].NoSerie);
-        if (!NoSerie) {
-            await transaccion.rollback();
-            return { ok: false, mensaje: 'El activo no tiene número de serie registrado; no hay qué copiar.' };
-        }
-
-        const equipo = await req
-            .input('IdEquipo', sql.Int, eq)
-            .query(`SELECT NoSerieCPU, Hostname FROM dbo.Equipos WHERE IdEquipo = @IdEquipo;`);
-
-        const fila = equipo.recordset[0];
-        if (!fila) {
-            await transaccion.rollback();
-            return { ok: false, mensaje: 'El equipo del flujo anterior ya no existe.' };
-        }
-        if (texto(fila.NoSerieCPU)) {
-            await transaccion.rollback();
-            return {
-                ok: false,
-                mensaje: `El equipo ya tiene serie capturada (${texto(fila.NoSerieCPU)}). Este módulo no sobrescribe series.`
-            };
-        }
-
-        /* NoSerieCPU es nvarchar(200) y la serie del activo nvarchar(150):
-           el LEFT es sólo cinturón de seguridad si el esquema cambia. */
-        await req
-            .input('NoSerie', sql.NVarChar(200), NoSerie.slice(0, 200))
-            .query(`UPDATE dbo.Equipos SET NoSerieCPU = @NoSerie WHERE IdEquipo = @IdEquipo;`);
-
-        await req
-            .input('Accion', sql.VarChar(30), 'COMPLETAR_SERIE')
-            .input('Anterior', sql.NVarChar(200), null)
-            .input('Nueva', sql.NVarChar(200), NoSerie.slice(0, 200))
-            .input('Nota', sql.NVarChar(400), texto(nota) || null)
-            .input('IdUsuario', sql.Int, entero(idUsuario))
-            .query(`
-                INSERT INTO dbo.${TABLA_REVISION}
-                    (IdEquipo, IdActivoFijoEQ, NoSerieActivo, Accion, NoSerieAnterior, NoSerieNueva, Nota, IdUsuario)
-                VALUES (@IdEquipo, @IdActivo, @NoSerie, @Accion, @Anterior, @Nueva, @Nota, @IdUsuario);
-            `);
-
-        await transaccion.commit();
-        return { ok: true, mensaje: `Serie ${NoSerie} copiada al equipo.`, noSerie: NoSerie };
-    } catch (err) {
-        if (iniciada) { try { await transaccion.rollback(); } catch (e) { /* ya abortada */ } }
-        return respuestaError(err, 'completarSerie');
-    }
-}
-
-/* REVISAR_SERIE: deja constancia de que alguien ya revisó el
-   desajuste. No modifica ni el activo ni el equipo. */
-async function marcarRevision(idEquipo, idActivoFijoEQ, idUsuario = null, nota = null) {
-    const eq = entero(idEquipo);
-    if (!eq) return { ok: false, mensaje: 'No se indicó el equipo a marcar.' };
-    if (!(await existeObjeto(TABLA_REVISION))) {
-        return { ok: false, mensaje: `Falta la tabla dbo.${TABLA_REVISION}. Ejecuta ${SCRIPT}.` };
-    }
-
-    try {
-        const pool = await getPool();
-        await pool.request()
-            .input('IdEquipo', sql.Int, eq)
-            .input('IdActivo', sql.Int, entero(idActivoFijoEQ))
-            .input('Nota', sql.NVarChar(400), texto(nota) || null)
-            .input('IdUsuario', sql.Int, entero(idUsuario))
-            .query(`
-                INSERT INTO dbo.${TABLA_REVISION}
-                    (IdEquipo, IdActivoFijoEQ, NoSerieActivo, Accion, NoSerieAnterior, Nota, IdUsuario)
-                SELECT
-                    e.IdEquipo,
-                    @IdActivo,
-                    af.NoSerie,
-                    'REVISAR_SERIE',
-                    e.NoSerieCPU,
-                    @Nota,
-                    @IdUsuario
-                FROM dbo.Equipos e
-                LEFT JOIN dbo.ActivoFijoEquipos af ON af.IdActivoFijoEQ = @IdActivo
-                WHERE e.IdEquipo = @IdEquipo;
-            `);
-        return { ok: true, mensaje: 'Revisión registrada.' };
-    } catch (err) {
-        return respuestaError(err, 'marcarRevision');
-    }
-}
-
 module.exports = {
     estadoFuentes,
     listarMaestro,
     listarDominios,
     obtenerFicha,
-    componentesDeActivo,
+    detalleDeActivo,
     buscarPrograma,
     buscarCuenta,
     buscarHost,
     buscarComponente,
-    resumenPuente,
-    listarPuente,
-    completarSerie,
-    marcarRevision,
-    ACCIONES_PUENTE,
     SCRIPT
 };

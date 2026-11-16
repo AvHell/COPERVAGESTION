@@ -506,10 +506,16 @@ async function analizarArchivo(rutaArchivo) {
                 tipoIPNombre = 'DHCP';
             } else if (['estatica', 'estatico', 'fija', 'static'].includes(normalizarTexto(tipoIPCrudo))) {
                 tipoIPNombre = 'Estatica';
+            } else if (['wifi', 'wifi controlador', 'controlador wifi', 'controlador',
+                'wireless', 'inalambrica', 'inalambrico'].includes(normalizarTexto(tipoIPCrudo))) {
+                /* La WiFi también entrega la IP desde el controlador, así que se
+                   comporta como volátil (ver procedenciaPorTipoIP). */
+                tipoIPNombre = 'WiFi (controlador)';
             }
-            /* Misma regla que el alta manual: una IP estática/dinámica necesita IP. */
-            if (!ip && normalizarTexto(tipoIPNombre) !== 'dhcp') {
-                fallo(`sin IP pero el tipo de asignación es "${tipoIPNombre}" (captura la IP o usa DHCP)`);
+            /* Misma regla que el alta manual: sólo un tipo volátil (DHCP o
+               WiFi de controlador) puede venir sin IP. */
+            if (!ip && !inventarioIPDB.permiteSinIP(tipoIPNombre)) {
+                fallo(`sin IP pero el tipo de asignación es "${tipoIPNombre}" (captura la IP o usa DHCP / WiFi)`);
             }
 
             /* ---- Descripción + referencia del cliente ---- */

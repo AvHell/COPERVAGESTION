@@ -108,14 +108,9 @@ const CATALOGO = {
   'af-resp:pdf':                   { grupo: 'Activo Fijo',  etiqueta: 'Generar PDF' },
 
   /* ---------- ACTIVO FIJO: detalle del activo ----------
-     Lectura de lo que captura el colector. Las dos acciones del
-     puente son las únicas que escriben:
-       · completar → copia la serie del activo a dbo.Equipos.NoSerieCPU
-       · revisar   → marca el desajuste como revisado (auditoría) */
+     Lectura de lo que captura el colector (módulo sin escrituras). */
   'af-det:listado:ver':            { grupo: 'Activo Fijo',  etiqueta: 'Ver maestro y ficha del activo' },
   'af-det:buscar:ver':             { grupo: 'Activo Fijo',  etiqueta: 'Usar buscadores cruzados (programas, cuentas, red)' },
-  'af-det:puente:completar':       { grupo: 'Activo Fijo',  etiqueta: 'Copiar la serie al equipo del flujo anterior' },
-  'af-det:puente:revisar':         { grupo: 'Activo Fijo',  etiqueta: 'Marcar un desajuste de serie como revisado' },
 
   /* ---------- ACTIVO FIJO: reportes / importación ---------- */
   'af-rep:ver':                    { grupo: 'Activo Fijo',  etiqueta: 'Ver reportes' },

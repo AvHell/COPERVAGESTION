@@ -5,12 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#2E3228">
     <title>Control general de IP</title>
+
+    <!-- Misma tipografía que la página Detalle del activo:
+         Inter para el texto y Manrope para los títulos. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="../css/inventario-ip.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
     <header class="header">
-        <button id="btn-volver" type="button" class="button secondary">Volver a equipos</button>
+        <button id="ip-btn-volver" type="button" class="button secondary">Volver a equipos</button>
         <div>
             <p class="eyebrow">Vista general de IP; inventarios conservados por origen</p>
             <h1>Control general de IP</h1>
@@ -53,6 +60,11 @@
                         <p id="segmento-detalle">Selecciona un segmento para revisar su ocupación.</p>
                     </div>
                     <div id="segmento-estado" class="segmento-estado"></div>
+                    <label class="filtro-volatiles"
+                        title="Las IP que asigna un DHCP o un controlador WiFi pueden cambiar en cada reconexión: no cuentan como inventario fijo">
+                        <input type="checkbox" id="incluir-volatiles">
+                        Incluir volátiles (DHCP / WiFi)
+                    </label>
                 </div>
 
                 <div class="table-wrap">
@@ -62,6 +74,7 @@
                                 <th>Origen</th>
                                 <th>Estado</th>
                                 <th>IP</th>
+                                <th>Origen IP</th>
                                 <th>Hostname</th>
                                 <th>MAC</th>
                                 <th>Dispositivo</th>

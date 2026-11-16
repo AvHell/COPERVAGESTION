@@ -5,7 +5,7 @@
    hoja compartida (../../css/catalogos.css) todavía no tiene:
 
      .pill · .tag/.tag-ok/.tag-off/.tag-dominio · .conf.alta/media/baja
-     .statusbar · .report-list · .chk
+     .statusbar · .report-list
      y la maquetación propia de esta página (pestañas, tarjetas
      de buscador, ficha del activo).
 
@@ -193,7 +193,7 @@ body {
 }
 
 /* =========================================================
-   CONFIANZA DEL EMPATE (bandeja del puente)
+   CONFIANZA DE LA PIEZA (ficha y buscador de piezas)
    ========================================================= */
 .conf {
     display: inline-flex;
@@ -300,36 +300,6 @@ body {
 .det-ficha-head .btn-icon:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
 
 /* =========================================================
-   CHECKBOX EN LÍNEA (.chk)
-   ========================================================= */
-.chk {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    border-radius: var(--radius-md);
-    background: #fff;
-    border: 1px solid var(--gray-200);
-    font-size: 0.82rem;
-    color: var(--gray-700);
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-}
-
-.chk:hover { border-color: var(--tierra-arena); }
-
-.chk input[type="checkbox"] {
-    width: 15px;
-    height: 15px;
-    accent-color: var(--tierra-oliva);
-    cursor: pointer;
-}
-
-.header-actions .chk { background: rgba(255, 247, 232, 0.12); border-color: rgba(255, 247, 232, 0.3); color: var(--tierra-crema); }
-.header-actions .chk:hover { border-color: var(--tierra-oro); }
-
-/* =========================================================
    TARJETAS DE LOS BUSCADORES CRUZADOS
    ---------------------------------------------------------
    Una tarjeta por renglón: las tablas de resultado tienen 6–8
@@ -402,7 +372,6 @@ body {
 .det-toolbar .buscador { flex: 1 1 300px; max-width: 460px; }
 .det-toolbar .filtro-group { flex: 0 0 auto; min-width: 170px; }
 .det-toolbar .filtro-group label { margin-bottom: 0; }
-.det-toolbar .chk { height: 46px; }
 .det-toolbar .btn-outline { padding: 0 18px; }
 
 /* =========================================================

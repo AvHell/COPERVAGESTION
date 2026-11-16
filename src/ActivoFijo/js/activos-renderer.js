@@ -733,14 +733,27 @@ btnExportar.addEventListener('click', async () => {
 async function respuestaPiezas(id) {
     try {
         const res = await window.api.activoFijo.activos.componentes(id);
-        if (res && res.ok !== false && Array.isArray(res.componentes)) return res;
+        if (res && res.ok !== false && Array.isArray(res.componentes)) {
+            /* El IPC devuelve el detalle completo del activo (red, cuentas,
+               programas y piezas). `fuenteDisponible` resume si la tabla de
+               piezas existe, que es lo que mira seccionPiezas(). */
+            return Object.assign({}, res, {
+                fuenteDisponible: !(res.fuentes && res.fuentes.componentes === false)
+            });
+        }
         return {
             ok: false,
             mensaje: (res && res.mensaje) || 'No se pudieron leer las piezas del equipo.',
-            componentes: []
+            componentes: [],
+            red: [], cuentas: [], programas: [], fuentes: {}
         };
     } catch (err) {
-        return { ok: false, mensaje: err.message || 'No se pudieron leer las piezas.', componentes: [] };
+        return {
+            ok: false,
+            mensaje: err.message || 'No se pudieron leer las piezas.',
+            componentes: [],
+            red: [], cuentas: [], programas: [], fuentes: {}
+        };
     }
 }
 
@@ -876,12 +889,221 @@ function seccionPiezas(resPiezas, noSerie) {
         </div>`;
 }
 
+/* =========================================================
+   RED (WiFi / Ethernet), CUENTAS Y PROGRAMAS
+   ---------------------------------------------------------
+   Misma fuente que la ficha del módulo Detalle (obtenerFicha vía
+   detalleDeActivo), así que aquí sólo se pinta: no se consulta nada
+   distinto ni se inventan campos. Todo llega ya filtrado Vigente = 1.
+   ========================================================= */
+
+/* Regla de WiFi idéntica a la del Control general IP
+   (inventario-ip.js: TipoMedio/NombreAdaptador/DescripcionAdaptador). */
+const PATRON_WIFI = /wi[\s_-]*fi|wireless|wlan/i;
+
+function esAdaptadorWifi(fila) {
+    const r = fila || {};
+    return PATRON_WIFI.test(String(r.TipoMedio || ''))
+        || PATRON_WIFI.test(String(r.NombreAdaptador || ''))
+        || PATRON_WIFI.test(String(r.DescripcionAdaptador || ''));
+}
+
+/** Celda simple: vacío se lee como raya, nunca como hueco. */
+function celdaVer(valor, clase) {
+    const v = (valor === null || valor === undefined || valor === '') ? '—' : valor;
+    return `<td${clase ? ` class="${clase}"` : ''}>${escaparHTML(v)}</td>`;
+}
+
+function celdaSiNo(valor, textoSi, textoNo, claseSi) {
+    return valor
+        ? `<td><span class="pill-mini ${claseSi || ''}">${escaparHTML(textoSi)}</span></td>`
+        : `<td><span class="ver-tenue">${escaparHTML(textoNo)}</span></td>`;
+}
+
+/** Tabla con scroll horizontal: nunca rompe las proporciones del modal. */
+function tablaVer(cabeceras, filasHtml) {
+    return `
+        <div class="ver-tabla-scroll">
+            <table class="ver-piezas-tabla">
+                <thead><tr>${cabeceras.map(c => `<th${c.num ? ' class="num"' : ''}>${escaparHTML(c.titulo)}</th>`).join('')}</tr></thead>
+                <tbody>${filasHtml}</tbody>
+            </table>
+        </div>`;
+}
+
+function filaRed(r) {
+    const adaptador = r.NombreAdaptador || r.DescripcionAdaptador || r.Clave || '—';
+    const dns = [r.DNS1, r.DNS2].filter(Boolean).join(' · ');
+    const mascara = r.PrefijoRed !== null && r.PrefijoRed !== undefined && r.PrefijoRed !== ''
+        ? `/${r.PrefijoRed}`
+        : r.Mascara;
+    return `<tr>
+        ${celdaVer(adaptador)}
+        ${celdaVer(r.IP, 'mono')}
+        ${celdaVer(r.MAC, 'mono')}
+        ${celdaVer(mascara, 'mono')}
+        ${celdaVer(r.PuertaEnlace, 'mono')}
+        ${celdaVer(dns, 'mono')}
+        ${celdaSiNo(r.DHCP, 'Sí', 'No')}
+        ${celdaVer(r.Dominio)}
+        ${celdaSiNo(r.EsPrincipal, 'Principal', '—', 'pill-mini-ok')}
+    </tr>`;
+}
+
+const CABECERAS_RED = [
+    { titulo: 'Adaptador' }, { titulo: 'IP' }, { titulo: 'MAC' },
+    { titulo: 'Máscara' }, { titulo: 'Puerta de enlace' }, { titulo: 'DNS' },
+    { titulo: 'DHCP' }, { titulo: 'Dominio' }, { titulo: 'Principal' }
+];
+
+/** Bloque "Red": adaptadores WiFi y Ethernet por separado, en su propia tabla. */
+function seccionRed(res) {
+    const fuentes = (res && res.fuentes) || {};
+    const red = Array.isArray(res && res.red) ? res.red : [];
+
+    if (fuentes.red === false) {
+        return `
+            <div class="ver-seccion">
+                <div class="ver-seccion-titulo">Red (WiFi y Ethernet)</div>
+                <div class="ver-aviso">
+                    La tabla <code>dbo.ActivoFijoEquiposRed</code> no existe todavía,
+                    así que este equipo no puede mostrar sus adaptadores de red.
+                </div>
+            </div>`;
+    }
+    if (!red.length) {
+        return `
+            <div class="ver-seccion">
+                <div class="ver-seccion-titulo">Red (WiFi y Ethernet)</div>
+                <div class="ver-tenue">Sin adaptadores de red registrados para este equipo.</div>
+            </div>`;
+    }
+
+    const wifi = red.filter(esAdaptadorWifi);
+    const cable = red.filter(r => !esAdaptadorWifi(r));
+
+    const grupo = (titulo, lista) => (lista.length ? `
+        <div class="ver-piezas-grupo">
+            <div class="ver-piezas-subtitulo">${escaparHTML(titulo)} <span class="pill-mini">${lista.length}</span></div>
+            ${tablaVer(CABECERAS_RED, lista.map(filaRed).join(''))}
+        </div>` : '');
+
+    return `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Red (WiFi y Ethernet)</div>
+            <div class="ver-piezas">
+                ${grupo('WiFi', wifi)}
+                ${grupo('Ethernet / cable', cable)}
+            </div>
+        </div>`;
+}
+
+function filaCuenta(c) {
+    const esDominio = String(c.TipoCuenta || '').toUpperCase() === 'DOMINIO';
+    return `<tr>
+        ${celdaVer(c.Cuenta, 'mono')}
+        <td>${esDominio ? '<span class="pill-mini">Dominio</span>' : '<span class="ver-tenue">Local</span>'}</td>
+        ${celdaVer(c.NombreCompleto)}
+        ${celdaSiNo(c.Habilitada, 'Sí', 'No', 'pill-mini-ok')}
+        ${celdaVer(formatearFecha(c.UltimoAcceso))}
+        ${celdaSiNo(c.EsCuentaSesion, 'En sesión', '—', 'pill-mini-ok')}
+    </tr>`;
+}
+
+/** Bloque "Cuentas": quién entra a este equipo. */
+function seccionCuentas(res) {
+    const fuentes = (res && res.fuentes) || {};
+    const cuentas = Array.isArray(res && res.cuentas) ? res.cuentas : [];
+
+    if (fuentes.cuentas === false) {
+        return `
+            <div class="ver-seccion">
+                <div class="ver-seccion-titulo">Cuentas</div>
+                <div class="ver-aviso">
+                    La tabla <code>dbo.ActivoFijoEquiposCuentas</code> no existe todavía,
+                    así que este equipo no puede mostrar sus cuentas.
+                </div>
+            </div>`;
+    }
+    if (!cuentas.length) {
+        return `
+            <div class="ver-seccion">
+                <div class="ver-seccion-titulo">Cuentas</div>
+                <div class="ver-tenue">Sin cuentas registradas para este equipo.</div>
+            </div>`;
+    }
+
+    const cabeceras = [
+        { titulo: 'Cuenta' }, { titulo: 'Tipo' }, { titulo: 'Nombre completo' },
+        { titulo: 'Habilitada' }, { titulo: 'Último acceso' }, { titulo: 'Sesión' }
+    ];
+    return `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Cuentas (${cuentas.length})</div>
+            ${tablaVer(cabeceras, cuentas.map(filaCuenta).join(''))}
+        </div>`;
+}
+
+function filaPrograma(p) {
+    const alcance = String(p.Alcance || '').toUpperCase();
+    return `<tr>
+        ${celdaVer(p.Programa)}
+        ${celdaVer(p.Version, 'mono')}
+        ${celdaVer(p.Fabricante)}
+        ${celdaVer(formatearFecha(p.FechaInstalacion))}
+        <td>${alcance === 'USUARIO'
+            ? '<span class="ver-tenue">Usuario</span>'
+            : '<span class="pill-mini">Equipo</span>'}</td>
+        ${celdaVer(p.Cuenta, 'mono')}
+    </tr>`;
+}
+
+/** Bloque "Programas": el software instalado, con scroll para no estirar el modal. */
+function seccionProgramas(res) {
+    const fuentes = (res && res.fuentes) || {};
+    const programas = Array.isArray(res && res.programas) ? res.programas : [];
+
+    if (fuentes.programas === false) {
+        return `
+            <div class="ver-seccion">
+                <div class="ver-seccion-titulo">Programas</div>
+                <div class="ver-aviso">
+                    La tabla <code>dbo.ActivoFijoEquiposProgramas</code> no existe todavía,
+                    así que este equipo no puede mostrar su software.
+                </div>
+            </div>`;
+    }
+    if (!programas.length) {
+        return `
+            <div class="ver-seccion">
+                <div class="ver-seccion-titulo">Programas</div>
+                <div class="ver-tenue">Sin programas registrados para este equipo.</div>
+            </div>`;
+    }
+
+    const cabeceras = [
+        { titulo: 'Programa' }, { titulo: 'Versión' }, { titulo: 'Fabricante' },
+        { titulo: 'Instalación' }, { titulo: 'Alcance' }, { titulo: 'Cuenta' }
+    ];
+    return `
+        <div class="ver-seccion">
+            <div class="ver-seccion-titulo">Programas (${programas.length})</div>
+            <div class="ver-tabla-scroll ver-tabla-alta">
+                <table class="ver-piezas-tabla">
+                    <thead><tr>${cabeceras.map(c => `<th>${escaparHTML(c.titulo)}</th>`).join('')}</tr></thead>
+                    <tbody>${programas.map(filaPrograma).join('')}</tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
 async function verActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     if (!a) { toastError('Activo no encontrado'); return; }
 
-    // Piezas del equipo (monitor, disco, teclado, ratón…). Se piden antes de
-    // abrir el modal para que todo salga en una sola tarjeta coherente.
+    // Detalle completo del equipo: piezas conectadas + red (WiFi/Ethernet),
+    // cuentas y programas. Se pide ANTES de abrir el modal para que todo salga
+    // en una sola tarjeta coherente (la consulta es la misma de la ficha).
     const resPiezas = await respuestaPiezas(id);
 
     const tipo = tipos.find(t => t.IdTipo === a.IdTipo) || {};
@@ -976,13 +1198,24 @@ async function verActivo(id) {
         </div>
     `;
 
+    // Red, cuentas y programas: lo que el colector dejó de ESTE equipo.
+    // Cada bloque se pinta siempre (con su aviso si la fuente no existe),
+    // para que se note la diferencia entre "no hay datos" y "no se leyó".
+    const seccionRedEquipo      = seccionRed(resPiezas);
+    const seccionCuentasEquipo  = seccionCuentas(resPiezas);
+    const seccionProgramasEquipo = seccionProgramas(resPiezas);
+
     // Las piezas van al final: primero se lee el equipo y luego lo que cuelga
     // de él. El bloque se oculta sólo si el equipo no tiene ninguna.
     const seccionPiezasEquipo = seccionPiezas(resPiezas, a.NoSerie);
 
+    /* Con tablas dentro el modal necesita más ancho; el alto lo controla el
+       CSS (scroll interno) para que nunca se salga de la pantalla. */
+    const tieneTablas = !!(seccionRedEquipo || seccionCuentasEquipo ||
+                           seccionProgramasEquipo || seccionPiezasEquipo);
+
     Swal.fire({
         title: `Activo #${a.IdActivoFijoEQ} — ${escaparHTML(a.NoSerie || a.IMEI1 || a.NoTelefono || '')}`,
-        width: seccionPiezasEquipo ? '980px' : '820px',
         html: `
             <div class="ver-wrap">
                 ${seccionIdent}
@@ -991,13 +1224,16 @@ async function verActivo(id) {
                 ${seccionSpec}
                 ${seccionAcc}
                 ${seccionObs}
+                ${seccionRedEquipo}
+                ${seccionCuentasEquipo}
+                ${seccionProgramasEquipo}
                 ${seccionPiezasEquipo}
                 ${meta}
             </div>
         `,
         showCloseButton: true,
         showConfirmButton: false,
-        customClass: { popup: 'cl-ver' }
+        customClass: { popup: tieneTablas ? 'cl-ver cl-ver-datos' : 'cl-ver' }
     });
 }
 

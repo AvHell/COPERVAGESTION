@@ -22,13 +22,10 @@
                                          por IdActivoFijoEQ + NoSerie
                                          (la NoSerie del CPU).
      2. Crea los índices de apoyo de esas tablas.
-     3. Crea/actualiza las dos vistas de lectura:
+     3. Crea/actualiza la vista de lectura:
           vw_ActivoFijoEquipoInline  → base del maestro y la ficha
-          vw_ActivoFijoPuenteEquipos → empate con el flujo viejo
-                                       dbo.Equipos por 3 vías
-     4. Crea la tabla de marcas de revisión del puente (la única
-        escritura propia de la app B) e índices de cruce sobre
-        dbo.Equipos.
+     4. Crea índices de cruce sobre dbo.Equipos (hostname, IP y
+        serie) para el maestro.
 
    Modelo padre/hijo:
      · El EQUIPO (CPU / AIO / laptop / desktop) es el activo padre:
@@ -42,9 +39,9 @@
        siempre se sabe a qué equipo pertenece cada componente.
 
    Reglas de oro que respeta el diseño:
-     · Vigente = 1 es lo único que se lee por omisión; los
-       históricos (Vigente = 0) nunca se borran y quedan
-       consultables con el interruptor de histórico.
+     · Vigente = 1 es lo único que lee el módulo Detalle; los
+       históricos (Vigente = 0) nunca se borran, pero ya no se
+       muestran en la ficha ni en los buscadores cruzados.
      · LoteEnvio agrupa un envío y permite comparar dos lotes.
      · UltimaDeteccion = última vez visto.
      · Las cuatro puente repiten NoSerie y Hostname para consulta
@@ -436,200 +433,19 @@ OUTER APPLY
 GO
 
 /* =========================================================
-   6. dbo.vw_ActivoFijoPuenteEquipos
+   6. (Retirado) dbo.vw_ActivoFijoPuenteEquipos
    ---------------------------------------------------------
-   Empata el flujo viejo dbo.Equipos con el activo por 3 vías:
-       NoSerieCPU = NoSerie   → SERIE
-       Hostname                → HOSTNAME
-       IP                      → IP
-   y devuelve además los activos que no tienen renglón en
-   dbo.Equipos (SOLO_ACTIVO). Las comparaciones son igualdades
-   simples a propósito: SQL Server ignora los espacios finales
-   al comparar, así que la serie con o sin espacio pega igual y
-   el índice se puede usar (la función sobre la columna lo
-   impediría).
+   El empate con el flujo viejo dbo.Equipos ya no existe: la
+   pestaña "Puente con equipos" se eliminó del módulo Detalle.
+   Si la base todavía tiene la vista o la tabla de revisiones,
+   ejecuta scripts/drop-vw-activo-fijo-puente.sql.
    ========================================================= */
-CREATE OR ALTER VIEW dbo.vw_ActivoFijoPuenteEquipos
-AS
-WITH activo AS
-(
-    /* Activo + su red principal vigente (mismo criterio que el maestro). */
-    SELECT
-        a.IdActivoFijoEQ,
-        a.NoSerie,
-        red.Hostname,
-        red.IP,
-        red.MAC,
-        red.Dominio
-    FROM dbo.ActivoFijoEquipos a
-    OUTER APPLY
-    (
-        SELECT TOP (1) r.Hostname, r.IP, r.MAC, r.Dominio
-        FROM dbo.ActivoFijoEquiposRed r
-        WHERE r.IdActivoFijoEQ = a.IdActivoFijoEQ
-          AND r.Vigente = 1
-        ORDER BY r.EsPrincipal DESC, r.UltimaDeteccion DESC, r.IdEquipoRed DESC
-    ) red
-),
-base AS
-(
-    SELECT
-        e.IdEquipo,
-        e.IdCliente,
-        e.IdPiso,
-        e.Hostname,
-        e.IP,
-        e.Mascara,
-        e.PuertaEnlace,
-        e.DNS1,
-        e.DNS2,
-        e.NoSerieCPU,
-        CASE WHEN s.IdActivoFijoEQ IS NOT NULL THEN s.IdActivoFijoEQ
-             WHEN h.IdActivoFijoEQ IS NOT NULL THEN h.IdActivoFijoEQ
-             ELSE p.IdActivoFijoEQ END                        AS IdActivoFijoEQ,
-        CASE WHEN s.IdActivoFijoEQ IS NOT NULL THEN s.NoSerie
-             WHEN h.IdActivoFijoEQ IS NOT NULL THEN h.NoSerie
-             ELSE p.NoSerie END                               AS NoSerieActivo,
-        CASE WHEN s.IdActivoFijoEQ IS NOT NULL THEN s.Hostname
-             WHEN h.IdActivoFijoEQ IS NOT NULL THEN h.Hostname
-             ELSE p.Hostname END                              AS HostnameActivo,
-        CASE WHEN s.IdActivoFijoEQ IS NOT NULL THEN s.Dominio
-             WHEN h.IdActivoFijoEQ IS NOT NULL THEN h.Dominio
-             ELSE p.Dominio END                               AS DominioActivo,
-        CASE WHEN s.IdActivoFijoEQ IS NOT NULL THEN 'SERIE'
-             WHEN h.IdActivoFijoEQ IS NOT NULL THEN 'HOSTNAME'
-             WHEN p.IdActivoFijoEQ IS NOT NULL THEN 'IP'
-             ELSE 'SIN_EMPATE' END                            AS OrigenEmpate
-    FROM dbo.Equipos e
-    OUTER APPLY
-    (
-        /* 1ª vía: la serie ya capturada (la más confiable). */
-        SELECT TOP (1) x.IdActivoFijoEQ, x.NoSerie, x.Hostname, x.Dominio
-        FROM activo x
-        WHERE NULLIF(e.NoSerieCPU, N'') IS NOT NULL
-          AND x.NoSerie = e.NoSerieCPU
-        ORDER BY x.IdActivoFijoEQ
-    ) s
-    OUTER APPLY
-    (
-        /* 2ª vía: hostname, sólo si la serie no empató. */
-        SELECT TOP (1) x.IdActivoFijoEQ, x.NoSerie, x.Hostname, x.Dominio
-        FROM activo x
-        WHERE s.IdActivoFijoEQ IS NULL
-          AND NULLIF(e.Hostname, N'') IS NOT NULL
-          AND x.Hostname = e.Hostname
-        ORDER BY x.IdActivoFijoEQ
-    ) h
-    OUTER APPLY
-    (
-        /* 3ª vía: IP, sólo si ni serie ni hostname empataron. */
-        SELECT TOP (1) x.IdActivoFijoEQ, x.NoSerie, x.Hostname, x.Dominio
-        FROM activo x
-        WHERE s.IdActivoFijoEQ IS NULL
-          AND h.IdActivoFijoEQ IS NULL
-          AND NULLIF(e.IP, '') IS NOT NULL
-          AND e.IP <> '0.0.0.0'
-          AND x.IP = e.IP
-        ORDER BY x.IdActivoFijoEQ
-    ) p
-)
-SELECT
-    b.IdEquipo,
-    b.IdCliente,
-    b.IdPiso,
-    b.Hostname,
-    b.IP,
-    b.Mascara,
-    b.PuertaEnlace,
-    b.DNS1,
-    b.DNS2,
-    b.NoSerieCPU,
-    b.IdActivoFijoEQ,
-    b.NoSerieActivo,
-    b.HostnameActivo,
-    b.DominioActivo,
-    b.OrigenEmpate,
-    CAST(CASE
-        WHEN b.OrigenEmpate = 'SERIE' THEN 'OK'
-        WHEN b.OrigenEmpate IN ('HOSTNAME', 'IP') THEN
-             CASE WHEN NULLIF(b.NoSerieCPU, N'') IS NULL THEN 'COMPLETAR_SERIE'
-                  ELSE 'REVISAR_SERIE' END
-        ELSE 'PENDIENTE_INVENTARIAR'
-    END AS VARCHAR(30)) AS AccionSugerida,
-    CAST(0 AS BIT) AS EsSoloActivo
-FROM base b
-
-UNION ALL
-
-/* Activos que la app A ya inventarió pero que no existen en el flujo
-   viejo: no hay deuda de serie, pero sí un renglón que revisar. */
-SELECT
-    CAST(NULL AS INT)              AS IdEquipo,
-    CAST(NULL AS INT)              AS IdCliente,
-    CAST(NULL AS INT)              AS IdPiso,
-    a.Hostname,
-    a.IP,
-    CAST(NULL AS VARCHAR(45))      AS Mascara,
-    CAST(NULL AS VARCHAR(45))      AS PuertaEnlace,
-    CAST(NULL AS VARCHAR(45))      AS DNS1,
-    CAST(NULL AS VARCHAR(45))      AS DNS2,
-    CAST(NULL AS NVARCHAR(200))    AS NoSerieCPU,      -- se captura en dbo.Equipos, no aquí
-    a.IdActivoFijoEQ,
-    a.NoSerie                      AS NoSerieActivo,
-    a.Hostname                     AS HostnameActivo,
-    a.Dominio                      AS DominioActivo,
-    CAST('SIN_EMPATE' AS VARCHAR(10)) AS OrigenEmpate,
-    CAST('SOLO_ACTIVO' AS VARCHAR(30)) AS AccionSugerida,
-    CAST(1 AS BIT)                 AS EsSoloActivo
-FROM activo a
-WHERE NOT EXISTS (SELECT 1 FROM base b WHERE b.IdActivoFijoEQ = a.IdActivoFijoEQ);
-GO
-
 /* =========================================================
-   7. dbo.ActivoFijoPuenteRevision
+   7. Índices de cruce sobre dbo.Equipos
    ---------------------------------------------------------
-   Única escritura propia de la app B en esta área: la marca de
-   revisión cuando el operador cierra un REVISAR_SERIE (o deja
-   constancia del COMPLETAR_SERIE). Guarda la serie anterior y
-   la nueva para que la decisión quede auditable.
-   ========================================================= */
-IF OBJECT_ID(N'dbo.ActivoFijoPuenteRevision', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.ActivoFijoPuenteRevision
-    (
-        IdRevision       BIGINT           IDENTITY(1,1) NOT NULL,
-        IdEquipo         INT              NOT NULL,
-        IdActivoFijoEQ   INT              NULL,
-        NoSerieActivo    NVARCHAR(150)    NULL,
-        Accion           VARCHAR(30)      NOT NULL,  -- COMPLETAR_SERIE | REVISAR_SERIE
-        NoSerieAnterior  NVARCHAR(200)    NULL,
-        NoSerieNueva     NVARCHAR(200)    NULL,
-        Nota             NVARCHAR(400)    NULL,
-        IdUsuario        INT              NULL,
-        Fecha            DATETIME2(0)     NOT NULL CONSTRAINT DF_AFPR_Fecha DEFAULT (SYSDATETIME()),
-        CONSTRAINT PK_ActivoFijoPuenteRevision PRIMARY KEY CLUSTERED (IdRevision)
-    );
-
-    PRINT 'Creada dbo.ActivoFijoPuenteRevision';
-END
-ELSE
-    PRINT 'dbo.ActivoFijoPuenteRevision ya existía (sin cambios)';
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.indexes
-               WHERE name = N'IX_AFPR_Equipo' AND object_id = OBJECT_ID(N'dbo.ActivoFijoPuenteRevision'))
-    CREATE INDEX IX_AFPR_Equipo
-        ON dbo.ActivoFijoPuenteRevision (IdEquipo, Fecha DESC)
-        INCLUDE (Accion, IdUsuario);
-GO
-
-/* =========================================================
-   8. Índices de cruce sobre dbo.Equipos
-   ---------------------------------------------------------
-   El puente busca por las tres vías sobre 562 equipos. Sólo se
-   agregan índices NO CLUSTERED: no cambian el flujo de la app A
-   (no altera columnas ni restricciones), únicamente aceleran
-   el empate.
+   Índices NO CLUSTERED sobre las columnas por las que se cruza
+   el activo con el flujo viejo (hostname, IP, serie). No cambian
+   el flujo de la app A: no alteran columnas ni restricciones.
    ========================================================= */
 IF NOT EXISTS (SELECT 1 FROM sys.indexes
                WHERE name = N'IX_Equipos_Hostname' AND object_id = OBJECT_ID(N'dbo.Equipos'))
@@ -651,7 +467,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes
 GO
 
 /* =========================================================
-   9. Resumen final
+   8. Resumen final
    ========================================================= */
 SELECT Objeto    = o.name,
        Tipo      = o.type_desc,
@@ -665,9 +481,7 @@ WHERE o.object_id IN (
         OBJECT_ID(N'dbo.ActivoFijoEquiposCuentas'),
         OBJECT_ID(N'dbo.ActivoFijoEquiposProgramas'),
         OBJECT_ID(N'dbo.ActivoFijoEquiposComponentes'),
-        OBJECT_ID(N'dbo.ActivoFijoPuenteRevision'),
-        OBJECT_ID(N'dbo.vw_ActivoFijoEquipoInline'),
-        OBJECT_ID(N'dbo.vw_ActivoFijoPuenteEquipos'))
+        OBJECT_ID(N'dbo.vw_ActivoFijoEquipoInline'))
 ORDER BY o.type_desc, o.name;
 GO
 

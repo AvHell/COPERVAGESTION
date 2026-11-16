@@ -36,14 +36,11 @@
 
             <div class="header-titles">
                 <h1>Detalle del Activo</h1>
-                <p>Red, cuentas, programas, piezas conectadas y empate con el inventario anterior</p>
+                <p>Red, cuentas, programas y piezas conectadas de cada activo</p>
             </div>
 
             <div class="header-actions">
-                <label class="chk" title="Incluir filas históricas (Vigente = 0)">
-                    <input type="checkbox" id="chk-historico">
-                    <span>Histórico</span>
-                </label>
+
                 <button id="btn-recargar" class="btn-icon" title="Recargar datos" aria-label="Recargar datos">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="23 4 23 10 17 10"></polyline>
@@ -84,13 +81,6 @@
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
                 <span>Buscadores cruzados</span>
-            </button>
-            <button type="button" class="det-tab" data-seccion="puente" role="tab">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 21V9a8 8 0 0 1 16 0v12"></path>
-                    <line x1="2" y1="15" x2="22" y2="15"></line>
-                </svg>
-                <span>Puente con equipos</span>
             </button>
         </nav>
 
@@ -309,7 +299,7 @@
                      equipo: se busca la pieza y se responde con el CPU dueño. -->
                 <article class="det-card">
                     <h3>¿A qué equipo pertenece esta pieza?</h3>
-                    <p class="det-hint">Busca por serie, identificador, marca o modelo (monitor, disco, teclado, ratón).</p>
+                    <p class="det-hint">Busca por serie, identificador, marca o modelo (monitor, disco, teclado, ratón, diadema).</p>
                     <div class="field-row">
                         <div class="field">
                             <label for="comp-texto">Serie, ID o modelo</label>
@@ -323,6 +313,7 @@
                                 <option value="DISCO">Disco</option>
                                 <option value="TECLADO">Teclado</option>
                                 <option value="RATON">Ratón</option>
+                                <option value="DIADEMA">Diadema</option>
                                 <option value="OTRO">Otro</option>
                             </select>
                         </div>
@@ -361,73 +352,6 @@
             </div>
         </section>
 
-        <!-- ================= 3. PUENTE ================= -->
-        <section id="panel-puente" class="det-panel oculto">
-
-            <div class="panel-header">
-                <div class="panel-title">
-                    <h2>Puente con el inventario anterior</h2>
-                    <p>Empate por NoSerieCPU → Hostname → IP contra <code>dbo.Equipos</code></p>
-                </div>
-                <span class="pill" id="pill-puente">0 renglones</span>
-            </div>
-
-            <div class="det-toolbar" id="grupo-acciones">
-                <button type="button" class="btn-outline activo" data-accion="">Todas</button>
-                <button type="button" class="btn-outline" data-accion="COMPLETAR_SERIE">Completar serie</button>
-                <button type="button" class="btn-outline" data-accion="REVISAR_SERIE">Revisar serie</button>
-                <button type="button" class="btn-outline" data-accion="PENDIENTE_INVENTARIAR">Pendiente de inventariar</button>
-                <button type="button" class="btn-outline" data-accion="SOLO_ACTIVO">Solo en el activo</button>
-                <button type="button" class="btn-outline" data-accion="OK">Empate correcto</button>
-            </div>
-
-            <div class="det-toolbar">
-                <label class="chk">
-                    <input type="checkbox" id="chk-solo-sin-revisar" checked>
-                    <span>Ocultar lo ya revisado</span>
-                </label>
-                <div class="buscador">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <input type="text" id="puente-busqueda" placeholder="Serie, hostname o IP...">
-                </div>
-                <button type="button" id="btn-recargar-puente" class="btn-outline">Recargar bandeja</button>
-            </div>
-
-            <div class="card-table" id="card-puente">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Acción</th>
-                            <th>Confianza</th>
-                            <th>Origen</th>
-                            <th>Serie del activo</th>
-                            <th>NoSerieCPU</th>
-                            <th>Hostname</th>
-                            <th>IP</th>
-                            <th>Revisión</th>
-                            <th class="acciones-col">Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbody-puente"></tbody>
-                </table>
-            </div>
-
-            <div id="vacio-puente" class="empty-state oculto">
-                <div class="empty-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                    </svg>
-                </div>
-                <h3>Nada pendiente en esta bandeja</h3>
-                <p>No hay renglones que cumplan el filtro actual.</p>
-            </div>
-
-            <div id="paginacion-puente"></div>
-        </section>
     </main>
 
     <!-- ================= FICHA DEL ACTIVO =================
@@ -633,6 +557,11 @@
                                         <th>Serie</th>
                                         <th>Identificador</th>
                                         <th>ID tipo</th>
+                                        <!-- Diademas: cómo se conecta (Bluetooth / USB-Dongle /
+                                             Jack 3.5) y su estado; el resto de piezas lo deja vacío. -->
+                                        <th>Conexión</th>
+                                        <th>MAC</th>
+                                        <th>Batería</th>
                                         <th>Confianza</th>
                                         <th class="num">Cantidad</th>
                                         <th>Última detección</th>

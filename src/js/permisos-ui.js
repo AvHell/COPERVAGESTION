@@ -230,16 +230,12 @@
       '#btn-importar': 'af-imp:ejecutar',
       '#btn-descargar-plantilla': 'af-imp:ejecutar'
     },
-    /* Detalle del activo: leer es el permiso base; las dos acciones
-       del puente son las únicas que escriben en otra tabla. */
+    /* Detalle del activo: módulo de sólo lectura. */
     'detalle.html': {
       '#card-maestro': 'af-det:listado:ver',
       '#panel-buscadores': 'af-det:buscar:ver',
-      '#card-puente': 'af-det:listado:ver',
       '#btn-recargar': 'af-det:listado:ver',
-      '#det-modal': 'af-det:listado:ver',
-      '[data-puente-completar]': 'af-det:puente:completar',
-      '[data-puente-revisar]': 'af-det:puente:revisar'
+      '#det-modal': 'af-det:listado:ver'
     }
   };
 
@@ -401,9 +397,6 @@
     },
     'detalle.html': {
       ver: 'af-det:listado:ver',
-      crear: 'af-det:puente:completar',
-      editar: 'af-det:puente:revisar',
-      guardar: 'af-det:puente:completar',
       exportar: 'af-det:listado:ver',
       importar: 'af-det:buscar:ver',
       gestionar: 'activofijo_detalle'

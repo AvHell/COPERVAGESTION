@@ -44,6 +44,17 @@ Para editar desde el control general los datos complementarios de las IP que per
 
 Ejecuta también `scripts/responsivas-liberar-activo.sql`, que reescribe el mismo trigger `trg_AFR_AfterUpdate` con la regla correcta de liberación: al **devolver** o **cancelar** una responsiva el activo queda en **DISPONIBLE y sin usuario de inventario** (quién lo tenía queda en la responsiva cerrada y en el histórico de asignaciones), y si una responsiva abierta cambia de receptor el usuario del activo se resincroniza. Sin esta regla el activo devuelto se quedaba marcado *Asignado* a la persona anterior, y como algunos tipos exigen usuario era imposible vaciarlo desde el formulario: la única salida era eliminar el activo. El script termina con una consulta que lista los activos inconsistentes que quedaron de antes (debe devolver 0 filas).
 
+#### Detalle del activo, diademas y procedencia de IP
+
+Ejecuta en este orden (todos son idempotentes y aditivos):
+
+1. `scripts/activo-fijo-detalle.sql` — tablas/vistas del detalle del activo (red, cuentas, programas, piezas).
+2. `scripts/activo-vivo-unificado.sql` — permite `TipoComponente = 'DIADEMA'` y agrega a las piezas `MAC`, `ConectadoA`, `EstadoConexion` y `Bateria`; agrega `OrigenIP`/`EsConfiable` a `InventarioGeneralIP` con su `CHECK` y siembra el TipoIP **WiFi (controlador)**.
+3. `scripts/activo-vivo-vistas.sql` — crea las vistas de sólo lectura `vw_InventarioIPUnificado` y `vw_ActivoFijoPiezasUnificadas`, que evitan duplicar IP/hostname/MAC y series.
+4. `scripts/activo-vivo-verificar.sql` — comprobación final: revisa columnas, `CHECK` y vistas, prueba la regla de procedencia y una diadema completa dentro de una transacción con `ROLLBACK` (no deja datos).
+
+Regla de la IP: lo **estático** es inventario duro (`Manual`/confiable). Lo que entregue **DHCP** o un **controlador WiFi** es volátil (`EsConfiable = 0`) y la interfaz lo oculta por defecto tras la casilla *Incluir volátiles*. Detalles de diseño en `docs/control-general-unificado.md`; el prompt para que el colector reporte diademas y los campos nuevos está en `docs/colector-diademas.md`.
+
 
 La fecha de mantenimiento queda fijada al día actual para los usuarios sin el permiso **Modificar fecha del mantenimiento**. Un administrador puede asignar ese permiso desde la gestión de roles.
 

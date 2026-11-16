@@ -79,6 +79,8 @@
     },
     'equipos.html': {
       '#btn-nuevo': 'equipos:crear',
+      '#btn-importacion-pasiva': 'equipos:crear',
+      '#ipas-importar': 'equipos:crear',
       '#btn-guardar': 'equipos:crear|equipos:editar',
       '#btn-exportar-excel': 'equipos:listado:exportar',
       '#btn-control-ip': 'equipos:listado:ver',

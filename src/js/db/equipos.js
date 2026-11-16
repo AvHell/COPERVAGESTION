@@ -58,11 +58,26 @@ async function verificarIPDuplicada(ip, idEquipoExcluir = null) {
               AND TRY_CONVERT(int, PARSENAME(E.IP, 2)) = @IP3
               AND TRY_CONVERT(int, PARSENAME(E.IP, 1)) = @IP4
             UNION ALL
+            /* Sólo choca un registro del control general que siga ACTIVO: uno
+               dado de baja ya no usa la dirección y la lupa lo ofrece como
+               libre, así que guardar el equipo no debe fallar por él. */
             SELECT NULL AS IdEquipo, COALESCE(I.Hostname, N'Dispositivo general') AS Hostname,
                    N'Control general' AS ClienteCodigo, Site.Nombre AS PisoNombre
             FROM dbo.InventarioGeneralIP I
             LEFT JOIN dbo.CatalogosInventarioIP Site ON Site.IdCatalogoIP = I.IdSite
-            WHERE TRY_CONVERT(int, PARSENAME(I.IP, 4)) = @IP1
+            LEFT JOIN dbo.CatalogosInventarioIP Est
+                   ON Est.IdCatalogoIP = I.IdEstado
+                  AND Est.TipoCatalogo = 'Estado'
+            WHERE UPPER(LTRIM(RTRIM(ISNULL(Est.Nombre, N'')))) = N'ACTIVO'
+              /* Un alta "vacía" (sólo IP + Estado) no identifica ningún equipo:
+                 no representa una dirección en uso, así que no debe impedir
+                 guardar la IP que la lupa ofrece como libre. */
+              AND (
+                    NULLIF(LTRIM(RTRIM(I.Hostname)), N'') IS NOT NULL
+                 OR NULLIF(LTRIM(RTRIM(I.MAC)), '') IS NOT NULL
+                 OR NULLIF(LTRIM(RTRIM(I.Descripcion)), N'') IS NOT NULL
+              )
+              AND TRY_CONVERT(int, PARSENAME(I.IP, 4)) = @IP1
               AND TRY_CONVERT(int, PARSENAME(I.IP, 3)) = @IP2
               AND TRY_CONVERT(int, PARSENAME(I.IP, 2)) = @IP3
               AND TRY_CONVERT(int, PARSENAME(I.IP, 1)) = @IP4
@@ -81,6 +96,17 @@ async function verificarIPDuplicada(ip, idEquipoExcluir = null) {
    LISTAR IP ASIGNADAS EN UN SEGMENTO /24
    ========================================================= */
 async function listarIPsAsignadasEnSegmento(segmento, idEquipoExcluir = null) {
+    const detalle = await listarOcupacionSegmento(segmento, idEquipoExcluir);
+    return detalle.map(registro => registro.IP);
+}
+
+/**
+ * Igual que listarIPsAsignadasEnSegmento() pero con el dueño de cada IP, para
+ * poder explicar en la lupa y en la importación pasiva POR QUÉ una dirección
+ * del rango no se ofrece: un equipo concreto o un dispositivo del control
+ * general, nunca "el rango" (el rango sólo reserva, no ocupa).
+ */
+async function listarOcupacionSegmento(segmento, idEquipoExcluir = null) {
     const octetos = String(segmento ?? '').split('.');
     const segmentoValido = octetos.length === 3 && octetos.every(octeto =>
         /^\d{1,3}$/.test(octeto) && Number(octeto) >= 0 && Number(octeto) <= 255
@@ -91,35 +117,85 @@ async function listarIPsAsignadasEnSegmento(segmento, idEquipoExcluir = null) {
 
     const pool = await getPool();
     const request = pool.request();
+    const octetosNum = octetos.map(Number);
+    request.input('IP1', sql.Int, octetosNum[0])
+        .input('IP2', sql.Int, octetosNum[1])
+        .input('IP3', sql.Int, octetosNum[2]);
     const excluir = Number.isInteger(Number(idEquipoExcluir)) && Number(idEquipoExcluir) > 0;
     if (excluir) request.input('IdEquipoExcluir', sql.Int, Number(idEquipoExcluir));
 
+    /* Ocupado = en uso, no reservado. Cuenta cualquier equipo activo con IP
+       capturada (estática o DHCP) y los registros del Control General de IP
+       que siguen ACTIVOS; un registro dado de baja (Estado "Inactivo") ya no
+       usa su dirección y la app misma lo muestra como libre, así que no debe
+       bloquear la sugerencia. Pertenecer a un rango de cliente TAMPOCO ocupa
+       la IP: el rango sólo la reserva para ese cliente, que es justo lo que
+       se está consultando.
+       El filtro por segmento se hace en el servidor con PARSENAME para no
+       traer toda la tabla. */
     const resultado = await request.query(`
-        SELECT DISTINCT LTRIM(RTRIM(IP)) AS IP
+        SELECT Direcciones.IP, Direcciones.Hostname, Direcciones.ClienteCodigo,
+               Direcciones.Origen
         FROM (
-            SELECT E.IP, E.IdEquipo
+            SELECT E.IP,
+                   COALESCE(NULLIF(LTRIM(RTRIM(E.Hostname)), ''), N'Equipo sin hostname') AS Hostname,
+                   COALESCE(C.Codigo, N'') AS ClienteCodigo,
+                   N'Equipo' AS Origen,
+                   E.IdEquipo AS IdEquipo
             FROM dbo.Equipos E
-            INNER JOIN dbo.Clientes C ON C.IdCliente = E.IdCliente
+            LEFT JOIN dbo.Clientes C ON C.IdCliente = E.IdCliente
             WHERE E.Activo = 1
-              AND E.TipoIP = 'Estatica'
-              AND E.IP IS NOT NULL
+              AND NULLIF(LTRIM(RTRIM(E.IP)), '') IS NOT NULL
+              AND TRY_CONVERT(int, PARSENAME(E.IP, 4)) = @IP1
+              AND TRY_CONVERT(int, PARSENAME(E.IP, 3)) = @IP2
+              AND TRY_CONVERT(int, PARSENAME(E.IP, 2)) = @IP3
             UNION ALL
-            SELECT IP, NULL AS IdEquipo
-            FROM dbo.InventarioGeneralIP
-            WHERE IP IS NOT NULL
+            SELECT I.IP,
+                   COALESCE(NULLIF(LTRIM(RTRIM(I.Hostname)), ''), N'Dispositivo general') AS Hostname,
+                   N'' AS ClienteCodigo,
+                   N'Control general' AS Origen,
+                   NULL AS IdEquipo
+            FROM dbo.InventarioGeneralIP I
+            LEFT JOIN dbo.CatalogosInventarioIP Est
+                   ON Est.IdCatalogoIP = I.IdEstado
+                  AND Est.TipoCatalogo = 'Estado'
+            WHERE I.IP IS NOT NULL
+              AND UPPER(LTRIM(RTRIM(ISNULL(Est.Nombre, N'')))) = N'ACTIVO'
+              /* Un alta vacía (sólo IP + Estado) no identifica ningún equipo y
+                 no representa una dirección en uso: no debe ocultar hosts
+                 libres del rango. */
+              AND (
+                    NULLIF(LTRIM(RTRIM(I.Hostname)), N'') IS NOT NULL
+                 OR NULLIF(LTRIM(RTRIM(I.MAC)), '') IS NOT NULL
+                 OR NULLIF(LTRIM(RTRIM(I.Descripcion)), N'') IS NOT NULL
+              )
+              AND TRY_CONVERT(int, PARSENAME(I.IP, 4)) = @IP1
+              AND TRY_CONVERT(int, PARSENAME(I.IP, 3)) = @IP2
+              AND TRY_CONVERT(int, PARSENAME(I.IP, 2)) = @IP3
         ) Direcciones
         WHERE 1 = 1
-        ${excluir ? 'AND (IdEquipo IS NULL OR IdEquipo <> @IdEquipoExcluir)' : ''}
+        ${excluir ? 'AND (Direcciones.IdEquipo IS NULL OR Direcciones.IdEquipo <> @IdEquipoExcluir)' : ''}
     `);
     const prefijo = octetos.map(Number).join('.');
-    return resultado.recordset.map(registro => String(registro.IP ?? '').trim())
-        .filter(ip => {
-            const partesIP = ip.split('.');
-            return partesIP.length === 4 &&
-                partesIP.every(octeto => /^\d{1,3}$/.test(octeto) && Number(octeto) <= 255) &&
-                partesIP.slice(0, 3).map(Number).join('.') === prefijo;
-        })
-        .map(ip => ip.split('.').map(Number).join('.'));
+    const porIP = new Map();
+    resultado.recordset.forEach(registro => {
+        const partesIP = String(registro.IP ?? '').trim().split('.');
+        const valida = partesIP.length === 4 &&
+            partesIP.every(octeto => /^\d{1,3}$/.test(octeto) && Number(octeto) <= 255) &&
+            partesIP.slice(0, 3).map(Number).join('.') === prefijo;
+        if (!valida) return;
+        const ip = partesIP.map(Number).join('.');
+        /* Un equipo del inventario manda sobre el registro general: es el dato
+           con el que se trabaja en la pantalla de equipos. */
+        if (porIP.has(ip) && porIP.get(ip).Origen !== 'Control general') return;
+        porIP.set(ip, {
+            IP: ip,
+            Hostname: String(registro.Hostname ?? '').trim(),
+            ClienteCodigo: String(registro.ClienteCodigo ?? '').trim(),
+            Origen: String(registro.Origen ?? '').trim()
+        });
+    });
+    return [...porIP.values()];
 }
 
 /* =========================================================
@@ -442,5 +518,5 @@ async function eliminar(id) {
 
 module.exports = {
     listar, obtenerPorId, crear, actualizar, eliminar,
-    verificarIPDuplicada, listarIPsAsignadasEnSegmento
+    verificarIPDuplicada, listarIPsAsignadasEnSegmento, listarOcupacionSegmento
 };

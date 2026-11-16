@@ -1,6 +1,5 @@
 /* =========================================================
    ACTIVO FIJO — RENDERER DE INVENTARIO
-   Exportador inteligente + Badges sólidos
    ========================================================= */
 const Swal = window.Swal;
 
@@ -30,9 +29,6 @@ let catalogosEspecificaciones = {
 };
 let modoEdicion    = false;
 let idEditando     = null;
-/* Estatus con el que se abrió el formulario: sirve para saber si el usuario
-   administrador realmente lo cambió y para poder revertir el select si
-   rechaza la advertencia de consecuencias. */
 let estatusOriginal = null;
 let guardando      = false;
 let filtroBusqueda = '';
@@ -61,25 +57,18 @@ const btnLimpiarBusq   = document.getElementById('btn-limpiar-busqueda');
 const btnLimpiarVacio  = document.getElementById('btn-limpiar-busqueda-vacio');
 const modal            = document.getElementById('modal-activo');
 const modalTitulo      = document.getElementById('modal-titulo');
-
-/* Contenedores de las dos vistas que viven en esta misma página:
-   el inventario y los catálogos (ya no son módulos separados). */
 const seccionInventario  = document.getElementById('vista-inventario');
 const seccionCatalogos   = document.getElementById('vista-catalogos');
 const buscadorInventario = document.getElementById('buscador-inventario');
 const accionesInventario = document.getElementById('acciones-inventario');
 const tituloPagina       = document.getElementById('titulo-pagina');
 const subtituloPagina    = document.getElementById('subtitulo-pagina');
-
-/* Textos originales del hero: se restauran al volver al inventario. */
 const HERO_INVENTARIO = {
     titulo: tituloPagina ? tituloPagina.textContent : '',
     subtitulo: subtituloPagina ? subtituloPagina.textContent : ''
 };
 
-/* Paginación de la tabla: el inventario se dibuja por páginas para no
-   volcar cientos de filas al DOM. Si el módulo no se cargó, recortar()
-   devuelve la lista completa y la página sigue funcionando igual. */
+/* Paginación*/
 const pagInventario = window.Paginador
     ? window.Paginador.crear(document.getElementById('paginacion-inventario'), {
         alCambiar: () => renderTabla()
@@ -131,8 +120,6 @@ function puedeAcceder(clave) {
     return !!permisosUsuario[clave];
 }
 
-/* ¿Puede ver el inventario? Quien sólo tiene permiso de catálogos abre
-   esta página directamente en la vista de Catálogos. */
 function permiteInventario() {
     return puedeAcceder('af-act:listado:ver');
 }
@@ -180,11 +167,6 @@ function formatearFecha(val) {
 
 /* =========================================================
    COPIAR AL PORTAPAPELES
-   ---------------------------------------------------------
-   El número de serie, la IP y la MAC se dictan por teléfono y se
-   pegan en otros sistemas: se copian con un clic. Se usa la API
-   moderna y, si la ventana no la expone, se cae al textarea
-   temporal (el clásico execCommand) para que nunca falle.
    ========================================================= */
 async function copiarAlPortapapeles(texto) {
     const valor = String(texto ?? '').trim();
@@ -210,7 +192,7 @@ async function copiarAlPortapapeles(texto) {
     }
 }
 
-/** Copia y avisa en el propio tooltip del elemento (¡Copiado!). */
+/** Aviso de copiado */
 async function copiarConAviso(el, texto) {
     if (!el) return false;
     const original = el.getAttribute('data-tooltip') || 'Copiar';
@@ -224,8 +206,6 @@ async function copiarConAviso(el, texto) {
     return ok;
 }
 
-/* Clic delegado: cualquier elemento con data-copiar-texto copia su valor.
-   Sirve para la tabla y para la ficha sin atar un listener por nodo. */
 function engancharCopiables(contenedor) {
     if (!contenedor) return;
     contenedor.addEventListener('click', (e) => {
@@ -377,8 +357,7 @@ async function cargarActivos() {
 /* =========================================================
    RENDER TABLA
    ========================================================= */
-/* Repintado en vivo: la tabla conserva su desplazamiento y el foco del
-   buscador al filtrar, crear, editar o dar de baja un activo. */
+
 function renderTabla() {
     if (window.Vivo && tablaBody) {
         window.Vivo.enVivo(tablaBody, pintarTabla);
@@ -387,10 +366,7 @@ function renderTabla() {
     pintarTabla();
 }
 
-/* Piezas conectadas (monitor, disco, teclado, ratón): NO son activos,
-   cuelgan del equipo y el inventario las cuenta dentro de él. Se pintan
-   como una insignia con el desglose en el tooltip para que se vea de un
-   golpe que ese CPU vale 1 aunque tenga 5 piezas. */
+
 const NOMBRE_TIPO_PIEZA = {
     MONITOR: ['monitor',    'monitores'],
     DISCO:   ['disco duro', 'discos duros'],
@@ -399,7 +375,7 @@ const NOMBRE_TIPO_PIEZA = {
     OTRO:    ['otro',       'otros']
 };
 
-/** "1 monitor", "3 discos duros": el número manda en el plural. */
+
 function pluralPieza(n, tipo) {
     const par = NOMBRE_TIPO_PIEZA[String(tipo || 'OTRO').toUpperCase()];
     const nombre = par ? par[Number(n) === 1 ? 0 : 1] : String(tipo).toLowerCase();
@@ -419,7 +395,7 @@ function celdaPiezas(a) {
         + `${total} ${total === 1 ? 'pieza' : 'piezas'}</span>`;
 }
 
-/* Misma información en texto plano para el Excel del inventario. */
+
 function textoPiezas(a) {
     const total = Number(a.Piezas) || 0;
     if (!total) return '—';
@@ -438,7 +414,6 @@ function pintarTabla() {
             a.UsuarioAsignado, a.Observaciones,
             a.Procesador, a.MemoriaRAM, a.Almacenamiento, a.SistemaOperativo,
             a.Accesorios, a.Subtipo, a.Clasificacion, a.Tamanio, a.Capacidad, a.Voltaje,
-            /* Buscar "monitor" o "disco" encuentra el equipo al que cuelgan. */
             (Array.isArray(a.PiezasTipos) ? a.PiezasTipos.map(t => NOMBRE_TIPO_PIEZA[t.tipo] || t.tipo).join(' ') : '')
         ].filter(Boolean).join(' ').toLowerCase();
         return texto.includes(filtroBusqueda);
@@ -468,7 +443,7 @@ function pintarTabla() {
 
     const esVistaEliminados = (vistaActual === 'eliminados');
 
-    /* Sólo se vuelcan las filas de la página vigente. */
+   
     const filasVisibles = pagInventario.recortar(listaFiltrada);
     pagInventario.mostrar(true);
 
@@ -476,8 +451,6 @@ function pintarTabla() {
         const tr = document.createElement('tr');
 
         const identificadores = [];
-        /* El número de serie se dicta por teléfono y se pega en otros
-           sistemas: un clic lo copia. El tooltip lo dice al pasar el ratón. */
         if (a.NoSerie)    identificadores.push(`<button type="button" class="principal copiable" data-copiar-texto="${escaparHTML(a.NoSerie)}" data-tooltip="Copiar número de serie">${escaparHTML(a.NoSerie)}</button>`);
         if (a.IMEI1)      identificadores.push(`<span class="secundario">IMEI1: ${escaparHTML(a.IMEI1)}</span>`);
         if (a.IMEI2)      identificadores.push(`<span class="secundario">IMEI2: ${escaparHTML(a.IMEI2)}</span>`);
@@ -543,7 +516,6 @@ function pintarTabla() {
                 celda.appendChild(btnRestaurar);
             }
 
-            /* Purga física: sólo tiene sentido aquí, en Eliminados. */
             if (puedeAcceder('af-act:eliminar')) {
                 const btnDefinitivo = document.createElement('button');
                 btnDefinitivo.type = 'button';
@@ -663,7 +635,7 @@ btnExportar.addEventListener('click', async () => {
             return;
         }
 
-        // Columnas base
+      
         columnas = [
             { header: 'No. Serie', key: 'NoSerie', width: 20 },
             { header: 'Marca', key: 'Marca', width: 15 },
@@ -673,7 +645,7 @@ btnExportar.addEventListener('click', async () => {
             { header: 'Estatus', key: 'Estatus', width: 15 }
         ];
 
-        // Columnas dinámicas según el tipo
+     
         if (tipoSel.RequiereIMEI) {
             columnas.push({ header: 'IMEI 1', key: 'IMEI1', width: 20 });
             columnas.push({ header: 'IMEI 2', key: 'IMEI2', width: 20 });
@@ -698,7 +670,7 @@ btnExportar.addEventListener('click', async () => {
         columnas.push({ header: 'Cartera', key: 'Cartera', width: 15 });
 
     } else {
-        // Exportación general (todas las columnas que existan)
+      
         datosExport = activos;
         columnas = [
             { header: 'No. Serie', key: 'NoSerie', width: 20 },
@@ -715,8 +687,7 @@ btnExportar.addEventListener('click', async () => {
         ];
     }
 
-    /* Piezas conectadas: una sóla columna, siempre al final, con el
-       desglose en texto. El equipo sigue siendo 1 renglón del Excel. */
+   
     columnas.push({ header: 'Piezas conectadas', key: 'PiezasTexto', width: 34 });
     datosExport = datosExport.map(a => ({ ...a, PiezasTexto: textoPiezas(a) }));
 
@@ -779,24 +750,12 @@ btnExportar.addEventListener('click', async () => {
 /* =========================================================
    RESTO DE FUNCIONES (Ver, Editar, Guardar, Eliminar, Restaurar)
    ========================================================= */
-/* =========================================================
-   PIEZAS CONECTADAS DEL EQUIPO (modelo padre / hijo)
-   ---------------------------------------------------------
-   El colector ya NO crea un activo por cada pieza: el CPU, AIO o
-   laptop es el activo (1 fila en ActivoFijoEquipos) y sus monitores,
-   discos, teclados y ratones viven en dbo.ActivoFijoEquiposComponentes
-   colgados de su IdActivoFijoEQ + NoSerie.
 
-   Aquí se leen para MOSTRARLAS dentro del equipo: nunca se listan como
-   activos independientes, por eso el conteo del inventario no cambia.
-   ========================================================= */
 async function respuestaPiezas(id) {
     try {
         const res = await window.api.activoFijo.activos.componentes(id);
         if (res && res.ok !== false && Array.isArray(res.componentes)) {
-            /* El IPC devuelve el detalle completo del activo (red, cuentas,
-               programas y piezas). `fuenteDisponible` resume si la tabla de
-               piezas existe, que es lo que mira seccionPiezas(). */
+         
             return Object.assign({}, res, {
                 fuenteDisponible: !(res.fuentes && res.fuentes.componentes === false)
             });
@@ -824,13 +783,13 @@ const GRUPOS_PIEZA = [
     { tipo: 'RATON',   titulo: 'Ratones / apuntadores' }
 ];
 
-/** Suma de unidades: una fila con Cantidad = 2 son dos piezas físicas. */
+
 function totalPiezas(piezas) {
     return (Array.isArray(piezas) ? piezas : [])
         .reduce((n, p) => n + (Number(p.Cantidad) > 0 ? Number(p.Cantidad) : 1), 0);
 }
 
-/** Unidades por tipo: { MONITOR: 1, DISCO: 2, … } */
+
 function contarPorTipo(piezas) {
     const cuenta = new Map();
     for (const p of Array.isArray(piezas) ? piezas : []) {
@@ -841,7 +800,7 @@ function contarPorTipo(piezas) {
     return cuenta;
 }
 
-/** "1 monitor, 2 discos duros" → resumen corto para los avisos de baja. */
+
 function resumenPiezas(piezas) {
     const cuenta = contarPorTipo(piezas);
     const partes = [];
@@ -858,7 +817,7 @@ function claseConfianzaPieza(valor) {
     return (c === 'alta' || c === 'media') ? c : 'baja';
 }
 
-/** Una fila por pieza: marca, modelo y serie son lo que se revisa al auditar. */
+
 function filaPieza(p) {
     const conf = String(p.Confianza || 'baja').toLowerCase();
     return `<tr>
@@ -871,12 +830,11 @@ function filaPieza(p) {
     </tr>`;
 }
 
-/** Sección "Piezas conectadas": agrupada por tipo, dentro del propio equipo. */
+
 function seccionPiezas(resPiezas, noSerie) {
     const piezas = Array.isArray(resPiezas && resPiezas.componentes) ? resPiezas.componentes : [];
     if (!piezas.length) {
-        // Si la tabla puente no existe todavía se avisa; si simplemente no
-        // hay piezas, no se pinta nada (no se inventa contenido).
+      
         if (resPiezas && resPiezas.fuenteDisponible === false) {
             return `
                 <div class="ver-seccion">
@@ -923,7 +881,7 @@ function seccionPiezas(resPiezas, noSerie) {
         usados.add(g.tipo);
         if (lista.length) bloques.push(bloque(g.titulo, lista));
     }
-    // Cualquier tipo no contemplado (defensivo: nunca se pierde una pieza).
+
     for (const [tipo, lista] of porTipo) {
         if (usados.has(tipo)) continue;
         bloques.push(bloque('Otros componentes (' + tipo + ')', lista));
@@ -951,14 +909,8 @@ function seccionPiezas(resPiezas, noSerie) {
 
 /* =========================================================
    RED (WiFi / Ethernet), CUENTAS Y PROGRAMAS
-   ---------------------------------------------------------
-   Misma fuente que la ficha del módulo Detalle (obtenerFicha vía
-   detalleDeActivo), así que aquí sólo se pinta: no se consulta nada
-   distinto ni se inventan campos. Todo llega ya filtrado Vigente = 1.
    ========================================================= */
 
-/* Regla de WiFi idéntica a la del Control general IP
-   (inventario-ip.js: TipoMedio/NombreAdaptador/DescripcionAdaptador). */
 const PATRON_WIFI = /wi[\s_-]*fi|wireless|wlan/i;
 
 function esAdaptadorWifi(fila) {
@@ -993,11 +945,7 @@ function tablaVer(cabeceras, filasHtml) {
         </div>`;
 }
 
-/* El colector reporta la máscara como prefijo CIDR (/24), pero en el resto
-   del sistema —y en el formulario de equipos— se captura en decimal
-   (255.255.255.0). Aquí se traduce el prefijo a decimal para que la ficha se
-   lea igual que la pantalla de captura; el prefijo se conserva como anotación
-   para no perder información. */
+
 function prefijoAMascara(prefijo) {
     const n = Number(prefijo);
     if (!Number.isInteger(n) || n < 0 || n > 32) return '';
@@ -1009,7 +957,6 @@ function prefijoAMascara(prefijo) {
     return octetos.join('.');
 }
 
-/** Máscara legible en decimal: "255.255.255.0 (/24)". */
 function mascaraRed(r) {
     const fila = r || {};
     const prefijo = (fila.PrefijoRed === null || fila.PrefijoRed === undefined)
@@ -1022,7 +969,6 @@ function mascaraRed(r) {
     return prefijo ? `/${prefijo}` : '';
 }
 
-/** DNS tal como se dicta: "8.8.8.8 · 1.1.1.1". */
 function dnsRed(r) {
     return [r.DNS1, r.DNS2].filter(Boolean).join(' · ');
 }
@@ -1049,15 +995,13 @@ const CABECERAS_RED = [
     { titulo: 'DHCP' }, { titulo: 'Dominio' }, { titulo: 'Principal' }
 ];
 
-/** Adaptador "de cabecera": el principal o, si el colector no lo marcó, el
-    primero (la consulta ya ordena por EsPrincipal y UltimaDeteccion). */
+
 function adaptadorPrincipal(red) {
     const lista = Array.isArray(red) ? red : [];
     return lista.find(r => r.EsPrincipal) || lista[0] || null;
 }
 
-/** Renglones de conexión: hostname, IP, MAC y DNS son lo que se dicta por
-    teléfono, así que van en la ficha y no escondidos en una tabla ancha. */
+
 function seccionConexion(red) {
     const p = adaptadorPrincipal(red);
     const items = [
@@ -1074,8 +1018,7 @@ function seccionConexion(red) {
         ['Última detección', p ? formatearFecha(p.UltimaDeteccion) : '']
     ];
 
-    /* Lo que se copia y pega en otros sistemas: se marca con el cursor de
-       copiar y el aviso en el tooltip (ver CSS .copiable). */
+ 
     const COPIABLES = new Set(['Hostname', 'IP', 'MAC', 'Máscara', 'Puerta de enlace', 'DNS', 'Dominio']);
 
     const filas = items.map(([etiqueta, valor]) => {
@@ -1104,7 +1047,6 @@ function seccionConexion(red) {
         </div>`;
 }
 
-/** Bloque "Red": adaptadores WiFi y Ethernet por separado, en su propia tabla. */
 function seccionRed(res) {
     const fuentes = (res && res.fuentes) || {};
     const red = Array.isArray(res && res.red) ? res.red : [];
@@ -1165,7 +1107,6 @@ function filaCuenta(c) {
     </tr>`;
 }
 
-/** Bloque "Cuentas": quién entra a este equipo. */
 function seccionCuentas(res) {
     const fuentes = (res && res.fuentes) || {};
     const cuentas = Array.isArray(res && res.cuentas) ? res.cuentas : [];
@@ -1201,8 +1142,7 @@ function seccionCuentas(res) {
 
 function filaPrograma(p) {
     const alcance = String(p.Alcance || '').toUpperCase();
-    /* Texto plano indexable para el filtro: se guarda en la fila para no
-       recorrer las celdas en cada tecla. */
+  
     const buscar = [p.Programa, p.Version, p.Fabricante, p.Cuenta, alcance]
         .filter(Boolean).join(' ').toLowerCase();
     return `<tr data-buscar="${escaparHTML(buscar)}">
@@ -1217,8 +1157,7 @@ function filaPrograma(p) {
     </tr>`;
 }
 
-/** Bloque "Programas": el software instalado, con filtro rápido y scroll
-    para no estirar el modal (un equipo puede traer 200+ programas). */
+
 function seccionProgramas(res) {
     const fuentes = (res && res.fuentes) || {};
     const programas = Array.isArray(res && res.programas) ? res.programas : [];
@@ -1280,11 +1219,7 @@ function seccionProgramas(res) {
 }
 
 /* =========================================================
-   PÁGINA "ENVÍOS" (lotes del colector)
-   ---------------------------------------------------------
-   Un renglón por LoteEnvio: cuántos adaptadores, cuentas, programas y
-   piezas llegaron en esa recolección y entre qué fechas. Sirve para
-   detectar un equipo que dejó de reportar sin abrir las tablas.
+   PÁGINA "ENVÍOS" 
    ========================================================= */
 function seccionEnvios(res) {
     const lotes = Array.isArray(res && res.lotes) ? res.lotes : [];
@@ -1325,15 +1260,8 @@ function seccionEnvios(res) {
 
 /* =========================================================
    FICHA TÉCNICA PAGINADA (modal "Ver")
-   ---------------------------------------------------------
-   Todo lo que antes era un scroll larguísimo se reparte en páginas:
-   Resumen · Red · Cuentas · Programas · Piezas · Envíos. La barra de
-   páginas se queda fija y sólo cambia el contenido, así el modal mide
-   siempre lo mismo y la red (hostname, IP, MAC, DNS) o el software
-   quedan a un clic en vez de a media pantalla de distancia.
    ========================================================= */
 
-/** Contenedor de la ficha: barra de páginas + un panel por página. */
 function htmlFichaTecnica(paginas) {
     const tabs = paginas.map((p, i) => `
         <button type="button"
@@ -1358,7 +1286,6 @@ function htmlFichaTecnica(paginas) {
         </div>`;
 }
 
-/** Cambio de página dentro de la ficha: no vuelve a consultar nada. */
 function engancharPaginasFicha(popup) {
     if (!popup) return;
     const tabs = Array.from(popup.querySelectorAll('[data-ver-pagina]'));
@@ -1381,12 +1308,6 @@ function engancharPaginasFicha(popup) {
 
 /* =========================================================
    FILTRO RÁPIDO DE LA PÁGINA "PROGRAMAS"
-   ---------------------------------------------------------
-   Un equipo puede traer 200+ programas y encontrar uno a ojo dentro
-   de la tabla es imposible: se filtra en vivo por programa, versión,
-   fabricante o cuenta. Cada fila ya trae su texto plano en
-   data-buscar (lo escribe filaPrograma), así el filtro no recorre
-   celdas en cada tecla. El contador dice cuántos quedan a la vista.
    ========================================================= */
 function engancharProgramasFicha(popup) {
     if (!popup) return;
@@ -1416,7 +1337,6 @@ function engancharProgramasFicha(popup) {
     };
 
     input.addEventListener('input', aplicar);
-    /* Escape limpia el filtro sin cerrar el modal (SweetAlert lo cerraría). */
     input.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
         e.stopPropagation();
@@ -1432,7 +1352,6 @@ function engancharProgramasFicha(popup) {
     aplicar();
 }
 
-/** Engancha todo lo interactivo de la ficha en un solo punto. */
 function engancharFicha(popup) {
     engancharPaginasFicha(popup);
     engancharProgramasFicha(popup);
@@ -1443,10 +1362,7 @@ async function verActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     if (!a) { toastError('Activo no encontrado'); return; }
 
-    /* La ficha es la consulta más pesada del inventario (red, cuentas,
-       programas, piezas y envíos, cada una en su tabla). Se muestra el
-       cargador mientras llega para que el clic en el ojo no parezca muerto;
-       el Swal.fire de abajo reemplaza este mismo cuadro. */
+   
     Swal.fire({
         title: 'Leyendo la ficha del equipo…',
         allowOutsideClick: false,
@@ -1455,15 +1371,8 @@ async function verActivo(id) {
         didOpen: () => Swal.showLoading()
     });
 
-    // Detalle completo del equipo: piezas conectadas + red (WiFi/Ethernet),
-    // cuentas y programas. Se pide ANTES de abrir el modal para que todo salga
-    // en una sola tarjeta coherente (la consulta es la misma de la ficha).
     const resPiezas = await respuestaPiezas(id);
-
-    /* Cabecera del activo tal como está en dbo.ActivoFijoEquipos: aquí viene
-       el BuildSO, que no viaja en el listado del inventario. */
     const equipoFicha = (resPiezas && resPiezas.equipo) || {};
-
     const tipo = tipos.find(t => t.IdTipo === a.IdTipo) || {};
 
     const row = (etiqueta, valor) => {
@@ -1527,9 +1436,7 @@ async function verActivo(id) {
         if (a.MemoriaRAM)       itemsSpec.push(row('Memoria RAM', a.MemoriaRAM));
         if (a.Almacenamiento)   itemsSpec.push(row('Almacenamiento', a.Almacenamiento));
     }
-    /* Sistema operativo y su build salen siempre: no dependen del tipo de
-       activo y son lo primero que se revisa al dar soporte. El build llega
-       desde dbo.ActivoFijoEquipos.BuildSO (lo escribe el colector). */
+   
     if (a.SistemaOperativo)                  itemsSpec.push(row('Sistema Operativo', a.SistemaOperativo));
     if (equipoFicha && equipoFicha.BuildSO)  itemsSpec.push(row('Build del SO', equipoFicha.BuildSO));
     const seccionSpec = itemsSpec.length ? `
@@ -1560,28 +1467,17 @@ async function verActivo(id) {
         </div>
     `;
 
-    // Red, cuentas y programas: lo que el colector dejó de ESTE equipo.
-    // Cada bloque se pinta siempre (con su aviso si la fuente no existe),
-    // para que se note la diferencia entre "no hay datos" y "no se leyó".
+   
     const seccionRedEquipo       = seccionRed(resPiezas);
     const seccionCuentasEquipo   = seccionCuentas(resPiezas);
     const seccionProgramasEquipo = seccionProgramas(resPiezas);
-
-    // Las piezas van al final: primero se lee el equipo y luego lo que cuelga
-    // de él. El bloque se oculta sólo si el equipo no tiene ninguna.
     const seccionPiezasEquipo = seccionPiezas(resPiezas, a.NoSerie);
-
-    /* Contadores de cada página: el número en la pestaña dice de un vistazo
-       si vale la pena abrirla, sin tener que entrar y bajar. */
     const nRed       = Array.isArray(resPiezas && resPiezas.red) ? resPiezas.red.length : 0;
     const nCuentas   = Array.isArray(resPiezas && resPiezas.cuentas) ? resPiezas.cuentas.length : 0;
     const nProgramas = Array.isArray(resPiezas && resPiezas.programas) ? resPiezas.programas.length : 0;
     const nPiezas    = totalPiezas(resPiezas && resPiezas.componentes);
     const nLotes     = Array.isArray(resPiezas && resPiezas.lotes) ? resPiezas.lotes.length : 0;
 
-    /* Una página por bloque: el "Ver" deja de ser una tira larga y pasa a
-       ser una ficha técnica navegable. "Resumen" es la única siempre
-       presente; las demás se crean cuando tienen algo que enseñar. */
     const paginas = [
         {
             id: 'resumen',
@@ -1600,9 +1496,6 @@ async function verActivo(id) {
         paginas.push({ id: 'envios', titulo: 'Envíos', cuenta: nLotes, html: seccionEnvios(resPiezas) });
     }
 
-    /* Con tablas dentro el modal necesita más ancho; el alto lo controla el
-       CSS (scroll corto dentro de cada página) para que nunca se salga de
-       la pantalla y nunca haya que bajar media ficha. */
     const tieneTablas = paginas.length > 1;
 
     Swal.fire({
@@ -1618,18 +1511,13 @@ async function verActivo(id) {
 }
 
 /* =========================================================
-   CAMBIO DE VISTA · INVENTARIO ⇄ CATÁLOGOS
-   Las dos vistas conviven en esta página; aquí sólo se muestra
-   una y se refresca con datos frescos al entrar.
+   CAMBIO DE VISTA · INVENTARIO CATÁLOGOS
    ========================================================= */
 function aplicarEstadoVista() {
     const enCatalogos = (vistaActual === 'catalogos');
 
     if (seccionInventario) seccionInventario.classList.toggle('oculto', enCatalogos);
     if (seccionCatalogos)  seccionCatalogos.classList.toggle('oculto', !enCatalogos);
-
-    /* Buscador y acciones del header son del inventario: en catálogos
-       se ocultan porque esa vista trae su propio buscador y su botón. */
     if (buscadorInventario) buscadorInventario.classList.toggle('oculto', enCatalogos);
     if (accionesInventario) accionesInventario.classList.toggle('oculto', enCatalogos);
 
@@ -1653,7 +1541,6 @@ async function cambiarVista(vista, opciones = {}) {
     vistaActual = nueva;
     aplicarEstadoVista();
 
-    /* El hash permite abrir la página directamente en catálogos. */
     try {
         history.replaceState(null, '', nueva === 'catalogos' ? '#catalogos' : '#inventario');
     } catch (_) { /* file:// sin historial disponible */ }
@@ -1670,8 +1557,7 @@ async function cambiarVista(vista, opciones = {}) {
     btnLimpiarBusq.classList.add('oculto');
     pagInventario.reiniciar();
 
-    /* Si se editó algún catálogo, los selects del formulario y los nombres
-       ya pintados en la tabla quedan viejos: se refresca todo al volver. */
+  
     if (saliendoDeCatalogos && CatalogosUI.huboCambios()) {
         CatalogosUI.limpiarCambios();
         if (opciones.permiteInventario) await cargarCatalogos();
@@ -1688,9 +1574,7 @@ tabsVista.addEventListener('click', (e) => {
     cambiarVista(btn.dataset.vista, { permiteInventario: permiteInventario() });
 });
 
-/* Una sola vez: el clic sobre el No. Serie (y cualquier dato marcado
-   como copiable) copia al portapapeles. La tabla se repinta entera en
-   cada filtro, así que el listener va en el tbody, no en las filas. */
+
 engancharCopiables(tablaBody);
 
 inputBusqueda.addEventListener('input', () => {
@@ -1835,35 +1719,25 @@ function actualizarUsuarioAsignado() {
     document.querySelector('.campo-usuario-asignado')?.classList.toggle('oculto', !esExterno);
 }
 
-/* Un activo está "en uso" mientras tenga una responsiva abierta: su estatus
-   y su usuario de inventario los mueve la responsiva (asignar / devolver),
-   no el formulario. */
+
 function activoEnUso(estatus) {
     const nombre = String(estatus ?? '').trim().toUpperCase();
     return nombre === 'ASIGNADO' || nombre === 'PENDIENTE';
 }
 
-/* Candado del campo "Usuario asignado":
-   - En uso: se bloquea, porque lo escribe la responsiva.
-   - Activo libre: se puede vaciar, que es la forma de devolverlo al
-     inventario sin tener que borrar el activo. */
+
 function aplicarEstadoUsuarioAsignado(enUso) {
     if (inpUsuarioAsig) inpUsuarioAsig.disabled = !!enUso;
     document.getElementById('req-usuario-asignado')?.classList.toggle('oculto', !!enUso);
     document.getElementById('nota-usuario-asignado')?.classList.toggle('oculto', !enUso);
 }
 
-/* El estatus lo escribe el sistema (asignar / devolver / cancelar una
-   responsiva, dar de baja): tocarlo a mano descuadra inventario y
-   responsivas. Por eso hace falta el permiso af-act:estatus, que por
-   omisión sólo tiene el rol ADMIN. */
+
 function puedeCambiarEstatus() {
     return puedeAcceder('af-act:estatus');
 }
 
-/* Candado del campo "Estatus":
-   - En uso: lo mueve la responsiva abierta.
-   - Sin permiso: sólo un administrador puede forzarlo. */
+
 function aplicarEstadoEstatus(enUso) {
     const porPermiso = !puedeCambiarEstatus();
     if (selEstatus) selEstatus.disabled = !!enUso || porPermiso;
@@ -1876,7 +1750,6 @@ function aplicarEstadoEstatus(enUso) {
         : 'Sólo un administrador puede cambiarlo. El estatus manda el inventario disponible y el flujo de responsivas.';
 }
 
-/* Consecuencias de cada estatus cuando se fuerza a mano. */
 const CONSECUENCIAS_ESTATUS = {
     ASIGNADO: 'El activo quedará <strong>bloqueado</strong> y saldrá de la lista para asignar, aunque ninguna responsiva lo respalde: el sistema creerá que alguien lo tiene.',
     PENDIENTE: 'El activo quedará <strong>bloqueado</strong> igual que con una responsiva abierta y saldrá de la lista para asignar hasta que registres una responsiva o lo liberes.',
@@ -1891,8 +1764,7 @@ function nombreEstatus(id) {
     return encontrado?.Nombre ?? '—';
 }
 
-/* Advertencia explícita antes de forzar el estatus. Devuelve true sólo si el
-   administrador confirma; cerrar la ventana equivale a cancelar el cambio. */
+
 async function alertaConsecuenciasEstatus(antesId, despuesId) {
     const antes   = nombreEstatus(antesId);
     const despues = nombreEstatus(despuesId);
@@ -1927,8 +1799,7 @@ async function alertaConsecuenciasEstatus(antesId, despuesId) {
     return resultado.isConfirmed === true;
 }
 
-/* Se evalúa en el cambio del select (no al guardar) para que el
-   administrador vea de inmediato qué implica y pueda arrepentirse. */
+
 selEstatus.addEventListener('change', async () => {
     if (!modoEdicion) return;
     const nuevo = selEstatus.value ? parseInt(selEstatus.value, 10) : null;
@@ -2031,10 +1902,7 @@ function abrirEdicion(id) {
     inpObservaciones.value  = a.Observaciones ?? '';
 
     ocultarMensaje();
-    // Con una responsiva abierta (asignada o pendiente) ni el estatus ni el
-    // usuario de inventario se cambian a mano: los mueve la propia responsiva
-    // (asignar / devolver). Sin responsiva abierta el activo es libre y sí se
-    // puede vaciar el usuario, sin tener que borrar el activo.
+   
     const enUso = activoEnUso(a.Estatus);
     estatusOriginal = a.IdEstatus != null ? a.IdEstatus : null;
     aplicarEstadoEstatus(enUso);
@@ -2089,10 +1957,7 @@ formulario.addEventListener('submit', async (e) => {
     if (tipo.RequiereAccesorios && !inpAccesorios.value) {
         mostrarMensaje('Selecciona los accesorios del catálogo.', 'error'); return;
     }
-    /* El usuario asignado es obligatorio al dar de alta y cuando el activo
-       está en uso (responsiva abierta, que es quien lo escribe). En un activo
-       libre se puede dejar vacío: es la forma de quitárselo a quien lo tenía
-       sin tener que eliminar el activo. */
+    
     const campoUsuarioVisible = !document.querySelector('.campo-usuario-asignado')?.classList.contains('oculto');
     const activoEditando = (modoEdicion && idEditando !== null)
         ? activos.find(x => x.IdActivoFijoEQ === idEditando)
@@ -2166,9 +2031,6 @@ formulario.addEventListener('submit', async (e) => {
 async function eliminarActivo(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     const nombre = a ? (a.NoSerie || a.IMEI1 || a.NoTelefono || `#${id}`) : `#${id}`;
-
-    // Una baja con piezas conectadas deja el equipo sin vigencia y las piezas
-    // apuntando a un activo dado de baja: se avisa antes de confirmar.
     const resPiezas = await respuestaPiezas(id);
     const piezas = Array.isArray(resPiezas.componentes) ? resPiezas.componentes : [];
     const cuantas = totalPiezas(piezas);
@@ -2299,13 +2161,9 @@ async function restaurarActivo(id, noSerie) {
     }
 }
 
-/* Purga física del activo. Sólo aparece en la pestaña Eliminados y el
-   backend la vuelve a validar (estatus BAJA + sin responsivas). */
+
 async function eliminarDefinitivoActivo(id, noSerie) {
     const nombre = noSerie || ('#' + id);
-
-    // Igual que en la baja: si el equipo tiene piezas ligadas hay que decirlo
-    // explícitamente, porque la purga se las lleva y eso no tiene vuelta atrás.
     const resPiezas = await respuestaPiezas(id);
     const piezas = Array.isArray(resPiezas.componentes) ? resPiezas.componentes : [];
     const cuantas = totalPiezas(piezas);
@@ -2437,11 +2295,6 @@ document.getElementById('btn-volver').addEventListener('click', () => {
 
 /* =========================================================
    MÓDULO DE CATÁLOGOS (misma página, sin módulos aparte)
-   ---------------------------------------------------------
-   Todo vive dentro de esta IIFE con estado y nombres propios,
-   así no choca con el inventario (tablaBody, formulario, modal,
-   vistaActual, abrirEdicion...). Sólo expone tres métodos:
-   inicializar(), mostrar() y ocultar().
    ========================================================= */
 const CatalogosUI = (() => {
     'use strict';
@@ -2761,15 +2614,13 @@ const CatalogosUI = (() => {
        ESTADO PROPIO (prefijado para no chocar con el inventario)
        ========================================================= */
     let catalogoActual = 'marcas';
-    let vistaCatalogo  = 'activos';   // 'activos' | 'eliminados'
+    let vistaCatalogo  = 'activos';   
     let registros      = [];
     let editando       = false;
     let idEditando     = null;
     let guardando      = false;
     let busqueda       = '';
     let ayudaAbierta   = true;
-    /* ¿Se creó/editó/activó algún registro? Sirve para refrescar los
-       selects del inventario al volver a esa vista. */
     let huboCambios    = false;
     let cargado        = false;
 
@@ -2809,9 +2660,7 @@ const CatalogosUI = (() => {
     const elPanelAyudaBody   = $('cat-panel-ayuda-body');
     const elBtnToggleAyuda   = $('cat-btn-toggle-ayuda');
 
-    /* Cada catálogo puede traer cientos de filas: la tabla se dibuja por
-       páginas. Si el módulo Paginador no está cargado, recortar() devuelve
-       la lista completa y todo sigue funcionando como antes. */
+ 
     const pagCatalogo = window.Paginador
         ? window.Paginador.crear(elPaginacionCat, { alCambiar: () => renderTabla() })
         : {
@@ -2824,7 +2673,6 @@ const CatalogosUI = (() => {
     /* =========================================================
        UTILIDADES
        ========================================================= */
-    /* escaparHTML() se reutiliza del módulo de inventario (misma página). */
 
     function mensajeCat(texto, tipo) {
         if (!elMensaje) return;
@@ -2882,8 +2730,6 @@ const CatalogosUI = (() => {
         });
     }
 
-    /* Aviso de error: se cierra con la X roja de la esquina. Sin botonera,
-       para que el texto quede centrado y nada se descuadre. */
     function alertaError(titulo, texto = '') {
         return Swal.fire({
             icon: 'error',
@@ -2977,9 +2823,7 @@ const CatalogosUI = (() => {
        ========================================================= */
     async function cargarCatalogo() {
         try {
-            /* La vista normal trae activos e inactivos juntos: así el botón
-               Activar/Desactivar de cada fila funciona con un solo clic.
-               La pestaña "Eliminados" sigue mostrando sólo los inactivos. */
+         
             const filtros = vistaCatalogo === 'eliminados'
                 ? { soloEliminados: true }
                 : { incluirInactivos: true };
@@ -2991,7 +2835,7 @@ const CatalogosUI = (() => {
         }
     }
 
-    /* Un registro está activo salvo que la columna Activo venga en 0/false. */
+
     function estaActivo(registro) {
         return registro.Activo !== 0 && registro.Activo !== false;
     }
@@ -3029,8 +2873,7 @@ const CatalogosUI = (() => {
             <line x1="12" y1="2" x2="12" y2="12"></line>
         </svg>`;
 
-    /* Purga física: mismo icono que en el inventario, para que las dos
-       pestañas "Eliminados" se lean igual. */
+
     const ICONO_PAPELERA = `
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
             <polyline points="3 6 5 6 21 6"></polyline>
@@ -3039,8 +2882,7 @@ const CatalogosUI = (() => {
             <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
         </svg>`;
 
-    /* El permiso se declara en el propio botón: PermisosUI lo respeta y no
-       lo deduce como si fuera una acción del inventario (af-act:*). */
+  
     function crearBotonAccion(clase, tooltip, svg, alHacerClic, permiso) {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -3052,9 +2894,7 @@ const CatalogosUI = (() => {
         return btn;
     }
 
-    /* Un solo lugar para las acciones: en "Eliminados" se restaura y en
-       la vista normal se edita o se activa/desactiva sin cambiar de
-       pestaña (la fila queda atenuada y marcada como Inactivo). */
+
     function crearAccionesFila(celda, cfg, registro) {
         if (!celda) return;
         const id = registro[cfg.pk];
@@ -3083,8 +2923,6 @@ const CatalogosUI = (() => {
         ));
     }
 
-    /* Atenúa la fila inactiva y le pone su distintivo.
-       En la pestaña "Eliminados" no hace falta: todas las filas lo son. */
     function marcarFilaInactiva(tr, registro) {
         if (vistaCatalogo === 'eliminados') return;
         if (estaActivo(registro)) return;
@@ -3140,7 +2978,6 @@ const CatalogosUI = (() => {
         if (elSinResultados) elSinResultados.classList.add('oculto');
         if (elCardTabla) elCardTabla.style.display = '';
 
-        /* Sólo se vuelcan las filas de la página vigente del catálogo. */
         const filasVisibles = pagCatalogo.recortar(listaFiltrada);
         pagCatalogo.mostrar(true);
 
@@ -3322,8 +3159,6 @@ const CatalogosUI = (() => {
     /* =========================================================
        NUEVO / EDITAR
        ========================================================= */
-    /* El botón Guardar sirve para crear y para editar: se declara el
-       permiso que corresponde a cada modo y PermisosUI lo re-evalúa. */
     function aplicarPermisoGuardar(clave) {
         if (!elBtnGuardar) return;
         elBtnGuardar.setAttribute('data-permiso', clave);
@@ -3453,10 +3288,6 @@ const CatalogosUI = (() => {
 
     /* =========================================================
        ACTIVAR / DESACTIVAR
-       Una sola acción para los dos sentidos: deja de existir el
-       rodeo "dar de baja → pestaña Eliminados → restaurar".
-       Es reversible y de un solo clic, así que no pide confirmación:
-       el aviso posterior informa qué se hizo.
        ========================================================= */
     async function cambiarEstadoRegistro(id, activar) {
         const cfg = CATALOGOS_FRONT[catalogoActual];
@@ -3491,8 +3322,6 @@ const CatalogosUI = (() => {
 
     /* =========================================================
        PURGA FÍSICA DE UN REGISTRO DE CATÁLOGO
-       El backend vuelve a validar (Activo = 0 + sin referencias) y
-       devuelve el motivo exacto si algo lo está usando.
        ========================================================= */
     async function eliminarDefinitivoRegistro(id, nombre) {
         if (!CATALOGOS_FRONT[catalogoActual]) return;
@@ -3681,9 +3510,6 @@ const CatalogosUI = (() => {
 
     const puedeVerInventario = permiteInventario();
     const puedeVerCatalogos  = permiteCatalogos();
-
-    /* El hash permite abrir la página directamente en Catálogos
-       (es lo que hace el menú lateral con el módulo de catálogos). */
     const hashPideCatalogos = (location.hash.replace('#', '').toLowerCase() === 'catalogos');
     const vistaInicial = (hashPideCatalogos && puedeVerCatalogos) || !puedeVerInventario
         ? 'catalogos'

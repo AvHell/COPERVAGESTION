@@ -1282,6 +1282,31 @@ body {
     background: rgba(178, 60, 50, 0.08);
     color: var(--gray-700);
 }
+/* Hosts del rango que no se ofrecen, con el dueño de cada uno. */
+.ips-ocupadas {
+    margin-top: 12px;
+    text-align: left;
+    font-size: 0.82rem;
+}
+.ips-ocupadas summary {
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--gray-50);
+    color: var(--gray-600);
+    font-weight: 600;
+}
+.ips-ocupadas summary:hover { color: var(--gray-800); }
+.ips-ocupadas[open] summary {
+    margin-bottom: 8px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.ips-ocupadas .ips-disponibles-lista { max-height: min(26vh, 220px); }
+.ips-ocupadas .tabla-ips-disponibles td:last-child {
+    text-align: left;
+    color: var(--gray-600);
+}
 
 /* =========================================================
    RESPONSIVE
@@ -1538,6 +1563,23 @@ body {
     color: var(--gray-700);
 }
 .rangos-resumen-sep { color: var(--gray-400); }
+
+/* Importación pasiva de equipos */
+#ipas-preview { margin-top: 16px; }
+#ipas-preview .rangos-resumen {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+}
+#ipas-preview .rangos-resumen .grupo-count { margin-left: 0; }
+#ipas-preview .rangos-tabla { margin-top: 12px; }
+.ipas-destino {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--tierra-oliva);
+}
+.ipas-destino-aviso { color: var(--rojo-text); }
 .contador-alerta,
 .contador-ok {
     display: inline-flex;

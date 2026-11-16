@@ -76,6 +76,15 @@
                     </svg>
                     <span>Exportar Excel</span>
                 </button>
+                <button id="btn-importacion-pasiva" class="btn-export" type="button" data-permiso="equipos:crear"
+                        title="Carga masiva: pega hostnames (AGT-TALA29) e infiere rol, segmento e IP">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+                        <path d="M7 9l5-5 5 5"/>
+                        <path d="M12 4v12"/>
+                    </svg>
+                    <span>Importación pasiva</span>
+                </button>
                 <button id="btn-nuevo" class="btn-primary" data-permiso="equipos:crear">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M12 5v14M5 12h14"/>
@@ -143,6 +152,7 @@
                     <div class="field">
                         <label for="rol">Rol <span class="req">*</span></label>
                         <select id="rol"></select>
+                        <span id="hint-rol-ip" class="ayuda-rango oculto"></span>
                     </div>
                 </div>
 
@@ -192,7 +202,7 @@
                                     </svg>
                                 </button>
                             </div>
-                            <span class="ayuda-checkbox">Consulta hosts libres del segmento, desde .1 hasta .254.</span>
+                            <span class="ayuda-checkbox">Consulta las IPs libres dentro del rango autorizado del cliente y perfil (descuenta puerta de enlace y DNS).</span>
                             <span id="hint-rango-ip" class="ayuda-rango oculto"></span>
                         </div>
                         <div class="field">
@@ -427,6 +437,106 @@
                 <button id="rango-cancelar" class="btn-ghost">Cancelar</button>
                 <button id="rango-guardar" class="btn-primary">
                     <span class="btn-text">Guardar</span>
+                    <span class="btn-spinner oculto"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL IMPORTACIÓN PASIVA -->
+    <div id="modal-importacion-pasiva" class="modal-overlay" style="display:none;">
+        <div class="modal-base modal-xl">
+            <div class="modal-header">
+                <div class="modal-header-content">
+                    <div class="modal-header-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+                            <path d="M7 9l5-5 5 5"/>
+                            <path d="M12 4v12"/>
+                        </svg>
+                    </div>
+                    <h3>Importación pasiva de equipos</h3>
+                </div>
+                <button id="ipas-cerrar" class="btn-cerrar-modal" aria-label="Cerrar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <p class="rangos-intro">
+                    Pega la lista de hostnames. El sistema interpreta el patrón
+                    <code>ROL-CLIENTE + número de host</code> (por ejemplo <code>AGT-TALA29</code>)
+                    y calcula la IP con el segmento y el rango autorizado del cliente.
+                </p>
+
+                <div class="section-title">
+                    <span>Configuración que se aplicará</span>
+                    <span class="section-hint">Se usa para todos los equipos de la lista</span>
+                </div>
+
+                <div class="field-row-3">
+                    <div class="field">
+                        <label for="ipas-cliente">Cliente <span class="req">*</span></label>
+                        <select id="ipas-cliente"></select>
+                    </div>
+                    <div class="field">
+                        <label for="ipas-piso">Piso</label>
+                        <select id="ipas-piso" disabled></select>
+                        <small class="ayuda-rango">Si lo dejas vacío se usa el piso del rango IP.</small>
+                    </div>
+                    <div class="field">
+                        <label for="ipas-dominio">Usuario admin <span class="req">*</span></label>
+                        <select id="ipas-dominio" disabled></select>
+                    </div>
+                </div>
+
+                <div class="field-row-2">
+                    <div class="field">
+                        <label for="ipas-password">Password admin <span class="req">*</span></label>
+                        <input type="text" id="ipas-password" placeholder="P@ssw0rd">
+                    </div>
+                    <div class="field">
+                        <label for="ipas-mascara">Máscara <span class="req">*</span></label>
+                        <select id="ipas-mascara" disabled></select>
+                    </div>
+                </div>
+
+                <div class="field-row-3">
+                    <div class="field">
+                        <label for="ipas-puerta">Puerta de enlace <span class="req">*</span></label>
+                        <select id="ipas-puerta" disabled></select>
+                    </div>
+                    <div class="field">
+                        <label for="ipas-dns1">DNS 1 <span class="req">*</span></label>
+                        <select id="ipas-dns1" disabled></select>
+                    </div>
+                    <div class="field">
+                        <label for="ipas-dns2">DNS 2</label>
+                        <select id="ipas-dns2" disabled></select>
+                    </div>
+                </div>
+
+                <div class="section-title">
+                    <span>Hostnames a importar</span>
+                    <span class="section-hint">Uno por línea, o separados por espacios, comas o tabuladores</span>
+                </div>
+
+                <div class="field">
+                    <label for="ipas-texto">Lista de hostnames</label>
+                    <textarea id="ipas-texto" rows="5" spellcheck="false" placeholder="AGT-TALA29&#10;AGT-TALA30&#10;SPR-TALA153"></textarea>
+                </div>
+
+                <div id="ipas-preview" class="rangos-lista"></div>
+                <div id="ipas-mensaje" class="alert oculto"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button id="ipas-cancelar" class="btn-ghost" type="button">Cancelar</button>
+                <button id="ipas-importar" class="btn-primary" type="button" disabled>
+                    <span class="btn-text">Importar equipos</span>
                     <span class="btn-spinner oculto"></span>
                 </button>
             </div>

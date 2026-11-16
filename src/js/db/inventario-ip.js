@@ -769,13 +769,29 @@ async function guardar(datos, id = null) {
    filas no castigue la base.
    ========================================================= */
 
-/** Todas las IP que ya están tomadas (control general + equipos estáticos). */
+/**
+ * Todas las IP que ya están EN USO (control general + equipos estáticos).
+ * Se aplica el mismo criterio que listarOcupacionSegmento() en db/equipos.js:
+ * - un registro del control general dado de baja (Estado "Inactivo") ya no usa
+ *   su dirección, así que no debe marcar la fila del archivo como duplicada;
+ * - un alta vacía (sólo IP + Estado, sin hostname, MAC ni descripción) no
+ *   identifica ningún aparato y tampoco ocupa la IP.
+ */
 async function listarIPsOcupadas() {
     const pool = await getPool();
     const result = await pool.request().query(`
-        SELECT LTRIM(RTRIM(IP)) AS IP
-        FROM dbo.InventarioGeneralIP
-        WHERE NULLIF(LTRIM(RTRIM(IP)), '') IS NOT NULL
+        SELECT LTRIM(RTRIM(I.IP)) AS IP
+        FROM dbo.InventarioGeneralIP I
+        LEFT JOIN dbo.CatalogosInventarioIP Est
+               ON Est.IdCatalogoIP = I.IdEstado
+              AND Est.TipoCatalogo = 'Estado'
+        WHERE NULLIF(LTRIM(RTRIM(I.IP)), '') IS NOT NULL
+          AND UPPER(LTRIM(RTRIM(ISNULL(Est.Nombre, N'')))) = N'ACTIVO'
+          AND (
+                NULLIF(LTRIM(RTRIM(I.Hostname)), N'') IS NOT NULL
+             OR NULLIF(LTRIM(RTRIM(I.MAC)), '') IS NOT NULL
+             OR NULLIF(LTRIM(RTRIM(I.Descripcion)), N'') IS NOT NULL
+          )
         UNION
         SELECT LTRIM(RTRIM(E.IP)) AS IP
         FROM dbo.Equipos E

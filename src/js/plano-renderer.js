@@ -1497,6 +1497,10 @@ function edConfigurarInputIP(input) {
 async function abrirModalEditarEquipo(equipo, panel) {
     equipoEditando = { equipo, panel };
 
+    /* Rangos vigentes en cada apertura: de ellos dependen el rol inferido
+       por IP y el aviso de pertenencia al rango. */
+    edInvalidarCacheRangos();
+
     // FIX: usar equipo.IdPiso o, si no viene, el piso del panel activo
     const idPisoReal = equipo.IdPiso ?? panel.idPiso;
 
@@ -1597,6 +1601,10 @@ async function abrirModalEditarEquipo(equipo, panel) {
     edSetSelectValorConHuerfano(edUsuario, equipo.UsuarioAdmin || '');
     if (edPassword) edPassword.value = equipo.PasswordAdmin ?? '';
 
+    /* Red y administración: si el cliente tiene un único valor cargado en el
+       catálogo y el campo quedó vacío, se rellena solo (nunca pisa lo guardado). */
+    edAutollenarConfiguracion();
+
     if (modalEditarEquipo) modalEditarEquipo.style.display = 'flex';
     /* El aviso de rango se calcula con los valores ya cargados del equipo. */
     edActualizarHintRango();
@@ -1611,11 +1619,16 @@ if (edCliente) {
             // En cambio manual de cliente, no hay piso "actual" que preservar
             await edCargarPisosDelCliente(id, null);
             await edCargarConfiguracionesDelCliente(id);
+            /* Con el cliente nuevo, red y administración se rellenan solas
+               cuando el catálogo ofrece un único valor. */
+            edAutollenarConfiguracion();
         } else {
             edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente primero --');
             await edCargarConfiguracionesDelCliente(null);
+            edMostrarHintRol(null);
         }
         edActualizarPreviewHostname();
+        edInferirRolPorIP();
     });
 }
 
@@ -1796,6 +1809,175 @@ if (mvIP) {
 if (mvCliente) mvCliente.addEventListener('change', mvActualizarHintRango);
 if (mvRol) mvRol.addEventListener('change', mvActualizarHintRango);
 if (mvTipoIP) mvTipoIP.addEventListener('change', mvActualizarHintRango);
+
+/* =========================================================
+   ROL Y CONFIGURACIÓN AUTOMÁTICOS — MODAL EDITAR EQUIPO
+
+   Misma norma que la página de Equipos:
+     1) al capturar la IP se busca el rango declarado del cliente que la
+        contiene; si ese rango tiene un perfil concreto, el rol se elige solo;
+     2) red y administración se rellenan con lo que el cliente ya tiene
+        cargado en el catálogo, sólo cuando hay un único valor y el campo
+        está vacío (nunca se pisa una elección ni se inventan valores).
+   ========================================================= */
+const cacheRangosEd = new Map();
+
+/** Rangos declarados del cliente, memorizados. Nunca rechaza: devuelve []. */
+function edRangosDelCliente(idCliente) {
+    const id = Number(idCliente);
+    if (!id) return Promise.resolve([]);
+    if (!cacheRangosEd.has(id)) {
+        const peticion = window.api.rangos.listar(id)
+            .then(lista => (Array.isArray(lista) ? lista : []))
+            .catch(() => []);
+        cacheRangosEd.set(id, peticion);
+    }
+    return cacheRangosEd.get(id);
+}
+
+/**
+ * Olvida los rangos memorizados. Se llama al abrir el modal de edición para
+ * que el rol inferido y la validación de IP usen siempre los rangos vigentes
+ * (pudieron crearse o modificarse desde la última vez que se abrió).
+ */
+function edInvalidarCacheRangos(idCliente) {
+    if (idCliente == null) { cacheRangosEd.clear(); return; }
+    cacheRangosEd.delete(Number(idCliente));
+}
+
+/** IPv4 → entero comparable. Devuelve null si la IP no está completa. */
+function edIPValorEntero(ip) {
+    const partes = String(ip || '').trim().split('.');
+    if (partes.length !== 4) return null;
+    let valor = 0;
+    for (const parte of partes) {
+        const numero = Number(parte);
+        if (!Number.isInteger(numero) || numero < 0 || numero > 255) return null;
+        valor = valor * 256 + numero;
+    }
+    return valor;
+}
+
+const edRolHint = document.getElementById('ed-rol-hint');
+let tokenRolEd = 0;
+
+function edMostrarHintRol(texto, clase) {
+    if (!edRolHint) return;
+    if (!texto) {
+        edRolHint.textContent = '';
+        edRolHint.className = 'ayuda-rango oculto';
+        return;
+    }
+    edRolHint.textContent = texto;
+    edRolHint.className = `ayuda-rango ${clase || 'neutra'}`;
+}
+
+async function edInferirRolPorIP() {
+    const token = ++tokenRolEd;
+    const idCliente = edCliente ? parseInt(edCliente.value, 10) : NaN;
+    const ip = edIP ? edIP.value.trim() : '';
+
+    if (!edTipoIP || edTipoIP.value !== 'Estatica' || !idCliente || !RE_IPV4.test(ip)) {
+        edMostrarHintRol(null);
+        return;
+    }
+
+    const listaRangos = await edRangosDelCliente(idCliente);
+    if (token !== tokenRolEd) return;
+    if (!listaRangos.length) { edMostrarHintRol(null); return; }
+
+    const valor = edIPValorEntero(ip);
+    if (valor === null) { edMostrarHintRol(null); return; }
+
+    const rangosQueCubren = listaRangos.filter(r => {
+        const inicio = edIPValorEntero(r.IPInicio);
+        const fin = edIPValorEntero(r.IPFin);
+        return inicio !== null && fin !== null && valor >= inicio && valor <= fin;
+    });
+
+    if (!rangosQueCubren.length) {
+        edMostrarHintRol('La IP no cae en ningún rango declarado: elige el rol manualmente.', 'neutra');
+        return;
+    }
+
+    const idsPerfil = [...new Set(
+        rangosQueCubren.map(r => Number(r.IdRolEquipo) || 0).filter(Boolean)
+    )];
+
+    if (!idsPerfil.length) {
+        edMostrarHintRol('La IP cae en un rango heredado (sin perfil): elige el rol manualmente.', 'neutra');
+        return;
+    }
+    if (idsPerfil.length > 1) {
+        edMostrarHintRol('La IP cae en varios rangos con perfiles distintos: elige el rol manualmente.', 'alerta');
+        return;
+    }
+
+    const idRol = idsPerfil[0];
+    const rol = roles.find(r => Number(r.IdRolEquipo) === idRol);
+    const nombreRol = rol ? (rol.Nombre || rol.Codigo) : `perfil ${idRol}`;
+
+    if (edRol && String(edRol.value) !== String(idRol)) {
+        edRol.value = String(idRol);
+        edActualizarPreviewHostname();
+    }
+    edMostrarHintRol(`Rol inferido por la IP: ${nombreRol}.`, 'ok');
+    /* El rol cambió: el aviso de rango debe recalcularse con el perfil nuevo. */
+    edActualizarHintRango();
+}
+
+/** Opciones realmente elegibles de un select (sin el placeholder vacío). */
+function edOpcionesUtiles(select) {
+    return Array.from(select.options).filter(o => o.value !== '' && !o.disabled);
+}
+
+/** Selecciona el valor si el catálogo trae uno solo y el campo está vacío. */
+function edAutoseleccionarUnico(select) {
+    if (!select || select.disabled || select.value) return false;
+    const opciones = edOpcionesUtiles(select);
+    if (opciones.length !== 1) return false;
+    select.value = opciones[0].value;
+    return true;
+}
+
+function edPasswordDelDominio(select) {
+    const opt = select && select.options[select.selectedIndex];
+    return (opt && opt.dataset && opt.dataset.password) ? opt.dataset.password : '';
+}
+
+/**
+ * Autollenado de red y administración con la información ya cargada del
+ * cliente. Sólo actúa sobre campos vacíos y catálogos de un único valor.
+ */
+function edAutollenarConfiguracion() {
+    if (!edTipoIP || edTipoIP.value !== 'Estatica') return false;
+    let cambios = false;
+
+    [edMascara, edPuerta, edDns1, edDns2].forEach(select => {
+        if (edAutoseleccionarUnico(select)) cambios = true;
+    });
+
+    if (edAutoseleccionarUnico(edUsuario)) {
+        const password = edPasswordDelDominio(edUsuario);
+        if (password && edPassword) edPassword.value = password;
+        cambios = true;
+    } else if (edUsuario && edUsuario.value && edPassword && !edPassword.value) {
+        /* El equipo ya traía dominio pero sin password: se toma del catálogo. */
+        const password = edPasswordDelDominio(edUsuario);
+        if (password) { edPassword.value = password; cambios = true; }
+    }
+
+    return cambios;
+}
+
+if (edIP) {
+    edIP.addEventListener('input', edInferirRolPorIP);
+    edIP.addEventListener('blur', edInferirRolPorIP);
+}
+if (edCliente) edCliente.addEventListener('change', edInferirRolPorIP);
+if (edTipoIP) edTipoIP.addEventListener('change', edInferirRolPorIP);
+/* Al volver de DHCP a Estática los campos se limpian: se rellenan otra vez. */
+if (edTipoIP) edTipoIP.addEventListener('change', edAutollenarConfiguracion);
 
 if (editarConfirmar) {
     editarConfirmar.addEventListener('click', async () => {

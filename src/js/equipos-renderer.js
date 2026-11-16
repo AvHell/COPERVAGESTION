@@ -399,6 +399,76 @@ function llenarSelectConfig(select, items, placeholder) {
 }
 
 /* =========================================================
+   RANGOS DEL CLIENTE (caché) + AUTOFORMATO DEL FORMULARIO
+
+   Los rangos declarados en «Rangos IP» son la fuente para dos
+   automatismos del formulario:
+     1) inferir el rol del equipo a partir de la IP capturada;
+     2) deducir el segmento al importar listas de hostnames.
+   ========================================================= */
+const cacheRangosPorCliente = new Map();
+
+/** Rangos del cliente, memorizados por cliente. Nunca rechaza: devuelve []. */
+function rangosDelCliente(idCliente) {
+    const id = Number(idCliente);
+    if (!id) return Promise.resolve([]);
+    if (!cacheRangosPorCliente.has(id)) {
+        const peticion = window.api.rangos.listar(id)
+            .then(lista => (Array.isArray(lista) ? lista : []))
+            .catch(() => []);
+        cacheRangosPorCliente.set(id, peticion);
+    }
+    return cacheRangosPorCliente.get(id);
+}
+
+/** Olvida la caché de rangos (tras crear/editar/eliminar un rango). */
+function invalidarCacheRangos() {
+    cacheRangosPorCliente.clear();
+}
+
+/** Opciones realmente elegibles de un select (sin el placeholder vacío). */
+function opcionesUtiles(select) {
+    return Array.from(select.options).filter(o => o.value !== '' && !o.disabled);
+}
+
+/** Selecciona el valor si el catálogo trae uno solo y el campo está vacío. */
+function autoseleccionarUnico(select) {
+    if (!select || select.disabled) return false;
+    if (select.value) return false;
+    const opciones = opcionesUtiles(select);
+    if (opciones.length !== 1) return false;
+    select.value = opciones[0].value;
+    return true;
+}
+
+/** Copia la password del dominio elegido al input indicado. */
+function sincronizarPasswordDominio(select, input) {
+    if (!select || !input) return;
+    const opt = select.options[select.selectedIndex];
+    input.value = (opt && opt.dataset && opt.dataset.password) ? opt.dataset.password : '';
+}
+
+/**
+ * Autollenado de red y administración con la información ya cargada del
+ * cliente. Sólo actúa cuando el catálogo ofrece un único valor, de modo que
+ * nunca inventa ni pisa una elección del usuario.
+ */
+function autollenarConfiguracionDelCliente() {
+    if (selectTipoIP && selectTipoIP.value !== 'Estatica') return false;
+    let cambios = false;
+    [selectMascara, selectPuerta, selectDNS1, selectDNS2].forEach(select => {
+        if (autoseleccionarUnico(select)) cambios = true;
+    });
+    if (autoseleccionarUnico(selectDominio)) {
+        sincronizarPasswordDominio(selectDominio, inputPassword);
+        cambios = true;
+    } else if (selectDominio && selectDominio.value && !inputPassword.value) {
+        sincronizarPasswordDominio(selectDominio, inputPassword);
+    }
+    return cambios;
+}
+
+/* =========================================================
    AGREGAR CONFIGURACIÓN / DOMINIO
    ========================================================= */
 async function agregarConfigRed(tipo, selectTarget) {
@@ -512,12 +582,17 @@ selectCli.addEventListener('change', async () => {
     if (id) {
         await cargarPisosDelCliente(id);
         await cargarConfiguracionesDelCliente(id);
+        /* Red y administración se rellenan con lo ya cargado del cliente
+           (sólo cuando el catálogo tiene un único valor). */
+        autollenarConfiguracionDelCliente();
     } else {
         selectPiso.innerHTML = '<option value="">-- Selecciona un cliente primero --</option>';
         await cargarConfiguracionesDelCliente(null);
+        mostrarHintRol(null);
     }
 
     actualizarPreviewHostname();
+    inferirRolPorIP();
 });
 
 selectRol.addEventListener('change', actualizarPreviewHostname);
@@ -649,19 +724,12 @@ function ipValorEntero(ip) {
 /**
  * Rangos del cliente que aplican al perfil elegido, con la misma regla del
  * backend (db/rangos.js): un rango sin perfil aplica a cualquier perfil.
+ * Reusa la caché de rangosDelCliente() para no repetir la consulta.
  */
 async function rangosDeLaLupa(idCliente, idRol) {
     if (!idCliente) return { estado: 'sin-cliente', rangos: [], delCliente: [] };
 
-    let delCliente;
-    try {
-        delCliente = await window.api.rangos.listar(idCliente);
-    } catch (err) {
-        return { estado: 'error', mensaje: err?.message || '', rangos: [], delCliente: [] };
-    }
-    if (!Array.isArray(delCliente)) {
-        return { estado: 'error', mensaje: delCliente?.mensaje || '', rangos: [], delCliente: [] };
-    }
+    const delCliente = await rangosDelCliente(idCliente);
     if (!delCliente.length) return { estado: 'sin-rangos', rangos: [], delCliente };
 
     if (!idRol) return { estado: 'sin-perfil', rangos: delCliente, delCliente };
@@ -671,20 +739,61 @@ async function rangosDeLaLupa(idCliente, idRol) {
     return { estado: 'ok', rangos: aplicables, delCliente };
 }
 
-/** Hosts (1–254) del segmento que caen dentro de alguno de los rangos. */
-function hostsDentroDeRangos(rangos, segmento) {
-    const hosts = new Set();
+/** Hosts (1–254) del segmento autorizados por los rangos, con el rango que los cubre. */
+function hostsAutorizadosPorRango(rangos, segmento) {
+    const mapa = new Map();
     for (let host = 1; host <= 254; host++) {
         const valor = ipValorEntero(`${segmento}.${host}`);
         if (valor === null) continue;
-        const dentro = (rangos || []).some(r => {
+        const rango = (rangos || []).find(r => {
             const inicio = ipValorEntero(r.IPInicio);
             const fin = ipValorEntero(r.IPFin);
             return inicio !== null && fin !== null && valor >= inicio && valor <= fin;
         });
-        if (dentro) hosts.add(host);
+        if (rango) mapa.set(host, rango);
     }
+    return mapa;
+}
+
+/**
+ * Hosts del segmento que el cliente ya ocupa con sus parámetros de red
+ * (puerta de enlace, DNS, máscara). La puerta de enlace típica —192.168.3.1—
+ * nunca debe ofrecerse como IP libre aunque el rango empiece en .1.
+ * `selects` permite usar los mismos catálogos desde la importación pasiva,
+ * que tiene sus propios combos (ipas-*).
+ */
+function hostsDeConfiguracionDelCliente(segmento, selects = [selectMascara, selectPuerta, selectDNS1, selectDNS2]) {
+    const hosts = new Set();
+    (selects || []).forEach(select => {
+        Array.from(select?.options || []).forEach(opcion => {
+            const host = hostEnSegmento(opcion.value, segmento);
+            if (host !== null) hosts.add(host);
+        });
+    });
     return hosts;
+}
+
+/**
+ * Texto legible del dueño real de una IP ocupada: un equipo del inventario o
+ * un dispositivo del control general. Lo usan la lupa y la importación pasiva
+ * para decir QUIÉN usa la dirección en lugar de un genérico «ocupada», que es
+ * justo lo que hacía pensar que el rango la estaba bloqueando.
+ * Devuelve texto plano: cada consumidor lo escapa al pintarlo.
+ */
+function describirDuenoIP(registro) {
+    const hostname = String(registro?.Hostname || '').trim();
+    const cliente = String(registro?.ClienteCodigo || '').trim();
+    const origen = String(registro?.Origen || '').trim();
+    const nombre = hostname || (origen === 'Control general' ? 'Dispositivo general' : 'Equipo sin hostname');
+    const ambito = cliente ? ` (${cliente})` : (origen === 'Control general' ? ' · control general' : '');
+    return `${nombre}${ambito}`;
+}
+
+/** Segmentos /24 que cubren los rangos: para avisar cuando el segmento no es el del cliente. */
+function segmentosDeRangos(rangos) {
+    return [...new Set((rangos || [])
+        .map(r => String(r.IPInicio || '').split('.').slice(0, 3).join('.'))
+        .filter(segmento => /^\d{1,3}(\.\d{1,3}){2}$/.test(segmento)))];
 }
 
 function textoRangos(rangos) {
@@ -693,36 +802,33 @@ function textoRangos(rangos) {
 }
 
 /** Nota explicativa que acompaña al listado de IPs libres. */
-function notaRangosLupa(info, segmento, hostsPermitidos, nombrePerfil) {
+function notaRangosLupa(info, segmento, autorizados, nombrePerfil) {
+    const perfil = escaparHTML(nombrePerfil || 'sin perfil');
+    const codigo = escaparHTML(info.delCliente?.[0]?.ClienteCodigo || '');
+
     if (info.estado === 'sin-cliente') {
-        return { clase: 'neutra', html: 'Sin cliente seleccionado: se muestran los 254 hosts del segmento. Elige un cliente para respetar sus rangos autorizados.' };
-    }
-    if (info.estado === 'error') {
-        const detalle = info.mensaje ? `: ${escaparHTML(info.mensaje)}` : '';
-        return { clase: 'aviso', html: `No se pudieron leer los rangos del cliente${detalle}. Se muestran los 254 hosts del segmento.` };
+        return { clase: 'aviso', html: 'Elige el cliente para consultar las IP libres dentro de su rango autorizado.' };
     }
     if (info.estado === 'sin-rangos') {
-        const codigo = escaparHTML(info.delCliente[0]?.ClienteCodigo || '');
-        return { clase: 'neutra', html: `El cliente ${codigo} todavía no tiene rangos configurados: se muestran los 254 hosts del segmento.` };
-    }
-    if (info.estado === 'sin-perfil') {
-        return { clase: 'ok', html: `Selecciona un perfil para afinar la búsqueda. Por ahora se muestran las IPs dentro de estos rangos: ${textoRangos(info.rangos)}.` };
+        return { clase: 'aviso', html: `El cliente ${codigo} todavía no tiene rangos IP registrados. Declara su rango en «Rangos IP» para que la lupa pueda sugerir direcciones.` };
     }
     if (info.estado === 'perfil-sin-rango') {
-        const codigo = escaparHTML(info.delCliente[0]?.ClienteCodigo || '');
-        const perfil = escaparHTML(nombrePerfil || 'sin perfil');
-        return { clase: 'alerta', html: `El perfil ${perfil} no tiene rango IP definido para el cliente ${codigo}. Registra un rango en «Rangos IP» antes de asignar direcciones.` };
+        return { clase: 'alerta', html: `El perfil ${perfil} no tiene rango IP definido para el cliente ${codigo}. Regístralo en «Rangos IP» para poder sugerir direcciones.` };
     }
-    if (!hostsPermitidos || !hostsPermitidos.size) {
-        const segmentos = [...new Set((info.rangos || []).map(r =>
-            String(r.IPInicio || '').split('.').slice(0, 3).join('.')
-        ).filter(Boolean))];
+    if (!autorizados.size) {
+        const segmentos = segmentosDeRangos(info.rangos);
         return {
             clase: 'alerta',
-            html: `Ningún rango autorizado cubre el segmento ${escaparHTML(segmento)}. Rangos del perfil: ${textoRangos(info.rangos)}${segmentos.length ? ` (segmentos: ${escaparHTML(segmentos.join(', '))})` : ''}.`
+            html: `El rango de ${perfil} no cubre el segmento ${escaparHTML(segmento)}: ${textoRangos(info.rangos)}${segmentos.length ? ` (segmento ${escaparHTML(segmentos.join(', '))})` : ''}. Escribe una IP del segmento del rango para ver sus direcciones libres.`
         };
     }
-    return { clase: 'ok', html: `Sólo IPs dentro de los rangos autorizados: ${textoRangos(info.rangos)}.` };
+    if (info.estado === 'sin-perfil') {
+        return { clase: 'aviso', html: `Sin perfil seleccionado se usan todos los rangos del cliente: ${textoRangos(info.rangos)}.` };
+    }
+    return {
+        clase: 'ok',
+        html: `Direcciones libres dentro del rango de ${perfil}: ${textoRangos(info.rangos)}. Estar dentro del rango <b>reserva</b> la IP para el cliente, no la ocupa: sólo se descartan las que ya usa un equipo o un dispositivo activo.`
+    };
 }
 
 async function consultarIPsDisponibles() {
@@ -733,81 +839,137 @@ async function consultarIPsDisponibles() {
         return;
     }
 
+    const idCliente = parseInt(selectCli.value, 10) || null;
+    const idRol = parseInt(selectRol.value, 10) || null;
+    const opcionPerfil = selectRol.options[selectRol.selectedIndex];
+    const nombrePerfil = opcionPerfil ? opcionPerfil.textContent.trim() : '';
+
     btnIPsDisponibles.disabled = true;
     try {
-        const resultado = await window.api.equipos.listarIPsAsignadasEnSegmento(segmento, idEditando);
+        /* La lupa sólo propone direcciones que el rango autorizado cubra: el
+           guardado del equipo rechaza cualquier IP fuera de rango (db/rangos.js),
+           así que ofrecerlas sería prometer algo que no se puede guardar. */
+        const infoRangos = await rangosDeLaLupa(idCliente, idRol);
+        const autorizados = (infoRangos.estado === 'ok' || infoRangos.estado === 'sin-perfil')
+            ? hostsAutorizadosPorRango(infoRangos.rangos, segmento)
+            : new Map();
+        const nota = notaRangosLupa(infoRangos, segmento, autorizados, nombrePerfil);
+        const notaHTML = `<p class="ips-rangos-nota ${nota.clase}">${nota.html}</p>`;
+        const comun = {
+            title: `IPs disponibles — ${segmento}.0/24`,
+            showConfirmButton: false,
+            showCloseButton: true,
+            width: 680,
+            customClass: { popup: 'cl-confirm cl-modal-ips' }
+        };
+
+        if (!autorizados.size) {
+            await Swal.fire({
+                ...comun,
+                html: `${notaHTML}
+                    <p class="ips-disponibles-vacias">Sin rango autorizado no hay IPs que sugerir: la lupa sólo muestra direcciones libres dentro del rango del cliente y perfil elegidos.</p>`
+            });
+            return;
+        }
+
+        const resultado = await window.api.equipos.listarOcupacionSegmento(segmento, idEditando);
         if (!Array.isArray(resultado)) {
             throw new Error(resultado?.mensaje || 'No se pudieron consultar las IP asignadas.');
         }
 
-        const prefijo = `${segmento}.`;
-        const ipsReservadas = [
-            ...resultado,
-            selectPuerta.value,
-            selectDNS1.value,
-            selectDNS2.value
-        ];
-        const hostsOcupados = new Set(
-            ipsReservadas.map(ip => hostEnSegmento(ip, segmento)).filter(host => host !== null)
-        );
+        /* Ocupadas = en uso: equipos activos y dispositivos activos del Control
+           general que sí identifican un aparato, más los parámetros de red del
+           cliente (puerta de enlace, DNS, máscara), que nunca son equipos.
+           Pertenecer al rango NO ocupa: el rango es la autorización, así que
+           toda dirección del rango que no use nadie se ofrece como libre. */
+        const infra = hostsDeConfiguracionDelCliente(segmento);
+        const duenos = new Map();
+        resultado.forEach(registro => {
+            const host = hostEnSegmento(registro?.IP, segmento);
+            if (host !== null) duenos.set(host, registro);
+        });
+        const libres = [];
+        const ocupadas = [];
+        let usadosEnRango = 0;
+        let redEnRango = 0;
+        autorizados.forEach((rangoAutorizado, host) => {
+            const ip = `${segmento}.${host}`;
+            const dueno = duenos.get(host);
+            if (dueno) {
+                usadosEnRango += 1;
+                ocupadas.push({ ip, motivo: `En uso por ${escaparHTML(describirDuenoIP(dueno))}` });
+                return;
+            }
+            if (infra.has(host)) {
+                redEnRango += 1;
+                ocupadas.push({ ip, motivo: 'Red del cliente: puerta de enlace, DNS o máscara' });
+                return;
+            }
+            libres.push({ ip, rango: rangoAutorizado });
+        });
+        libres.sort((a, b) => ipValorEntero(a.ip) - ipValorEntero(b.ip));
 
-        /* Rangos autorizados del cliente/perfil seleccionados en el formulario */
-        const idCliente = parseInt(selectCli.value, 10) || null;
-        const idRol = parseInt(selectRol.value, 10) || null;
-        const opcionPerfil = selectRol.options[selectRol.selectedIndex];
-        const nombrePerfil = opcionPerfil ? opcionPerfil.textContent.trim() : '';
+        const filas = libres.map(item => `<tr data-ip="${item.ip}">
+                <td><code>${item.ip}</code></td>
+                <td>${escaparHTML(`${item.rango.IPInicio} – ${item.rango.IPFin}`)}</td>
+                <td><button type="button" class="btn-usar-ip" data-ip-disponible="${item.ip}">Usar IP</button></td>
+            </tr>`).join('');
 
-        const infoRangos = await rangosDeLaLupa(idCliente, idRol);
-        let hostsPermitidos = null; // null = sin restricción de rango
-        if (infoRangos.estado === 'ok' || infoRangos.estado === 'sin-perfil') {
-            hostsPermitidos = hostsDentroDeRangos(infoRangos.rangos, segmento);
-        } else if (infoRangos.estado === 'perfil-sin-rango') {
-            hostsPermitidos = new Set();
-        }
+        const ejemplo = libres.length ? libres[0].ip : `${segmento}.10`;
 
-        const ipsLibres = [];
-        for (let host = 1; host <= 254; host++) {
-            if (hostsPermitidos && !hostsPermitidos.has(host)) continue;
-            if (hostsOcupados.has(host)) continue;
-            ipsLibres.push(`${prefijo}${host}`);
-        }
+        /* Desglose del rango: por qué un host del rango no aparece como libre.
+           Nunca se descuenta por "estar reservado": eso es el rango mismo. */
+        const bloqueos = [
+            usadosEnRango ? `${usadosEnRango} en uso` : '',
+            redEnRango ? `${redEnRango} de la red del cliente` : ''
+        ].filter(Boolean).join(' · ');
+        const resumenBloqueo = bloqueos
+            ? `Del rango: ${bloqueos}`
+            : 'Ninguna dirección del rango está en uso';
+        const vacias = `No hay IPs libres en ${escaparHTML(segmento)}.0/24 dentro del rango autorizado${
+            bloqueos ? `: ${escaparHTML(bloqueos)}` : ''
+        }. Libera una dirección o amplía el rango en «Rangos IP».`;
 
-        const totalConsiderados = hostsPermitidos ? hostsPermitidos.size : 254;
-        const nota = notaRangosLupa(infoRangos, segmento, hostsPermitidos, nombrePerfil);
-
-        const filas = ipsLibres.map(ip => {
-            return `<tr data-ip="${ip}">
-                <td><code>${ip}</code></td>
-                <td><button type="button" class="btn-usar-ip" data-ip-disponible="${ip}">Usar IP</button></td>
-            </tr>`;
-        }).join('');
+        /* Las que sí están tomadas se listan aparte y con dueño: así se ve de
+           un golpe que lo que falta es un equipo/dispositivo concreto y no una
+           «reserva» del rango (el rango sólo autoriza, nunca bloquea). */
+        const filasOcupadas = ocupadas.map(item => `<tr>
+                <td><code>${escaparHTML(item.ip)}</code></td>
+                <td>${item.motivo}</td>
+            </tr>`).join('');
+        const detalleOcupadas = ocupadas.length
+            ? `<details class="ips-ocupadas">
+                    <summary>${ocupadas.length} dirección(es) del rango ya están en uso o son de la red del cliente</summary>
+                    <div class="ips-disponibles-lista">
+                        <table class="tabla-ips-disponibles">
+                            <thead><tr><th>Dirección IP</th><th>Motivo</th></tr></thead>
+                            <tbody>${filasOcupadas}</tbody>
+                        </table>
+                    </div>
+               </details>`
+            : '';
 
         await Swal.fire({
-            title: `IPs disponibles — ${segmento}.0/24`,
+            ...comun,
             html: `
                 <p class="ips-disponibles-resumen">
-                    <strong>${ipsLibres.length}</strong> libres de ${totalConsiderados} hosts ${hostsPermitidos ? 'autorizados' : 'utilizables'}
-                    <span>${hostsPermitidos ? 'Rangos autorizados y ocupación ya aplicados' : `Rango de hosts: ${segmento}.1 a ${segmento}.254`}</span>
+                    <strong>${libres.length}</strong> libres de ${autorizados.size} host(s) del rango
+                    <span>${escaparHTML(resumenBloqueo)}</span>
                 </p>
-                <p class="ips-rangos-nota ${nota.clase}">${nota.html}</p>
+                ${notaHTML}
                 <label for="buscar-ip-libre" class="ips-busqueda">Buscar IP libre</label>
                 <input id="buscar-ip-libre" type="search" class="swal2-input"
-                    placeholder="Ej. ${prefijo}67 o 67">
-                ${ipsLibres.length
+                    placeholder="Ej. ${ejemplo} o ${ejemplo.split('.').pop()}">
+                ${libres.length
                     ? `<div class="ips-disponibles-lista">
                         <table class="tabla-ips-disponibles">
-                            <thead><tr><th>Dirección IP</th><th></th></tr></thead>
+                            <thead><tr><th>Dirección IP</th><th>Rango</th><th></th></tr></thead>
                             <tbody>${filas}</tbody>
                         </table>
                     </div>`
-                    : `<p class="ips-disponibles-vacias">${hostsPermitidos && !ipsLibres.length
-                        ? 'No hay IPs libres dentro de los rangos autorizados para este segmento.'
-                        : 'No hay direcciones disponibles en este segmento.'}</p>`}
+                    : `<p class="ips-disponibles-vacias">${vacias}</p>`}
+                ${detalleOcupadas}
             `,
-            showConfirmButton: false,
-            showCloseButton: true,
-            width: 680,
-            customClass: { popup: 'cl-confirm cl-modal-ips' },
             didOpen: popup => {
                 const buscarIP = popup.querySelector('#buscar-ip-libre');
                 buscarIP.addEventListener('input', () => {
@@ -864,6 +1026,79 @@ function actualizarNumeroHost() {
     } else {
         inputNumHost.value = '';
     }
+}
+
+/* =========================================================
+   ROL AUTOMÁTICO A PARTIR DE LA IP
+
+   Si la IP capturada cae dentro de un rango declarado con un perfil
+   concreto, ese perfil se selecciona solo. Cuando el rango es heredado
+   (sin perfil) o hay varios perfiles compatibles, no se toca la elección
+   y se explica por qué.
+   ========================================================= */
+const hintRolIP = document.getElementById('hint-rol-ip');
+let tokenRolIP = 0;
+
+function mostrarHintRol(texto, clase) {
+    if (!hintRolIP) return;
+    if (!texto) {
+        hintRolIP.textContent = '';
+        hintRolIP.className = 'ayuda-rango oculto';
+        return;
+    }
+    hintRolIP.textContent = texto;
+    hintRolIP.className = `ayuda-rango ${clase || 'neutra'}`;
+}
+
+async function inferirRolPorIP() {
+    const token = ++tokenRolIP;
+    const idCliente = parseInt(selectCli.value, 10);
+    const ip = inputIP.value.trim();
+
+    if (selectTipoIP.value !== 'Estatica' || !idCliente || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+        mostrarHintRol(null);
+        return;
+    }
+
+    const listaRangos = await rangosDelCliente(idCliente);
+    if (token !== tokenRolIP) return;
+    if (!listaRangos.length) { mostrarHintRol(null); return; }
+
+    const valor = ipValorEntero(ip);
+    if (valor === null) { mostrarHintRol(null); return; }
+
+    const rangosQueCubren = listaRangos.filter(r => {
+        const inicio = ipValorEntero(r.IPInicio);
+        const fin = ipValorEntero(r.IPFin);
+        return inicio !== null && fin !== null && valor >= inicio && valor <= fin;
+    });
+    if (!rangosQueCubren.length) {
+        mostrarHintRol('La IP no cae en ningún rango declarado: elige el rol manualmente.', 'neutra');
+        return;
+    }
+
+    const idsPerfil = [...new Set(
+        rangosQueCubren.map(r => Number(r.IdRolEquipo) || 0).filter(Boolean)
+    )];
+
+    if (!idsPerfil.length) {
+        mostrarHintRol('La IP cae en un rango heredado (sin perfil): elige el rol manualmente.', 'neutra');
+        return;
+    }
+    if (idsPerfil.length > 1) {
+        mostrarHintRol('La IP cae en varios rangos con perfiles distintos: elige el rol manualmente.', 'alerta');
+        return;
+    }
+
+    const idRol = idsPerfil[0];
+    const rol = roles.find(r => Number(r.IdRolEquipo) === idRol);
+    const nombreRol = rol ? (rol.Nombre || rol.Codigo) : `perfil ${idRol}`;
+
+    if (String(selectRol.value) !== String(idRol)) {
+        selectRol.value = String(idRol);
+        actualizarPreviewHostname();
+    }
+    mostrarHintRol(`Rol inferido por la IP: ${nombreRol}.`, 'ok');
 }
 
 /* =========================================================
@@ -1005,15 +1240,42 @@ function renderTabla() {
     pintarTablaEquipos();
 }
 
+/**
+ * Buscador de la tabla: compara término por término contra cada campo (en vez
+ * de concatenar todo en una sola cadena), de modo que buscar una IP, un número
+ * de host o varios criterios separados por espacios funciona siempre.
+ */
+function tokensDeBusqueda(texto) {
+    return String(texto || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+function camposBuscablesEquipo(e) {
+    return [
+        e.Hostname, e.ClienteCodigo, e.ClienteNombre, e.PisoNombre,
+        e.RolCodigo, e.RolNombre, e.IP, e.UsuarioAdmin, e.TipoIP,
+        e.NumeroHost != null ? String(e.NumeroHost) : ''
+    ]
+        .filter(valor => valor !== null && valor !== undefined && String(valor).trim() !== '')
+        .map(valor => String(valor).toLowerCase());
+}
+
+function coincideBusquedaEquipo(e, tokens) {
+    if (!tokens.length) return true;
+    const campos = camposBuscablesEquipo(e);
+    return tokens.every(token => {
+        const compacto = token.replace(/[^a-z0-9]/g, '');
+        return campos.some(campo =>
+            campo.includes(token) ||
+            (compacto !== '' && campo.replace(/[^a-z0-9]/g, '').includes(compacto))
+        );
+    });
+}
+
 function pintarTablaEquipos() {
     contenedorGrupos.innerHTML = '';
 
-    const listaFiltrada = equipos.filter(e => {
-        if (!filtroBusqueda) return true;
-        const texto = [e.Hostname, e.ClienteCodigo, e.ClienteNombre, e.PisoNombre, e.RolCodigo, e.RolNombre, e.IP, e.UsuarioAdmin]
-            .filter(Boolean).join(' ').toLowerCase();
-        return texto.includes(filtroBusqueda);
-    });
+    const tokensFiltro = tokensDeBusqueda(filtroBusqueda);
+    const listaFiltrada = equipos.filter(e => coincideBusquedaEquipo(e, tokensFiltro));
 
     if (listaFiltrada.length === 0) {
         sinResultados.classList.remove('oculto');
@@ -1194,6 +1456,7 @@ function limpiarFormulario() {
     inputNumHost.value = '';
     inputPassword.value = '';
     actualizarHintRango();
+    mostrarHintRol(null);
 }
 
 async function abrirEdicion(id) {
@@ -1236,6 +1499,11 @@ async function abrirEdicion(id) {
 
     setSelectValorConHuerfano(selectDominio, e.UsuarioAdmin);
     inputPassword.value = e.PasswordAdmin ?? '';
+
+    /* Al editar se respeta lo guardado; sólo se completa lo que esté vacío
+       con el único valor disponible en el catálogo del cliente. */
+    autollenarConfiguracionDelCliente();
+    mostrarHintRol(null);
 
     abrirModal();
     ocultarMensaje();
@@ -1483,6 +1751,9 @@ function llenarSelectPerfiles(select, valorSeleccionado = '') {
 /* ---------- Listado ---------- */
 
 function abrirModalRangos() {
+    /* Se va a revisar/editar rangos: la inferencia de rol por IP y la
+       importación pasiva deben volver a consultarlos al cerrar. */
+    invalidarCacheRangos();
     llenarSelectClientes(rangosFiltroCliente, selectCli.value || '');
     rangosResumen.classList.add('oculto');
     rangosResumen.innerHTML = '';
@@ -1694,6 +1965,7 @@ async function guardarRango() {
 
         if (res && res.ok) {
             cerrarModalRango();
+            invalidarCacheRangos();
             if (rangosFiltroCliente.querySelector(`option[value="${idCliente}"]`)) {
                 rangosFiltroCliente.value = String(idCliente);
             }
@@ -1734,6 +2006,7 @@ async function eliminarRango(rango) {
     try {
         const res = await window.api.rangos.eliminar(rango.IdRangoIP);
         if (res && res.ok) {
+            invalidarCacheRangos();
             await cargarRangos();
             toastExito(res.mensaje || 'Rango eliminado');
         } else {
@@ -2202,6 +2475,627 @@ inputIP.addEventListener('input', actualizarHintRango);
 inputIP.addEventListener('blur', actualizarHintRango);
 selectCli.addEventListener('change', actualizarHintRango);
 selectRol.addEventListener('change', actualizarHintRango);
+
+/* Al capturar la IP se deduce el rol desde los rangos declarados. */
+inputIP.addEventListener('input', inferirRolPorIP);
+inputIP.addEventListener('blur', inferirRolPorIP);
+
+/* =========================================================
+   IMPORTACIÓN PASIVA
+
+   El usuario pega una lista de hostnames (AGT-TALA29, SPR-TALA153…).
+   De cada token se deducen tres cosas:
+     · el rol      → el prefijo (AGT, SPR…)
+     · el cliente  → el código intermedio (TALA…)
+     · el host     → los dígitos finales
+   Con el rol y los rangos declarados del cliente se resuelve el segmento
+   y la IP exacta. Nada se crea hasta que la vista previa está en verde.
+   ========================================================= */
+
+const modalPasiva    = document.getElementById('modal-importacion-pasiva');
+const btnPasiva      = document.getElementById('btn-importacion-pasiva');
+const pasCliente     = document.getElementById('ipas-cliente');
+const pasPiso        = document.getElementById('ipas-piso');
+const pasDominio     = document.getElementById('ipas-dominio');
+const pasPassword    = document.getElementById('ipas-password');
+const pasMascara     = document.getElementById('ipas-mascara');
+const pasPuerta      = document.getElementById('ipas-puerta');
+const pasDns1        = document.getElementById('ipas-dns1');
+const pasDns2        = document.getElementById('ipas-dns2');
+const pasTexto       = document.getElementById('ipas-texto');
+const pasPreview     = document.getElementById('ipas-preview');
+const pasMensaje     = document.getElementById('ipas-mensaje');
+const pasImportar    = document.getElementById('ipas-importar');
+
+/* ROL-CLIENTE##  →  AGT-TALA29 */
+const RE_TOKEN_PASIVA = /^([A-Za-z0-9]+)-(.+)$/;
+
+/** Códigos de cliente del catálogo en mayúsculas (desempata códigos con dígitos). */
+function codigosDeCliente() {
+    return new Set(clientes.map(c => String(c.Codigo || '').toUpperCase()).filter(Boolean));
+}
+
+/**
+ * Descompone un token de la lista pasiva en rol, cliente y número de host.
+ *
+ * La regla es «ROL-CLIENTE + octeto final» (AGT-TALA29 → AGT · TALA · 29), así
+ * que los dígitos finales SIEMPRE son el número de host y nunca parte del
+ * código del cliente (el patrón anterior era codicioso y leía TALA2 + 9). Sólo
+ * cuando el código que queda a la izquierda no existe en el catálogo se prueba
+ * la lectura anclada al cliente elegido, única forma de respetar códigos que
+ * terminan en dígitos (p. ej. TALA2 → AGT-TALA229).
+ */
+function descomponerTokenPasiva(token, codigoElegido) {
+    const base = RE_TOKEN_PASIVA.exec(String(token ?? '').trim());
+    if (!base) return null;
+
+    const rol = base[1].toUpperCase();
+    const resto = base[2];
+    const conocidos = codigosDeCliente();
+    const elegido = String(codigoElegido || '').toUpperCase();
+
+    /* Se puntúan las tres lecturas posibles (1, 2 o 3 dígitos finales como
+       número de host). Gana la que coincide con el cliente elegido en el
+       formulario, después la que existe en el catálogo y, en empate, la que
+       deja más dígitos como host — así AGT-TALA29 nunca se lee como TALA2 + 9. */
+    const candidatos = [];
+    for (let digitos = 1; digitos <= 3; digitos++) {
+        const cola = resto.slice(-digitos);
+        if (!/^\d+$/.test(cola)) break;
+        const codigo = resto.slice(0, resto.length - digitos).toUpperCase();
+        if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(codigo)) continue;
+        candidatos.push({
+            rol,
+            cliente: codigo,
+            host: Number(cola),
+            puntaje: (codigo === elegido ? 30 : 0)
+                + (conocidos.has(codigo) ? 20 : 0)
+                + digitos
+        });
+    }
+    if (!candidatos.length) return null;
+
+    const mejor = candidatos.reduce((a, b) => (b.puntaje > a.puntaje ? b : a));
+    return { rol: mejor.rol, cliente: mejor.cliente, host: mejor.host };
+}
+
+let filasPasivas = [];
+let importandoPasiva = false;
+let temporizadorPasiva = null;
+let pasPisosCliente = [];
+
+function mostrarMensajePasiva(texto, tipo) {
+    if (!pasMensaje) return;
+    if (!texto) { pasMensaje.className = 'alert oculto'; pasMensaje.textContent = ''; return; }
+    pasMensaje.textContent = texto;
+    pasMensaje.className = `alert ${tipo || 'info'}`;
+}
+
+function tokensDeListaPasiva(texto) {
+    return String(texto || '')
+        .split(/[\s,;]+/)
+        .map(token => token.trim())
+        .filter(Boolean);
+}
+
+async function cargarPisosPasiva(idCliente) {
+    if (!pasPiso) return;
+    if (!idCliente) {
+        pasPiso.innerHTML = '<option value="">-- Selecciona un cliente --</option>';
+        pasPiso.disabled = true;
+        pasPisosCliente = [];
+        return;
+    }
+    try {
+        const todos = await window.api.pisos.listar();
+        pasPisosCliente = (todos || []).filter(p =>
+            (p.clientes || []).some(c => Number(c.IdCliente) === Number(idCliente))
+        );
+        pasPiso.disabled = false;
+        pasPiso.innerHTML = '<option value="">-- Selecciona --</option>';
+        pasPisosCliente
+            .slice()
+            .sort((a, b) => String(a.Nombre).localeCompare(String(b.Nombre)))
+            .forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = String(p.IdPiso);
+                opt.textContent = p.Nombre;
+                pasPiso.appendChild(opt);
+            });
+        if (pasPisosCliente.length === 1) pasPiso.value = String(pasPisosCliente[0].IdPiso);
+        if (pasPisosCliente.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = ''; opt.disabled = true;
+            opt.textContent = 'Este cliente no tiene pisos asignados.';
+            pasPiso.appendChild(opt);
+        }
+    } catch (err) {
+        toastError('No se pudieron cargar los pisos', err.message);
+    }
+}
+
+async function cargarConfiguracionPasiva(idCliente) {
+    if (!idCliente) {
+        limpiarSelectConMensaje(pasMascara, '-- Selecciona un cliente --');
+        limpiarSelectConMensaje(pasPuerta,  '-- Selecciona un cliente --');
+        limpiarSelectConMensaje(pasDns1,    '-- Selecciona un cliente --');
+        limpiarSelectConMensaje(pasDns2,    '-- Selecciona un cliente --');
+        limpiarSelectConMensaje(pasDominio, '-- Selecciona un cliente --');
+        pasPassword.value = '';
+        return;
+    }
+    try {
+        const [mascaras, puertas, dns1s, dns2s, doms] = await Promise.all([
+            window.api.config.listarPorClienteTipo(idCliente, 'Mascara'),
+            window.api.config.listarPorClienteTipo(idCliente, 'PuertaEnlace'),
+            window.api.config.listarPorClienteTipo(idCliente, 'DNS1'),
+            window.api.config.listarPorClienteTipo(idCliente, 'DNS2'),
+            window.api.dominios.listarPorCliente(idCliente)
+        ]);
+
+        llenarSelectConfig(pasMascara, mascaras, '-- Máscara --');
+        llenarSelectConfig(pasPuerta,  puertas,  '-- Puerta de enlace --');
+        llenarSelectConfig(pasDns1,    dns1s,    '-- DNS 1 --');
+        llenarSelectConfig(pasDns2,    dns2s,    '-- DNS 2 (opcional) --');
+
+        pasDominio.disabled = false;
+        pasDominio.innerHTML = '<option value="">-- Dominio admin --</option>';
+        (doms || []).forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.Usuario;
+            opt.dataset.password = d.Password;
+            opt.dataset.descripcion = d.Descripcion || '';
+            opt.textContent = d.Descripcion ? `${d.Usuario} (${d.Descripcion})` : d.Usuario;
+            pasDominio.appendChild(opt);
+        });
+        if (!doms || !doms.length) {
+            const opt = document.createElement('option');
+            opt.value = ''; opt.disabled = true;
+            opt.textContent = 'Sin dominios. Agrégalo en el formulario de equipo.';
+            pasDominio.appendChild(opt);
+        }
+
+        /* Igual que en el formulario: si el cliente tiene un único valor
+           cargado, se elige solo para que el flujo sea de dos clics. */
+        [pasMascara, pasPuerta, pasDns1, pasDns2, pasDominio].forEach(autoseleccionarUnico);
+        sincronizarPasswordDominio(pasDominio, pasPassword);
+    } catch (err) {
+        console.error('[Equipos] Error cargando configuración de importación:', err);
+        toastError('No se pudo cargar la configuración', err.message);
+    }
+}
+
+/** Evalúa un token y devuelve la fila de la vista previa. */
+async function evaluarTokenPasiva(token, contexto) {
+    const fila = {
+        token,
+        hostname: token,
+        clienteCodigo: '',
+        rolCodigo: '',
+        ip: '',
+        idRolEquipo: null,
+        idPiso: null,
+        estado: 'error',
+        detalle: ''
+    };
+
+    const { cliente, listaRangos } = contexto;
+    const partes = descomponerTokenPasiva(token, cliente?.Codigo);
+    if (!partes) {
+        fila.detalle = 'Formato no reconocido (se espera ROL-CLIENTE29)';
+        return fila;
+    }
+
+    fila.rolCodigo = partes.rol;
+    fila.clienteCodigo = partes.cliente;
+    const host = partes.host;
+
+    const rol = roles.find(r => String(r.Codigo || '').toUpperCase() === fila.rolCodigo);
+    if (!rol) {
+        fila.detalle = `El rol «${fila.rolCodigo}» no existe en el catálogo`;
+        return fila;
+    }
+    fila.idRolEquipo = Number(rol.IdRolEquipo);
+    fila.rolCodigo = rol.Codigo;
+
+    if (fila.clienteCodigo !== String(cliente.Codigo || '').toUpperCase()) {
+        fila.detalle = `El hostname es de «${fila.clienteCodigo}» y el cliente elegido es «${cliente.Codigo}»`;
+        return fila;
+    }
+    if (!Number.isInteger(host) || host < 1 || host > 254) {
+        fila.detalle = 'El número de host debe estar entre 1 y 254';
+        return fila;
+    }
+
+    fila.hostname = `${rol.Codigo}-${cliente.Codigo}${host}`;
+
+    const aplicables = listaRangos.filter(r =>
+        !r.IdRolEquipo || Number(r.IdRolEquipo) === fila.idRolEquipo
+    );
+    const candidatos = [];
+    aplicables.forEach(r => {
+        const inicio = ipValorEntero(r.IPInicio);
+        const fin = ipValorEntero(r.IPFin);
+        if (inicio === null || fin === null) return;
+        const segmento = String(r.IPInicio || '').split('.').slice(0, 3).join('.');
+        if (!/^\d{1,3}(\.\d{1,3}){2}$/.test(segmento)) return;
+        const ip = `${segmento}.${host}`;
+        const valor = ipValorEntero(ip);
+        if (valor === null) return;
+        if (valor >= inicio && valor <= fin) candidatos.push({ ip, segmento, rango: r });
+    });
+
+    if (!candidatos.length) {
+        fila.detalle = aplicables.length
+            ? `El host ${host} no cae en ningún rango autorizado del rol ${rol.Codigo}`
+            : `El cliente no tiene rangos declarados para el rol ${rol.Codigo}`;
+        return fila;
+    }
+
+    const ipsCandidatas = [...new Set(candidatos.map(c => c.ip))];
+    if (ipsCandidatas.length > 1) {
+        fila.detalle = 'Varios segmentos posibles: depura el rango en «Rangos IP»';
+        return fila;
+    }
+
+    fila.ip = ipsCandidatas[0];
+    const elegido = candidatos.find(c => c.ip === fila.ip);
+    const segmento = elegido.segmento;
+    fila.idPiso = elegido.rango.IdPiso != null ? Number(elegido.rango.IdPiso) : null;
+
+    const hostLower = fila.hostname.toLowerCase();
+    if (contexto.hostnamesExistentes.has(hostLower)) {
+        fila.detalle = 'Ese hostname ya existe en el inventario';
+        return fila;
+    }
+    if (contexto.vistosHostname.has(hostLower)) {
+        fila.detalle = 'Hostname repetido dentro de la lista';
+        return fila;
+    }
+    if (contexto.vistosIP.has(fila.ip)) {
+        fila.detalle = 'IP repetida dentro de la lista';
+        return fila;
+    }
+
+    /* La puerta de enlace y los DNS del cliente no son hosts libres aunque el
+       rango los cubra: se descuentan igual que en la lupa. */
+    const hostInfra = hostEnSegmento(fila.ip, segmento);
+    if (hostInfra !== null &&
+        hostsDeConfiguracionDelCliente(segmento, [pasMascara, pasPuerta, pasDns1, pasDns2]).has(hostInfra)) {
+        fila.detalle = `La IP ${fila.ip} ya la usa la red del cliente (puerta de enlace o DNS)`;
+        return fila;
+    }
+
+    /* Ocupado = en uso por un equipo activo o un dispositivo activo del
+       control general. El rango sólo reserva la IP para el cliente, así que
+       pertenecer al rango nunca deja la fila en rojo. */
+    if (!contexto.ocupacionPorSegmento.has(segmento)) {
+        const registros = await window.api.equipos
+            .listarOcupacionSegmento(segmento, null)
+            .then(lista => (Array.isArray(lista) ? lista : []))
+            .catch(() => []);
+        const porIP = new Map();
+        registros.forEach(registro => {
+            const ip = String(registro?.IP || '').trim();
+            if (ip) porIP.set(ip, describirDuenoIP(registro));
+        });
+        contexto.ocupacionPorSegmento.set(segmento, porIP);
+    }
+    const duenoIP = contexto.ocupacionPorSegmento.get(segmento).get(fila.ip);
+    if (duenoIP) {
+        fila.detalle = `La IP ${fila.ip} ya está en uso por ${duenoIP}`;
+        return fila;
+    }
+
+    contexto.vistosHostname.add(hostLower);
+    contexto.vistosIP.add(fila.ip);
+    fila.estado = 'ok';
+    fila.detalle = 'Listo para crear';
+    return fila;
+}
+
+/** Nombre legible del piso dentro del modal de importación pasiva. */
+function nombrePisoPasiva(idPiso) {
+    if (idPiso == null || idPiso === '') return '';
+    const piso = pasPisosCliente.find(p => Number(p.IdPiso) === Number(idPiso));
+    return piso ? String(piso.Nombre) : `Piso ${idPiso}`;
+}
+
+/** Explica en qué piso terminarán los equipos y avisa de rangos incoherentes. */
+function resumenPisoPasiva(pendientes) {
+    const conPiso = pendientes.map(f => f.idPiso).filter(id => id != null);
+    const pisos = [...new Set(conPiso)];
+    const sinPiso = pendientes.some(f => f.idPiso == null);
+    const elegido = parseInt(pasPiso.value, 10) || null;
+
+    if (!pendientes.length) return { texto: '', tipo: 'info' };
+
+    if (elegido) {
+        const otros = pisos.filter(id => Number(id) !== Number(elegido));
+        const base = `Piso elegido: ${nombrePisoPasiva(elegido)}`;
+        if (otros.length) {
+            return {
+                texto: `${base} · Ojo: el rango de ${otros.map(nombrePisoPasiva).join(', ')} apunta a otro piso`,
+                tipo: 'aviso'
+            };
+        }
+        return { texto: base, tipo: 'ok' };
+    }
+
+    if (pisos.length > 1) {
+        return {
+            texto: `Los rangos apuntan a pisos distintos (${pisos.map(nombrePisoPasiva).join(', ')}): elige un piso arriba`,
+            tipo: 'aviso'
+        };
+    }
+    if (pisos.length === 1 && !sinPiso) {
+        return { texto: `Piso del rango: ${nombrePisoPasiva(pisos[0])}`, tipo: 'ok' };
+    }
+    return { texto: 'Los rangos no definen piso: elige un piso arriba', tipo: 'aviso' };
+}
+
+function renderPreviewPasiva() {
+    if (!pasPreview) return;
+
+    if (!filasPasivas.length) {
+        pasPreview.innerHTML = '';
+        pasImportar.disabled = true;
+        return;
+    }
+
+    const pendientes = filasPasivas.filter(f => f.estado === 'ok');
+    const resumenPiso = resumenPisoPasiva(pendientes);
+    const cuerpo = filasPasivas.map(fila => `
+        <tr${fila.estado === 'ok' ? '' : ' class="fila-invalida"'}>
+            <td data-label="Hostname"><code class="rango-ip">${escaparHTML(fila.hostname || fila.token)}</code></td>
+            <td data-label="Cliente">${escaparHTML(fila.clienteCodigo || '—')}</td>
+            <td data-label="Rol">${escaparHTML(fila.rolCodigo || '—')}</td>
+            <td data-label="IP inferida">${fila.ip ? `<code class="rango-ip">${escaparHTML(fila.ip)}</code>` : '—'}</td>
+            <td data-label="Piso">${escaparHTML(nombrePisoPasiva(fila.idPiso) || '—')}</td>
+            <td data-label="Estado">${fila.estado === 'ok'
+                ? '<span class="rango-general">Listo</span>'
+                : `<span class="rango-motivo">${escaparHTML(fila.detalle || 'Revisar')}</span>`}</td>
+        </tr>`).join('');
+
+    pasPreview.innerHTML = `
+        <div class="rangos-resumen">
+            <span class="grupo-count">${pendientes.length} de ${filasPasivas.length} listos</span>
+            ${resumenPiso.texto ? `<span class="ipas-destino ${resumenPiso.tipo === 'aviso' ? 'ipas-destino-aviso' : ''}">${escaparHTML(resumenPiso.texto)}</span>` : ''}
+        </div>
+        <table class="rangos-tabla">
+            <thead>
+                <tr>
+                    <th>Hostname</th>
+                    <th>Cliente</th>
+                    <th>Rol</th>
+                    <th>IP inferida</th>
+                    <th>Piso</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>${cuerpo}</tbody>
+        </table>`;
+
+    pasImportar.disabled = pendientes.length === 0 || importandoPasiva;
+}
+
+async function construirFilasPasivas() {
+    const tokens = tokensDeListaPasiva(pasTexto.value);
+    filasPasivas = [];
+
+    if (!tokens.length) { mostrarMensajePasiva(null); renderPreviewPasiva(); return; }
+
+    const idCliente = parseInt(pasCliente.value, 10);
+    if (!idCliente) {
+        filasPasivas = tokens.map(token => ({
+            token, hostname: token, clienteCodigo: '', rolCodigo: '',
+            ip: '', idRolEquipo: null, estado: 'error',
+            detalle: 'Selecciona primero el cliente'
+        }));
+        renderPreviewPasiva();
+        return;
+    }
+
+    const cliente = clientes.find(c => Number(c.IdCliente) === idCliente);
+    if (!cliente) { renderPreviewPasiva(); return; }
+
+    const listaRangos = await rangosDelCliente(idCliente);
+    const contexto = {
+        cliente,
+        listaRangos,
+        hostnamesExistentes: new Set(equipos.map(e => String(e.Hostname || '').toLowerCase())),
+        ocupacionPorSegmento: new Map(),
+        vistosHostname: new Set(),
+        vistosIP: new Set()
+    };
+
+    for (const token of tokens) {
+        filasPasivas.push(await evaluarTokenPasiva(token, contexto));
+    }
+    mostrarMensajePasiva(null);
+    renderPreviewPasiva();
+}
+
+function programarPreviewPasiva() {
+    clearTimeout(temporizadorPasiva);
+    temporizadorPasiva = setTimeout(() => { construirFilasPasivas(); }, 250);
+}
+
+function abrirModalPasiva() {
+    if (!modalPasiva) return;
+    filasPasivas = [];
+    importandoPasiva = false;
+    pasTexto.value = '';
+    pasPassword.value = '';
+    mostrarMensajePasiva(null);
+    renderPreviewPasiva();
+
+    pasCliente.innerHTML = '<option value="">-- Selecciona --</option>';
+    clientes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = String(c.IdCliente);
+        opt.textContent = c.Nombre ? `${c.Nombre} (${c.Codigo})` : c.Codigo;
+        pasCliente.appendChild(opt);
+    });
+    limpiarSelectConMensaje(pasPiso, '-- Selecciona un cliente primero --');
+    limpiarSelectConMensaje(pasMascara, '-- Selecciona un cliente primero --');
+    limpiarSelectConMensaje(pasPuerta,  '-- Selecciona un cliente primero --');
+    limpiarSelectConMensaje(pasDns1,    '-- Selecciona un cliente primero --');
+    limpiarSelectConMensaje(pasDns2,    '-- Selecciona un cliente primero --');
+    limpiarSelectConMensaje(pasDominio, '-- Selecciona un cliente primero --');
+
+    modalPasiva.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => pasCliente.focus(), 60);
+}
+
+function cerrarModalPasiva() {
+    if (!modalPasiva) return;
+    modalPasiva.style.display = 'none';
+    document.body.style.overflow = '';
+    mostrarMensajePasiva(null);
+}
+
+function setImportandoPasiva(valor) {
+    importandoPasiva = valor;
+    if (!pasImportar) return;
+    pasImportar.disabled = valor;
+    const texto = pasImportar.querySelector('.btn-text');
+    const spinner = pasImportar.querySelector('.btn-spinner');
+    if (texto) texto.textContent = valor ? 'Importando...' : 'Importar equipos';
+    if (spinner) spinner.classList.toggle('oculto', !valor);
+}
+
+async function importarPasiva() {
+    const idCliente = parseInt(pasCliente.value, 10);
+    const pisoSeleccionado = parseInt(pasPiso.value, 10) || null;
+    const usuarioAdmin = pasDominio.value;
+    const passwordAdmin = pasPassword.value.trim();
+    const mascara = pasMascara.value;
+    const puertaEnlace = pasPuerta.value;
+    const dns1 = pasDns1.value;
+    const dns2 = pasDns2.value;
+
+    if (!idCliente) { mostrarMensajePasiva('Selecciona el cliente.', 'error'); return; }
+    if (!usuarioAdmin || !passwordAdmin) { mostrarMensajePasiva('Usuario admin y password son obligatorios.', 'error'); return; }
+    if (!mascara || !puertaEnlace || !dns1) { mostrarMensajePasiva('Máscara, puerta de enlace y DNS 1 son obligatorios.', 'error'); return; }
+
+    const pendientes = filasPasivas.filter(f => f.estado === 'ok');
+    if (!pendientes.length) { mostrarMensajePasiva('No hay filas válidas para importar.', 'error'); return; }
+
+    /* El piso elegido a mano manda; si no se eligió, se toma el del rango. */
+    let idPiso = pisoSeleccionado;
+    if (!idPiso) {
+        const pisosDeLosRangos = [...new Set(
+            pendientes.map(f => f.idPiso).filter(id => id != null)
+        )];
+        if (pisosDeLosRangos.length === 1) {
+            idPiso = Number(pisosDeLosRangos[0]);
+        } else if (pisosDeLosRangos.length > 1) {
+            mostrarMensajePasiva(
+                `Los rangos apuntan a pisos distintos (${pisosDeLosRangos.map(nombrePisoPasiva).join(', ')}). Elige arriba el piso que se aplicará a todos.`,
+                'error'
+            );
+            return;
+        } else {
+            mostrarMensajePasiva('Selecciona el piso al que se asignarán los equipos.', 'error');
+            return;
+        }
+    }
+
+    const nombrePisoDestino = nombrePisoPasiva(idPiso);
+
+
+    const confirmacion = await Swal.fire({
+        icon: 'question',
+        title: `¿Importar ${pendientes.length} equipo(s)?`,
+        html: `<div style="text-align:left;font-size:0.9rem;">
+            Se crearán <b>${pendientes.length}</b> equipos estáticos en <b>${escaparHTML(nombrePisoDestino)}</b>.
+            <div style="background:#F4F6F0;padding:10px;border-radius:6px;border-left:3px solid #516848;margin-top:10px;max-height:180px;overflow:auto;">
+                ${pendientes.map(f => `${escaparHTML(f.hostname)} — <code>${escaparHTML(f.ip)}</code>`).join('<br>')}
+            </div></div>`,
+        showCancelButton: true,
+        confirmButtonText: 'Sí, importar',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    setImportandoPasiva(true);
+    mostrarMensajePasiva(null);
+
+    let creados = 0;
+    const errores = [];
+
+    for (const fila of pendientes) {
+        const datos = {
+            idCliente,
+            idPiso,
+            idRolEquipo: fila.idRolEquipo,
+            tipoIP: 'Estatica',
+            hostname: fila.hostname,
+            numeroHost: Number(String(fila.ip).split('.').pop()),
+            ip: fila.ip,
+            mascara,
+            puertaEnlace,
+            dns1,
+            dns2: dns2 || null,
+            usuarioAdmin,
+            passwordAdmin,
+            activo: true
+        };
+        try {
+            const res = await window.api.equipos.crear(datos);
+            if (res && res.ok) creados += 1;
+            else errores.push(`${fila.hostname}: ${res?.mensaje || 'Error desconocido'}`);
+        } catch (err) {
+            errores.push(`${fila.hostname}: ${err.message}`);
+        }
+    }
+
+    setImportandoPasiva(false);
+    await recargarEquipos();
+
+    if (errores.length) {
+        pasTexto.value = errores.map(texto => texto.split(':')[0]).join('\n');
+        await construirFilasPasivas();
+        mostrarMensajePasiva(
+            `Se crearon ${creados} equipo(s). ${errores.length} con error — revisa la lista: ${errores[0]}`,
+            'error'
+        );
+        toastError(`Se importaron ${creados} equipos`, `${errores.length} con error`);
+    } else {
+        pasTexto.value = '';
+        filasPasivas = [];
+        renderPreviewPasiva();
+        mostrarMensajePasiva(`Se importaron ${creados} equipo(s) correctamente.`, 'ok');
+        toastExito(`${creados} equipo(s) importados`);
+    }
+}
+
+if (btnPasiva) btnPasiva.addEventListener('click', abrirModalPasiva);
+if (document.getElementById('ipas-cerrar')) document.getElementById('ipas-cerrar').addEventListener('click', cerrarModalPasiva);
+if (document.getElementById('ipas-cancelar')) document.getElementById('ipas-cancelar').addEventListener('click', cerrarModalPasiva);
+if (modalPasiva) modalPasiva.addEventListener('click', (e) => { if (e.target === modalPasiva) cerrarModalPasiva(); });
+
+if (pasCliente) {
+    pasCliente.addEventListener('change', async () => {
+        const id = parseInt(pasCliente.value, 10);
+        await cargarPisosPasiva(id);
+        await cargarConfiguracionPasiva(id);
+        await construirFilasPasivas();
+    });
+}
+if (pasDominio) pasDominio.addEventListener('change', () => sincronizarPasswordDominio(pasDominio, pasPassword));
+if (pasPiso) pasPiso.addEventListener('change', renderPreviewPasiva);
+if (pasTexto) pasTexto.addEventListener('input', programarPreviewPasiva);
+if (pasImportar) pasImportar.addEventListener('click', importarPasiva);
 
 /* =========================================================
    INICIO

@@ -1479,6 +1479,7 @@ ipcMain.handle('equipos:actualizar',           async (_e, id, datos) => { const 
 ipcMain.handle('equipos:eliminar',             async (_e, id)    => { const err = requerirSesion('equipos:eliminar');    if (err) return err; return await equiposDB.eliminar(id); });
 ipcMain.handle('equipos:verificarIPDuplicada', async (_e, ip, idExcluir) => { const err = requerirSesion('equipos');      if (err) return err; return await equiposDB.verificarIPDuplicada(ip, idExcluir); });
 ipcMain.handle('equipos:listarIPsAsignadasEnSegmento', async (_e, segmento, idExcluir) => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.listarIPsAsignadasEnSegmento(segmento, idExcluir); });
+ipcMain.handle('equipos:listarOcupacionSegmento', async (_e, segmento, idExcluir) => { const err = requerirSesion('equipos:listado:ver'); if (err) return err; return await equiposDB.listarOcupacionSegmento(segmento, idExcluir); });
 
 /* =========================================================
    IPC: CONTROL GENERAL DE IP

@@ -122,6 +122,7 @@ contextBridge.exposeInMainWorld('api', {
         actualizar:           (id, datos)       => ipcRenderer.invoke('equipos:actualizar', id, datos),
         eliminar:             (id)              => ipcRenderer.invoke('equipos:eliminar', id),
         verificarIPDuplicada: (ip, idExcluir)   => ipcRenderer.invoke('equipos:verificarIPDuplicada', ip, idExcluir),
+        listarOcupacionSegmento: (segmento, idExcluir = null) => ipcRenderer.invoke('equipos:listarOcupacionSegmento', segmento, idExcluir),
         listarIPsAsignadasEnSegmento: (segmento, idExcluir) => ipcRenderer.invoke('equipos:listarIPsAsignadasEnSegmento', segmento, idExcluir)
     },
 

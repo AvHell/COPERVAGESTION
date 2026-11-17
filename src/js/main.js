@@ -379,6 +379,7 @@ const RUTAS_MODULOS = {
     catalogos: { basePath: HTML, archivo: 'catalogos.html', permiso: 'catalogos', titulo: 'Catálogos del Sistema' },
     equipos: { basePath: HTML, archivo: 'equipos.html', permiso: 'equipos', titulo: 'Equipos' },
     inventario_ip: { basePath: HTML, archivo: 'inventario-ip.html', permiso: 'equipos', titulo: 'Control general de IP' },
+    rangos_ip: { basePath: HTML, archivo: 'rangos.html', permiso: 'equipos', titulo: 'Rangos IP por cliente' },
     plano: { basePath: HTML, archivo: 'plano.html', permiso: 'plano', titulo: 'Plano Visual' },
     documentacion: { basePath: HTML, archivo: 'documentacion.html', permiso: 'documentos', titulo: 'Documentación' },
     historico: { basePath: HTML, archivo: 'historico.html', permiso: 'historico', titulo: 'Histórico del Plano' },

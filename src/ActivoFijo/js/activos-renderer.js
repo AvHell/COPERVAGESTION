@@ -315,7 +315,7 @@ async function cargarCatalogos() {
         poblarCatalogoTexto(inpProcesador, catalogosEspecificaciones.procesadores, '— Seleccionar procesador —');
         poblarCatalogoTexto(inpRAM, catalogosEspecificaciones.memoriasRam, '— Seleccionar memoria —');
         poblarCatalogoTexto(inpAlmacenamiento, catalogosEspecificaciones.almacenamientos, '— Seleccionar almacenamiento —');
-        poblarCatalogoTexto(inpSO, catalogosEspecificaciones.sistemasOperativos, '— Seleccionar sistema operativo —');
+        poblarSistemasOperativos(catalogosEspecificaciones.sistemasOperativos);
         poblarCatalogoTexto(inpAccesorios, catalogosEspecificaciones.accesorios, '— Seleccionar accesorios —');
         poblarCatalogoTexto(inpUsuarioAsig, catalogosEspecificaciones.usuariosAsignados, '— Seleccionar usuario —');
     } catch (err) {
@@ -336,6 +336,31 @@ function seleccionarCatalogoTexto(select, valor) {
         select.add(option);
     }
     select.value = texto;
+}
+
+/* El SO se identifica por Nombre + BuildSO: dos filas del catálogo pueden
+   compartir nombre y diferir sólo en la compilación. Por eso este <select>
+   usa el Id de la fila como valor (no el nombre) y muestra el build en la
+   etiqueta. Así el activo apunta a la variante exacta que trajo el colector
+   y editar no re-apunta a otra fila del catálogo. */
+function poblarSistemasOperativos(registros) {
+    const lista = Array.isArray(registros) ? registros : [];
+    inpSO.innerHTML = '<option value="">— Seleccionar sistema operativo —</option>' +
+        lista.map(r => {
+            const etiqueta = `${r.Nombre ?? ''}${r.BuildSO ? ' · ' + r.BuildSO : ''}`;
+            return `<option value="${r.IdSistemaOperativo}">${escaparHTML(etiqueta)}</option>`;
+        }).join('');
+}
+
+function seleccionarSistemaOperativo(activo) {
+    const id = activo && activo.IdSistemaOperativo != null ? String(activo.IdSistemaOperativo) : '';
+    if (id && !Array.from(inpSO.options).some(option => option.value === id)) {
+        const etiqueta = `${activo.SistemaOperativo ?? 'Sistema operativo'}${activo.BuildSO ? ' · ' + activo.BuildSO : ''} (inactivo)`;
+        const option = new Option(etiqueta, id, true, true);
+        option.disabled = true;
+        inpSO.add(option);
+    }
+    inpSO.value = id;
 }
 
 /* =========================================================
@@ -372,6 +397,7 @@ const NOMBRE_TIPO_PIEZA = {
     DISCO:   ['disco duro', 'discos duros'],
     TECLADO: ['teclado',    'teclados'],
     RATON:   ['ratón',      'ratones'],
+    DIADEMA: ['diadema',    'diademas'],
     OTRO:    ['otro',       'otros']
 };
 
@@ -396,11 +422,142 @@ function celdaPiezas(a) {
 }
 
 
-function textoPiezas(a) {
-    const total = Number(a.Piezas) || 0;
-    if (!total) return '—';
-    const detalle = detallePiezas(a);
-    return detalle ? `${total} (${detalle})` : String(total);
+/* --- Piezas conectadas: lo que va al Excel -------------------------
+   El activo con piezas sigue contando 1 en el inventario (un monitor, un
+   disco o un teclado no son activos: cuelgan de su equipo). Para el
+   reporte NO se abren columnas por tipo de pieza: eso no escala (cada
+   familia nueva rompería el formato del Excel). Cada pieza es una FILA
+   propia, con su serie/marca/modelo en las mismas columnas de siempre, y
+   dos columnas finales dicen de qué activo cuelga: su NoSerie y su
+   hostname. Así "reporte de monitores" es filtrar Tipo = Monitor: cada
+   monitor sale en su renglón y se ve de qué equipo es.
+   Los renglones de activo llevan esas dos columnas vacías; los de pieza
+   las llevan llenas, así "sólo activos" = filtrar el padre en blanco. */
+
+const COL_PADRE_SERIE = { header: 'No. Serie del activo padre', key: 'NoSeriePadre',  width: 24 };
+const COL_PADRE_HOST  = { header: 'Hostname del activo padre',  key: 'HostnamePadre', width: 24 };
+
+/* Orden fijo de las familias de piezas (monitores → discos → teclados →
+   ratones → diademas → otros) para que dos reportes se lean igual. */
+const ORDEN_TIPOS_PIEZA = ['MONITOR', 'DISCO', 'TECLADO', 'RATON', 'DIADEMA', 'OTRO'];
+
+/* --- Comparar TIPOS de fila contra el catálogo de tipos ----------------
+   El reporte por tipo tiene que encontrar también las PIEZAS de ese tipo:
+   un monitor no es un activo, cuelga de un equipo. Para eso se comparan
+   nombres de tipo escritos por humanos ("Monitor" de la pieza contra
+   "Monitores" del catálogo), sin acentos, sin distinguir mayúsculas y sin
+   que importe el singular/plural. */
+
+/** "Discos  Duros" → "discos duros" (sin acentos, minúsculas). */
+function normalizarTipo(txt) {
+    return String(txt || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** "Discos duros" → "disco duro": lleva cada palabra al singular. */
+function singularTipo(txt) {
+    return normalizarTipo(txt)
+        .split(' ')
+        .map(palabra => palabra.replace(/es$/, '').replace(/s$/, ''))
+        .join(' ')
+        .trim();
+}
+
+/** ¿La fila es del tipo que se está exportando? "Monitor" (pieza) coincide
+    con "Monitor" o "Monitores" del catálogo; "Disco duro" con "Discos duros". */
+function tipoCoincide(tipoFila, tipoCatalogo) {
+    const fila = singularTipo(tipoFila);
+    return !!fila && fila === singularTipo(tipoCatalogo);
+}
+
+/** Nombre singular con mayúscula: 'MONITOR' → 'Monitor'. */
+function nombreTipoPieza(tipo) {
+    const par = NOMBRE_TIPO_PIEZA[String(tipo || 'OTRO').toUpperCase()];
+    const nombre = par ? par[0] : String(tipo || '').toLowerCase();
+    return nombre.charAt(0).toUpperCase() + nombre.slice(1);
+}
+
+/** Identidad legible de una pieza: "Dell P2419H (serie CN0K1) ×2". */
+function identidadPieza(p) {
+    const marcaModelo = [p && p.Marca, p && p.Modelo].filter(Boolean).join(' ').trim();
+    const ids = [];
+    if (p && p.Serie)         ids.push(`serie ${p.Serie}`);
+    if (p && p.Identificador) ids.push(`${p && p.IdentificadorTipo ? String(p.IdentificadorTipo).toLowerCase() : 'id'} ${p.Identificador}`);
+    /* La Clave del colector es la identidad interna de la pieza: sólo se
+       muestra cuando no hay serie ni identificador que la hagan legible. */
+    if (ids.length === 0 && p && p.Clave) ids.push(`clave ${p.Clave}`);
+
+    const cuantas = Number(p && p.Cantidad) || 1;
+    const texto = [marcaModelo || 'sin marca/modelo',
+                   ids.length ? `(${ids.join(', ')})` : ''].filter(Boolean).join(' ');
+    return cuantas > 1 ? `${texto} ×${cuantas}` : texto;
+}
+
+/** "Monitores: Dell P2419H (serie CN0K1) | Discos duros: WD Blue ×2". */
+function identificadoresPiezas(a) {
+    const piezas = Array.isArray(a.PiezasDetalle) ? a.PiezasDetalle : [];
+    if (piezas.length === 0) return '';
+
+    const porTipo = new Map();
+    for (const p of piezas) {
+        const tipo = String((p && p.TipoComponente) || 'OTRO').toUpperCase();
+        if (!porTipo.has(tipo)) porTipo.set(tipo, []);
+        porTipo.get(tipo).push(p);
+    }
+
+    const tipos = [...porTipo.keys()].sort((x, y) => {
+        const ix = ORDEN_TIPOS_PIEZA.indexOf(x), iy = ORDEN_TIPOS_PIEZA.indexOf(y);
+        return (ix < 0 ? ORDEN_TIPOS_PIEZA.length : ix) - (iy < 0 ? ORDEN_TIPOS_PIEZA.length : iy);
+    });
+
+    return tipos.map(tipo => {
+        const par = NOMBRE_TIPO_PIEZA[tipo];
+        const plural = par ? par[1] : String(tipo).toLowerCase();
+        const titulo = plural.charAt(0).toUpperCase() + plural.slice(1);
+        return `${titulo}: ${porTipo.get(tipo).map(p => identidadPieza(p)).join('; ')}`;
+    }).join(' | ');
+}
+
+/* Datos del activo PADRE que se copian al renglón de la pieza: en un
+   reporte de monitores dicen de quién es la pieza y dónde está, sin tener
+   que abrir la ficha del equipo. No se inventan columnas: sólo se llenan
+   las que ya existen en el Excel de ese tipo. */
+const CAMPOS_PADRE_PIEZA = ['Estado', 'Estatus', 'Cartera', 'Sitio', 'UsuarioAsignado'];
+
+/** Una fila del reporte por cada pieza física del activo: su identidad en
+    las columnas de siempre (NoSerie / Marca / Modelo / Tipo) y el activo
+    dueño en las dos columnas del padre. */
+function filaPiezaDeActivo(activo, pieza) {
+    const p = pieza || {};
+    const fila = {
+        NoSerie: p.Serie || p.Identificador || p.Clave || '',
+        Marca:   p.Marca || '',
+        Modelo:  p.Modelo || '',
+        Tipo:    nombreTipoPieza(p.TipoComponente)
+    };
+    for (const campo of CAMPOS_PADRE_PIEZA) {
+        const valor = activo[campo];
+        if (valor !== undefined && valor !== null && valor !== '') fila[campo] = valor;
+    }
+    fila[COL_PADRE_SERIE.key] = activo.NoSerie || '';
+    fila[COL_PADRE_HOST.key]  = activo.Hostname || '';
+    return fila;
+}
+
+/** Aplana el reporte: el activo en su fila y debajo una fila por pieza
+    conectada. Cantidad > 1 significa N piezas idénticas y el reporte debe
+    contar unidades físicas, así que se repite el renglón. */
+function filasConPiezas(datos) {
+    const filas = [];
+    for (const a of datos) {
+        filas.push({ ...a, [COL_PADRE_SERIE.key]: '', [COL_PADRE_HOST.key]: '' });
+        for (const p of Array.isArray(a.PiezasDetalle) ? a.PiezasDetalle : []) {
+            const unidades = Math.max(1, Number(p && p.Cantidad) || 1);
+            for (let i = 0; i < unidades; i++) filas.push(filaPiezaDeActivo(a, p));
+        }
+    }
+    return filas;
 }
 
 function pintarTabla() {
@@ -414,7 +571,9 @@ function pintarTabla() {
             a.UsuarioAsignado, a.Observaciones,
             a.Procesador, a.MemoriaRAM, a.Almacenamiento, a.SistemaOperativo,
             a.Accesorios, a.Subtipo, a.Clasificacion, a.Tamanio, a.Capacidad, a.Voltaje,
-            (Array.isArray(a.PiezasTipos) ? a.PiezasTipos.map(t => NOMBRE_TIPO_PIEZA[t.tipo] || t.tipo).join(' ') : '')
+            /* Las piezas también se buscan: escribir "monitor" o la serie de
+               un disco debe encontrar al activo al que cuelgan. */
+            detallePiezas(a), identificadoresPiezas(a)
         ].filter(Boolean).join(' ').toLowerCase();
         return texto.includes(filtroBusqueda);
     });
@@ -620,18 +779,28 @@ btnExportar.addEventListener('click', async () => {
 
     if (!isConfirmed) return;
 
-    let datosExport = [];
+    /* Reporte aplanado: cada activo en su fila y, debajo, una fila por cada
+       pieza conectada (monitor, disco, teclado...). */
+    const filasInventario = filasConPiezas(activos);
+
+    let filasExport = [];
     let columnas = [];
     let tituloReporte = 'Inventario_General';
 
     if (idTipo) {
         // Filtrar por tipo
         const tipoSel = tipos.find(t => t.IdTipo == idTipo);
-        datosExport = activos.filter(a => a.IdTipo == idTipo);
         tituloReporte = `Inventario_${tipoSel.Nombre.replace(/\s+/g, '_')}`;
 
-        if (datosExport.length === 0) {
-            toastError('Sin datos', `No hay activos registrados de tipo "${tipoSel.Nombre}".`);
+        /* El filtro es por el TIPO DE CADA FILA, no por el tipo del activo:
+           un monitor (como un disco, teclado o ratón) no es un activo, cuelga
+           de un equipo como pieza conectada. Filtrar sólo los activos dejaba
+           el reporte de monitores casi vacío aunque los equipos tuvieran
+           monitores registrados. */
+        filasExport = filasInventario.filter(f => tipoCoincide(f.Tipo, tipoSel.Nombre));
+
+        if (filasExport.length === 0) {
+            toastError('Sin datos', `No hay activos ni piezas conectadas de tipo "${tipoSel.Nombre}".`);
             return;
         }
 
@@ -671,7 +840,7 @@ btnExportar.addEventListener('click', async () => {
 
     } else {
       
-        datosExport = activos;
+        filasExport = filasInventario;
         columnas = [
             { header: 'No. Serie', key: 'NoSerie', width: 20 },
             { header: 'Marca', key: 'Marca', width: 15 },
@@ -688,13 +857,28 @@ btnExportar.addEventListener('click', async () => {
     }
 
    
-    columnas.push({ header: 'Piezas conectadas', key: 'PiezasTexto', width: 34 });
-    datosExport = datosExport.map(a => ({ ...a, PiezasTexto: textoPiezas(a) }));
+    /* Las dos únicas columnas de "piezas": de qué activo cuelga cada fila.
+       No se abren columnas por tipo de pieza; cada pieza va en su renglón
+       con su serie, marca y modelo en las columnas normales. */
+    columnas.push(COL_PADRE_SERIE, COL_PADRE_HOST);
+
+    /* Recuento del reporte: los renglones con el padre lleno son piezas
+       conectadas; el resto son activos. Así el aviso sirve tanto para el
+       reporte general como para uno filtrado por tipo (que puede traer
+       sólo piezas, p. ej. el de monitores). */
+    const totalPiezas = filasExport.filter(f => f[COL_PADRE_SERIE.key]).length;
+    const totalActivos = filasExport.length - totalPiezas;
+    const resumenFilas = totalPiezas
+        ? (totalActivos
+            ? `<strong>${totalActivos}</strong> activo(s) más <strong>${totalPiezas}</strong> pieza(s) conectada(s)`
+            : `<strong>${totalPiezas}</strong> pieza(s) conectada(s)`)
+        : `<strong>${totalActivos}</strong> activo(s)`;
 
     const confirm = await Swal.fire({
         icon: 'question',
         title: '¿Generar Excel?',
-        html: `Se exportarán <strong>${datosExport.length}</strong> registros con <strong>${columnas.length}</strong> columnas.`,
+        html: `Se exportarán ${resumenFilas} con <strong>${columnas.length}</strong> columnas.<br>`
+            + `<small>Cada pieza va en su propia fila, con el No. Serie y el hostname del activo al que pertenece.</small>`,
         showCloseButton: true,
         confirmButtonText: 'Sí, generar',
         buttonsStyling: false,
@@ -717,7 +901,7 @@ btnExportar.addEventListener('click', async () => {
         const payload = {
             titulo: tituloReporte,
             columnas: columnas,
-            datos: datosExport
+            datos: filasExport
         };
 
         const res = await window.api.activoFijo.activos.exportarExcel(payload);
@@ -1896,7 +2080,7 @@ function abrirEdicion(id) {
     seleccionarCatalogoTexto(inpProcesador, a.Procesador);
     seleccionarCatalogoTexto(inpRAM, a.MemoriaRAM);
     seleccionarCatalogoTexto(inpAlmacenamiento, a.Almacenamiento);
-    seleccionarCatalogoTexto(inpSO, a.SistemaOperativo);
+    seleccionarSistemaOperativo(a);
     seleccionarCatalogoTexto(inpAccesorios, a.Accesorios);
     inpPrecio.value         = a.PrecioActivo ?? '';
     inpObservaciones.value  = a.Observaciones ?? '';
@@ -1973,6 +2157,13 @@ formulario.addEventListener('submit', async (e) => {
 
     const precioNum = inpPrecio.value.trim() ? parseFloat(inpPrecio.value) : null;
 
+    /* El select de SO usa el Id; se recupera la fila del catálogo para
+       mandar también el nombre (columna de respaldo) y la FK explícita. */
+    const soSeleccionado = inpSO.value
+        ? (catalogosEspecificaciones.sistemasOperativos || [])
+            .find(x => String(x.IdSistemaOperativo) === inpSO.value) || null
+        : null;
+
     const datos = {
         IdTipo:          idTipo,
         IdMarca:         selMarca.value ? parseInt(selMarca.value, 10) : null,
@@ -1996,7 +2187,8 @@ formulario.addEventListener('submit', async (e) => {
         Procesador:      inpProcesador.value.trim() || null,
         MemoriaRAM:      inpRAM.value.trim() || null,
         Almacenamiento:  inpAlmacenamiento.value.trim() || null,
-        SistemaOperativo: inpSO.value.trim() || null,
+        IdSistemaOperativo: soSeleccionado ? soSeleccionado.IdSistemaOperativo : null,
+        SistemaOperativo: soSeleccionado ? soSeleccionado.Nombre : null,
         Accesorios:      inpAccesorios.value.trim() || null,
         Observaciones:   inpObservaciones.value.trim() || null
     };
@@ -2508,7 +2700,9 @@ const CatalogosUI = (() => {
             pk: 'IdSistemaOperativo',
             campos: [
                 { nombre: 'Nombre', etiqueta: 'Nombre', tipo: 'text', requerido: true, max: 100,
-                  hint: 'Ej. Windows 11 Pro.' }
+                  hint: 'Ej. Windows 11 Pro, Windows 10 Pro, Ubuntu 24.04.' },
+                { nombre: 'BuildSO', etiqueta: 'Build (compilación)', tipo: 'text', max: 20,
+                  hint: 'Compilación del SO. Ej. 22H2, 23H2, 24H2. Puede ir vacío. Mismo nombre con distinta compilación son sistemas distintos (Windows 10 22H2 ≠ Windows 10 21H2).' }
             ]
         },
         accesorios: {

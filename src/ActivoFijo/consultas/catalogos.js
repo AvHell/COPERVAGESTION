@@ -182,8 +182,14 @@ const CATALOGOS = {
     sistemasOperativos: {
         tabla: 'ActivoFijoSistemasOperativos',
         pk:    'IdSistemaOperativo',
+        /* El SO se identifica por Nombre + BuildSO, donde BuildSO es la
+           COMPILACIÓN del sistema ("22H2", "23H2"): ("Windows 10", "22H2") y
+           ("Windows 10", "21H2") son dos filas distintas. Por eso Nombre NO
+           es único por sí solo; la validación de duplicado es la compuesta
+           que hace crear()/actualizar(). */
         campos: [
-            { nombre: 'Nombre', tipo: 'NVarChar', longitud: 100, requerido: true, unico: true }
+            { nombre: 'Nombre',  tipo: 'NVarChar', longitud: 100, requerido: true, unico: false },
+            { nombre: 'BuildSO', tipo: 'NVarChar', longitud: 20 }
         ]
     },
     accesorios: {
@@ -301,6 +307,16 @@ async function asegurarCatalogosExtendidos() {
                 'ActivoFijoResponsivas',
                 [...CATALOGOS_RESPONSIVAS.map(c => c.origen), 'NombreRecibe', 'PuestoRecibe']
             );
+
+            /* BuildSO es atributo del catálogo de SO (ver
+               scripts/activo-fijo-buildso-catalogo.sql). Se crea de forma
+               defensiva para que la app funcione aunque el script todavía
+               no se haya ejecutado en la base. */
+            await pool.request().query(`
+                IF OBJECT_ID(N'dbo.ActivoFijoSistemasOperativos', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.ActivoFijoSistemasOperativos', N'BuildSO') IS NULL
+                    ALTER TABLE dbo.ActivoFijoSistemasOperativos ADD BuildSO NVARCHAR(20) NULL;
+            `);
 
             for (const cfg of CATALOGOS_ESPECIFICACIONES) {
                 await pool.request().query(
@@ -538,6 +554,21 @@ async function crear(clave, datos) {
             }
         }
 
+        // Validación especial: sistemas operativos (Nombre + BuildSO único)
+        if (clave === 'sistemasOperativos') {
+            const dup = await pool.request()
+                .input('Nombre',  sql.NVarChar(100), datos.Nombre)
+                .input('BuildSO', sql.NVarChar(20),  datos.BuildSO || null)
+                .query(`SELECT 1 FROM ActivoFijoSistemasOperativos
+                        WHERE UPPER(LTRIM(RTRIM(Nombre))) = UPPER(LTRIM(RTRIM(@Nombre)))
+                          AND UPPER(LTRIM(RTRIM(ISNULL(BuildSO, N'')))) =
+                              UPPER(LTRIM(RTRIM(ISNULL(@BuildSO, N''))))
+                          AND Activo = 1`);
+            if (dup.recordset.length > 0) {
+                return { ok: false, mensaje: `Ya existe un sistema operativo activo "${datos.Nombre}" con el build "${datos.BuildSO || 'sin build'}".` };
+            }
+        }
+
         // Construir INSERT dinámico
         const columnas = [];
         const valores  = [];
@@ -602,6 +633,34 @@ async function actualizar(clave, id, datos) {
                         WHERE Grupo = @Grupo AND Nombre = @Nombre AND IdSubtipo <> @Id AND Activo = 1`);
             if (dup.recordset.length > 0) {
                 return { ok: false, mensaje: `Ya existe un subtipo activo "${datos.Nombre}" en el grupo "${datos.Grupo}".` };
+            }
+        }
+
+        /* Sistemas operativos: único por Nombre + BuildSO. Sólo se valida
+           cuando llega alguno de los dos campos (edición parcial). */
+        if (clave === 'sistemasOperativos' && (datos.Nombre !== undefined || datos.BuildSO !== undefined)) {
+            const actual = await pool.request()
+                .input('Id', sql.Int, id)
+                .query(`SELECT Nombre, BuildSO FROM ActivoFijoSistemasOperativos WHERE IdSistemaOperativo = @Id`);
+            if (actual.recordset.length === 0) {
+                return { ok: false, mensaje: 'El registro ya no existe.' };
+            }
+
+            const nombre  = datos.Nombre  !== undefined ? datos.Nombre  : actual.recordset[0].Nombre;
+            const buildSO = datos.BuildSO !== undefined ? datos.BuildSO : actual.recordset[0].BuildSO;
+
+            const dup = await pool.request()
+                .input('Nombre',  sql.NVarChar(100), nombre)
+                .input('BuildSO', sql.NVarChar(20),  buildSO || null)
+                .input('Id',      sql.Int, id)
+                .query(`SELECT 1 FROM ActivoFijoSistemasOperativos
+                        WHERE UPPER(LTRIM(RTRIM(Nombre))) = UPPER(LTRIM(RTRIM(@Nombre)))
+                          AND UPPER(LTRIM(RTRIM(ISNULL(BuildSO, N'')))) =
+                              UPPER(LTRIM(RTRIM(ISNULL(@BuildSO, N''))))
+                          AND IdSistemaOperativo <> @Id
+                          AND Activo = 1`);
+            if (dup.recordset.length > 0) {
+                return { ok: false, mensaje: `Ya existe otro sistema operativo activo "${nombre}" con el build "${buildSO || 'sin build'}".` };
             }
         }
 
@@ -865,7 +924,7 @@ async function eliminarDefinitivo(clave, id) {
      - Si no existe, lo crea.
    Devuelve null si el texto viene vacío.
    ========================================================= */
-async function resolverId(clave, nombre) {
+async function resolverId(clave, nombre, buildSO) {
     if (nombre === null || nombre === undefined) return null;
 
     const cfg = getConfig(clave);
@@ -879,23 +938,58 @@ async function resolverId(clave, nombre) {
     const campoNombre = cfg.campos.find(c => c.nombre === 'Nombre') || {};
     const longitud = campoNombre.longitud || 100;
 
+    /* Los sistemas operativos se identifican por Nombre + BuildSO, así
+       que el build (opcional) forma parte de la búsqueda. Si no llega,
+       se prefiere la fila sin build y luego la de menor Id. */
+    const campoBuild = cfg.campos.find(c => c.nombre === 'BuildSO') || null;
+    const usaBuild   = !!campoBuild;
+
     /* Se recorta al largo real de la columna para no provocar un
        error de truncamiento si el texto viene más largo. */
     const texto = String(nombre).trim().slice(0, longitud);
     if (!texto) return null;
 
+    const textoBuild = usaBuild && buildSO !== null && buildSO !== undefined
+        ? (String(buildSO).trim().slice(0, campoBuild.longitud || 20) || null)
+        : null;
+
     await asegurarCatalogosExtendidos();
     const pool = await getPool();
 
-    const buscar = () =>
-        pool.request()
-            .input('Nombre', sql.NVarChar(300), texto)
-            .query(`
+    const filtroNombre = `UPPER(LTRIM(RTRIM(Nombre))) = UPPER(LTRIM(RTRIM(@Nombre)))`;
+
+    const buscar = () => {
+        const request = pool.request().input('Nombre', sql.NVarChar(300), texto);
+
+        if (!usaBuild) {
+            return request.query(`
                 SELECT TOP 1 ${cfg.pk} AS Id, Activo
                 FROM ${cfg.tabla}
-                WHERE UPPER(LTRIM(RTRIM(Nombre))) = UPPER(LTRIM(RTRIM(@Nombre)))
+                WHERE ${filtroNombre}
                 ORDER BY ${cfg.pk}
             `);
+        }
+
+        if (textoBuild) {
+            request.input('BuildSO', sql.NVarChar(20), textoBuild);
+            return request.query(`
+                SELECT TOP 1 ${cfg.pk} AS Id, Activo
+                FROM ${cfg.tabla}
+                WHERE ${filtroNombre}
+                  AND UPPER(LTRIM(RTRIM(ISNULL(BuildSO, N'')))) = UPPER(@BuildSO)
+                ORDER BY ${cfg.pk}
+            `);
+        }
+
+        return request.query(`
+            SELECT TOP 1 ${cfg.pk} AS Id, Activo
+            FROM ${cfg.tabla}
+            WHERE ${filtroNombre}
+            ORDER BY
+                CASE WHEN NULLIF(LTRIM(RTRIM(BuildSO)), N'') IS NULL THEN 0 ELSE 1 END,
+                ${cfg.pk}
+        `);
+    };
 
     const existente = await buscar();
 
@@ -909,13 +1003,21 @@ async function resolverId(clave, nombre) {
         return fila.Id;
     }
 
-    const insertado = await pool.request()
-        .input('Nombre', tipoSql('NVarChar', longitud), texto)
-        .query(`
-            INSERT INTO ${cfg.tabla} (Nombre, Activo)
-            OUTPUT INSERTED.${cfg.pk} AS Id
-            VALUES (@Nombre, 1)
-        `);
+    const insertar = pool.request().input('Nombre', tipoSql('NVarChar', longitud), texto);
+    let columnas = 'Nombre, Activo';
+    let valores  = '@Nombre, 1';
+
+    if (usaBuild) {
+        insertar.input('BuildSO', sql.NVarChar(campoBuild.longitud || 20), textoBuild);
+        columnas = 'Nombre, BuildSO, Activo';
+        valores  = '@Nombre, @BuildSO, 1';
+    }
+
+    const insertado = await insertar.query(`
+        INSERT INTO ${cfg.tabla} (${columnas})
+        OUTPUT INSERTED.${cfg.pk} AS Id
+        VALUES (${valores})
+    `);
 
     return insertado.recordset[0].Id;
 }

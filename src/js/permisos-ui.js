@@ -49,13 +49,8 @@
       '.tab-btn[data-tab="roles"]': 'catalogos',
       '.tab-btn[data-tab="dominios"]': 'catalogos:dominios:gestionar',
       '.tab-btn[data-tab="config"]': 'catalogos:config:gestionar',
-      '.tab-btn[data-tab="rangos"]': 'catalogos:rangos:auditar|catalogos:rangos:editar|catalogos',
       '.tab-panel[data-tab-panel="dominios"]': 'catalogos:dominios:gestionar',
       '.tab-panel[data-tab-panel="config"]': 'catalogos:config:gestionar',
-      '.tab-panel[data-tab-panel="rangos"]': 'catalogos:rangos:auditar|catalogos:rangos:editar|catalogos',
-      '#rng-filtro-cliente': 'catalogos:rangos:auditar|catalogos:rangos:editar|catalogos',
-      '#rng-btn-analizar': 'catalogos:rangos:auditar|equipos:rangos:auditar|catalogos',
-      '#rng-btn-aplicar': 'catalogos:rangos:crear|catalogos:rangos:editar|equipos:rangos:crear|equipos:rangos:editar',
       '#cli-btn-nuevo': 'catalogos:clientes:crear',
       '#cli-guardar': 'catalogos:clientes:crear|catalogos:clientes:editar',
       '#pis-btn-nuevo': 'catalogos:pisos:crear',
@@ -91,9 +86,16 @@
       '#contenedor-grupos': 'equipos:listado:ver',
       '.data-table button.secundario': 'equipos:editar',
       '.data-table button.peligro': 'equipos:eliminar',
-      '#btn-rangos-ip': 'equipos',
-      '#rangos-filtro-cliente': 'equipos',
-      '#btn-rangos-auditar': 'equipos:rangos:auditar|equipos',
+      '#btn-rangos-ip': 'equipos:listado:ver'
+    },
+    /* Rangos IP vive en su propia ventana (ya no es modal de Equipos
+       ni pestaña de Catálogos). Usa las claves equipos:rangos:*. */
+    'rangos.html': {
+      '#rangos-filtro-cliente': 'equipos:listado:ver',
+      '#btn-rangos-analizar': 'equipos:listado:ver',
+      '#btn-rangos-aplicar': 'equipos:rangos:editar|equipos:rangos:crear',
+      '#btn-rangos-auditar': 'equipos:rangos:auditar|equipos:listado:ver',
+      '#rangos-lista': 'equipos:listado:ver',
       '#btn-rango-nuevo': 'equipos:rangos:crear',
       '#btn-sugerir-rango': 'equipos:rangos:crear|equipos:rangos:editar',
       '#rango-guardar': 'equipos:rangos:crear|equipos:rangos:editar',

@@ -420,6 +420,14 @@ async function obtenerFicha(idActivoFijoEQ) {
             catalogosDB.camposEspecificaciones3FN()
         );
         const pool = await getPool();
+        /* El build ya no vive en ActivoFijoEquipos: es atributo del
+           catálogo de sistemas operativos (Nombre + BuildSO). Se lee por
+           IdSistemaOperativo para que la ficha siga mostrando la versión
+           exacta del SO. */
+        const columnasSO = await catalogosDB.columnasExistentes('ActivoFijoSistemasOperativos', ['BuildSO']);
+        const buildSOExpr = columnasSO.has('BuildSO')
+            ? 'soBuild.BuildSO'
+            : 'CAST(NULL AS NVARCHAR(20)) AS BuildSO';
         const r = await pool.request()
             .input('Id', sql.Int, id)
             .query(`
@@ -432,11 +440,7 @@ async function obtenerFicha(idActivoFijoEQ) {
                     af.IdEstatus,      et.Nombre AS Estatus,
                     af.IdCartera,      ca.Nombre AS Cartera,
                     af.Observaciones,
-                    /* Build del sistema operativo: lo escribe el colector en
-                       ActivoFijoEquipos.BuildSO (nvarchar 20). Sin esta
-                       columna la ficha no puede mostrar la versión exacta
-                       del SO, que es lo que se revisa al dar soporte. */
-                    af.BuildSO,
+                    ${buildSOExpr},
                     ${esp.columnas.join(',\n                    ')}
                 FROM dbo.ActivoFijoEquipos af
                 LEFT JOIN dbo.ActivoFijoMarcas   ma ON ma.IdMarca   = af.IdMarca
@@ -444,6 +448,7 @@ async function obtenerFicha(idActivoFijoEQ) {
                 LEFT JOIN dbo.ActivoFijoEstados  es ON es.IdEstado  = af.IdEstado
                 LEFT JOIN dbo.ActivoFijoEstatus  et ON et.IdEstatus = af.IdEstatus
                 LEFT JOIN dbo.ActivoFijoCarteras ca ON ca.IdCartera = af.IdCartera
+                LEFT JOIN dbo.ActivoFijoSistemasOperativos soBuild ON soBuild.IdSistemaOperativo = af.IdSistemaOperativo
                 ${esp.joins.join('\n                ')}
                 WHERE af.IdActivoFijoEQ = @Id;
             `);
@@ -567,9 +572,9 @@ async function detalleDeActivo(idActivoFijoEQ) {
     }
     return {
         ok: true,
-        /* La cabecera viaja con el detalle: ahí viene lo que sólo está en
-           ActivoFijoEquipos y no en el listado (BuildSO y los nombres de
-           catálogo ya resueltos). Así la ficha del inventario muestra el
+        /* La cabecera viaja con el detalle: ahí vienen los nombres de
+           catálogo ya resueltos y el BuildSO, leído del catálogo de
+           sistemas operativos. Así la ficha del inventario muestra el
            build sin una segunda consulta. */
         equipo: ficha.equipo || null,
         red: ficha.red || [],

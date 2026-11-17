@@ -75,11 +75,28 @@ async function resolverEspecificaciones(datos) {
     const textos = {};
 
     for (const [campo, clave, fk] of CAMPOS_CATALOGO_ESPECIFICACIONES) {
+        /* La UI puede mandar la FK ya resuelta (los <select> por Id, como el
+           de sistemas operativos, donde el nombre puede repetirse con
+           distintos builds). En ese caso manda la FK y no se busca por
+           texto, para no re-apuntar el equipo a otra fila del catálogo. */
+        if (datos[fk] !== undefined) {
+            ids[fk] = datos[fk] === null ? null : (Number(datos[fk]) || null);
+            if (datos[campo] !== undefined) {
+                const textoFk = datos[campo] === null ? '' : String(datos[campo]).trim();
+                textos[campo] = textoFk || null;
+            }
+            continue;
+        }
+
         if (datos[campo] === undefined) continue;
 
         const texto = datos[campo] === null ? '' : String(datos[campo]).trim();
         textos[campo] = texto || null;
-        ids[fk] = texto ? await catalogosDB.resolverId(clave, texto) : null;
+
+        /* El sistema operativo se identifica por Nombre + BuildSO: si el
+           llamador envía el build, se usa para desambiguar. */
+        const build = campo === 'SistemaOperativo' ? datos.BuildSO : undefined;
+        ids[fk] = texto ? await catalogosDB.resolverId(clave, texto, build) : null;
     }
 
     return { ids, textos };
@@ -95,31 +112,68 @@ async function resolverEspecificaciones(datos) {
    para poder mostrarlo en el listado, sin convertirlas en activos
    (el total del inventario no cambia). Si la tabla no existe
    (esquema viejo) devuelve un mapa vacío: el listado nunca se cae.
+
+   Además del conteo por tipo se devuelve cada pieza con su identidad
+   (Clave / Serie / Identificador + Marca y Modelo) porque el Excel del
+   inventario tiene que decir QUÉ monitores, discos, teclados y ratones
+   cuelgan de cada activo, no sólo cuántos.
    ========================================================= */
 async function piezasPorActivo(pool) {
     const mapa = new Map();
     try {
-        const ex = await pool.request().query(`
-            SELECT CASE WHEN OBJECT_ID('dbo.ActivoFijoEquiposComponentes', 'U') IS NULL
-                        THEN 0 ELSE 1 END AS Existe`);
-        if (!(ex.recordset && ex.recordset[0] && ex.recordset[0].Existe)) return mapa;
+        if (!(await catalogosDB.tablaExiste('ActivoFijoEquiposComponentes'))) return mapa;
 
-        /* SUM(Cantidad) y no COUNT(*): una fila puede representar 2 discos
-           idénticos (misma Clave) y el inventario debe mostrar unidades
-           físicas, no filas. Cantidad tiene DEFAULT (1). */
+        /* La tabla puente creció por fases (diadema, MAC, estado), así que
+           sólo se piden las columnas de identidad que existen de verdad:
+           una base atrasada no puede tumbar el listado. */
+        const cols = await catalogosDB.columnasExistentes('ActivoFijoEquiposComponentes',
+            ['TipoComponente', 'Clave', 'Marca', 'Modelo', 'Serie',
+             'Identificador', 'IdentificadorTipo', 'Cantidad']);
+        const col = (nombre, tipo = 'NVARCHAR(300)') =>
+            cols.has(nombre) ? `cp.${nombre}` : `CAST(NULL AS ${tipo}) AS ${nombre}`;
+
+        /* Una fila puede representar N discos idénticos (misma Clave) y el
+           inventario debe contar unidades físicas, no filas: la Cantidad
+           se suma aquí en vez de en SQL porque también viaja por pieza.
+           Cantidad tiene DEFAULT (1). */
         const r = await pool.request().query(`
-            SELECT IdActivoFijoEQ, TipoComponente,
-                   SUM(ISNULL(Cantidad, 1)) AS Cuantas
-            FROM dbo.ActivoFijoEquiposComponentes
-            WHERE Vigente = 1
-            GROUP BY IdActivoFijoEQ, TipoComponente`);
+            SELECT cp.IdActivoFijoEQ,
+                   ${col('TipoComponente', 'VARCHAR(40)')},
+                   ${col('Clave')},
+                   ${col('Marca', 'NVARCHAR(150)')},
+                   ${col('Modelo', 'NVARCHAR(150)')},
+                   ${col('Serie', 'NVARCHAR(150)')},
+                   ${col('Identificador')},
+                   ${col('IdentificadorTipo', 'VARCHAR(40)')},
+                   ${cols.has('Cantidad') ? 'ISNULL(cp.Cantidad, 1)' : '1'} AS Cantidad
+            FROM dbo.ActivoFijoEquiposComponentes cp
+            WHERE cp.Vigente = 1
+            ORDER BY cp.IdActivoFijoEQ`);
+
         for (const f of r.recordset || []) {
             const id = Number(f.IdActivoFijoEQ) || 0;
-            if (!mapa.has(id)) mapa.set(id, { total: 0, tipos: [] });
+            if (!mapa.has(id)) mapa.set(id, { total: 0, tipos: [], piezas: [] });
             const entrada = mapa.get(id);
-            const cuantas = Number(f.Cuantas) || 0;
+            const tipo = String(f.TipoComponente || 'OTRO').toUpperCase();
+            const cuantas = Number(f.Cantidad) || 1;
             entrada.total += cuantas;
-            entrada.tipos.push({ tipo: String(f.TipoComponente || 'OTRO').toUpperCase(), cuantas });
+
+            entrada.piezas.push({
+                TipoComponente: tipo,
+                Cantidad: cuantas,
+                Clave: f.Clave || null,
+                Marca: f.Marca || null,
+                Modelo: f.Modelo || null,
+                Serie: f.Serie || null,
+                Identificador: f.Identificador || null,
+                IdentificadorTipo: f.IdentificadorTipo || null
+            });
+
+            /* Un solo renglón por tipo en el desglose ("2 discos duros"),
+               sumando las filas que compartan TipoComponente. */
+            const resumen = entrada.tipos.find(t => t.tipo === tipo);
+            if (resumen) resumen.cuantas += cuantas;
+            else entrada.tipos.push({ tipo, cuantas });
         }
     } catch (err) {
         /* Best-effort: el conteo de piezas no puede impedir listar el
@@ -157,10 +211,45 @@ async function listar(filtros = {}) {
         await catalogosDB.prepararAccesoriosEquipo('af')
     );
 
+    /* La compilación del SO (BuildSO) es atributo del catálogo (Nombre +
+       BuildSO); se lee por la FK del equipo con el alias que arma
+       prepararNombresCatalogo (catSistemaOperativo), así el listado
+       distingue "Windows 10 21H2" de "Windows 10 22H2". Defensivo mientras
+       el script de migración no corra. */
+    const columnasSO = await catalogosDB.columnasExistentes('ActivoFijoSistemasOperativos', ['BuildSO']);
+    const buildSOExpr = columnasSO.has('BuildSO')
+        ? 'catSistemaOperativo.BuildSO'
+        : 'CAST(NULL AS NVARCHAR(20)) AS BuildSO';
+
+    /* Hostname con el que el colector identifica al equipo. No vive en el
+       activo sino en la tabla puente de red (ActivoFijoEquiposRed), así que
+       se lee por subconsulta del registro principal (EsPrincipal y, si no
+       hay, la última detección). El Excel lo usa para decir de qué equipo
+       cuelga cada pieza. Defensivo: si la base no tiene la tabla o las
+       columnas, el listado sigue igual y el hostname sale vacío. */
+    let hostnameExpr = 'CAST(NULL AS NVARCHAR(100)) AS Hostname';
+    if (await catalogosDB.tablaExiste('ActivoFijoEquiposRed')) {
+        const colsRed = await catalogosDB.columnasExistentes('ActivoFijoEquiposRed',
+            ['Hostname', 'Vigente', 'EsPrincipal', 'UltimaDeteccion']);
+        if (colsRed.has('Hostname')) {
+            const orden = [
+                colsRed.has('EsPrincipal')     ? 'r.EsPrincipal DESC'     : null,
+                colsRed.has('UltimaDeteccion') ? 'r.UltimaDeteccion DESC' : null
+            ].filter(Boolean).join(', ') || '(SELECT NULL)';
+            hostnameExpr = `(SELECT TOP (1) r.Hostname
+                FROM dbo.ActivoFijoEquiposRed r
+                WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
+                  ${colsRed.has('Vigente') ? 'AND r.Vigente = 1' : ''}
+                  AND NULLIF(LTRIM(RTRIM(r.Hostname)), '') IS NOT NULL
+                ORDER BY ${orden}) AS Hostname`;
+        }
+    }
+
     const result = await request.query(`
         SELECT
             af.IdActivoFijoEQ,
             af.IdCartera,
+            af.IdSistemaOperativo,
             c.Nombre        AS Cartera,
             af.IdMarca,
             m.Nombre        AS Marca,
@@ -181,6 +270,7 @@ async function listar(filtros = {}) {
             t.RequiereAccesorios,
             t.GrupoSubtipo,
             af.NoSerie,
+            ${hostnameExpr},
             af.IMEI1,
             af.IMEI2,
             af.NoTelefono,
@@ -206,6 +296,7 @@ async function listar(filtros = {}) {
             af.Observaciones,
             af.FechaCreacion,
             af.FechaModificacion,
+            ${buildSOExpr},
             ${lectura.columnas.join(',\n            ')}
         FROM ActivoFijoEquipos af
         LEFT  JOIN ActivoFijoCarteras       c   ON c.IdCartera       = af.IdCartera
@@ -233,6 +324,9 @@ async function listar(filtros = {}) {
         const p = piezas.get(Number(a.IdActivoFijoEQ));
         a.Piezas = p ? p.total : 0;
         a.PiezasTipos = p ? p.tipos : [];
+        /* Piezas con su identidad (monitor + serie, disco + clave, ...):
+           el Excel del inventario las detalla sin abrir la ficha. */
+        a.PiezasDetalle = p ? p.piezas : [];
         return a;
     });
 }

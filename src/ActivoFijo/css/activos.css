@@ -973,10 +973,11 @@ body {
 }
 
 .swal2-popup.cl-confirm  { width: 540px !important; }
-.swal2-popup.cl-ver      { width: 820px !important; }
-/* "Ver" con tablas dentro (red, cuentas, programas, piezas): necesita más
-   ancho, pero nunca más que la ventana. El alto lo resuelve el scroll. */
-.swal2-popup.cl-ver.cl-ver-datos { width: min(1180px, 94vw) !important; }
+/* "Ver": la ficha ya no se siente como una caja apretada. El resumen usa
+   un ancho cómodo de lectura y el modo con tablas (red, cuentas, programas,
+   piezas) aprovecha casi toda la ventana, sin desbordarla nunca. */
+.swal2-popup.cl-ver      { width: min(980px, 94vw) !important; }
+.swal2-popup.cl-ver.cl-ver-datos { width: min(1300px, 95vw) !important; }
 .swal2-popup.cl-historico{ width: 980px !important; }
 
 .swal2-popup.cl-confirm::before,
@@ -1242,16 +1243,60 @@ body {
 /* =========================================================
    MODAL VER (solo X)
    ========================================================= */
+/* Cabecera propia: el título va a la izquierda y la X vive en una
+   pastilla blanca elevada. Así la franja superior de color (o cualquier
+   otra línea) queda SIEMPRE por debajo y nunca tapa la X. */
 .swal2-popup.cl-ver .swal2-title {
-    padding: 24px 60px 16px !important;
-    font-size: 1.2rem !important;
+    padding: 26px 88px 20px 36px !important;
+    font-size: 1.24rem !important;
+    text-align: left !important;
 }
+/* El separador de cabecera sólo aparece cuando hay ficha que mostrar:
+   en el aviso de "Leyendo la ficha…" sobraría una raya suelta. */
+.swal2-popup.cl-ver:has(.ver-ficha) .swal2-title {
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.swal2-popup.cl-ver .swal2-close {
+    position: absolute !important;
+    top: 24px !important;
+    right: 24px !important;
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 1px solid var(--gray-200) !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+    color: var(--gray-500) !important;
+    font-size: 1.3rem !important;
+    font-weight: 400 !important;
+    line-height: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: var(--shadow-sm) !important;
+    /* Por encima del título, de la franja superior y de la barra de
+       páginas pegajosa: nada puede dibujarse encima de la X. */
+    z-index: 30 !important;
+    outline: none !important;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease !important;
+}
+.swal2-popup.cl-ver .swal2-close:hover,
+.swal2-popup.cl-ver .swal2-close:focus-visible {
+    background: var(--tierra-crema) !important;
+    border-color: var(--tierra-arena) !important;
+    color: var(--tierra-carbon) !important;
+    transform: translateY(-1px);
+}
+
 .swal2-popup.cl-ver .swal2-html-container {
-    padding: 0 32px 28px !important;
+    padding: 24px 36px 32px !important;
     text-align: left !important;
     /* El modal se adapta a la ventana: el scroll vive aquí dentro y la
        cabecera (título y X) nunca se pierde. */
-    max-height: calc(100vh - 190px);
+    max-height: calc(100vh - 210px);
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -1260,27 +1305,27 @@ body {
 .ver-seccion {
     background: var(--gray-50);
     border: 1px solid var(--gray-200);
-    border-radius: 12px;
-    padding: 14px 18px;
+    border-radius: 14px;
+    padding: 18px 22px;
 }
 .ver-seccion-titulo {
     font-family: var(--font-display);
-    font-size: 0.74rem;
+    font-size: 0.75rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--tierra-oliva);
-    margin-bottom: 10px;
-    padding-bottom: 8px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
     border-bottom: 1px solid var(--gray-200);
 }
 .ver-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 22px;
+    gap: 14px 28px;
 }
 .ver-grid-full { grid-template-columns: 1fr; }
-.ver-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ver-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ver-label {
     font-size: 0.7rem;
     font-weight: 600;
@@ -1289,15 +1334,15 @@ body {
     letter-spacing: 0.05em;
 }
 .ver-valor {
-    font-size: 0.88rem;
+    font-size: 0.9rem;
     color: var(--gray-800);
     word-break: break-word;
-    line-height: 1.4;
+    line-height: 1.45;
 }
 .ver-observaciones {
-    font-size: 0.86rem;
+    font-size: 0.88rem;
     color: var(--gray-700);
-    line-height: 1.55;
+    line-height: 1.6;
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -1305,7 +1350,7 @@ body {
     font-size: 0.74rem;
     color: var(--gray-500);
     text-align: center;
-    padding-top: 12px;
+    padding-top: 14px;
     border-top: 1px dashed var(--gray-200);
     font-style: italic;
 }
@@ -1322,18 +1367,18 @@ body {
 .ver-ficha {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
 }
 
 .ver-tabs {
     position: sticky;
     top: 0;
-    z-index: 3;
+    z-index: 2;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    padding: 6px;
-    background: var(--gray-50);
+    gap: 8px;
+    padding: 8px;
+    background: #fff;
     border: 1px solid var(--gray-200);
     border-radius: var(--radius-lg);
 }
@@ -1341,14 +1386,14 @@ body {
 .ver-tab {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 8px 14px;
+    gap: 8px;
+    padding: 9px 16px;
     border: 0;
     border-radius: var(--radius-md);
     background: transparent;
     color: var(--gray-600);
     font-family: var(--font-display);
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 600;
     letter-spacing: -0.005em;
     cursor: pointer;
@@ -1367,20 +1412,20 @@ body {
 }
 .ver-tab:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
 
-/* El scroll vive aquí: corto y con la barra de páginas siempre a la vista. */
+/* El scroll vive aquí: la ficha respira más alto antes de pedir scroll. */
 .ver-paginas {
-    max-height: min(52vh, 520px);
-    min-height: 180px;
+    max-height: min(62vh, 640px);
+    min-height: 240px;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-right: 4px;
+    padding-right: 6px;
 }
 
 .ver-pagina { display: none; }
 .ver-pagina.activo {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
 }
 /* Dentro de una página la tabla no necesita su propio scroll vertical:
    ya lo da el contenedor de páginas (evita dos barras anidadas). La
@@ -1962,12 +2007,22 @@ body {
         width: 100% !important;
         min-width: 0 !important;
     }
-    .ver-grid { grid-template-columns: 1fr; }
-    .ver-seccion { padding: 12px 14px; }
-    .swal2-popup.cl-ver .swal2-html-container { padding: 0 20px 22px !important; }
+    .ver-grid { grid-template-columns: 1fr; gap: 12px; }
+    .ver-seccion { padding: 14px 16px; }
+    .ver-seccion-titulo { margin-bottom: 12px; padding-bottom: 9px; }
+    /* En pantalla chica la cabecera de "Ver" se achica, pero la X sigue
+       con su pastilla opaca y su z-index alto para que nada la tape. */
+    .swal2-popup.cl-ver .swal2-title { padding: 20px 62px 16px 20px !important; font-size: 1.05rem !important; }
+    .swal2-popup.cl-ver .swal2-close {
+        top: 12px !important;
+        right: 12px !important;
+        width: 36px !important;
+        height: 36px !important;
+    }
+    .swal2-popup.cl-ver .swal2-html-container { padding: 18px 20px 24px !important; }
     /* En pantallas bajas la ficha deja más alto al contenido: la barra de
        páginas pasa a dos renglones y el título ocupa más espacio. */
-    .ver-paginas { max-height: calc(100vh - 300px); min-height: 140px; }
+    .ver-paginas { max-height: calc(100vh - 320px); min-height: 160px; }
     .ver-tab { padding: 7px 10px; font-size: 0.74rem; }
     .swal2-popup.cl-historico .swal2-html-container { padding: 0 16px 20px !important; }
 }

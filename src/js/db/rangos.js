@@ -338,6 +338,18 @@ async function eliminar(idRango) {
 
 /* ---------- Validación / auditoría ---------- */
 
+function rangosAplicables(rangosCliente, idRolEquipo) {
+    const lista = rangosCliente || [];
+    const idRol = Number(idRolEquipo) || null;
+    /* Un equipo sin perfil no se puede juzgar por perfil: le aplican TODOS
+       los rangos del cliente. Antes solo se le aplicaban los rangos sin
+       perfil, así que cualquier cliente con rangos por perfil marcaba a sus
+       equipos sin perfil como "perfil sin rango" aunque la IP estuviera
+       dentro de un rango establecido. Ese era el falso positivo. */
+    if (!idRol) return lista.slice();
+    return lista.filter((r) => !r.IdRolEquipo || Number(r.IdRolEquipo) === idRol);
+}
+
 function evaluarRangos(rangosCliente, idRolEquipo, ip) {
     const ipNormal = normalizarIPv4(ip);
     if (!ipNormal) return { ok: true, aplica: false, rango: null };
@@ -345,8 +357,7 @@ function evaluarRangos(rangosCliente, idRolEquipo, ip) {
     const lista = rangosCliente || [];
     if (!lista.length) return { ok: true, aplica: false, rango: null };
 
-    const idRol = Number(idRolEquipo) || null;
-    const aplicables = lista.filter((r) => !r.IdRolEquipo || Number(r.IdRolEquipo) === idRol);
+    const aplicables = rangosAplicables(lista, idRolEquipo);
     const valor = ipAEntero(ipNormal);
 
     const encontrado = aplicables.find((r) => {
@@ -446,6 +457,65 @@ async function rangoReservadoParaIP(ip) {
     };
 }
 
+/** Describe por qué un rango está mal definido, o null si está bien. */
+function problemaDeRango(rango) {
+    const ini = ipAEntero(rango?.IPInicio);
+    const fin = ipAEntero(rango?.IPFin);
+    if (ini === null) return { causa: 'ip-invalida', mensaje: `La IP inicial "${rango?.IPInicio ?? ''}" no es una IPv4 válida.` };
+    if (fin === null) return { causa: 'ip-invalida', mensaje: `La IP final "${rango?.IPFin ?? ''}" no es una IPv4 válida.` };
+    if (ini > fin) return { causa: 'invertido', mensaje: `El rango empieza en ${rango.IPInicio} y termina en ${rango.IPFin}: el inicio queda después del fin.` };
+    if (segmentoDe(rango.IPInicio) !== segmentoDe(rango.IPFin)) {
+        return { causa: 'cruza-segmento', mensaje: `Cruza de un segmento a otro (${segmentoDe(rango.IPInicio)} → ${segmentoDe(rango.IPFin)}); un rango debe vivir en un solo /24.` };
+    }
+    return null;
+}
+
+/**
+ * Explica dónde debería estar una IP que quedó fuera de los rangos
+ * establecidos: el rango más cercano y a cuántas direcciones está.
+ */
+function diagnosticoFueraDeRango(ip, aplicables) {
+    const valor = ipAEntero(ip);
+    const rangos = (aplicables || [])
+        .map((r) => ({ rango: r, ini: ipAEntero(r.IPInicio), fin: ipAEntero(r.IPFin) }))
+        .filter((x) => x.ini !== null && x.fin !== null);
+    if (valor === null || !rangos.length) {
+        return { cercano: null, distancia: null, mensaje: 'No hay ningún rango establecido que pueda cubrir esta IP.' };
+    }
+    let mejor = null;
+    for (const x of rangos) {
+        const distancia = valor < x.ini ? x.ini - valor : (valor > x.fin ? valor - x.fin : 0);
+        if (!mejor || distancia < mejor.distancia) mejor = { ...x, distancia };
+    }
+    if (mejor.distancia === 0) return { cercano: mejor.rango, distancia: 0, mensaje: '' };
+    const sentido = valor < mejor.ini ? 'antes' : 'después';
+    return {
+        cercano: mejor.rango,
+        distancia: mejor.distancia,
+        mensaje: `Está ${mejor.distancia} dirección${mejor.distancia === 1 ? '' : 'es'} ${sentido} del rango ${mejor.rango.IPInicio} – ${mejor.rango.IPFin}.`
+    };
+}
+
+/**
+ * Auditoría de rangos IP.
+ *
+ * Solo reporta lo que de verdad está mal. No marca "hay que ajustar
+ * rangos" por equipos que ya caen dentro de un rango establecido:
+ *
+ *   1. rangosInvalidos   → el rango está mal definido (IP inválida,
+ *                          invertido, cruza de segmento).
+ *   2. choques           → dos rangos se empalman (del mismo cliente o
+ *                          de clientes distintos: alguien reserva una IP
+ *                          que ya es de otro).
+ *   3. ipsDuplicadas     → dos equipos comparten la misma IP.
+ *   4. ipEnRangoAjeno    → la IP de un equipo cae en el rango de OTRO
+ *                          cliente.
+ *   5. violaciones       → la IP está fuera de todos los rangos del
+ *                          cliente, teniendo rangos establecidos.
+ *
+ * La falta de cobertura (cliente sin rangos, perfil sin rango) NO es
+ * una violación: va aparte en `cobertura` como pendiente de configurar.
+ */
 async function auditar(idCliente = null) {
     await verificarEsquema();
     const pool = await getPool();
@@ -482,43 +552,225 @@ async function auditar(idCliente = null) {
     `);
 
     const equipos = resultado.recordset || [];
+
+    /* ---------- 1. Rangos mal definidos ---------- */
+    const rangosInvalidos = [];
+    for (const r of rangos) {
+        const problema = problemaDeRango(r);
+        if (!problema) continue;
+        rangosInvalidos.push({
+            IdRangoIP: r.IdRangoIP,
+            IdCliente: r.IdCliente,
+            ClienteCodigo: r.ClienteCodigo,
+            ClienteNombre: r.ClienteNombre,
+            Nombre: r.Nombre,
+            IPInicio: r.IPInicio,
+            IPFin: r.IPFin,
+            RolCodigo: r.RolCodigo,
+            RolNombre: r.RolNombre,
+            causa: problema.causa,
+            mensaje: `${r.Nombre || 'Rango sin nombre'}: ${problema.mensaje}`
+        });
+    }
+
+    /* ---------- 2. Choques entre rangos ---------- */
+    const choques = [];
+    const rangosValidos = rangos
+        .map((r) => ({ rango: r, ini: ipAEntero(r.IPInicio), fin: ipAEntero(r.IPFin) }))
+        .filter((x) => x.ini !== null && x.fin !== null);
+    for (let i = 0; i < rangosValidos.length; i += 1) {
+        for (let j = i + 1; j < rangosValidos.length; j += 1) {
+            const a = rangosValidos[i];
+            const b = rangosValidos[j];
+            if (!seEmpalman(a.ini, a.fin, b.ini, b.fin)) continue;
+            const mismoCliente = Number(a.rango.IdCliente) === Number(b.rango.IdCliente);
+            const desde = Math.max(a.ini, b.ini);
+            const hasta = Math.min(a.fin, b.fin);
+            const hosts = hasta - desde + 1;
+            const A = `${a.rango.IPInicio} – ${a.rango.IPFin}`;
+            const B = `${b.rango.IPInicio} – ${b.rango.IPFin}`;
+            choques.push({
+                tipo: mismoCliente ? 'mismo-cliente' : 'entre-clientes',
+                gravedad: mismoCliente ? 'media' : 'alta',
+                desde: enteroAIP(desde),
+                hasta: enteroAIP(hasta),
+                hosts,
+                IdRangoA: a.rango.IdRangoIP,
+                IdRangoB: b.rango.IdRangoIP,
+                rangoA: { ...a.rango, etiqueta: A },
+                rangoB: { ...b.rango, etiqueta: B },
+                mensaje: mismoCliente
+                    ? `Dos rangos del mismo cliente (${a.rango.ClienteCodigo}) se empalman en ${hosts} dirección${hosts === 1 ? '' : 'es'}: ${A} y ${B}.`
+                    : `Los rangos ${B} (${b.rango.ClienteCodigo}) y ${A} (${a.rango.ClienteCodigo}) reservan ${hosts} dirección${hosts === 1 ? '' : 'es'} en común (${enteroAIP(desde)} – ${enteroAIP(hasta)}): una misma IP pertenece a dos clientes.`
+            });
+        }
+    }
+
+    /* ---------- 3. IP duplicada en dos o más equipos ---------- */
+    const ipEquipos = new Map();
+    for (const equipo of equipos) {
+        const ip = normalizarIPv4(equipo.IP);
+        if (!ip) continue;
+        if (!ipEquipos.has(ip)) ipEquipos.set(ip, []);
+        ipEquipos.get(ip).push(equipo);
+    }
+    const ipsDuplicadas = [];
+    for (const [ip, lista] of ipEquipos) {
+        if (lista.length < 2) continue;
+        ipsDuplicadas.push({
+            IP: ip,
+            total: lista.length,
+            equipos: lista.map((e) => ({
+                IdEquipo: e.IdEquipo,
+                Hostname: e.Hostname,
+                ClienteCodigo: e.ClienteCodigo,
+                RolCodigo: e.RolCodigo
+            })),
+            mensaje: `${lista.length} equipos comparten la IP ${ip}: ${lista.map((e) => `${e.Hostname || '(sin hostname)'} (${e.ClienteCodigo})`).join(', ')}.`
+        });
+    }
+
+    /* ---------- 4 y 5. Equipos: rango ajeno, fuera de rango, cobertura ---------- */
     const violaciones = [];
-    const sinNorma = [];
+    const ipEnRangoAjeno = [];
+    const coberturaEquipos = [];
 
     for (const equipo of equipos) {
-        const rangosCliente = porCliente.get(Number(equipo.IdCliente)) || [];
+        const ip = normalizarIPv4(equipo.IP) || equipo.IP;
+        const valor = ipAEntero(ip);
+        const idClienteEquipo = Number(equipo.IdCliente);
+        const rangosCliente = porCliente.get(idClienteEquipo) || [];
+
+        // ¿La IP cae en el rango de otro cliente? Eso siempre es un choque.
+        if (valor !== null) {
+            for (const otro of rangos) {
+                if (Number(otro.IdCliente) === idClienteEquipo) continue;
+                const ini = ipAEntero(otro.IPInicio);
+                const fin = ipAEntero(otro.IPFin);
+                if (ini === null || fin === null || valor < ini || valor > fin) continue;
+                ipEnRangoAjeno.push({
+                    IdEquipo: equipo.IdEquipo,
+                    Hostname: equipo.Hostname,
+                    IP: ip,
+                    ClienteCodigo: equipo.ClienteCodigo,
+                    ClienteNombre: equipo.ClienteNombre,
+                    RolCodigo: equipo.RolCodigo,
+                    RolNombre: equipo.RolNombre,
+                    IdRangoIP: otro.IdRangoIP,
+                    rangoAjeno: `${otro.IPInicio} – ${otro.IPFin}`,
+                    clienteAjeno: otro.ClienteCodigo,
+                    perfilAjeno: otro.RolNombre || 'Sin perfil',
+                    mensaje: `La IP ${ip} de ${equipo.Hostname || '(sin hostname)'} (${equipo.ClienteCodigo}) está dentro del rango ${otro.IPInicio} – ${otro.IPFin}, que pertenece a ${otro.ClienteCodigo}.`
+                });
+            }
+        }
+
+        // Cliente sin rangos configurados: no es un error, es cobertura.
         if (!rangosCliente.length) {
-            sinNorma.push({
+            coberturaEquipos.push({
                 IdEquipo: equipo.IdEquipo,
                 Hostname: equipo.Hostname,
-                IP: equipo.IP,
-                ClienteCodigo: equipo.ClienteCodigo
+                IP: ip,
+                ClienteCodigo: equipo.ClienteCodigo,
+                causa: 'cliente-sin-rango'
             });
             continue;
         }
-        const evaluacion = evaluarRangos(rangosCliente, equipo.IdRolEquipo, equipo.IP);
+
+        const evaluacion = evaluarRangos(rangosCliente, equipo.IdRolEquipo, ip);
         if (evaluacion.ok) continue;
+
+        const aplicables = evaluacion.aplicables || [];
+
+        // El perfil del equipo no tiene ni rango propio ni norma general.
+        if (evaluacion.motivo === 'perfil-sin-rango') {
+            coberturaEquipos.push({
+                IdEquipo: equipo.IdEquipo,
+                Hostname: equipo.Hostname,
+                IP: ip,
+                ClienteCodigo: equipo.ClienteCodigo,
+                RolNombre: equipo.RolNombre,
+                causa: 'perfil-sin-rango'
+            });
+            continue;
+        }
+
+        const diagnostico = diagnosticoFueraDeRango(ip, aplicables);
         violaciones.push({
             IdEquipo: equipo.IdEquipo,
             Hostname: equipo.Hostname,
-            IP: evaluacion.ip || equipo.IP,
+            IP: ip,
             ClienteCodigo: equipo.ClienteCodigo,
             ClienteNombre: equipo.ClienteNombre,
             RolCodigo: equipo.RolCodigo,
             RolNombre: equipo.RolNombre,
-            motivo: evaluacion.motivo,
-            esperado: (evaluacion.aplicables || []).map((r) => `${r.IPInicio} – ${r.IPFin}`),
-            mensaje: evaluacion.motivo === 'perfil-sin-rango'
-                ? `El perfil "${equipo.RolNombre || 'Sin perfil'}" no tiene rango definido.`
-                : `Fuera de rango (permitido: ${(evaluacion.aplicables || []).map((r) => `${r.IPInicio} – ${r.IPFin}`).join(', ') || 'sin rangos'}).`
+            motivo: 'fuera-de-rango',
+            esperado: aplicables.map((r) => `${r.IPInicio} – ${r.IPFin}`),
+            distancia: diagnostico.distancia,
+            rangoCercano: diagnostico.cercano
+                ? `${diagnostico.cercano.IPInicio} – ${diagnostico.cercano.IPFin}`
+                : null,
+            mensaje: `La IP ${ip} no está en ningún rango de ${equipo.ClienteCodigo}. ${diagnostico.mensaje}`.trim()
         });
     }
+
+    /* ---------- Cobertura agrupada ---------- */
+    const clientesSinRango = new Map();
+    for (const e of coberturaEquipos) {
+        if (e.causa !== 'cliente-sin-rango') continue;
+        const clave = e.ClienteCodigo || '(sin código)';
+        if (!clientesSinRango.has(clave)) clientesSinRango.set(clave, { ClienteCodigo: clave, equipos: 0 });
+        clientesSinRango.get(clave).equipos += 1;
+    }
+    const perfilesSinRango = new Map();
+    for (const e of coberturaEquipos) {
+        if (e.causa !== 'perfil-sin-rango') continue;
+        const clave = `${e.ClienteCodigo}|${e.RolNombre || 'Sin perfil'}`;
+        if (!perfilesSinRango.has(clave)) {
+            perfilesSinRango.set(clave, { ClienteCodigo: e.ClienteCodigo, RolNombre: e.RolNombre || 'Sin perfil', equipos: 0 });
+        }
+        perfilesSinRango.get(clave).equipos += 1;
+    }
+
+    const cobertura = {
+        clientesSinRango: [...clientesSinRango.values()].sort((a, b) => b.equipos - a.equipos),
+        perfilesSinRango: [...perfilesSinRango.values()].sort((a, b) => b.equipos - a.equipos),
+        equipos: coberturaEquipos.length
+    };
+
+    /* `sinNorma` se conserva por compatibilidad, pero ya NO es una
+       violación: solo lista equipos sin cobertura configurada. */
+    const sinNorma = coberturaEquipos.map((e) => ({
+        IdEquipo: e.IdEquipo,
+        Hostname: e.Hostname,
+        IP: e.IP,
+        ClienteCodigo: e.ClienteCodigo
+    }));
+
+    const totalHallazgos = violaciones.length + choques.length
+        + ipsDuplicadas.length + ipEnRangoAjeno.length + rangosInvalidos.length;
 
     return {
         ok: true,
         totalEquipos: equipos.length,
         totalRangos: rangos.length,
+        sinHallazgos: totalHallazgos === 0,
+        resumen: {
+            equipos: equipos.length,
+            rangos: rangos.length,
+            violaciones: violaciones.length,
+            choques: choques.length,
+            ipsDuplicadas: ipsDuplicadas.length,
+            ipEnRangoAjeno: ipEnRangoAjeno.length,
+            rangosInvalidos: rangosInvalidos.length,
+            sinCobertura: coberturaEquipos.length
+        },
         violaciones,
+        choques,
+        ipsDuplicadas,
+        ipEnRangoAjeno,
+        rangosInvalidos,
+        cobertura,
         sinNorma
     };
 }
@@ -539,12 +791,11 @@ async function auditar(idCliente = null) {
    rangos sin uso, empalmes y direcciones fuera de norma.
    ========================================================= */
 
-/* Hosts libres que se toleran entre dos IP usadas para que caigan
-   dentro del MISMO rango; si el hueco es mayor se crea otro rango. */
-const HOLGURA_HOSTS = 2;
 /* Hosts extra a cada lado del bloque detectado (se recortan si
    chocan con el inicio/fin del segmento o con Control General IP). */
 const MARGEN_HOSTS = 1;
+const HOST_MIN = 1;
+const HOST_MAX = 254;
 
 function hostDeIP(ip) {
     const normal = normalizarIPv4(ip);
@@ -557,19 +808,106 @@ function ipDesdeHost(segmento, host) {
     return `${segmento}.${host}`;
 }
 
-/** Agrupa hosts usados en bloques contiguos (con tolerancia HOLGURA). */
-function agruparHosts(hosts) {
-    const orden = [...new Set(hosts)].sort((a, b) => a - b);
-    const bloques = [];
-    for (const host of orden) {
-        const ultimo = bloques[bloques.length - 1];
-        if (ultimo && host - ultimo[ultimo.length - 1] <= HOLGURA_HOSTS + 1) {
-            ultimo.push(host);
-        } else {
-            bloques.push([host]);
+/** Segmento y host de una IPv4, con su valor entero. */
+function extremoDeIP(ip) {
+    const normal = normalizarIPv4(ip);
+    if (!normal) return null;
+    const [a, b, c, d] = normal.split('.').map(Number);
+    return {
+        segmento: `${a}.${b}.${c}`,
+        host: d,
+        valor: ((a * 256 + b) * 256 + c) * 256 + d
+    };
+}
+
+/**
+ * Hosts del segmento que ya son de OTROS clientes: esas direcciones no
+ * se pueden reservar, así que son el único motivo válido para partir un
+ * bloque.
+ *
+ * Ojo: las IP del Control General NO se tratan como bloqueo. Reservar
+ * una de ellas dentro de un rango es un aviso (se reporta en
+ * `generalesEnRangos`), no una razón para fragmentar el segmento en
+ * rangos sueltos sin consecutivo.
+ */
+function hostsDeOtrosClientes(rangos, idCliente, segmento) {
+    const bloqueados = new Set();
+    for (const rango of rangos) {
+        if (Number(rango.IdCliente) === Number(idCliente)) continue;
+        const ini = extremoDeIP(rango.IPInicio);
+        const fin = extremoDeIP(rango.IPFin);
+        if (!ini || !fin) continue;
+        if (ini.segmento !== segmento || fin.segmento !== segmento) continue;
+        for (let host = Math.max(ini.host, HOST_MIN); host <= Math.min(fin.host, HOST_MAX); host += 1) {
+            bloqueados.add(host);
         }
     }
-    return bloques;
+    return bloqueados;
+}
+
+/**
+ * Hosts del segmento que ya ocupa otro rango del MISMO cliente.
+ *
+ * La holgura (`MARGEN_HOSTS`) no puede entrar aquí: si el tramo usado
+ * termina en .195 y el perfil vecino empieza en .196, sumar un host de
+ * margen crearía una ampliación que se empalma con el rango vecino y el
+ * motor la reportaba como "revisar a mano" sin que hubiera nada mal.
+ *
+ * @param {number|null} excluirIdRango Rango que se va a ampliar: ese sí
+ *        puede crecer, así que no cuenta como vecino.
+ */
+function hostsOcupadosPorCliente(rangosCliente, segmento, excluirIdRango = null) {
+    const ocupados = new Set();
+    for (const rango of rangosCliente || []) {
+        if (excluirIdRango && Number(rango.IdRangoIP) === Number(excluirIdRango)) continue;
+        const ini = extremoDeIP(rango.IPInicio);
+        const fin = extremoDeIP(rango.IPFin);
+        if (!ini || !fin) continue;
+        if (ini.segmento !== segmento || fin.segmento !== segmento) continue;
+        for (let host = Math.max(ini.host, HOST_MIN); host <= Math.min(fin.host, HOST_MAX); host += 1) {
+            ocupados.add(host);
+        }
+    }
+    return ocupados;
+}
+
+/**
+ * Bloques consecutivos que hay que cubrir en el segmento.
+ *
+ * Toma las IP usadas y devuelve, como máximo, el tramo continuo que va
+ * de la primera a la última IP usada RELLENANDO los huecos intermedios.
+ * Ya no se parte en bloques sueltos cada vez que hay 2-3 hosts libres
+ * (eso generaba los rangos "sin consecutivo" y el fallback fragmentado).
+ * Solo se corta donde hay direcciones de otro cliente.
+ */
+function bloquesConsecutivos(usados, bloqueados) {
+    const lista = [...new Set(usados)].sort((a, b) => a - b);
+    if (!lista.length) return [];
+
+    const primero = lista[0];
+    const ultimo = lista[lista.length - 1];
+    const usadosSet = new Set(lista);
+    const bloques = [];
+    let inicio = null;
+
+    for (let host = primero; host <= ultimo + 1; host += 1) {
+        /* Una IP usada por este cliente no corta el tramo aunque otro
+           cliente la tenga reservada: si se cortaba, el equipo
+           desaparecía del análisis sin ningún aviso. Ahora el tramo la
+           incluye y el choque se reporta como conflicto. */
+        const corta = host > HOST_MAX || (bloqueados.has(host) && !usadosSet.has(host));
+        if (corta) {
+            if (inicio !== null) {
+                bloques.push({ desde: inicio, hasta: host - 1 });
+                inicio = null;
+            }
+            continue;
+        }
+        if (inicio === null) inicio = host;
+    }
+    if (inicio !== null) bloques.push({ desde: inicio, hasta: ultimo });
+
+    return bloques.filter((b) => lista.some((h) => h >= b.desde && h <= b.hasta));
 }
 
 function rangoCubreIP(rango, valor) {
@@ -669,10 +1007,14 @@ async function analizar(idCliente = null) {
             );
             const generalesSegmento = generalPorHost.get(segmento) || new Map();
             const hostsUsados = lista.map((e) => e.Host);
+            /* Solo las direcciones que ya reservó OTRO cliente obligan a
+               partir el segmento. Así cada propuesta sale como un tramo
+               continuo (consecutivo), no como bloques sueltos. */
+            const bloqueados = hostsDeOtrosClientes(rangos, grupo.IdCliente, segmento);
 
-            for (const bloque of agruparHosts(hostsUsados)) {
+            for (const bloque of bloquesConsecutivos(hostsUsados, bloqueados)) {
                 const usados = lista
-                    .filter((e) => bloque.includes(e.Host))
+                    .filter((e) => e.Host >= bloque.desde && e.Host <= bloque.hasta)
                     .sort((a, b) => a.Host - b.Host);
                 const equiposDetalle = usados.map((e) => ({
                     IdEquipo: e.IdEquipo,
@@ -682,34 +1024,62 @@ async function analizar(idCliente = null) {
                     EnPlano: !!e.EnPlano
                 }));
 
-                /* Recorta márgenes para no "reservar" la IP de la red,
-                   la de broadcast ni direcciones del control general. */
-                let hostInicio = Math.max(1, bloque[0] - MARGEN_HOSTS);
-                let hostFin = Math.min(254, bloque[bloque.length - 1] + MARGEN_HOSTS);
-                while (hostInicio < bloque[0] && generalesSegmento.has(hostInicio)) hostInicio += 1;
-                while (hostFin > bloque[bloque.length - 1] && generalesSegmento.has(hostFin)) hostFin -= 1;
+                const usadoIniValor = ipAEntero(ipDesdeHost(segmento, bloque.desde));
+                const usadoFinValor = ipAEntero(ipDesdeHost(segmento, bloque.hasta));
 
-                const ipInicio = ipDesdeHost(segmento, hostInicio);
-                const ipFin = ipDesdeHost(segmento, hostFin);
-                const iniValor = ipAEntero(ipInicio);
-                const finValor = ipAEntero(ipFin);
-
-                /* ¿Ya está cubierto por un rango que aplica al perfil? */
+                /* ---------- 1. ¿Ya está cubierto? ----------
+                   Se mide el tramo REALMENTE usado, no el tramo con
+                   holgura. Antes se exigía que el inicio y el fin, ya con
+                   margen, cayeran dentro de un rango: así, un rango que
+                   empieza justo en la primera IP usada salía "sin cubrir",
+                   y el motor inventaba una ampliación de un host que en una
+                   escalera de rangos consecutivos siempre chocaba con el
+                   rango vecino. Ese era el "Revisar a mano" fantasma. */
                 const cobertura = aplicables.find((r) =>
-                    rangoCubreIP(r, iniValor) && rangoCubreIP(r, finValor)
+                    rangoCubreIP(r, usadoIniValor) && rangoCubreIP(r, usadoFinValor)
                 );
                 if (cobertura) {
                     cubiertos += 1;
                     continue;
                 }
 
-                /* ¿Un rango existente se solapa parcialmente? Se amplía. */
+                /* ---------- 2. Holgura, sólo si falta cobertura ----------
+                   Recortada contra todo lo que NO es de este rango:
+                   Control General, rangos de otros clientes y rangos
+                   vecinos del mismo cliente. */
+                let hostInicio = Math.max(HOST_MIN, bloque.desde - MARGEN_HOSTS);
+                let hostFin = Math.min(HOST_MAX, bloque.hasta + MARGEN_HOSTS);
+
+                /* El rango del perfil que se solapa con el tramo holgado
+                   es el que se va a ampliar: no cuenta como vecino. */
                 const ampliable = aplicables.find((r) => {
                     const ini = ipAEntero(r.IPInicio);
                     const fin = ipAEntero(r.IPFin);
                     if (ini === null || fin === null) return false;
-                    return seEmpalman(ini, fin, iniValor, finValor);
+                    return seEmpalman(
+                        ini, fin,
+                        ipAEntero(ipDesdeHost(segmento, hostInicio)),
+                        ipAEntero(ipDesdeHost(segmento, hostFin))
+                    );
                 });
+
+                const vecinos = hostsOcupadosPorCliente(
+                    rangosCliente, segmento, ampliable ? ampliable.IdRangoIP : null
+                );
+
+                while (hostInicio < bloque.desde
+                    && (generalesSegmento.has(hostInicio) || bloqueados.has(hostInicio) || vecinos.has(hostInicio))) {
+                    hostInicio += 1;
+                }
+                while (hostFin > bloque.hasta
+                    && (generalesSegmento.has(hostFin) || bloqueados.has(hostFin) || vecinos.has(hostFin))) {
+                    hostFin -= 1;
+                }
+
+                const ipInicio = ipDesdeHost(segmento, hostInicio);
+                const ipFin = ipDesdeHost(segmento, hostFin);
+                const iniValor = ipAEntero(ipInicio);
+                const finValor = ipAEntero(ipFin);
 
                 const detalle = {
                     IdCliente: grupo.IdCliente,
@@ -721,7 +1091,7 @@ async function analizar(idCliente = null) {
                     Segmento: segmento,
                     IPInicio: ipInicio,
                     IPFin: ipFin,
-                    HostsUsados: bloque,
+                    HostsUsados: usados.map((e) => e.Host),
                     Equipos: equiposDetalle,
                     EquiposEnPlano: equiposDetalle.filter((e) => e.EnPlano).length,
                     TotalEquipos: equiposDetalle.length,
@@ -828,20 +1198,36 @@ async function analizar(idCliente = null) {
         (ipAEntero(a.IPInicio) ?? 0) - (ipAEntero(b.IPInicio) ?? 0)
     );
 
-    /* --- Rangos sin uso: ningún equipo del perfil cae dentro --- */
+    /* --- Rangos sin uso -------------------------------------------------
+       Se distinguen dos cosas que antes salían mezcladas:
+
+         · reservado → el perfil todavía no tiene ningún equipo con IP en
+           el cliente. Es el caso normal de un rango aprovisionado para
+           futuro: NO hay nada que depurar.
+         · sinUso    → el perfil sí tiene equipos con IP, pero ninguno cae
+           dentro del rango. Eso sí es accionable (rango mal ubicado). */
     const sinUso = [];
+    const reservado = [];
     for (const rango of rangos) {
         const equiposPerfil = equiposValidos.filter((e) =>
             Number(e.IdCliente) === Number(rango.IdCliente) &&
             (!rango.IdRolEquipo || Number(e.IdRolEquipo) === Number(rango.IdRolEquipo))
         );
         if (!equiposPerfil.length) {
-            sinUso.push({ ...rango, Motivo: rango.RolNombre ? `Sin equipos del perfil ${rango.RolNombre}.` : 'El cliente no tiene equipos estáticos con IP.' });
+            reservado.push({
+                ...rango,
+                Motivo: rango.RolNombre
+                    ? `Reservado para el perfil ${rango.RolNombre}: aún no hay equipos con ese perfil.`
+                    : 'Reservado: el cliente aún no tiene equipos estáticos con IP.'
+            });
             continue;
         }
         const usados = equiposPerfil.filter((e) => rangoCubreIP(rango, e.Valor));
         if (!usados.length) {
-            sinUso.push({ ...rango, Motivo: 'Ningún equipo del perfil usa IPs dentro de este rango.' });
+            sinUso.push({
+                ...rango,
+                Motivo: `${equiposPerfil.length} equipo(s) del perfil usan IP fuera de este rango.`
+            });
         }
     }
 
@@ -881,6 +1267,7 @@ async function analizar(idCliente = null) {
             ampliar: conteo.ampliar,
             conflicto: conteo.conflicto,
             sinUso: sinUso.length,
+            reservado: reservado.length,
             generalesEnRangos: generalesEnRangos.length,
             ipsInvalidas: ipsInvalidas.length,
             violaciones: auditoria.violaciones?.length || 0,
@@ -888,6 +1275,7 @@ async function analizar(idCliente = null) {
         },
         propuestas,
         sinUso,
+        reservado,
         generalesEnRangos,
         ipsInvalidas,
         violaciones: auditoria.violaciones || [],

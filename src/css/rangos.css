@@ -1,35 +1,306 @@
-.contenedor-form {
+/* =========================================================
+   RANGOS IP — página propia (src/html/rangos.html)
+   Reutiliza la base visual de equipos.css y solo agrega
+   el layout de secciones + el bloque de ajuste automático.
+   ========================================================= */
+
+/* --- Selector de cliente dentro de la toolbar fija --- */
+.toolbar-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+    flex-shrink: 0;
+}
+.toolbar-select select {
+    min-width: 190px;
+    padding: 10px 34px 10px 12px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: 12px;
     background: #fff;
-    padding: 15px;
-    border-radius: 6px;
+    color: var(--gray-800);
+    font-family: inherit;
+    font-size: 0.84rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.toolbar-select select:focus {
+    outline: none;
+    border-color: var(--tierra-oliva);
+    box-shadow: 0 0 0 4px rgba(110, 123, 91, 0.15);
+}
+
+/* --- Secciones de la página --- */
+.rangos-seccion {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 22px 24px;
     margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.rangos-seccion-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 16px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--gray-100);
+}
+.rangos-seccion-header > div { min-width: 0; }
+.rangos-seccion-header h3 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--tierra-carbon);
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+}
+.rangos-seccion-header p {
+    font-size: 0.82rem;
+    color: var(--gray-500);
+    line-height: 1.55;
+    max-width: 92ch;
 }
 
-.fila-form {
+.rangos-conteo {
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--tierra-crema);
+    color: var(--tierra-oliva);
+    border: 1px solid var(--tierra-arena);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.rangos-conteo:empty { display: none; }
+
+.rangos-vacio {
+    font-size: 0.84rem;
+    color: var(--gray-500);
+    line-height: 1.6;
+    padding: 14px 16px;
+    background: var(--gray-50);
+    border: 1px dashed var(--gray-200);
+    border-radius: var(--radius-md);
+}
+
+/* --- Modal de alta / edición ---
+   Usa las clases .modal-* de equipos.css; aquí solo se ajusta el ancho
+   para que los campos del rango quepan en una sola fila. */
+#modal-rango .modal-base { max-width: 760px; }
+#modal-rango .modal-body { padding-bottom: 22px; }
+#modal-rango .modal-header h3 { font-size: 1.1rem; }
+#modal-rango .rangos-ayuda-intro { margin: 0 0 16px; }
+
+.rangos-ayuda {
+    font-size: 0.78rem;
+    color: var(--gray-500);
+    line-height: 1.6;
+    margin-top: 4px;
+}
+.rangos-ayuda code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.76rem;
+    background: var(--gray-100);
+    padding: 1px 5px;
+    border-radius: 5px;
+    color: var(--tierra-carbon);
+}
+
+/* =========================================================
+   AJUSTE AUTOMÁTICO (migrado desde catalogos.css)
+   ========================================================= */
+.rng-resumen {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr auto;
+    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    gap: 12px;
+    margin: 0 0 20px;
+}
+.rng-resumen.oculto { display: none; }
+
+.rng-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-left: 4px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs);
+    min-width: 0;
+}
+.rng-stat.ok      { border-left-color: var(--tierra-oliva); }
+.rng-stat.aviso   { border-left-color: var(--tierra-oro); }
+.rng-stat.peligro { border-left-color: var(--rojo-base); }
+
+.rng-stat-valor {
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--tierra-carbon);
+    letter-spacing: -0.03em;
+}
+.rng-stat-label {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+}
+.rng-stat-hint {
+    font-size: 0.72rem;
+    color: var(--gray-400);
+    line-height: 1.35;
+}
+
+/* Detalle bajo cada valor de la tabla de propuestas */
+.rng-motivo {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.74rem;
+    color: var(--gray-500);
+    line-height: 1.45;
+    max-width: 54ch;
+}
+.rng-motivo.rng-alerta { color: var(--rojo-text); font-weight: 600; }
+
+#rng-propuestas .card-table { margin-bottom: 18px; }
+
+.rng-accion {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.rng-accion.crear {
+    background: var(--tierra-crema);
+    color: var(--tierra-oliva);
+    border-color: var(--tierra-arena);
+}
+.rng-accion.ampliar {
+    background: #F6EFD8;
+    color: #7a6a2f;
+    border-color: var(--tierra-oro);
+}
+.rng-accion.conflicto {
+    background: var(--rojo-soft);
+    color: var(--rojo-text);
+    border-color: var(--rojo-base);
+}
+
+/* Bloques de hallazgos (rangos mal definidos, choques, violaciones...) */
+.rng-bloque {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 18px 20px;
+    margin-bottom: 14px;
+}
+.rng-bloque.aviso   { border-left: 4px solid var(--tierra-oro); }
+.rng-bloque.peligro { border-left: 4px solid var(--rojo-base); }
+.rng-bloque.ok      { border-left: 4px solid var(--tierra-oliva); }
+
+.rng-bloque-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 10px;
-    align-items: end;
-    margin-bottom: 10px;
+}
+.rng-bloque-header h3 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--tierra-carbon);
+    letter-spacing: -0.015em;
+}
+.rng-bloque-count {
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--gray-100);
+    color: var(--gray-600);
+    flex-shrink: 0;
+}
+.rng-bloque.ok .rng-bloque-count      { background: var(--tierra-crema); color: var(--tierra-oliva); }
+.rng-bloque.aviso .rng-bloque-count   { background: var(--tierra-crema); color: var(--tierra-oliva); }
+.rng-bloque.peligro .rng-bloque-count { background: var(--rojo-soft); color: var(--rojo-text); }
+
+.rng-bloque-desc {
+    font-size: 0.8rem;
+    color: var(--gray-500);
+    line-height: 1.5;
+    margin: 4px 0 10px;
+    max-width: 76ch;
+}
+.rng-lista {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.rng-lista li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    font-size: 0.82rem;
+    color: var(--gray-700);
+    line-height: 1.5;
 }
 
-.fila-form.doble {
-    grid-template-columns: 1fr 1fr;
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+@media (max-width: 1024px) {
+    .toolbar-select select { min-width: 150px; }
+    .sticky-toolbar .toolbar-actions { flex-wrap: wrap; }
 }
 
-.mensaje {
-    margin-top: 10px;
-    padding: 10px;
-    border-radius: 6px;
-    font-size: 0.9rem;
+@media (max-width: 900px) {
+    .toolbar-select { width: 100%; justify-content: space-between; }
+    .toolbar-select select { flex: 1; min-width: 0; }
+    .rangos-seccion { padding: 18px 16px; }
+    .rangos-seccion-header { flex-direction: column; align-items: stretch; gap: 10px; }
+    #modal-rango .modal-footer { flex-direction: column-reverse; align-items: stretch; }
+    #modal-rango .modal-footer .btn-primary,
+    #modal-rango .modal-footer .btn-ghost { width: 100%; justify-content: center; }
+    #modal-rango .modal-header { padding: 20px 18px 16px; }
+    #modal-rango .modal-body { padding: 18px 18px 18px; }
+    #modal-rango .modal-footer { padding: 14px 18px 16px; }
 }
 
-.mensaje.ok    { background: #d4edda; color: #155724; }
-.mensaje.error { background: #f8d7da; color: #721c24; }
-
-.acciones-tabla button {
-    padding: 4px 10px;
-    font-size: 0.85rem;
-    margin-right: 5px;
+@media (max-width: 600px) {
+    .rng-resumen { grid-template-columns: 1fr; }
+    .rng-bloque { padding: 14px 14px; }
 }

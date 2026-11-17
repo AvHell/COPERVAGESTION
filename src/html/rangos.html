@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#2E3228">
+    <title>Rangos IP</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <link rel="stylesheet" href="../css/equipos.css">
+    <link rel="stylesheet" href="../css/rangos.css">
+</head>
+<body>
+
+    <!-- HEADER GLOBAL -->
+    <header class="header-global">
+        <div class="header-inner">
+            <button id="btn-volver" class="btn-back" aria-label="Volver a equipos">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                <span>Equipos</span>
+            </button>
+
+            <div class="header-titles">
+                <h1>Rangos IP por cliente</h1>
+                <p>Segmentos autorizados, auditoría y ajuste automático</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="tabs-main">
+
+        <div class="panel-title-main">
+            <h2>Rangos IP</h2>
+            <p>Cada cliente administra sus propios rangos; un rango sin perfil se hereda a todos los perfiles del cliente.</p>
+        </div>
+
+        <!-- TOOLBAR FIJA (se mantiene visible al hacer scroll) -->
+        <div class="sticky-toolbar">
+            <div class="buscador">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" id="rango-buscar" placeholder="Buscar por IP, cliente, perfil o descripción...">
+                <button type="button" id="btn-limpiar-busqueda" class="btn-clear oculto" title="Limpiar búsqueda">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="toolbar-actions">
+                <label class="toolbar-select" for="rangos-filtro-cliente">
+                    <span>Cliente</span>
+                    <select id="rangos-filtro-cliente"></select>
+                </label>
+
+                <button id="btn-rangos-analizar" class="btn-export" type="button"
+                        title="Cruza las IP reales de los equipos con los rangos establecidos">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    <span class="btn-text">Analizar</span>
+                    <span class="btn-spinner oculto"></span>
+                </button>
+
+                <button id="btn-rangos-aplicar" class="btn-export" type="button" disabled
+                        title="Crea los rangos faltantes y amplía los que se quedaron cortos. Nunca elimina rangos.">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 12h10M9 7l5 5-5 5"/>
+                        <path d="M17 4v16"/>
+                    </svg>
+                    <span class="btn-text">Ajustar automáticamente</span>
+                    <span class="btn-spinner oculto"></span>
+                </button>
+
+                <button id="btn-rangos-auditar" class="btn-export" type="button"
+                        title="Revisa choques, IP duplicadas, rangos mal definidos y equipos fuera de rango">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="M9 12l2 2 4-4"/>
+                    </svg>
+                    <span class="btn-text">Auditar</span>
+                    <span class="btn-spinner oculto"></span>
+                </button>
+
+                <button id="btn-rango-nuevo" class="btn-primary" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    <span>Nuevo rango</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- =========================================================
+             AJUSTE AUTOMÁTICO (antes en Catálogos)
+             ========================================================= -->
+        <section id="seccion-ajuste" class="rangos-seccion oculto" aria-labelledby="ajuste-titulo">
+            <div class="rangos-seccion-header">
+                <div>
+                    <h3 id="ajuste-titulo">Ajuste automático de rangos</h3>
+                    <p>
+                        Compara las IP estáticas reales de cada cliente con los rangos <strong>ya establecidos</strong>.
+                        Solo propone crear rangos faltantes o ampliar los que se quedaron cortos para que el segmento
+                        quede en consecutivo; nunca elimina rangos ni toca los que están en conflicto.
+                    </p>
+                </div>
+                <button id="btn-cerrar-ajuste" type="button" class="btn-ghost">Ocultar</button>
+            </div>
+
+            <div id="rng-mensaje" class="alert oculto"></div>
+            <div id="rng-resumen" class="rng-resumen oculto"></div>
+            <div id="rng-propuestas"></div>
+            <div id="rng-avisos"></div>
+            <p id="rng-vacio" class="rangos-vacio">
+                Pulsa <strong>Analizar</strong> para calcular qué rangos faltan y cuáles hay que ampliar.
+            </p>
+        </section>
+
+        <!-- =========================================================
+             AUDITORÍA
+             ========================================================= -->
+        <section id="seccion-auditoria" class="rangos-seccion oculto" aria-labelledby="auditoria-titulo">
+            <div class="rangos-seccion-header">
+                <div>
+                    <h3 id="auditoria-titulo">Resultado de la auditoría</h3>
+                    <p>
+                        Se revisa únicamente lo que está mal: rangos mal definidos, choques entre rangos,
+                        IP duplicadas, IP de un cliente dentro del rango de otro y equipos fuera de los
+                        rangos establecidos. Lo que solo falta configurar aparece aparte como cobertura.
+                    </p>
+                </div>
+                <button id="btn-cerrar-auditoria" type="button" class="btn-ghost">Ocultar</button>
+            </div>
+            <div id="auditoria-contenido"></div>
+        </section>
+
+        <!-- =========================================================
+             ALTA / EDICIÓN DE RANGO (modal reutilizando equipos.css)
+             ========================================================= -->
+        <div id="modal-rango" class="modal-overlay oculto" role="dialog" aria-modal="true"
+             aria-labelledby="rango-editor-titulo">
+            <div class="modal-base modal-xl">
+
+                <div class="modal-header">
+                    <div class="modal-header-content">
+                        <span class="modal-header-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                                <path d="M6 9h4M6 13h8"></path>
+                            </svg>
+                        </span>
+                        <h3 id="rango-editor-titulo">Nuevo rango IP</h3>
+                    </div>
+                    <button id="btn-cerrar-editor" type="button" class="btn-cerrar-modal" aria-label="Cerrar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <p class="rangos-ayuda rangos-ayuda-intro">
+                        Un rango debe vivir en un solo segmento /24 y no empalmarse con otro rango del mismo cliente.
+                    </p>
+
+                    <div class="field-row-2">
+                        <div class="field">
+                            <label for="rango-cliente">Cliente <span class="req">*</span></label>
+                            <select id="rango-cliente"></select>
+                        </div>
+                        <div class="field">
+                            <label for="rango-perfil">Perfil</label>
+                            <select id="rango-perfil"></select>
+                            <span class="ayuda-checkbox">Sin perfil = rango heredado para todos los perfiles.</span>
+                        </div>
+                    </div>
+
+                    <div class="section-title">
+                        <span>Rango autorizado</span>
+                        <span class="section-hint">Aplica a las IP estáticas del cliente</span>
+                    </div>
+
+                    <div class="field-row-3">
+                        <div class="field">
+                            <label for="rango-segmento">Segmento</label>
+                            <input type="text" id="rango-segmento" placeholder="192.168.2" inputmode="numeric">
+                        </div>
+                        <div class="field">
+                            <label for="rango-inicio">IP inicial <span class="req">*</span></label>
+                            <input type="text" id="rango-inicio" placeholder="192.168.2.60" inputmode="numeric">
+                        </div>
+                        <div class="field">
+                            <label for="rango-fin">IP final</label>
+                            <input type="text" id="rango-fin" placeholder="192.168.2.69" inputmode="numeric">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="rango-descripcion">Descripción</label>
+                        <input type="text" id="rango-descripcion" placeholder="Opcional: referencia del rango">
+                    </div>
+
+                    <p class="rangos-ayuda">
+                        Puedes escribir la IP completa (<code>192.168.2.60</code>) o solo el último octeto
+                        (<code>60</code>) indicando el segmento. Si dejas la IP final vacía, el rango será de una sola IP.
+                    </p>
+
+                    <section class="sugerencias-rango" aria-labelledby="sugerencias-rango-titulo">
+                        <div class="sugerencias-cabecera">
+                            <div class="sugerencias-titulo">
+                                <h4 id="sugerencias-rango-titulo">Sugerir IP libres del segmento</h4>
+                                <p>
+                                    Calcula bloques consecutivos que no chocan con los rangos de
+                                    <strong>ningún</strong> cliente ni con las IP ya registradas.
+                                </p>
+                            </div>
+                            <div class="sugerencias-control">
+                                <label for="rango-cantidad">Hosts
+                                    <input type="number" id="rango-cantidad" min="1" max="254" step="1" value="10">
+                                </label>
+                                <button id="btn-sugerir-rango" type="button" class="btn-ghost">
+                                    <span class="btn-text">Sugerir</span>
+                                    <span class="btn-spinner oculto"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="rango-sugerencias" class="sugerencias-lista">
+                            <p class="sugerencias-vacio">
+                                Elige cliente, segmento y cantidad de hosts; después pulsa «Sugerir».
+                            </p>
+                        </div>
+                    </section>
+
+                    <div id="rango-mensaje" class="alert oculto"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button id="rango-cancelar" type="button" class="btn-ghost">Cancelar</button>
+                    <button id="rango-guardar" type="button" class="btn-primary">
+                        <span class="btn-text">Guardar</span>
+                        <span class="btn-spinner oculto"></span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- =========================================================
+             LISTADO DE RANGOS
+             ========================================================= -->
+        <section class="rangos-seccion" aria-labelledby="listado-titulo">
+            <div class="rangos-seccion-header">
+                <div>
+                    <h3 id="listado-titulo">Rangos configurados</h3>
+                    <p>Las IP estáticas fuera de rango se marcan como <strong>fuera de norma</strong>.</p>
+                </div>
+                <span id="rangos-conteo" class="rangos-conteo"></span>
+            </div>
+            <div id="rangos-lista" class="rangos-lista"></div>
+        </section>
+
+    </main>
+
+    <script src="../js/permisos-ui.js"></script>
+    <script src="../js/rangos-renderer.js"></script>
+</body>
+</html>

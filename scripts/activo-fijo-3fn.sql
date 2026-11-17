@@ -113,6 +113,18 @@ CLOSE curCatalogo;
 DEALLOCATE curCatalogo;
 GO
 
+/* El build del SO es atributo del CATÁLOGO, no del equipo:
+   ("Windows 11 Pro", "22631.3155") es una fila de
+   ActivoFijoSistemasOperativos. Ver scripts/activo-fijo-buildso-catalogo.sql,
+   que además retira la vieja ActivoFijoEquipos.BuildSO y re-apunta los
+   equipos. Aquí sólo se asegura la columna para que las vistas de este
+   script puedan leerla en una base nueva. */
+IF OBJECT_ID(N'dbo.ActivoFijoSistemasOperativos', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.ActivoFijoSistemasOperativos', N'BuildSO') IS NULL
+    ALTER TABLE dbo.ActivoFijoSistemasOperativos
+        ADD BuildSO NVARCHAR(20) NULL;
+GO
+
 /* ============================================================
    2-3. COLUMNAS FK QUE FALTABAN
    ============================================================ */
@@ -455,6 +467,7 @@ SELECT
     mr.Nombre           AS MemoriaRAM,
     al.Nombre           AS Almacenamiento,
     so.Nombre           AS SistemaOperativo,
+    so.BuildSO,
     /* Accesorios desde la tabla puente (varios por activo). */
     (SELECT STRING_AGG(ca.Nombre, N', ') WITHIN GROUP (ORDER BY ca.Nombre)
      FROM dbo.ActivoFijoEquiposAccesorios ea

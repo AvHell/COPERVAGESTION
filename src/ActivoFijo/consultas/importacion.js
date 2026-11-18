@@ -4,6 +4,59 @@
    ========================================================= */
 const { getPool, sql } = require('../../js/db/conexion');
 const catalogosDB = require('./catalogos');
+const activosDB = require('./activos');
+
+/* El importador también deja de depender de las banderas del catálogo: mide
+   el inventario real del tipo (perfil) y sólo usa la bandera como respaldo. */
+function reglaPerfil(perfil, clave, bandera) {
+    const claves = perfil && perfil.total > 0 ? (perfil.claves || {}) : {};
+    const m = claves[clave];
+    if (!m) return { usar: !!bandera, obligatorio: !!bandera, medido: false };
+    return {
+        usar: !!m.usado || !!m.requerido || !!bandera,
+        obligatorio: !!m.requerido,
+        medido: true,
+        usos: m.usos,
+        total: m.total
+    };
+}
+
+function requisitosImportacion(tipo, perfil = null) {
+    return {
+        imei:            reglaPerfil(perfil, 'imei', tipo.RequiereIMEI),
+        telefono:        reglaPerfil(perfil, 'telefono', tipo.RequiereTelefono),
+        sitio:           reglaPerfil(perfil, 'sitio', tipo.RequiereSitio),
+        subtipo:         reglaPerfil(perfil, 'subtipo', tipo.RequiereSubtipo),
+        clasificacion:   reglaPerfil(perfil, 'clasificacion', tipo.RequiereClasificacion),
+        tamanio:         reglaPerfil(perfil, 'tamanio', tipo.RequiereTamanio),
+        capacidad:       reglaPerfil(perfil, 'capacidad', tipo.RequiereCapacidad),
+        voltaje:         reglaPerfil(perfil, 'voltaje', tipo.RequiereVoltaje),
+        usuarioAsignado: reglaPerfil(perfil, 'usuarioAsignado', tipo.RequiereUsuarioAsignado),
+        precio:          reglaPerfil(perfil, 'precio', tipo.RequierePrecio),
+        especificaciones: reglaPerfil(perfil, 'especificaciones', tipo.RequiereEspecificaciones),
+        accesorios:      reglaPerfil(perfil, 'accesorios', tipo.RequiereAccesorios)
+    };
+}
+
+/* Acepta encabezados escritos de varias formas (con acento, con espacios,
+   en mayúsculas): el archivo real nunca viene perfecto. */
+function valorFila(fila, ...alias) {
+    for (const a of alias) {
+        const clave = Object.keys(fila).find(k => normalizarClave(k) === normalizarClave(a));
+        if (clave === undefined) continue;
+        const valor = String(fila[clave] ?? '').trim();
+        if (valor) return valor;
+    }
+    return '';
+}
+
+function normalizarClave(texto) {
+    return String(texto ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9]/g, '')
+        .toUpperCase();
+}
 
 /* =========================================================
    HELPERS
@@ -39,55 +92,59 @@ async function getIdSubtipoPorGrupoYNombre(pool, grupo, nombre) {
 /* =========================================================
    CONSTRUIR LAYOUT DINÁMICO DESDE UN TIPO DE LA BD
    ========================================================= */
-function construirLayout(tipo) {
+function construirLayout(tipo, perfil = null) {
+    const req = requisitosImportacion(tipo, perfil);
+
     const columnas = [
         { key: 'Marca',   etiqueta: 'Marca',   catalogo: 'marcas' },
         { key: 'Modelo',  etiqueta: 'Modelo',  catalogo: 'modelos' },
-        { key: 'NoSerie', etiqueta: 'NoSerie', catalogo: null, opcional: true }
+        { key: 'NoSerie', etiqueta: 'NoSerie', catalogo: null, opcional: true },
+        /* Con el hostname (AGT-TOY156) se deduce la cartera del cliente. */
+        { key: 'Hostname', etiqueta: 'Hostname', catalogo: null, opcional: true }
     ];
 
-    if (tipo.RequiereIMEI) {
+    if (req.imei.usar) {
         columnas.push({ key: 'IMEI1', etiqueta: 'IMEI1', catalogo: null });
         columnas.push({ key: 'IMEI2', etiqueta: 'IMEI2', catalogo: null, opcional: true });
     }
-    if (tipo.RequiereTelefono) {
+    if (req.telefono.usar) {
         columnas.push({ key: 'NoTelefono', etiqueta: 'NoTelefono', catalogo: null });
     }
-    if (tipo.RequiereSitio) {
+    if (req.sitio.usar) {
         columnas.push({ key: 'Sitio', etiqueta: 'Sitio', catalogo: 'sitios' });
     }
-    if (tipo.RequiereSubtipo) {
+    if (req.subtipo.usar) {
         columnas.push({ key: 'Subtipo', etiqueta: 'Subtipo', catalogo: 'subtipos', grupoSubtipo: tipo.GrupoSubtipo });
     }
-    if (tipo.RequiereClasificacion) {
+    if (req.clasificacion.usar) {
         columnas.push({ key: 'Clasificacion', etiqueta: 'Clasificacion', catalogo: 'clasificaciones' });
     }
-    if (tipo.RequiereTamanio) {
+    if (req.tamanio.usar) {
         columnas.push({ key: 'Tamanio', etiqueta: 'Tamanio', catalogo: 'tamanios' });
     }
-    if (tipo.RequiereCapacidad) {
+    if (req.capacidad.usar) {
         columnas.push({ key: 'Capacidad', etiqueta: 'Capacidad', catalogo: 'capacidades' });
     }
-    if (tipo.RequiereVoltaje) {
+    if (req.voltaje.usar) {
         columnas.push({ key: 'Voltaje', etiqueta: 'Voltaje', catalogo: 'voltajes' });
     }
-    if (tipo.RequiereUsuarioAsignado) {
-        columnas.push({ key: 'UsuarioAsignado', etiqueta: 'UsuarioAsignado', catalogo: 'usuariosAsignados' });
+    if (req.usuarioAsignado.usar) {
+        columnas.push({ key: 'UsuarioAsignado', etiqueta: 'UsuarioAsignado', catalogo: 'usuariosAsignados', opcional: true });
     }
-    if (tipo.RequierePrecio) {
+    if (req.precio.usar) {
         columnas.push({ key: 'PrecioActivo', etiqueta: 'Precio', catalogo: null });
     }
-    if (tipo.RequiereEspecificaciones) {
+    if (req.especificaciones.usar) {
         columnas.push({ key: 'Procesador', etiqueta: 'Procesador', catalogo: 'procesadores' });
         columnas.push({ key: 'MemoriaRAM', etiqueta: 'RAM', catalogo: 'memoriasRam' });
         columnas.push({ key: 'Almacenamiento', etiqueta: 'Almacenamiento', catalogo: 'almacenamientos' });
         columnas.push({ key: 'SistemaOperativo', etiqueta: 'S.O.', catalogo: 'sistemasOperativos' });
     }
-    if (tipo.RequiereAccesorios) {
-        columnas.push({ key: 'Accesorios', etiqueta: 'Accesorios', catalogo: 'accesorios' });
+    if (req.accesorios.usar) {
+        columnas.push({ key: 'Accesorios', etiqueta: 'Accesorios', catalogo: 'accesorios', opcional: true });
     }
 
-    columnas.push({ key: 'CarteraAsignado', etiqueta: 'Cartera', catalogo: 'carteras' });
+    columnas.push({ key: 'CarteraAsignado', etiqueta: 'Cartera', catalogo: 'carteras', opcional: true });
 
     const ejemplo = {
         Marca: 'MARCA_EJEMPLO',
@@ -101,6 +158,7 @@ function construirLayout(tipo) {
         if (c.key === 'IMEI1') ejemplo[c.key] = '123456789012345';
         else if (c.key === 'IMEI2') ejemplo[c.key] = '';
         else if (c.key === 'NoTelefono') ejemplo[c.key] = '5512345678';
+        else if (c.key === 'Hostname') ejemplo[c.key] = 'AGT-TOY156';
         else if (c.key === 'Sitio') ejemplo[c.key] = 'COPERVA';
         else if (c.key === 'Subtipo') ejemplo[c.key] = 'TIPO_EJEMPLO';
         else if (c.key === 'Clasificacion') ejemplo[c.key] = 'INTERNO';
@@ -138,8 +196,14 @@ async function listarLayouts() {
     // Log para que veas en la consola de Node cuántos encontró
     console.log(`[Importar] Tipos encontrados en la BD: ${r.recordset.length}`);
 
-    return r.recordset.map(tipo => {
-        const layout = construirLayout(tipo);
+    /* El perfil real de cada tipo se mide en paralelo: con él la plantilla
+       ofrece exactamente las columnas que ese tipo captura. */
+    const perfiles = await Promise.all(
+        r.recordset.map(tipo => activosDB.perfilPorTipo(pool, tipo.IdTipo).catch(() => null))
+    );
+
+    return r.recordset.map((tipo, i) => {
+        const layout = construirLayout(tipo, perfiles[i]);
         return {
             clave: String(tipo.IdTipo),
             titulo: layout.titulo,
@@ -167,7 +231,9 @@ async function obtenerLayout(clave) {
     if (r.recordset.length === 0) throw new Error(`Tipo no encontrado: ${clave}`);
     
     const tipo = r.recordset[0];
-    const layout = construirLayout(tipo);
+    const perfil = await activosDB.perfilPorTipo(pool, tipo.IdTipo).catch(() => null);
+    const layout = construirLayout(tipo, perfil);
+    const requisitos = requisitosImportacion(tipo, perfil);
     for (const columna of layout.columnas) {
         if (!columna.catalogo) continue;
         if (columna.catalogo === 'subtipos') {
@@ -205,7 +271,12 @@ async function obtenerLayout(clave) {
             grupoSubtipo: c.grupoSubtipo || null,
             opcional: !!c.opcional
         })),
-        ejemplo: ejemploPorEtiqueta
+        ejemplo: ejemploPorEtiqueta,
+        /* Perfil real del tipo + qué campos quedan obligatorios con él. */
+        perfil,
+        requisitos: Object.fromEntries(
+            Object.entries(requisitos).map(([clave, r]) => [clave, r.obligatorio])
+        )
     };
 }
 
@@ -213,7 +284,7 @@ async function obtenerLayout(clave) {
    PROCESAR IMPORTACIÓN MASIVA
    ========================================================= */
 async function importar(datos, idUsuario) {
-    const { layout: idTipoStr, filas } = datos;
+    const { layout: idTipoStr, filas, opciones = {} } = datos;
 
     if (!idTipoStr) return { ok: false, mensaje: 'Falta el tipo de activo.' };
     if (!Array.isArray(filas) || filas.length === 0) return { ok: false, mensaje: 'No hay filas para importar.' };
@@ -234,6 +305,29 @@ async function importar(datos, idUsuario) {
         `);
     const tipo = tipoResult.recordset[0];
     if (!tipo) return { ok: false, mensaje: 'El tipo seleccionado ya no está activo.' };
+
+    /* Qué es obligatorio lo dice el inventario de ese tipo (perfil), no la
+       bandera capturada a mano en el catálogo. */
+    const req = requisitosImportacion(tipo, layoutInfo.perfil);
+
+    /* Cartera / sitio destino + regla de "sólo esta cartera". */
+    const contexto = await activosDB.contextoParaImportacion();
+    const idCarteraFija = parseInt(opciones.idCartera, 10) || null;
+    const idSitioFijo   = parseInt(opciones.idSitio, 10) || contexto.idSitioPorDefecto || null;
+    const soloCartera   = !!opciones.soloCartera && !!idCarteraFija;
+    let nombreCarteraFija = null;
+    if (soloCartera) {
+        const r = await pool.request()
+            .input('Id', sql.Int, idCarteraFija)
+            .query('SELECT Nombre FROM ActivoFijoCarteras WHERE IdCartera = @Id');
+        nombreCarteraFija = r.recordset[0]?.Nombre ?? null;
+    }
+    const nombreSitioFijo = idSitioFijo
+        ? (await pool.request()
+            .input('Id', sql.Int, idSitioFijo)
+            .query('SELECT Nombre FROM ActivoFijoSitios WHERE IdSitio = @Id')).recordset[0]?.Nombre ?? null
+        : null;
+
     
     const IdEstadoDefault  = await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', 'NUEVO')
         || await getIdPorNombre(pool, 'ActivoFijoEstados', 'IdEstado', 'VALIDAR');
@@ -247,6 +341,7 @@ async function importar(datos, idUsuario) {
 
     const insertados = [];
     const errores    = [];
+    let omitidos     = 0;
 
     for (let i = 0; i < filas.length; i++) {
         const fila = filas[i];
@@ -257,61 +352,64 @@ async function importar(datos, idUsuario) {
                 filaNormalizada[k.trim()] = String(fila[k] ?? '').trim();
             });
 
-            const marcaNombre   = filaNormalizada['Marca'];
-            let modelo          = filaNormalizada['Modelo'];
-            const noSerie       = filaNormalizada['NoSerie'];
-            const sitioNombre   = filaNormalizada['Sitio'];
-            const carteraNombre = filaNormalizada['Cartera'] || filaNormalizada['CarteraAsignado'];
-            
-            const imei1           = filaNormalizada['IMEI1'];
-            const imei2           = filaNormalizada['IMEI2'];
-            const noTelefono      = filaNormalizada['NoTelefono'];
-            const subtipoNombre   = filaNormalizada['Subtipo'] || filaNormalizada['Tipo'];
-            const clasificacionNombre = filaNormalizada['Clasificacion'];
-            const tamanioNombre   = filaNormalizada['Tamanio'] || filaNormalizada['Tamaño'];
-            const capacidadNombre = filaNormalizada['Capacidad'];
-            const voltajeNombre   = filaNormalizada['Voltaje'];
-            let usuarioAsignado = filaNormalizada['UsuarioAsignado'];
-            const precioStr       = filaNormalizada['Precio'];
-            let procesador        = filaNormalizada['Procesador'];
-            let ram               = filaNormalizada['RAM'] || filaNormalizada['MemoriaRAM'];
-            let almacenamiento    = filaNormalizada['Almacenamiento'];
-            let so                = filaNormalizada['S.O.'] || filaNormalizada['SistemaOperativo'];
-            let accesorios        = filaNormalizada['Accesorios'];
+            /* Lectura tolerante a encabezados: espacios, acentos, mayúsculas
+               y alias habituales de cada columna. */
+            const marcaNombre   = valorFila(filaNormalizada, 'Marca');
+            let modelo          = valorFila(filaNormalizada, 'Modelo');
+            const noSerie       = valorFila(filaNormalizada, 'NoSerie', 'No. Serie', 'Serie');
+            const hostname      = valorFila(filaNormalizada, 'Hostname', 'HostName', 'Equipo', 'NombreEquipo');
+            const sitioNombre   = valorFila(filaNormalizada, 'Sitio');
+            const carteraNombre = valorFila(filaNormalizada, 'Cartera', 'CarteraAsignado');
+
+            const imei1           = valorFila(filaNormalizada, 'IMEI1', 'IMEI 1');
+            const imei2           = valorFila(filaNormalizada, 'IMEI2', 'IMEI 2');
+            const noTelefono      = valorFila(filaNormalizada, 'NoTelefono', 'No. Telefono', 'Telefono');
+            const subtipoNombre   = valorFila(filaNormalizada, 'Subtipo', 'Tipo');
+            const clasificacionNombre = valorFila(filaNormalizada, 'Clasificacion');
+            const tamanioNombre   = valorFila(filaNormalizada, 'Tamanio', 'Tamaño');
+            const capacidadNombre = valorFila(filaNormalizada, 'Capacidad');
+            const voltajeNombre   = valorFila(filaNormalizada, 'Voltaje');
+            let usuarioAsignado   = valorFila(filaNormalizada, 'UsuarioAsignado', 'Usuario Asignado', 'Usuario');
+            const precioStr       = valorFila(filaNormalizada, 'Precio', 'PrecioActivo');
+            let procesador        = valorFila(filaNormalizada, 'Procesador');
+            let ram               = valorFila(filaNormalizada, 'RAM', 'MemoriaRAM', 'Memoria RAM');
+            let almacenamiento    = valorFila(filaNormalizada, 'Almacenamiento');
+            let so                = valorFila(filaNormalizada, 'S.O.', 'SO', 'SistemaOperativo', 'Sistema Operativo');
+            let accesorios        = valorFila(filaNormalizada, 'Accesorios');
 
             if (!noSerie && !imei1 && !noTelefono) {
                 errores.push({ fila: numFila, mensaje: 'Captura al menos NoSerie, IMEI1 o NoTeléfono.' });
                 continue;
             }
-            if (tipo.RequiereSubtipo && !subtipoNombre) {
+            if (req.subtipo.obligatorio && !subtipoNombre) {
                 errores.push({ fila: numFila, mensaje: 'El subtipo es obligatorio para este tipo.' });
                 continue;
             }
-            if (tipo.RequiereClasificacion && !clasificacionNombre) {
+            if (req.clasificacion.obligatorio && !clasificacionNombre) {
                 errores.push({ fila: numFila, mensaje: 'La clasificación es obligatoria para este tipo.' });
                 continue;
             }
-            if (tipo.RequiereTamanio && !tamanioNombre) {
+            if (req.tamanio.obligatorio && !tamanioNombre) {
                 errores.push({ fila: numFila, mensaje: 'El tamaño es obligatorio para este tipo.' });
                 continue;
             }
-            if (tipo.RequiereCapacidad && !capacidadNombre) {
+            if (req.capacidad.obligatorio && !capacidadNombre) {
                 errores.push({ fila: numFila, mensaje: 'La capacidad es obligatoria para este tipo.' });
                 continue;
             }
-            if (tipo.RequiereVoltaje && !voltajeNombre) {
+            if (req.voltaje.obligatorio && !voltajeNombre) {
                 errores.push({ fila: numFila, mensaje: 'El voltaje es obligatorio para este tipo.' });
                 continue;
             }
-            if (tipo.RequierePrecio && !precioStr) {
+            if (req.precio.obligatorio && !precioStr) {
                 errores.push({ fila: numFila, mensaje: 'El precio es obligatorio para este tipo.' });
                 continue;
             }
-            if (tipo.RequiereEspecificaciones && (!procesador || !ram || !almacenamiento || !so)) {
+            if (req.especificaciones.obligatorio && (!procesador || !ram || !almacenamiento || !so)) {
                 errores.push({ fila: numFila, mensaje: 'Procesador, RAM, almacenamiento y sistema operativo son obligatorios.' });
                 continue;
             }
-            if (tipo.RequiereAccesorios && !accesorios) {
+            if (req.accesorios.obligatorio && !accesorios) {
                 errores.push({ fila: numFila, mensaje: 'Los accesorios son obligatorios para este tipo.' });
                 continue;
             }
@@ -323,9 +421,23 @@ async function importar(datos, idUsuario) {
                 continue;
             }
 
+            /* Cartera del renglón: la del archivo, la elegida en pantalla o la
+               deducida del hostname. Con "sólo esta cartera" se omiten las
+               filas que declaren otra explícitamente. */
+            const inf = hostname ? contexto.inferir(hostname) : null;
+            let IdCartera = await getIdPorNombre(pool, 'ActivoFijoCarteras', 'IdCartera', carteraNombre);
+            if (soloCartera && carteraNombre && !IdCartera) {
+                errores.push({ fila: numFila, mensaje: `Cartera "${carteraNombre}" no existe.` });
+                continue;
+            }
+            if (soloCartera && IdCartera && IdCartera !== idCarteraFija) {
+                omitidos++;
+                continue;
+            }
+            if (!IdCartera) IdCartera = idCarteraFija || inf?.idCartera || null;
+
             const IdMarca   = await getIdPorNombre(pool, 'ActivoFijoMarcas',   'IdMarca',   marcaNombre);
-            const IdSitio   = await getIdPorNombre(pool, 'ActivoFijoSitios',   'IdSitio',   sitioNombre);
-            const IdCartera = await getIdPorNombre(pool, 'ActivoFijoCarteras', 'IdCartera', carteraNombre);
+            const IdSitio   = (await getIdPorNombre(pool, 'ActivoFijoSitios', 'IdSitio', sitioNombre)) || idSitioFijo;
             const IdClasificacion = await getIdPorNombre(pool, 'ActivoFijoClasificaciones', 'IdClasificacion', clasificacionNombre);
             const IdTamanio = await getIdPorNombre(pool, 'ActivoFijoTamanios', 'IdTamanio', tamanioNombre);
             const IdCapacidad = await getIdPorNombre(pool, 'ActivoFijoCapacidades', 'IdCapacidad', capacidadNombre);
@@ -516,14 +628,47 @@ async function importar(datos, idUsuario) {
 
     return {
         ok: true,
-        mensaje: `Importación finalizada. ${insertados.length} insertados, ${errores.length} errores.`,
+        mensaje: `Importación finalizada. ${insertados.length} insertados, ${errores.length} errores` +
+                 (omitidos ? `, ${omitidos} omitidos por cartera` : '') + '.',
         insertados,
-        errores
+        errores,
+        omitidos,
+        cartera: nombreCarteraFija,
+        sitio: nombreSitioFijo
+    };
+}
+
+/* =========================================================
+   OPCIONES DEL IMPORTADOR (cartera / sitio destino)
+   ---------------------------------------------------------
+   Importar "todo de golpe" necesita decir a qué cartera y sitio va lo
+   que el archivo no trae. COPERVA es el sitio por defecto y la cartera
+   puede deducirse del hostname de cada fila (AGT-TOY156 → TOYOTA).
+   ========================================================= */
+async function listarOpciones() {
+    await catalogosDB.asegurarCatalogosExtendidos();
+    const pool = await getPool();
+
+    const [carteras, sitios, contexto] = await Promise.all([
+        pool.request().query('SELECT IdCartera, Nombre FROM ActivoFijoCarteras WHERE Activo = 1 ORDER BY Nombre'),
+        pool.request().query('SELECT IdSitio, Nombre FROM ActivoFijoSitios WHERE Activo = 1 ORDER BY Nombre'),
+        activosDB.contextoParaImportacion()
+    ]);
+
+    return {
+        ok: true,
+        carteras: carteras.recordset || [],
+        sitios: sitios.recordset || [],
+        /* idSitioPorDefecto: para preseleccionar el <select>.
+           sitioPorDefecto: el nombre legible (COPERVA). */
+        idSitioPorDefecto: contexto.idSitioPorDefecto || null,
+        sitioPorDefecto: contexto.sitioPorDefecto || 'COPERVA'
     };
 }
 
 module.exports = {
     listarLayouts,
+    listarOpciones,
     obtenerLayout,
     importar
 };

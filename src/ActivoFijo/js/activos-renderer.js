@@ -34,6 +34,13 @@ let guardando      = false;
 let filtroBusqueda = '';
 let vistaActual    = 'activos';
 
+/* Pestaña de cartera activa: '__todas__', el id de una cartera o '__sin__'.
+   Separa el parque de cada cliente sin pedir un filtro más al usuario. */
+let carteraActual = '__todas__';
+/* Token de la última cascada Tipo → catálogos: las respuestas que llegan
+   tarde se descartan para que no pisen la selección vigente. */
+let cascadaToken = 0;
+
 let permisosUsuario = {};
 let rolUsuario      = null;
 let esAdmin         = false;
@@ -57,6 +64,21 @@ const btnLimpiarBusq   = document.getElementById('btn-limpiar-busqueda');
 const btnLimpiarVacio  = document.getElementById('btn-limpiar-busqueda-vacio');
 const modal            = document.getElementById('modal-activo');
 const modalTitulo      = document.getElementById('modal-titulo');
+<<<<<<< Updated upstream
+=======
+
+/* Segmentación del inventario por cartera y controles nuevos del formulario. */
+const tabsCartera        = document.getElementById('tabs-cartera');
+const btnAutoasignar     = document.getElementById('btn-autoasignar');
+const chkUsuarioAsignado = document.getElementById('chk-usuario-asignado');
+const usuarioPicker      = document.getElementById('usuario-picker');
+const buscadorUsuario    = document.getElementById('buscador-usuario');
+const btnLimpiarUsuario  = document.getElementById('btn-limpiar-usuario');
+const notaContextoAuto   = document.getElementById('nota-contexto-auto');
+
+/* Contenedores de las dos vistas que viven en esta misma página:
+   el inventario y los catálogos (ya no son módulos separados). */
+>>>>>>> Stashed changes
 const seccionInventario  = document.getElementById('vista-inventario');
 const seccionCatalogos   = document.getElementById('vista-catalogos');
 const buscadorInventario = document.getElementById('buscador-inventario');
@@ -373,10 +395,87 @@ async function cargarActivos() {
             filtrosEnvio.soloEliminados = true;
         }
         activos = await window.api.activoFijo.activos.listar(filtrosEnvio);
+        renderTabsCartera();
         renderTabla();
     } catch (err) {
         toastError('No se pudieron cargar los activos', err.message);
     }
+}
+
+/* =========================================================
+   PESTAÑAS POR CARTERA
+   ---------------------------------------------------------
+   El inventario mezcla equipos de todos los clientes con activos
+   generales (los que no pertenecen a ninguna cartera). La tabla se
+   segmenta con una pestaña por cartera y una extra "Sin cartera".
+   Sólo se dibujan las carteras que hoy tienen equipos: veinte
+   pestañas vacías no ayudan a nadie.
+   ========================================================= */
+function conteosPorCartera() {
+    const conteos = { todas: 0, sin: 0, porCartera: new Map() };
+    activos.forEach(a => {
+        conteos.todas++;
+        const id = Number(a.IdCartera) || 0;
+        if (!id) { conteos.sin++; return; }
+        conteos.porCartera.set(id, (conteos.porCartera.get(id) || 0) + 1);
+    });
+    return conteos;
+}
+
+function renderTabsCartera() {
+    if (!tabsCartera) return;
+
+    const { todas, sin, porCartera } = conteosPorCartera();
+    const pestañas = [{ clave: '__todas__', nombre: 'Todas', total: todas }];
+
+    carteras
+        .map(c => ({
+            clave: String(c.IdCartera),
+            nombre: c.Nombre,
+            total: porCartera.get(Number(c.IdCartera)) || 0
+        }))
+        .filter(c => c.total > 0 || c.clave === String(carteraActual))
+        .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'))
+        .forEach(c => pestañas.push(c));
+
+    if (sin > 0 || carteraActual === '__sin__') {
+        pestañas.push({ clave: '__sin__', nombre: 'Sin cartera', total: sin, sinCartera: true });
+    }
+
+    /* La cartera activa pudo quedarse sin equipos al editar o dar de baja:
+       se vuelve a "Todas" para no dejar la tabla vacía sin explicación. */
+    if (!pestañas.some(p => p.clave === String(carteraActual))) carteraActual = '__todas__';
+
+    tabsCartera.innerHTML = pestañas.map(p => {
+        const activa = (p.clave === String(carteraActual));
+        return `
+        <button type="button"
+                class="tab-cartera${activa ? ' activo' : ''}${p.sinCartera ? ' tab-sin-cartera' : ''}"
+                data-cartera="${escaparHTML(p.clave)}" role="tab"
+                aria-selected="${activa ? 'true' : 'false'}"
+                title="${escaparHTML(p.nombre)}: ${p.total} activo(s)">
+            <span class="tab-nombre">${escaparHTML(p.nombre)}</span>
+            <span class="tab-conteo">${p.total}</span>
+        </button>`;
+    }).join('');
+}
+
+tabsCartera?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-cartera');
+    if (!btn || btn.classList.contains('activo')) return;
+
+    carteraActual = btn.dataset.cartera || '__todas__';
+    pagInventario.reiniciar();
+    renderTabsCartera();
+    renderTabla();
+});
+
+/* ¿El activo cae en la pestaña vigente? */
+function coincideCartera(a) {
+    if (carteraActual === '__todas__') return true;
+    const id = Number(a.IdCartera) || 0;
+    if (carteraActual === '__sin__') return id === 0;
+    return String(id) === String(carteraActual);
 }
 
 /* =========================================================
@@ -421,6 +520,7 @@ function celdaPiezas(a) {
         + `${total} ${total === 1 ? 'pieza' : 'piezas'}</span>`;
 }
 
+<<<<<<< Updated upstream
 
 /* --- Piezas conectadas: lo que va al Excel -------------------------
    El activo con piezas sigue contando 1 en el inventario (un monitor, un
@@ -558,14 +658,33 @@ function filasConPiezas(datos) {
         }
     }
     return filas;
+=======
+/* Hostname y dominio los deja el collector: van como insignia para que se
+   lean de un golpe. Sólo el hostname es copiable (se dicta por teléfono y
+   se pega en otros sistemas); el dominio es informativo. */
+function celdaRed(valor, opciones) {
+    const { variante = 'dominio', copiable = false, tooltip = '' } = opciones || {};
+    const texto = String(valor ?? '').trim();
+    if (!texto) return '<span class="vacio">—</span>';
+
+    const clase = `badge badge-${variante}${copiable ? ' copiable' : ''}`;
+    if (!copiable) {
+        return `<span class="${clase}" title="${escaparHTML(tooltip || texto)}">${escaparHTML(texto)}</span>`;
+    }
+    return `<button type="button" class="${clase}" data-copiar-texto="${escaparHTML(texto)}"`
+        + ` data-tooltip="${escaparHTML(tooltip || 'Copiar')}">${escaparHTML(texto)}</button>`;
+>>>>>>> Stashed changes
 }
+
 
 function pintarTabla() {
     const listaFiltrada = activos.filter(a => {
+        if (!coincideCartera(a)) return false;
         if (!filtroBusqueda) return true;
         const texto = [
             a.NoSerie, a.IMEI1, a.IMEI2, a.NoTelefono,
             a.Marca, a.Modelo, a.Tipo,
+            a.Hostname, a.Dominio,
             a.Estado, a.Estatus,
             a.Cartera, a.Sitio,
             a.UsuarioAsignado, a.Observaciones,
@@ -588,6 +707,10 @@ function pintarTabla() {
         if (sinResultadosTxt) {
             if (filtroBusqueda) {
                 sinResultadosTxt.textContent = `Ningún activo coincide con "${inputBusqueda?.value || ''}".`;
+            } else if (carteraActual === '__sin__') {
+                sinResultadosTxt.textContent = 'Todos los activos de esta vista ya tienen cartera asignada.';
+            } else if (carteraActual !== '__todas__') {
+                sinResultadosTxt.textContent = 'Esta cartera no tiene activos en esta vista.';
             } else if (vistaActual === 'eliminados') {
                 sinResultadosTxt.textContent = 'Aún no hay activos dados de baja.';
             } else {
@@ -624,6 +747,8 @@ function pintarTabla() {
             <td data-label="Identificación"><div class="identificadores">${htmlIdent}</div></td>
             <td data-label="Marca / Modelo">${escaparHTML(marcaModelo)}</td>
             <td data-label="Tipo"><span class="badge badge-tipo">${escaparHTML(a.Tipo)}</span></td>
+            <td data-label="Hostname" class="col-red">${celdaRed(a.Hostname, { variante: 'host', copiable: true, tooltip: 'Copiar hostname' })}</td>
+            <td data-label="Dominio" class="col-red">${celdaRed(a.Dominio, { variante: 'dominio', tooltip: 'Dominio del equipo' })}</td>
             <td data-label="Estado"><span class="badge badge-estado-${escaparHTML(a.Estado)}">${escaparHTML(a.Estado)}</span></td>
             <td data-label="Estatus">
                 <span class="badge badge-estatus-${escaparHTML(a.Estatus)}">${escaparHTML(a.Estatus)}</span>
@@ -744,7 +869,12 @@ function pintarTabla() {
 }
 
 /* =========================================================
-   EXPORTAR INTELIGENTE A EXCEL
+   EXPORTAR A EXCEL (inventario general por cartera)
+   ---------------------------------------------------------
+   Un solo libro: hoja "Resumen" + una hoja por cartera ("Sin cartera"
+   incluida). Los equipos con piezas conectadas suman un renglón por
+   pieza, colgado del hostname (o la serie) del activo padre, así el
+   Excel se filtra igual que la tabla del inventario.
    ========================================================= */
 btnExportar.addEventListener('click', async () => {
     if (!activos || activos.length === 0) {
@@ -752,6 +882,7 @@ btnExportar.addEventListener('click', async () => {
         return;
     }
 
+<<<<<<< Updated upstream
     const opcionesTipo = tipos.map(t => `<option value="${t.IdTipo}">${t.Nombre}</option>`).join('');
 
     const { value: idTipo, isConfirmed } = await Swal.fire({
@@ -879,8 +1010,24 @@ btnExportar.addEventListener('click', async () => {
         title: '¿Generar Excel?',
         html: `Se exportarán ${resumenFilas} con <strong>${columnas.length}</strong> columnas.<br>`
             + `<small>Cada pieza va en su propia fila, con el No. Serie y el hostname del activo al que pertenece.</small>`,
+=======
+    const carteras = new Set(activos.map(a => String(a.Cartera || '').trim() || 'Sin cartera'));
+    const conPiezas = activos.filter(a => Number(a.Piezas) > 0).length;
+
+    const confirm = await Swal.fire({
+        icon: 'question',
+        title: 'Exportar inventario general',
+        html: `
+            <p style="font-size:0.9rem; color:#575347; margin-bottom:12px;">
+                Un solo archivo con <strong>una hoja por cartera</strong>
+                (<strong>${carteras.size}</strong>) más la hoja de resumen.
+                Los <strong>${conPiezas}</strong> equipos con piezas conectadas
+                incluyen un renglón extra por pieza, referenciando su hostname.
+            </p>
+        `,
+>>>>>>> Stashed changes
         showCloseButton: true,
-        confirmButtonText: 'Sí, generar',
+        confirmButtonText: 'Generar Excel',
         buttonsStyling: false,
         customClass: {
             popup: 'cl-confirm',
@@ -898,6 +1045,7 @@ btnExportar.addEventListener('click', async () => {
     });
 
     try {
+<<<<<<< Updated upstream
         const payload = {
             titulo: tituloReporte,
             columnas: columnas,
@@ -905,13 +1053,19 @@ btnExportar.addEventListener('click', async () => {
         };
 
         const res = await window.api.activoFijo.activos.exportarExcel(payload);
+=======
+        const res = await window.api.activoFijo.activos.exportarExcel();
+>>>>>>> Stashed changes
         Swal.close();
 
         if (res && res.ok) {
+            const extra = Number(res.hojas?.length)
+                ? `<br>Hojas: <strong>${res.hojas.length}</strong> · Registros: <strong>${res.registros ?? 0}</strong>`
+                : '';
             await Swal.fire({
                 icon: 'success',
                 title: 'Excel generado',
-                html: `Se guardó en:<br><code style="background:#FFF7E8;padding:4px 8px;border-radius:6px;color:#2E3228;word-break:break-all;font-size:0.82rem;">${escaparHTML(res.ruta)}</code>`,
+                html: `Se guardó en:<br><code style="background:#FFF7E8;padding:4px 8px;border-radius:6px;color:#2E3228;word-break:break-all;font-size:0.82rem;">${escaparHTML(res.ruta)}</code>${extra}`,
                 showCloseButton: true,
                 confirmButtonText: 'Aceptar',
                 buttonsStyling: false,
@@ -1819,6 +1973,146 @@ function poblarSubtipos(grupo, valorSeleccionado = '') {
         }).join('');
 }
 
+/* =========================================================
+   CASCADA TIPO → CATÁLOGOS
+   ---------------------------------------------------------
+   Los catálogos se llenan con todo lo que alguna vez se capturó, así
+   que la misma lista de marcas mezcla CPUs con monitores. Al elegir un
+   Tipo el formulario ofrece sólo lo que ESE tipo usa de verdad, y lo
+   deduce del propio inventario (backend `catalogoPorTipo`). Si un tipo
+   todavía no tiene datos en una categoría se deja el catálogo completo,
+   para no bloquear la captura de un equipo nuevo.
+   ========================================================= */
+function planCascada() {
+    return [
+        { clave: 'marcas',             select: selMarca,          registros: marcas, porId: true,  pk: 'IdMarca' },
+        { clave: 'modelos',            select: inpModelo,         registros: catalogosEspecificaciones.modelos, porId: false },
+        { clave: 'procesadores',       select: inpProcesador,     registros: catalogosEspecificaciones.procesadores, porId: false },
+        { clave: 'memoriasRam',        select: inpRAM,            registros: catalogosEspecificaciones.memoriasRam, porId: false },
+        { clave: 'almacenamientos',    select: inpAlmacenamiento, registros: catalogosEspecificaciones.almacenamientos, porId: false },
+        { clave: 'sistemasOperativos', select: inpSO,             registros: catalogosEspecificaciones.sistemasOperativos, porId: false },
+        { clave: 'voltajes',           select: selVoltaje,        registros: voltajes, porId: true,  pk: 'IdVoltaje' }
+    ];
+}
+
+/* Deja el valor vigente en el select aunque el filtro ya no lo incluya:
+   editar un equipo nunca debe perder su marca o su procesador. */
+function restaurarSeleccion(select, valor, texto) {
+    if (valor === null || valor === undefined || valor === '') {
+        select.value = '';
+        return;
+    }
+    if (!Array.from(select.options).some(o => o.value === String(valor))) {
+        select.add(new Option(texto || String(valor), valor, true, true));
+    }
+    select.value = String(valor);
+}
+
+function aplicarCascada(res) {
+    planCascada().forEach(cfg => {
+        const select = cfg.select;
+        const registros = cfg.registros || [];
+        if (!select || registros.length === 0) return;
+
+        const filas = (res && Array.isArray(res[cfg.clave])) ? res[cfg.clave] : [];
+        const permitidos = filas.length
+            ? new Set(filas.map(f => String(cfg.porId ? f.id : f.nombre).toUpperCase()))
+            : null;
+
+        const elegido = select.value;
+        const elegidoTexto = select.selectedOptions && select.selectedOptions[0]
+            ? select.selectedOptions[0].textContent
+            : elegido;
+        const vacio = select.options[0] ? select.options[0].textContent : '';
+
+        const visibles = registros.filter(r => {
+            if (!permitidos) return true;
+            const clave = String(cfg.porId ? r[cfg.pk] : r.Nombre).toUpperCase();
+            return permitidos.has(clave);
+        });
+
+        select.innerHTML = `<option value="">${escaparHTML(vacio)}</option>` +
+            visibles.map(r => {
+                const valor = cfg.porId ? r[cfg.pk] : r.Nombre;
+                return `<option value="${escaparHTML(valor)}">${escaparHTML(r.Nombre)}</option>`;
+            }).join('');
+
+        restaurarSeleccion(select, elegido, elegidoTexto);
+    });
+}
+
+/* Perfil real de cada tipo (cuántos de sus equipos tienen cada campo
+   capturado). Lo llena la cascada desde el inventario; mientras no llegue
+   o el tipo no tenga equipos, manda la bandera del catálogo. */
+const perfilesTipo = new Map();
+
+/* Requisitos efectivos de un tipo: el inventario manda y la bandera del
+   catálogo sólo se usa como respaldo. Así el formulario deja de depender
+   de que alguien mantenga al día las banderas de ActivoFijoTipos. */
+function requisitosDeTipo(tipo) {
+    const perfil = perfilesTipo.get(tipo.IdTipo);
+    const claves = perfil && perfil.total > 0 ? (perfil.claves || {}) : null;
+
+    const regla = (clave, bandera) => {
+        const m = claves ? claves[clave] : null;
+        if (!m) return { visible: !!bandera, obligatorio: !!bandera, medido: false };
+        return {
+            visible: m.usado || m.requerido || !!bandera,
+            obligatorio: m.requerido,
+            medido: true,
+            usos: m.usos,
+            total: m.total
+        };
+    };
+
+    const nombre = String(tipo.Nombre ?? '').toUpperCase();
+
+    return {
+        medido: !!claves,
+        marca:           regla('marca', false),
+        modelo:          regla('modelo', false),
+        serie:           regla('serie', false),
+        imei:            regla('imei', tipo.RequiereIMEI),
+        telefono:        regla('telefono', tipo.RequiereTelefono),
+        sitio:           regla('sitio', tipo.RequiereSitio),
+        subtipo:         regla('subtipo', tipo.RequiereSubtipo),
+        clasificacion:   regla('clasificacion', tipo.RequiereClasificacion),
+        tamanio:         regla('tamanio', tipo.RequiereTamanio),
+        capacidad:       regla('capacidad', tipo.RequiereCapacidad),
+        voltaje:         regla('voltaje', tipo.RequiereVoltaje),
+        usuarioAsignado: regla('usuarioAsignado', tipo.RequiereUsuarioAsignado),
+        precio:          regla('precio', tipo.RequierePrecio),
+        especificaciones: regla('especificaciones', tipo.RequiereEspecificaciones),
+        accesorios:      regla('accesorios', tipo.RequiereAccesorios),
+        /* Caso de negocio: un disco externo sí se le entrega a alguien. */
+        esAlmacenamiento: nombre === 'SSD NVME' || nombre === 'DISCO MECANICO'
+    };
+}
+
+async function cargarCascadaTipo() {
+    const idTipo = parseInt(selTipo.value, 10) || 0;
+    const token = ++cascadaToken;
+
+    /* Sin tipo no hay nada que filtrar: catálogos completos. */
+    if (!idTipo) { aplicarCascada(null); return; }
+
+    try {
+        const res = await window.api.activoFijo.activos.cascadaTipo(idTipo);
+        if (token !== cascadaToken) return; /* respuesta vieja: ya hay otro Tipo */
+        aplicarCascada(res);
+
+        /* El perfil real del tipo llega con la cascada: con él se afinan
+           qué campos se muestran y cuáles son obligatorios. */
+        if (res && res.perfil) {
+            perfilesTipo.set(idTipo, res.perfil);
+            const tipo = tipos.find(t => t.IdTipo === idTipo);
+            if (tipo) aplicarRequisitos(tipo);
+        }
+    } catch (_) {
+        /* Sin cascada se queda el catálogo completo: nunca bloquea la captura. */
+    }
+}
+
 selTipo.addEventListener('change', actualizarCamposPorTipo);
 
 function actualizarCamposPorTipo() {
@@ -1846,21 +2140,11 @@ function actualizarCamposPorTipo() {
         toggle('.bloque-especificaciones', false);
         toggle('.campo-accesorios', false);
         poblarSubtipos(null);
+        cargarCascadaTipo();
         return;
     }
 
-    toggle('.campo-imei1', !!tipo.RequiereIMEI);
-    toggle('.campo-imei2', !!tipo.RequiereIMEI);
-    toggle('.campo-telefono', !!tipo.RequiereTelefono);
-    toggle('.campo-sitio',         !!tipo.RequiereSitio);
-    toggle('.campo-subtipo',       !!tipo.RequiereSubtipo);
-    toggle('.campo-clasificacion', !!tipo.RequiereClasificacion);
-    toggle('.campo-tamanio',       !!tipo.RequiereTamanio);
-    toggle('.campo-capacidad',     !!tipo.RequiereCapacidad);
-    toggle('.campo-voltaje',       !!tipo.RequiereVoltaje);
-    toggle('.campo-precio', !!tipo.RequierePrecio);
-    toggle('.bloque-especificaciones', !!tipo.RequiereEspecificaciones);
-    toggle('.campo-accesorios', !!tipo.RequiereAccesorios);
+    aplicarRequisitos(tipo);
 
     if (tipo.RequiereSubtipo) {
         poblarSubtipos(tipo.GrupoSubtipo);
@@ -1868,50 +2152,162 @@ function actualizarCamposPorTipo() {
         poblarSubtipos(null);
     }
 
-    if (tipo.RequiereUsuarioAsignado) {
-        const esAlmacenamiento = (tipo.Nombre === 'SSD NVME' || tipo.Nombre === 'DISCO MECANICO');
-        if (esAlmacenamiento) {
-            actualizarUsuarioAsignado();
-        } else {
-            toggle('.campo-usuario-asignado', true);
-        }
-    } else {
-        toggle('.campo-usuario-asignado', false);
-    }
+    /* Marca, modelo, procesador, RAM, almacenamiento, S.O. y voltaje se
+       reducen a lo que este tipo realmente usa. */
+    cargarCascadaTipo();
 }
 
-selClasificacion.addEventListener('change', actualizarUsuarioAsignado);
+/* Muestra/oculta los campos del formulario con las reglas del tipo. El
+   usuario asignado ya no depende de la bandera del catálogo: la casilla
+   está siempre disponible (es opt-in) porque cualquier equipo puede
+   entregarse a alguien. */
+function aplicarRequisitos(tipo) {
+    const reqs = requisitosDeTipo(tipo);
 
-function actualizarUsuarioAsignado() {
+    const toggle = (selector, visible) => {
+        document.querySelectorAll(selector).forEach(el => {
+            el.classList.toggle('oculto', !visible);
+        });
+    };
+
+    toggle('.campo-imei1', reqs.imei.visible);
+    toggle('.campo-imei2', reqs.imei.visible);
+    toggle('.campo-telefono', reqs.telefono.visible);
+    toggle('.campo-sitio', reqs.sitio.visible);
+    toggle('.campo-subtipo', reqs.subtipo.visible);
+    toggle('.campo-clasificacion', reqs.clasificacion.visible);
+    toggle('.campo-tamanio', reqs.tamanio.visible);
+    toggle('.campo-capacidad', reqs.capacidad.visible);
+    toggle('.campo-voltaje', reqs.voltaje.visible);
+    toggle('.campo-precio', reqs.precio.visible);
+    toggle('.bloque-especificaciones', reqs.especificaciones.visible);
+    toggle('.campo-accesorios', reqs.accesorios.visible);
+
+    /* La casilla de usuario asignado siempre se ofrece; lo que cambia es si
+       el campo es obligatorio (bandera del catálogo / responsiva abierta). */
+    toggle('.campo-usuario-asignado', true);
+    actualizarUsuarioAsignado(tipo);
+
+    return reqs;
+}
+
+selClasificacion.addEventListener('change', () => actualizarUsuarioAsignado());
+
+function actualizarUsuarioAsignado(tipoActual = null) {
     const idTipo = parseInt(selTipo.value, 10);
-    const tipo = tipos.find(t => t.IdTipo === idTipo);
-    if (!tipo || !tipo.RequiereUsuarioAsignado) {
-        document.querySelector('.campo-usuario-asignado')?.classList.add('oculto');
-        return;
-    }
+    const tipo = tipoActual || tipos.find(t => t.IdTipo === idTipo);
+    if (!tipo) return;
 
-    const esAlmacenamiento = (tipo.Nombre === 'SSD NVME' || tipo.Nombre === 'DISCO MECANICO');
-    if (!esAlmacenamiento) {
-        document.querySelector('.campo-usuario-asignado')?.classList.remove('oculto');
-        return;
-    }
+    /* El campo ya no se esconde: se deja disponible para cualquier tipo. */
+    document.querySelector('.campo-usuario-asignado')?.classList.remove('oculto');
 
+    const { esAlmacenamiento } = requisitosDeTipo(tipo);
+    if (!esAlmacenamiento) return;
+
+    /* En discos sólo tiene sentido entregarlo cuando es externo. */
     const idCla = parseInt(selClasificacion.value, 10);
     const cla = clasificaciones.find(c => c.IdClasificacion === idCla);
-    const esExterno = cla && cla.Nombre.toUpperCase() === 'EXTERNO';
-
-    document.querySelector('.campo-usuario-asignado')?.classList.toggle('oculto', !esExterno);
+    const esExterno = !!cla && cla.Nombre.toUpperCase() === 'EXTERNO';
+    if (!esExterno) {
+        document.querySelector('.campo-usuario-asignado')?.classList.add('oculto');
+    }
 }
 
+<<<<<<< Updated upstream
 
+=======
+/* =========================================================
+   USUARIO ASIGNADO · casilla + buscador rápido
+   ---------------------------------------------------------
+   El catálogo de usuarios crece con cada alta, así que un <select>
+   plano ya no se puede recorrer a ojo. La casilla deja el campo
+   vacío por omisión (activo general) y, al marcarla, aparece el
+   selector con un buscador que filtra por nombre mientras se escribe.
+   ========================================================= */
+function poblarUsuarios(filtro = '') {
+    if (!inpUsuarioAsig) return;
+
+    const texto = String(filtro || '').trim().toLowerCase();
+    const registros = catalogosEspecificaciones.usuariosAsignados || [];
+    const actual = inpUsuarioAsig.value;
+
+    const visibles = registros.filter(u => !texto || String(u.Nombre ?? '').toLowerCase().includes(texto));
+
+    inpUsuarioAsig.innerHTML = '<option value="">— Seleccionar usuario —</option>' +
+        visibles.map(u => `<option value="${escaparHTML(u.Nombre)}">${escaparHTML(u.Nombre)}</option>`).join('');
+
+    if (!actual) return;
+
+    /* El usuario ya elegido no debe perderse porque el filtro no lo
+       muestre: se reinserta para conservar la selección. */
+    if (!visibles.some(u => String(u.Nombre) === actual)) {
+        inpUsuarioAsig.add(new Option(actual, actual, true, true));
+    }
+    inpUsuarioAsig.value = actual;
+}
+
+/* La casilla es la única dueña de la visibilidad del selector. */
+function aplicarVisibilidadUsuario() {
+    const visible = !!chkUsuarioAsignado?.checked;
+    if (usuarioPicker) usuarioPicker.classList.toggle('oculto', !visible);
+    return visible;
+}
+
+chkUsuarioAsignado?.addEventListener('change', () => {
+    if (aplicarVisibilidadUsuario()) {
+        buscadorUsuario?.focus();
+        return;
+    }
+
+    /* Se desmarca: el activo queda como general y sin usuario. */
+    if (inpUsuarioAsig) inpUsuarioAsig.value = '';
+    if (buscadorUsuario) buscadorUsuario.value = '';
+    btnLimpiarUsuario?.classList.add('oculto');
+    poblarUsuarios('');
+});
+
+buscadorUsuario?.addEventListener('input', () => {
+    const texto = buscadorUsuario.value.trim();
+    btnLimpiarUsuario?.classList.toggle('oculto', !texto);
+    poblarUsuarios(texto);
+});
+
+btnLimpiarUsuario?.addEventListener('click', () => {
+    if (buscadorUsuario) buscadorUsuario.value = '';
+    btnLimpiarUsuario.classList.add('oculto');
+    poblarUsuarios('');
+    buscadorUsuario?.focus();
+});
+
+/* Un activo está "en uso" mientras tenga una responsiva abierta: su estatus
+   y su usuario de inventario los mueve la responsiva (asignar / devolver),
+   no el formulario. */
+>>>>>>> Stashed changes
 function activoEnUso(estatus) {
     const nombre = String(estatus ?? '').trim().toUpperCase();
     return nombre === 'ASIGNADO' || nombre === 'PENDIENTE';
 }
 
+<<<<<<< Updated upstream
 
+=======
+/* Candado del campo "Usuario asignado":
+   - En uso: la casilla queda marcada y bloqueada, porque lo escribe la
+     responsiva.
+   - Activo libre: se puede desmarcar, que es la forma de devolverlo al
+     inventario sin tener que borrar el activo. */
+>>>>>>> Stashed changes
 function aplicarEstadoUsuarioAsignado(enUso) {
+    const asignado = !!String(inpUsuarioAsig?.value ?? '').trim();
+    const marcado = !!enUso || asignado;
+
+    if (chkUsuarioAsignado) {
+        chkUsuarioAsignado.checked = marcado;
+        chkUsuarioAsignado.disabled = !!enUso;
+    }
+    if (usuarioPicker) usuarioPicker.classList.toggle('oculto', !marcado);
     if (inpUsuarioAsig) inpUsuarioAsig.disabled = !!enUso;
+
     document.getElementById('req-usuario-asignado')?.classList.toggle('oculto', !!enUso);
     document.getElementById('nota-usuario-asignado')?.classList.toggle('oculto', !enUso);
 }
@@ -2021,6 +2417,12 @@ function limpiarFormulario() {
     inpIMEI2.value = '';
     inpNoTelefono.value = '';
     inpUsuarioAsig.value = '';
+    if (chkUsuarioAsignado) { chkUsuarioAsignado.checked = false; chkUsuarioAsignado.disabled = false; }
+    if (usuarioPicker) usuarioPicker.classList.add('oculto');
+    if (buscadorUsuario) buscadorUsuario.value = '';
+    btnLimpiarUsuario?.classList.add('oculto');
+    poblarUsuarios('');
+    if (notaContextoAuto) { notaContextoAuto.classList.add('oculto'); notaContextoAuto.textContent = ''; }
     aplicarEstadoUsuarioAsignado(false);
     inpProcesador.value = '';
     inpRAM.value = '';
@@ -2043,7 +2445,59 @@ btnNuevo.addEventListener('click', () => {
     selTipo.focus();
 });
 
-function abrirEdicion(id) {
+/* Relleno masivo: deduce cartera (por prefijo del hostname) y sitio
+   (COPERVA) de todos los activos que aún están vacíos. Sólo toca filas con
+   el campo en blanco, así que es seguro repetirlo. */
+btnAutoasignar?.addEventListener('click', async () => {
+    const confirm = await Swal.fire({
+        icon: 'question',
+        title: '¿Autoasignar cartera y sitio?',
+        html: 'Se completarán la cartera (según el prefijo del hostname) y el sitio ' +
+              '(COPERVA) de los activos que estén vacíos.<br><br>' +
+              '<strong>No se sobrescribe</strong> lo que ya capturaste a mano.',
+        showCloseButton: true,
+        confirmButtonText: 'Sí, autoasignar',
+        buttonsStyling: false,
+        customClass: { popup: 'cl-confirm', confirmButton: 'swal2-confirm swal2-styled' }
+    });
+    if (!confirm.isConfirmed) return;
+
+    Swal.fire({
+        title: 'Autoasignando...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    let res;
+    try {
+        res = await window.api.activoFijo.activos.autoasignar();
+    } catch (err) {
+        res = { ok: false, mensaje: err.message };
+    }
+
+    if (!res || !res.ok) {
+        Swal.fire({
+            icon: 'error',
+            title: 'No se pudo autoasignar',
+            text: res?.mensaje || 'Error desconocido.',
+            buttonsStyling: false,
+            customClass: { popup: 'cl-confirm', confirmButton: 'swal2-confirm swal2-styled' }
+        });
+        return;
+    }
+
+    await Swal.fire({
+        icon: 'success',
+        title: 'Listo',
+        text: res.mensaje || `Se actualizaron ${res.actualizados} equipos.`,
+        buttonsStyling: false,
+        customClass: { popup: 'cl-confirm', confirmButton: 'swal2-confirm swal2-styled' }
+    });
+    await cargarActivos();
+});
+
+async function abrirEdicion(id) {
     const a = activos.find(x => x.IdActivoFijoEQ === id);
     if (!a) { toastError('Activo no encontrado'); return; }
 
@@ -2093,6 +2547,51 @@ function abrirEdicion(id) {
     aplicarEstadoUsuarioAsignado(enUso);
     abrirModal();
     selTipo.focus();
+
+    /* Auto-relleno por hostname: el prefijo (AGT-TOY156 → TOY) dice a qué
+       cliente/cartera pertenece. Sólo completa cartera y sitio si están
+       vacíos y muestra una nota con lo deducido; nunca pisa lo capturado. */
+    await aplicarContextoInferido(id);
+}
+
+/* Sugiere cartera + sitio por defecto (COPERVA) a partir del hostname ya
+   guardado del activo. Reutiliza el endpoint af-activos-inferir. */
+async function aplicarContextoInferido(id) {
+    if (notaContextoAuto) { notaContextoAuto.classList.add('oculto'); notaContextoAuto.textContent = ''; }
+    if (!id || !window.api?.activoFijo?.activos?.inferir) return;
+
+    let res;
+    try { res = await window.api.activoFijo.activos.inferir(id); }
+    catch (_) { return; }
+    if (!res || !res.ok) return;
+
+    let completo = false;
+    if (!selCartera.value && res.idCartera) {
+        const opt = [...selCartera.options].find(o => String(o.value) === String(res.idCartera));
+        if (opt) { selCartera.value = String(res.idCartera); completo = true; }
+    }
+    if (!selSitio.value && res.idSitioPorDefecto) {
+        const opt = [...selSitio.options].find(o => String(o.value) === String(res.idSitioPorDefecto));
+        if (opt) { selSitio.value = String(res.idSitioPorDefecto); completo = true; }
+    }
+
+    const partes = [];
+    if (res.hostname) partes.push(`hostname ${res.hostname}`);
+    if (res.cliente)  partes.push(`cliente ${res.cliente}`);
+    if (res.idCartera) {
+        const oc = [...selCartera.options].find(o => String(o.value) === String(res.idCartera));
+        if (oc) partes.push(`cartera ${oc.textContent}`);
+    }
+    if (res.idSitioPorDefecto) {
+        const os = [...selSitio.options].find(o => String(o.value) === String(res.idSitioPorDefecto));
+        if (os) partes.push(`sitio ${os.textContent}`);
+    }
+
+    if (notaContextoAuto && partes.length) {
+        const prefijo = completo ? 'Asignado automáticamente' : 'Sugerido por hostname';
+        notaContextoAuto.textContent = `${prefijo}: ${partes.join(' · ')}`;
+        notaContextoAuto.classList.remove('oculto');
+    }
 }
 
 formulario.addEventListener('submit', async (e) => {
@@ -2120,25 +2619,29 @@ formulario.addEventListener('submit', async (e) => {
         return;
     }
 
-    if (tipo.RequiereSubtipo && !selSubtipo.value) {
+    /* Obligatoriedad por dato, no por bandera del catálogo: se exige lo que
+       el inventario de ese tipo realmente captura (>= 60% de sus equipos). */
+    const reqs = requisitosDeTipo(tipo);
+
+    if (reqs.subtipo.obligatorio && !selSubtipo.value) {
         mostrarMensaje('El subtipo es obligatorio para este tipo.', 'error'); return;
     }
-    if (tipo.RequiereClasificacion && !selClasificacion.value) {
+    if (reqs.clasificacion.obligatorio && !selClasificacion.value) {
         mostrarMensaje('La clasificación es obligatoria para este tipo.', 'error'); return;
     }
-    if (tipo.RequiereTamanio && !selTamanio.value) {
+    if (reqs.tamanio.obligatorio && !selTamanio.value) {
         mostrarMensaje('El tamaño es obligatorio para este tipo.', 'error'); return;
     }
-    if (tipo.RequiereCapacidad && !selCapacidad.value) {
+    if (reqs.capacidad.obligatorio && !selCapacidad.value) {
         mostrarMensaje('La capacidad es obligatoria para este tipo.', 'error'); return;
     }
-    if (tipo.RequiereVoltaje && !selVoltaje.value) {
+    if (reqs.voltaje.obligatorio && !selVoltaje.value) {
         mostrarMensaje('El voltaje es obligatorio para este tipo.', 'error'); return;
     }
-    if (tipo.RequiereEspecificaciones && (!inpProcesador.value || !inpRAM.value || !inpAlmacenamiento.value || !inpSO.value)) {
+    if (reqs.especificaciones.obligatorio && (!inpProcesador.value || !inpRAM.value || !inpAlmacenamiento.value || !inpSO.value)) {
         mostrarMensaje('Selecciona procesador, memoria RAM, almacenamiento y sistema operativo del catálogo.', 'error'); return;
     }
-    if (tipo.RequiereAccesorios && !inpAccesorios.value) {
+    if (reqs.accesorios.obligatorio && !inpAccesorios.value) {
         mostrarMensaje('Selecciona los accesorios del catálogo.', 'error'); return;
     }
     
@@ -2146,12 +2649,14 @@ formulario.addEventListener('submit', async (e) => {
     const activoEditando = (modoEdicion && idEditando !== null)
         ? activos.find(x => x.IdActivoFijoEQ === idEditando)
         : null;
+    /* Aquí sí manda la bandera del catálogo: dar de alta un equipo en stock
+       sin dueño es normal, así que el dato no lo vuelve obligatorio. */
     const usuarioObligatorio = !!tipo.RequiereUsuarioAsignado && campoUsuarioVisible &&
         (!activoEditando || activoEnUso(activoEditando.Estatus));
     if (usuarioObligatorio && !inpUsuarioAsig.value.trim()) {
         mostrarMensaje('Selecciona el usuario asignado del catálogo.', 'error'); return;
     }
-    if (tipo.RequierePrecio && !inpPrecio.value.trim()) {
+    if (reqs.precio.obligatorio && !inpPrecio.value.trim()) {
         mostrarMensaje('El precio es obligatorio para este tipo.', 'error'); return;
     }
 

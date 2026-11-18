@@ -65,6 +65,37 @@
             </div>
             
             <div class="grid-tipos" id="grid-tipos"></div>
+
+            <!-- Destino por defecto: lo que el archivo no traiga se llena aquí.
+                 La cartera también puede deducirse del hostname de cada fila
+                 (AGT-TOY156 → TOYOTA), así que es opcional. -->
+            <div class="card-destino">
+                <div class="destino-header">
+                    <h3>Destino de lo importado</h3>
+                    <p>Se aplica a las filas que no traigan cartera o sitio. La cartera también se deduce del hostname cuando es posible.</p>
+                </div>
+
+                <div class="destino-grid">
+                    <label class="campo">
+                        <span>Cartera destino</span>
+                        <select id="import-cartera">
+                            <option value="">Automática (por hostname / sin cartera)</option>
+                        </select>
+                    </label>
+
+                    <label class="campo">
+                        <span>Sitio destino</span>
+                        <select id="import-sitio">
+                            <option value="">Por defecto</option>
+                        </select>
+                    </label>
+                </div>
+
+                <label class="destino-check">
+                    <input type="checkbox" id="import-solo-cartera">
+                    <span>Importar <strong>sólo</strong> las filas que correspondan a esa cartera (omitir el resto)</span>
+                </label>
+            </div>
         </section>
 
         <!-- PASO 2: CARGAR ARCHIVO -->

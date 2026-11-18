@@ -22,11 +22,18 @@ const { app, safeStorage } = require('electron');
 const sql = require('mssql');
 
 const RAIZ = path.join(__dirname, '..');
+const PKG = require(path.join(RAIZ, 'package.json'));
+
+/* El nombre y la carpeta de datos se fijan ANTES de que Electron cargue el
+   perfil: safeStorage (OSCrypt) toma la clave de "Local State" de userData, y
+   si el proceso arranca como "Electron" esa carpeta no existe y el descifrado
+   de db-credentials.dat falla. */
+app.setName(PKG.name);
+app.setPath('userData', path.join(app.getPath('appData'), PKG.name));
 
 /** Configuración cifrada de la app (la misma que escribe Configurar conexión). */
 function credencialesDeLaApp() {
-    const pkg = require(path.join(RAIZ, 'package.json'));
-    app.setName(pkg.name);
+    const pkg = PKG;
     const base = app.getPath('appData');
     const candidatos = [
         path.join(base, pkg.name, 'db-credentials.dat'),

@@ -295,7 +295,8 @@ contextBridge.exposeInMainWorld('api', {
             eliminarDefinitivo: id => ipcRenderer.invoke('af-activos-eliminar-definitivo', id),
             historico: id => ipcRenderer.invoke('af-activos-historico', id),
             componentes: id => ipcRenderer.invoke('af-activos-componentes', id),
-            exportarExcel: payload => ipcRenderer.invoke('af-activos-exportar-excel', payload),
+            /* Inventario general: un libro con una hoja por cartera. */
+            exportarExcel: () => ipcRenderer.invoke('af-activos-exportar-excel'),
             listarTipos: () => ipcRenderer.invoke('af-activos-lista-tipos'),
             listarMarcas: () => ipcRenderer.invoke('af-activos-lista-marcas'),
             listarEstados: () => ipcRenderer.invoke('af-activos-lista-estados'),
@@ -307,7 +308,13 @@ contextBridge.exposeInMainWorld('api', {
             listarClasificaciones: () => ipcRenderer.invoke('af-activos-lista-clasificaciones'),
             listarTamanios: () => ipcRenderer.invoke('af-activos-lista-tamanios'),
             listarCapacidades: () => ipcRenderer.invoke('af-activos-lista-capacidades'),
-            listarCatalogosExtendidos: () => ipcRenderer.invoke('af-activos-lista-catalogos-especificaciones')
+            listarCatalogosExtendidos: () => ipcRenderer.invoke('af-activos-lista-catalogos-especificaciones'),
+            /* Contexto automático por hostname: cartera del cliente
+               (TOY, DIDI, TPLAY…) y sitio por defecto COPERVA. */
+            inferir: id => ipcRenderer.invoke('af-activos-inferir', id),
+            autoasignar: () => ipcRenderer.invoke('af-activos-autoasignar'),
+            /* Cascada Tipo → marca/modelo/especificaciones del formulario */
+            cascadaTipo: idTipo => ipcRenderer.invoke('af-activos-cascada-tipo', idTipo)
         },
         responsivas: {
             listar: filtros => ipcRenderer.invoke('af-resp-listar', filtros),
@@ -348,6 +355,7 @@ contextBridge.exposeInMainWorld('api', {
             carterasParaFiltro: () => ipcRenderer.invoke('af-rep-carteras')
         },
         importacion: {
+            opciones: () => ipcRenderer.invoke('af-import-opciones'),
             listarLayouts: () => ipcRenderer.invoke('af-import-layouts'),
             obtenerLayout: clave => ipcRenderer.invoke('af-import-layout', clave),
             importar: datos => ipcRenderer.invoke('af-import-procesar', datos)

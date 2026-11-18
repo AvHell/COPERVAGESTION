@@ -319,6 +319,95 @@ body {
 .tipo-card.activo svg { color: var(--tierra-crema); }
 
 /* =========================================================
+   PASO 1: DESTINO (CARTERA / SITIO)
+   ========================================================= */
+.card-destino {
+    margin-top: 22px;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-left: 4px solid var(--tierra-oliva);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs);
+}
+
+.destino-header h3 {
+    font-family: var(--font-display);
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: var(--gray-800);
+}
+
+.destino-header p {
+    margin-top: 3px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--gray-500);
+}
+
+.destino-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.destino-grid .campo {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.destino-grid .campo span {
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+}
+
+.destino-grid select {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: var(--font-sans);
+    font-size: 0.86rem;
+    color: var(--gray-800);
+    background: var(--gray-50);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.destino-grid select:focus {
+    outline: none;
+    background: #fff;
+    border-color: var(--tierra-oliva);
+    box-shadow: 0 0 0 3px rgba(110,123,91,0.14);
+}
+
+.destino-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-top: 14px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--gray-600);
+    cursor: pointer;
+}
+
+.destino-check input {
+    margin-top: 2px;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--tierra-oliva);
+    cursor: pointer;
+}
+
+.destino-check input:disabled { cursor: not-allowed; }
+.destino-check:has(input:disabled) { opacity: 0.55; cursor: not-allowed; }
+
+/* =========================================================
    PASO 2: DROPZONE
    ========================================================= */
 .zona-drop {
@@ -477,12 +566,21 @@ body {
     margin-top: 10px;
 }
 
-.resultado-ok, .resultado-error {
+.resultado-ok, .resultado-error, .resultado-aviso {
     padding: 20px;
     border-radius: var(--radius-md);
     margin-bottom: 16px;
     animation: fadeIn 0.3s ease;
 }
+
+.resultado-aviso {
+    background: var(--tierra-crema);
+    border: 1px solid var(--tierra-arena);
+    color: var(--gray-700);
+}
+
+.resultado-aviso .resultado-titulo { color: var(--tierra-oliva); }
+.resultado-aviso p { font-size: 0.86rem; line-height: 1.5; }
 
 .resultado-ok {
     background: var(--verde-ok-bg);

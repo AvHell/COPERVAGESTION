@@ -950,14 +950,14 @@ ipcMain.handle('af-activos-componentes', async (_e, id) => {
     return await activoFijoDetalleDB.detalleDeActivo(id);
 });
 
-/* --- NUEVO: Exportar Excel Activos --- */
-ipcMain.handle('af-activos-exportar-excel', async (_e, payload) => {
+/* --- Exportar Excel del inventario: un libro con una hoja por cartera --- */
+ipcMain.handle('af-activos-exportar-excel', async () => {
     const err = requerirSesion('af-act:listado:ver');
     if (err) return err;
     try {
-        return await activoFijoActivosDB.exportarExcel(payload);
+        return await activoFijoActivosDB.exportarInventario();
     } catch (e) {
-        console.error('[Activos] Error exportarExcel:', e);
+        console.error('[Activos] Error exportarInventario:', e);
         return { ok: false, mensaje: e.message };
     }
 });
@@ -974,6 +974,26 @@ ipcMain.handle('af-activos-lista-clasificaciones', async () => { const err = req
 ipcMain.handle('af-activos-lista-tamanios',        async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarTamanios(); });
 ipcMain.handle('af-activos-lista-capacidades',     async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCapacidades(); });
 ipcMain.handle('af-activos-lista-catalogos-especificaciones', async () => { const err = requerirSesion('activofijo_activos'); if (err) return err; return await activoFijoActivosDB.listarCatalogosExtendidos(); });
+
+/* Contexto automático por hostname (cartera del cliente + sitio COPERVA).
+   "inferir" sólo sugiere; "autoasignar" rellena en lote los vacíos. */
+ipcMain.handle('af-activos-inferir', async (_e, id) => {
+    const err = requerirSesion('af-act:listado:ver');
+    if (err) return err;
+    return await activoFijoActivosDB.inferirContexto(id);
+});
+ipcMain.handle('af-activos-autoasignar', async () => {
+    const err = requerirSesion('af-act:editar');
+    if (err) return err;
+    return await activoFijoActivosDB.autoasignar();
+});
+
+/* Cascada Tipo → marca / modelo / especificaciones para el formulario. */
+ipcMain.handle('af-activos-cascada-tipo', async (_e, idTipo) => {
+    const err = requerirSesion('activofijo_activos');
+    if (err) return err;
+    return await activoFijoActivosDB.catalogoPorTipo(idTipo);
+});
 
 /* =========================================================
    IPC: DETALLE AF (red, cuentas, programas, piezas)
@@ -1110,6 +1130,7 @@ ipcMain.handle('af-rep-carteras',              async () => { const err = requeri
 /* =========================================================
    IPC: IMPORTACIÓN AF
    ========================================================= */
+ipcMain.handle('af-import-opciones', async ()           => { const err = requerirSesion('af-imp:ejecutar'); if (err) return err; return activoFijoImportacionDB.listarOpciones(); });
 ipcMain.handle('af-import-layouts',  async ()           => { const err = requerirSesion('af-imp:ejecutar'); if (err) return err; return activoFijoImportacionDB.listarLayouts(); });
 ipcMain.handle('af-import-layout',   async (_e, clave)  => { const err = requerirSesion('af-imp:ejecutar'); if (err) return err; return activoFijoImportacionDB.obtenerLayout(clave); });
 ipcMain.handle('af-import-procesar', async (_e, datos)  => { const err = requerirSesion('af-imp:ejecutar'); if (err) return err; return await activoFijoImportacionDB.importar(datos, usuarioActual?.IdUsuario); });

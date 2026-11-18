@@ -184,12 +184,302 @@ async function piezasPorActivo(pool) {
 }
 
 /* =========================================================
+   CONTEXTO AUTOMÁTICO POR HOSTNAME
+   ---------------------------------------------------------
+   El hostname que deja el collector ya dice de quién es el equipo:
+   el formato es {ROL}-{CODIGOCLIENTE}{numero}, así que AGT-TOY156
+   es un equipo del rol AGT del cliente TOY (TOYOTA) número 156.
+   Aquí se decodifica ese prefijo y se cruza con Clientes y
+   ActivoFijoCarteras para deducir la cartera SIN mapa hardcodeado:
+   el vínculo es el nombre (TOY → TOYOTA → cartera TOYOTA).
+   Lo que no pertenece a ninguna cartera sigue siendo activo general
+   y queda en el sitio por defecto (COPERVA).
+   ========================================================= */
+const SITIO_POR_DEFECTO = 'COPERVA';
+
+let tablaRedCache = null;
+async function tablaRedDisponible(pool) {
+    if (tablaRedCache !== null) return tablaRedCache;
+    try {
+        const r = await pool.request().query(
+            "SELECT CASE WHEN OBJECT_ID('dbo.ActivoFijoEquiposRed','U') IS NULL THEN 0 ELSE 1 END AS Existe");
+        tablaRedCache = !!(r.recordset && r.recordset[0] && r.recordset[0].Existe);
+    } catch (_) {
+        tablaRedCache = false;
+    }
+    return tablaRedCache;
+}
+
+/* ¿La tabla de red tiene esta columna? El esquema del collector puede ser
+   más viejo que la app: sin `Dominio` se sigue mostrando el hostname. */
+let columnasRedCache = null;
+async function columnaEnRed(pool, nombre) {
+    if (!columnasRedCache) {
+        try {
+            const r = await pool.request().query(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ActivoFijoEquiposRed'");
+            const set = new Set();
+            for (const f of r.recordset || []) set.add(String(f.COLUMN_NAME ?? '').toUpperCase());
+            if (set.size) columnasRedCache = set;
+        } catch (_) { /* sin metadatos se asume el esquema mínimo */ }
+    }
+    return columnasRedCache ? columnasRedCache.has(String(nombre ?? '').toUpperCase()) : false;
+}
+
+/* Hostname (y dominio) del adaptador principal de cada activo. OUTER APPLY y
+   no JOIN: un equipo con varias tarjetas (Ethernet + WiFi) debe salir una
+   sola vez. Si la tabla de red no existe todavía, la consulta no se cae. */
+function aplicarHostname(disponible, conDominio = false) {
+    if (!disponible) {
+        return {
+            columna: conDominio
+                ? 'CAST(NULL AS nvarchar(200)) AS Hostname, CAST(NULL AS nvarchar(200)) AS Dominio'
+                : 'CAST(NULL AS nvarchar(200)) AS Hostname',
+            join: ''
+        };
+    }
+    return {
+        columna: conDominio ? 'red.Hostname, red.Dominio' : 'red.Hostname',
+        join: `OUTER APPLY (
+            SELECT TOP 1 r.Hostname${conDominio ? ', r.Dominio' : ''}
+            FROM ActivoFijoEquiposRed r
+            WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
+              AND r.Hostname IS NOT NULL
+              AND LTRIM(RTRIM(r.Hostname)) <> ''
+            ORDER BY r.EsPrincipal DESC, r.IdEquipoRed DESC
+        ) red`
+    };
+}
+
+/* Código de cliente escondido en el hostname:
+   AGT-TOY156 → TOY · DANIEL-REDES → REDES · HP-AVHELL → AVHELL */
+function codigoClienteDeHostname(hostname) {
+    const texto = String(hostname ?? '').trim().toUpperCase();
+    if (!texto) return null;
+    const guion = texto.indexOf('-');
+    const resto = guion === -1 ? texto : texto.slice(guion + 1);
+    const letras = /^[A-Z]+/.exec(resto);
+    return letras ? letras[0] : null;
+}
+
+/* Clientes + carteras + sitios en un solo viaje: es la tabla de verdad
+   para decidir a qué cartera pertenece un hostname. */
+async function contextoClientes(pool) {
+    const mapa = { porCodigo: new Map(), codigos: [], idSitioPorDefecto: null };
+    try {
+        const [cli, car, sit] = await Promise.all([
+            pool.request().query('SELECT Codigo, Nombre FROM Clientes'),
+            pool.request().query('SELECT IdCartera, Nombre FROM ActivoFijoCarteras WHERE Activo = 1'),
+            pool.request().query('SELECT IdSitio, Nombre FROM ActivoFijoSitios WHERE Activo = 1')
+        ]);
+
+        const carteraPorNombre = new Map();
+        for (const c of car.recordset || []) {
+            carteraPorNombre.set(String(c.Nombre ?? '').trim().toUpperCase(), c.IdCartera);
+        }
+
+        for (const c of cli.recordset || []) {
+            const codigo = String(c.Codigo ?? '').trim().toUpperCase();
+            if (!codigo) continue;
+            mapa.porCodigo.set(codigo, {
+                codigo,
+                cliente: c.Nombre,
+                idCartera: carteraPorNombre.get(String(c.Nombre ?? '').trim().toUpperCase()) ?? null
+            });
+        }
+
+        /* Los códigos largos primero: ADAMAHP debe ganarle a ADAMA. */
+        mapa.codigos = [...mapa.porCodigo.keys()].sort((a, b) => b.length - a.length);
+
+        for (const s of sit.recordset || []) {
+            if (String(s.Nombre ?? '').trim().toUpperCase() === SITIO_POR_DEFECTO) {
+                mapa.idSitioPorDefecto = s.IdSitio;
+                break;
+            }
+        }
+    } catch (err) {
+        /* Sin catálogos de clientes la inferencia simplemente no opina. */
+        return mapa;
+    }
+    return mapa;
+}
+
+/* Traduce un hostname a su cliente/cartera. Devuelve nulls cuando el
+   prefijo no corresponde a ningún cliente del catálogo. */
+function inferirDeHostname(hostname, mapa) {
+    const codigo = codigoClienteDeHostname(hostname);
+    const vacio = { hostname: hostname || null, codigo: codigo, cliente: null, idCartera: null };
+
+    if (!codigo || !mapa || !mapa.porCodigo) return vacio;
+
+    let info = mapa.porCodigo.get(codigo) || null;
+    if (!info) {
+        /* Respaldo: prefijo más largo que coincida (códigos con número). */
+        for (const c of mapa.codigos) {
+            if (codigo.startsWith(c)) { info = mapa.porCodigo.get(c); break; }
+        }
+    }
+
+    if (!info) return vacio;
+    return { hostname: hostname || null, codigo: info.codigo, cliente: info.cliente, idCartera: info.idCartera };
+}
+
+/* Hostname ya guardado de un activo (para no pedirlo al usuario). */
+async function hostnameDeActivo(pool, id) {
+    if (!(await tablaRedDisponible(pool))) return null;
+    try {
+        const r = await pool.request()
+            .input('Id', sql.Int, id)
+            .query(`SELECT TOP 1 Hostname
+                    FROM ActivoFijoEquiposRed
+                    WHERE IdActivoFijoEQ = @Id
+                      AND Hostname IS NOT NULL AND LTRIM(RTRIM(Hostname)) <> ''
+                    ORDER BY EsPrincipal DESC, IdEquipoRed DESC`);
+        return r.recordset[0]?.Hostname ?? null;
+    } catch (_) {
+        return null;
+    }
+}
+
+/* Cartera deducida del hostname + sitio por defecto (COPERVA). Nunca
+   pisa lo que el usuario capturó a mano. */
+async function resolverContextoActivo(pool, datos, hostnameGuardado = null) {
+    const mapa = await contextoClientes(pool);
+    const hostname = datos?.Hostname || hostnameGuardado || null;
+    const inferido = hostname ? inferirDeHostname(hostname, mapa) : null;
+    return {
+        hostname,
+        inferido,
+        idCartera: datos?.IdCartera || inferido?.idCartera || null,
+        idSitio: datos?.IdSitio || mapa.idSitioPorDefecto || null,
+        idSitioPorDefecto: mapa.idSitioPorDefecto
+    };
+}
+
+/* Qué cartera / sitio / cliente sugiere el hostname ya guardado de un
+   activo. Alimenta el "auto-relleno" del formulario de edición. */
+async function inferirContexto(id) {
+    try {
+        const pool = await getPool();
+        const hostname = await hostnameDeActivo(pool, id);
+        const mapa = await contextoClientes(pool);
+        const inf = hostname
+            ? inferirDeHostname(hostname, mapa)
+            : { hostname: null, codigo: null, cliente: null, idCartera: null };
+
+        return {
+            ok: true,
+            hostname,
+            codigo: inf.codigo,
+            cliente: inf.cliente,
+            idCartera: inf.idCartera,
+            idSitioPorDefecto: mapa.idSitioPorDefecto,
+            sitioPorDefecto: SITIO_POR_DEFECTO
+        };
+    } catch (err) {
+        return { ok: false, mensaje: 'No se pudo inferir el contexto: ' + err.message };
+    }
+}
+
+/* Relleno masivo: recorre los activos que ya tienen hostname y les pone
+   la cartera deducida del prefijo y el sitio por defecto (COPERVA).
+   Nunca pisa un valor capturado a mano, así que se puede correr las
+   veces que haga falta: sólo toca las filas con el campo vacío. */
+async function autoasignar() {
+    try {
+        const pool = await getPool();
+        const red = aplicarHostname(await tablaRedDisponible(pool));
+        if (!red.join) {
+            return {
+                ok: false,
+                mensaje: 'Todavía no hay tabla de red (ActivoFijoEquiposRed): el collector aún no ha cargado hostnames.'
+            };
+        }
+
+        const mapa = await contextoClientes(pool);
+        const r = await pool.request().query(`
+            SELECT af.IdActivoFijoEQ, af.IdCartera, af.IdSitio, ${red.columna}
+            FROM ActivoFijoEquipos af
+            ${red.join}
+            WHERE red.Hostname IS NOT NULL`);
+
+        const filas = r.recordset || [];
+        let actualizados = 0;
+        let sinCliente = 0;
+        let conCartera = 0;
+
+        for (const f of filas) {
+            const inf = inferirDeHostname(f.Hostname, mapa);
+            if (!inf.idCartera) sinCliente++;
+
+            const idCartera = f.IdCartera || inf.idCartera || null;
+            const idSitio = f.IdSitio || mapa.idSitioPorDefecto || null;
+
+            const sets = [];
+            const req = pool.request().input('Id', sql.Int, f.IdActivoFijoEQ);
+            if (!f.IdCartera && idCartera) {
+                req.input('IdCartera', sql.Int, idCartera);
+                sets.push('IdCartera = @IdCartera');
+            }
+            if (!f.IdSitio && idSitio) {
+                req.input('IdSitio', sql.Int, idSitio);
+                sets.push('IdSitio = @IdSitio');
+            }
+            if (sets.length === 0) continue;
+
+            await req.query(
+                `UPDATE ActivoFijoEquipos
+                 SET ${sets.join(', ')}, FechaModificacion = GETDATE()
+                 WHERE IdActivoFijoEQ = @Id`);
+            actualizados++;
+            if (inf.idCartera) conCartera++;
+        }
+
+        return {
+            ok: true,
+            total: filas.length,
+            actualizados,
+            conCartera,
+            sinCliente,
+            mensaje: `Se actualizaron ${actualizados} de ${filas.length} equipos con hostname (${conCartera} con cartera, ${sinCliente} sin cliente en el prefijo).`
+        };
+    } catch (err) {
+        return { ok: false, mensaje: 'Error al autoasignar: ' + err.message };
+    }
+}
+
+/* Contexto reutilizable por la importación masiva: deduce cartera desde un
+   hostname y aporta el sitio por defecto (COPERVA), con la misma tabla de
+   verdad que usa el alta manual. Así el importador no duplica la lógica. */
+async function contextoParaImportacion() {
+    try {
+        const pool = await getPool();
+        const mapa = await contextoClientes(pool);
+        return {
+            ok: true,
+            sitioPorDefecto: SITIO_POR_DEFECTO,
+            idSitioPorDefecto: mapa.idSitioPorDefecto,
+            inferir: hostname => inferirDeHostname(hostname, mapa)
+        };
+    } catch (err) {
+        return {
+            ok: false,
+            sitioPorDefecto: SITIO_POR_DEFECTO,
+            idSitioPorDefecto: null,
+            inferir: hostname => ({ hostname: hostname || null, codigo: null, cliente: null, idCartera: null }),
+            mensaje: err.message
+        };
+    }
+}
+
+/* =========================================================
    LISTAR
    ========================================================= */
 async function listar(filtros = {}) {
     const pool = await getPool();
     await catalogosDB.asegurarCatalogosExtendidos();
     const request = pool.request();
+    const red = aplicarHostname(await tablaRedDisponible(pool), await columnaEnRed(pool, 'Dominio'));
 
     let where = '1=1';
     if (filtros.idTipo)    { where += ' AND af.IdTipo = @IdTipo';        request.input('IdTipo',    sql.Int, filtros.idTipo); }
@@ -296,7 +586,11 @@ async function listar(filtros = {}) {
             af.Observaciones,
             af.FechaCreacion,
             af.FechaModificacion,
+<<<<<<< Updated upstream
             ${buildSOExpr},
+=======
+            ${red.columna},
+>>>>>>> Stashed changes
             ${lectura.columnas.join(',\n            ')}
         FROM ActivoFijoEquipos af
         LEFT  JOIN ActivoFijoCarteras       c   ON c.IdCartera       = af.IdCartera
@@ -311,6 +605,7 @@ async function listar(filtros = {}) {
         LEFT  JOIN ActivoFijoCapacidades    cap ON cap.IdCapacidad   = af.IdCapacidad
         LEFT  JOIN ActivoFijoVoltajes       vol ON vol.IdVoltaje     = af.IdVoltaje
         ${lectura.joins.join('\n        ')}
+        ${red.join}
         WHERE ${where}
         ORDER BY af.IdActivoFijoEQ DESC
     `);
@@ -341,6 +636,7 @@ async function obtener(id) {
         await prepararLecturaEspecificaciones(),
         await catalogosDB.prepararAccesoriosEquipo('af')
     );
+    const red = aplicarHostname(await tablaRedDisponible(pool), await columnaEnRed(pool, 'Dominio'));
     const r = await pool.request()
         .input('Id', sql.Int, id)
         .query(`
@@ -358,6 +654,7 @@ async function obtener(id) {
                 tam.Nombre AS Tamanio,
                 cap.Nombre AS Capacidad,
                 vol.Nombre AS Voltaje,
+                ${red.columna},
                 ${lectura.columnas.join(',\n                ')}
             FROM ActivoFijoEquipos af
             LEFT  JOIN ActivoFijoCarteras       c   ON c.IdCartera       = af.IdCartera
@@ -372,6 +669,7 @@ async function obtener(id) {
             LEFT  JOIN ActivoFijoCapacidades    cap ON cap.IdCapacidad   = af.IdCapacidad
             LEFT  JOIN ActivoFijoVoltajes       vol ON vol.IdVoltaje     = af.IdVoltaje
             ${lectura.joins.join('\n            ')}
+            ${red.join}
             WHERE af.IdActivoFijoEQ = @Id
         `);
     return lectura.aplicar(r.recordset[0] ?? null);
@@ -455,7 +753,12 @@ async function crear(datos, idUsuario) {
             valores.push('@' + param);
         };
 
-        agregar('IdCartera',           sql.Int,           datos.IdCartera || null);
+        /* Contexto automático: cartera deducida del hostname y, cuando no
+           hay cartera posible, el activo queda en el sitio por defecto
+           (COPERVA). Nunca sobrescribe lo capturado a mano. */
+        const contexto = await resolverContextoActivo(pool, datos);
+
+        agregar('IdCartera',           sql.Int,           contexto.idCartera);
         agregar('IdMarca',             sql.Int,           datos.IdMarca || null);
         agregar('IdModelo',            sql.Int,           idsCatalogo.IdModelo ?? null);
         agregar('Modelo',              sql.NVarChar(150), textos.Modelo ?? null);
@@ -479,7 +782,7 @@ async function crear(datos, idUsuario) {
         agregar('IdEstado',            sql.Int,           IdEstado);
         agregar('IdEstatus',           sql.Int,           IdEstatus);
         agregar('IdLugarCliente',      sql.Int,           datos.IdLugarCliente || null);
-        agregar('IdSitio',             sql.Int,           datos.IdSitio || null);
+        agregar('IdSitio',             sql.Int,           contexto.idSitio);
         agregar('IdSubtipo',           sql.Int,           datos.IdSubtipo || null);
         agregar('IdClasificacion',     sql.Int,           datos.IdClasificacion || null);
         agregar('IdTamanio',           sql.Int,           datos.IdTamanio || null);
@@ -627,6 +930,14 @@ async function actualizar(id, datos, idUsuario) {
                 };
             }
         }
+
+        /* Contexto automático (igual que en crear): si la cartera o el
+           sitio llegan vacíos se deduce del hostname ya guardado del
+           equipo y, en último caso, la cartera queda null (activo
+           general) con el sitio por defecto COPERVA. */
+        const contexto = await resolverContextoActivo(pool, datos, await hostnameDeActivo(pool, id));
+        if (datos.IdCartera !== undefined) datos.IdCartera = datos.IdCartera || contexto.idCartera;
+        if (datos.IdSitio !== undefined)   datos.IdSitio   = datos.IdSitio   || contexto.idSitio;
 
         /* Columnas de texto legado: sólo se actualizan si aún existen. */
         const hayTexto = await columnasTextoEquipo();
@@ -1068,75 +1379,183 @@ async function historico(idActivo, limite = 200) {
 }
 
 /* =========================================================
-   EXPORTAR A EXCEL (Inteligente + Poppins)
+   EXPORTAR A EXCEL (Inventario general, una hoja por cartera)
+   ---------------------------------------------------------
+   Un solo Excel: hoja "Resumen" + una hoja por cartera (más
+   "Sin cartera"). Los equipos con piezas conectadas suman un
+   renglón por pieza física, colgado del hostname (o de la serie)
+   del activo padre: el inventario sigue contando 1 por equipo,
+   pero el Excel deja ver y filtrar todo lo que cuelga de cada uno.
    ========================================================= */
-async function exportarExcel(payload) {
-    const { titulo, columnas, datos } = payload || {};
+const SIN_CARTERA_HOJA = 'Sin cartera';
+const COLOR_ENCABEZADO_EXCEL = 'FF15803D';
 
-    if (!datos || datos.length === 0) {
-        return { ok: false, mensaje: 'No hay datos para exportar.' };
+/* Nombre legible del Tipo de cada pieza conectada. */
+const NOMBRE_TIPO_PIEZA_EXCEL = {
+    MONITOR: 'Monitor',
+    DISCO: 'Disco duro',
+    TECLADO: 'Teclado',
+    RATON: 'Ratón',
+    DIADEMA: 'Diadema',
+    IMPRESORA: 'Impresora',
+    BOCINA: 'Bocinas',
+    WEBCAM: 'Cámara web',
+    OTRO: 'Otro'
+};
+
+function nombreTipoPieza(tipo) {
+    const clave = String(tipo || 'OTRO').toUpperCase();
+    return NOMBRE_TIPO_PIEZA_EXCEL[clave]
+        || clave.charAt(0) + clave.slice(1).toLowerCase();
+}
+
+/* "2 (1 monitor, 1 disco duro)": el mismo texto que muestra la tabla. */
+function textoPiezasActivo(a) {
+    const total = Number(a.Piezas) || 0;
+    if (!total) return '—';
+    const detalle = (Array.isArray(a.PiezasTipos) ? a.PiezasTipos : [])
+        .map(t => `${Number(t.cuantas) || 0} ${nombreTipoPieza(t.tipo).toLowerCase()}`)
+        .join(', ');
+    return detalle ? `${total} (${detalle})` : String(total);
+}
+
+/* Piezas físicas vigentes por activo (detalle, no sólo el conteo).
+   Si la tabla no existe devuelve un mapa vacío: el Excel nunca se cae. */
+async function piezasDetalladas(pool) {
+    const mapa = new Map();
+    try {
+        const ex = await pool.request().query(`
+            SELECT CASE WHEN OBJECT_ID('dbo.ActivoFijoEquiposComponentes', 'U') IS NULL
+                        THEN 0 ELSE 1 END AS Existe`);
+        if (!(ex.recordset && ex.recordset[0] && ex.recordset[0].Existe)) return mapa;
+
+        const r = await pool.request().query(`
+            SELECT IdActivoFijoEQ, TipoComponente, Marca, Modelo, Serie,
+                   Identificador, Cantidad
+            FROM dbo.ActivoFijoEquiposComponentes
+            WHERE Vigente = 1
+            ORDER BY IdActivoFijoEQ, TipoComponente, Marca, Modelo, IdEquipoComponente`);
+
+        for (const f of r.recordset || []) {
+            const id = Number(f.IdActivoFijoEQ) || 0;
+            if (!mapa.has(id)) mapa.set(id, []);
+            mapa.get(id).push(f);
+        }
+    } catch (err) {
+        console.error('[Inventario Excel] piezas:', err.message);
+        return new Map();
     }
+    return mapa;
+}
 
-    const safeTitulo = (titulo || 'Inventario').replace(/[\\/:*?"<>|]/g, '_');
-    const fecha = new Date().toISOString().slice(0, 10);
-    const downloadsDir = path.join(os.homedir(), 'Downloads');
-    const defaultPath = path.join(
-        fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
-        `${safeTitulo}_${fecha}.xlsx`
-    );
+const COLUMNAS_EXCEL_INVENTARIO = [
+    { header: 'No. Serie',          key: 'NoSerie',          width: 20 },
+    { header: 'Hostname',           key: 'Hostname',         width: 22 },
+    { header: 'Dominio',            key: 'Dominio',          width: 24 },
+    { header: 'Marca',              key: 'Marca',            width: 16 },
+    { header: 'Modelo',             key: 'Modelo',           width: 20 },
+    { header: 'Tipo',               key: 'Tipo',             width: 16 },
+    { header: 'Elemento',           key: 'Elemento',         width: 12 },
+    { header: 'Activo padre',       key: 'ActivoPadre',      width: 22 },
+    { header: 'Estado',             key: 'Estado',           width: 14 },
+    { header: 'Estatus',            key: 'Estatus',          width: 14 },
+    { header: 'Sitio',              key: 'Sitio',            width: 14 },
+    { header: 'Usuario Asignado',   key: 'UsuarioAsignado',  width: 26 },
+    { header: 'Piezas conectadas',  key: 'PiezasTexto',      width: 32 }
+];
 
-    const { canceled, filePath } = await dialog.showSaveDialog({
-        title: 'Guardar reporte en Excel',
-        defaultPath,
-        filters: [{ name: 'Excel', extensions: ['xlsx'] }]
-    });
+const COLUMNAS_EXCEL_RESUMEN = [
+    { header: 'Cartera',            key: 'Cartera',          width: 26 },
+    { header: 'Equipos',            key: 'Equipos',          width: 12 },
+    { header: 'Con hostname',       key: 'ConHostname',      width: 14 },
+    { header: 'Piezas conectadas',  key: 'Piezas',           width: 18 },
+    { header: 'Filas en Excel',     key: 'Filas',            width: 16 }
+];
 
-    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+/* Nombre de hoja válido: Excel rechaza : \ / ? * [ ] y corta en 31
+   caracteres; si se repite, se numera. */
+function nombreHojaExcel(cartera, usados) {
+    const limpio = String(cartera || '').replace(/[\\/:*?\[\]]/g, '-').trim();
+    const base = (limpio || SIN_CARTERA_HOJA).slice(0, 28);
+    let nombre = base;
+    let n = 2;
+    while (usados.has(nombre.toLowerCase())) {
+        nombre = `${base.slice(0, 25)} (${n})`;
+        n++;
+    }
+    usados.add(nombre.toLowerCase());
+    return nombre;
+}
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Inventario');
+/* Filas de una cartera: primero el equipo, después una fila por pieza
+   física colgada de él (referenciando hostname o serie del padre). */
+function filasExcelDeCartera(lista, piezas) {
+    const filas = [];
+    for (const a of lista) {
+        filas.push({
+            NoSerie: a.NoSerie || '',
+            Hostname: a.Hostname || '',
+            Dominio: a.Dominio || '',
+            Marca: a.Marca || '',
+            Modelo: a.Modelo || '',
+            Tipo: a.Tipo || '',
+            Elemento: 'Equipo',
+            ActivoPadre: '',
+            Estado: a.Estado || '',
+            Estatus: a.Estatus || '',
+            Sitio: a.Sitio || '',
+            UsuarioAsignado: a.UsuarioAsignado || '',
+            PiezasTexto: textoPiezasActivo(a)
+        });
 
-    // Definir columnas con anchos
-    worksheet.columns = columnas.map(col => ({
-        header: col.header,
-        key: col.key,
-        width: col.width || 15
-    }));
+        const delEquipo = piezas.get(Number(a.IdActivoFijoEQ)) || [];
+        if (delEquipo.length === 0) continue;
 
-    // Agregar los datos
-    worksheet.addRows(datos);
+        /* El hostname manda porque es lo que se busca en el Excel; si el
+           equipo no lo tiene, la referencia es su número de serie. */
+        const referencia = String(a.Hostname || '').trim() || String(a.NoSerie || '').trim();
 
-    // Estilos de encabezado verde con fuente Poppins
+        for (const p of delEquipo) {
+            const veces = Math.min(Math.max(Number(p.Cantidad) || 1, 1), 50);
+            for (let i = 0; i < veces; i++) {
+                filas.push({
+                    NoSerie: p.Serie || '',
+                    Hostname: a.Hostname || '',
+                    Dominio: a.Dominio || '',
+                    Marca: p.Marca || '',
+                    Modelo: p.Modelo || '',
+                    Tipo: nombreTipoPieza(p.TipoComponente),
+                    Elemento: 'Pieza',
+                    ActivoPadre: referencia,
+                    Estado: '',
+                    Estatus: '',
+                    Sitio: a.Sitio || '',
+                    UsuarioAsignado: '',
+                    PiezasTexto: ''
+                });
+            }
+        }
+    }
+    return filas;
+}
+
+/* Encabezado verde, bordes, filas alternas y filtros: mismo aspecto en
+   todas las hojas. */
+function estilizarHojaExcel(worksheet, totalColumnas) {
     const headerRow = worksheet.getRow(1);
     headerRow.height = 30;
     headerRow.eachCell((cell) => {
-        cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF15803D' } // Verde oscuro
-        };
-        cell.font = {
-            color: { argb: 'FFFFFFFF' },
-            bold: true,
-            size: 11,
-            name: 'Poppins'
-        };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_ENCABEZADO_EXCEL } };
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11, name: 'Poppins' };
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
         cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' }
+            top: { style: 'thin' }, left: { style: 'thin' },
+            bottom: { style: 'thin' }, right: { style: 'thin' }
         };
     });
 
-    // Filtros automáticos
-    worksheet.autoFilter = {
-        from: { row: 1, column: 1 },
-        to: { row: 1, column: columnas.length }
-    };
+    worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: totalColumnas } };
 
-    // Estilos de filas y bordes
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         if (rowNumber === 1) return;
         row.eachCell((cell) => {
@@ -1147,23 +1566,267 @@ async function exportarExcel(payload) {
                 right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
             };
             cell.font = { name: 'Poppins', size: 10 };
-            // Filas alternas grises
             if (rowNumber % 2 === 0) {
-                cell.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFF8FAFC' }
-                };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
             }
         });
     });
+}
+
+/* Un libro con N hojas: abre el diálogo una sola vez y escribe todo. */
+async function guardarLibroExcel(hojas, titulo) {
+    const safeTitulo = (titulo || 'Inventario').replace(/[\\/:*?"<>|]/g, '_');
+    const fecha = new Date().toISOString().slice(0, 10);
+    const downloadsDir = path.join(os.homedir(), 'Downloads');
+    const defaultPath = path.join(
+        fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
+        `${safeTitulo}_${fecha}.xlsx`
+    );
+
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        title: 'Guardar inventario en Excel',
+        defaultPath,
+        filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+    });
+
+    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
+
+    const workbook = new ExcelJS.Workbook();
+    for (const hoja of hojas) {
+        const worksheet = workbook.addWorksheet(hoja.nombre);
+        worksheet.columns = (hoja.columnas || []).map(col => ({
+            header: col.header,
+            key: col.key,
+            width: col.width || 15
+        }));
+        worksheet.addRows(hoja.datos || []);
+        estilizarHojaExcel(worksheet, (hoja.columnas || []).length);
+    }
 
     try {
         await workbook.xlsx.writeFile(filePath);
-        return { ok: true, ruta: filePath };
+        return { ok: true, ruta: filePath, hojas: hojas.map(h => h.nombre) };
     } catch (err) {
         console.error('[Excel Error]:', err);
         return { ok: false, mensaje: 'No se pudo escribir el archivo: ' + err.message };
+    }
+}
+
+/* Inventario general: vigentes (sin BAJA), segmentado por cartera. */
+async function exportarInventario() {
+    const pool = await getPool();
+    const activos = await listar({});
+
+    if (!activos || activos.length === 0) {
+        return { ok: false, mensaje: 'No hay activos para exportar.' };
+    }
+
+    const piezas = await piezasDetalladas(pool);
+
+    /* Agrupa por cartera; "Sin cartera" siempre al final. */
+    const grupos = new Map();
+    for (const a of activos) {
+        const cartera = String(a.Cartera || '').trim() || SIN_CARTERA_HOJA;
+        if (!grupos.has(cartera)) grupos.set(cartera, []);
+        grupos.get(cartera).push(a);
+    }
+    const carteras = [...grupos.keys()].sort((x, y) => {
+        if (x === SIN_CARTERA_HOJA) return 1;
+        if (y === SIN_CARTERA_HOJA) return -1;
+        return x.localeCompare(y, 'es');
+    });
+
+    const usados = new Set(['resumen']);
+    const resumen = [];
+    const hojas = [];
+
+    for (const cartera of carteras) {
+        const lista = grupos.get(cartera);
+        const filas = filasExcelDeCartera(lista, piezas);
+        const nPiezas = filas.filter(f => f.Elemento === 'Pieza').length;
+
+        resumen.push({
+            Cartera: cartera,
+            Equipos: lista.length,
+            ConHostname: lista.filter(a => String(a.Hostname || '').trim()).length,
+            Piezas: nPiezas,
+            Filas: filas.length
+        });
+
+        hojas.push({
+            nombre: nombreHojaExcel(cartera, usados),
+            columnas: COLUMNAS_EXCEL_INVENTARIO,
+            datos: filas
+        });
+    }
+
+    const libro = [{
+        nombre: 'Resumen',
+        columnas: COLUMNAS_EXCEL_RESUMEN,
+        datos: resumen
+    }, ...hojas];
+
+    const resultado = await guardarLibroExcel(libro, 'Inventario_General');
+    if (resultado.ok) {
+        resultado.hojas = libro.map(h => h.nombre);
+        resultado.registros = resumen.reduce((s, r) => s + r.Filas, 0);
+        resultado.carteras = resumen.length;
+    }
+    return resultado;
+}
+
+/* =========================================================
+   CASCADA TIPO → CATÁLOGOS
+   ---------------------------------------------------------
+   Los catálogos crecen con todo lo que se capturó alguna vez (hoy hay
+   marcas de laptops y de monitores en la misma lista), así que al
+   elegir un Tipo el formulario sólo ofrece las marcas, modelos y
+   especificaciones que ESE tipo de equipo realmente usa. Se deriva del
+   propio inventario, sin tabla de mapeo nueva: el propio dato enseña.
+   Si un tipo todavía no tiene datos en alguna categoría, la UI muestra
+   el catálogo completo para no bloquear la captura.
+   ========================================================= */
+const CASCADA_TIPO = [
+    ['marcas',             'ActivoFijoMarcas',             'IdMarca',            'IdMarca'],
+    ['modelos',            'ActivoFijoModelos',            'IdModelo',           'IdModelo'],
+    ['procesadores',       'ActivoFijoProcesadores',       'IdProcesador',       'IdProcesador'],
+    ['memoriasRam',        'ActivoFijoMemoriasRAM',        'IdMemoriaRAM',       'IdMemoriaRAM'],
+    ['almacenamientos',    'ActivoFijoAlmacenamientos',    'IdAlmacenamiento',   'IdAlmacenamiento'],
+    ['sistemasOperativos', 'ActivoFijoSistemasOperativos', 'IdSistemaOperativo', 'IdSistemaOperativo'],
+    ['voltajes',           'ActivoFijoVoltajes',           'IdVoltaje',          'IdVoltaje']
+];
+
+/* ---------------------------------------------------------
+   PERFIL REAL DE UN TIPO
+   ---------------------------------------------------------
+   Las banderas "RequiereX" del catálogo se capturan a mano y se
+   desfasan del inventario (CPU marca RequiereUsuarioAsignado = 0 aunque
+   todas las CPU tengan usuario). Aquí se mide el inventario: cuántos
+   equipos de ESE tipo tienen cada campo capturado. El formulario y el
+   importador usan este perfil como fuente de verdad y dejan la bandera
+   del catálogo sólo como respaldo cuando el tipo aún no tiene equipos.
+   --------------------------------------------------------- */
+const PERFIL_TIPO = [
+    ['marca',            ['IdMarca']],
+    ['modelo',           ['IdModelo', 'Modelo']],
+    ['serie',            ['NoSerie']],
+    ['imei',             ['IMEI1', 'IMEI2']],
+    ['telefono',         ['NoTelefono']],
+    ['sitio',            ['IdSitio']],
+    ['subtipo',          ['IdSubtipo']],
+    ['clasificacion',    ['IdClasificacion']],
+    ['tamanio',          ['IdTamanio']],
+    ['capacidad',        ['IdCapacidad']],
+    ['voltaje',          ['IdVoltaje']],
+    ['usuarioAsignado',  ['IdUsuarioAsignado', 'UsuarioAsignado']],
+    ['precio',           ['PrecioActivo']],
+    ['procesador',       ['IdProcesador', 'Procesador']],
+    ['memoriaRam',       ['IdMemoriaRAM', 'MemoriaRAM']],
+    ['almacenamiento',   ['IdAlmacenamiento', 'Almacenamiento']],
+    ['sistemaOperativo', ['IdSistemaOperativo', 'SistemaOperativo']],
+    ['accesorios',       ['Accesorios']]
+];
+
+/* Un campo está capturado cuando tiene texto o un id distinto de 0.
+   Sirve igual para columnas de texto (esquema viejo) y para las FK. */
+function expresionCapturado(columna) {
+    return `CASE WHEN af.[${columna}] IS NULL THEN 0
+                 WHEN CONVERT(nvarchar(100), af.[columna]) IN ('', '0') THEN 0
+                 ELSE 1 END`;
+}
+
+const UMBRAL_REQUERIDO = 0.6;
+
+async function perfilPorTipo(pool, idTipo) {
+    const vacio = { total: 0, claves: {} };
+    try {
+        const presentes = await catalogosDB.columnasExistentes(
+            'ActivoFijoEquipos',
+            PERFIL_TIPO.flatMap(([, cols]) => cols)
+        );
+
+        const sumas = [];
+        const claves = [];
+        for (const [clave, cols] of PERFIL_TIPO) {
+            const disponibles = cols.filter(c => presentes.has(c));
+            if (disponibles.length === 0) continue;
+            claves.push([clave, disponibles]);
+            sumas.push(`SUM(CASE WHEN ${disponibles.map(expresionCapturado).join(' OR ')} THEN 1 ELSE 0 END) AS [${clave}]`);
+        }
+        if (sumas.length === 0) return vacio;
+
+        const r = await pool.request()
+            .input('IdTipo', sql.Int, idTipo)
+            .query(`
+                SELECT COUNT(*) AS total, ${sumas.join(',\n                       ')}
+                FROM ActivoFijoEquipos af
+                WHERE af.IdTipo = @IdTipo`);
+
+        const fila = (r.recordset && r.recordset[0]) || {};
+        const total = Number(fila.total) || 0;
+        const salida = { total, claves: {} };
+
+        for (const [clave] of claves) {
+            const usos = Number(fila[clave]) || 0;
+            salida.claves[clave] = {
+                usos,
+                total,
+                /* Sin equipos capturados no opina: manda la bandera del catálogo. */
+                requerido: total > 0 && (usos / total) >= UMBRAL_REQUERIDO,
+                usado: usos > 0
+            };
+        }
+
+        /* Especificaciones completas: las cuatro juntas, igual que las exige
+           el formulario y el importador. */
+        const especificaciones = ['procesador', 'memoriaRam', 'almacenamiento', 'sistemaOperativo'];
+        if (especificaciones.every(k => salida.claves[k])) {
+            const minimo = Math.min(...especificaciones.map(k => salida.claves[k].usos));
+            salida.claves.especificaciones = {
+                usos: minimo,
+                total,
+                requerido: total > 0 && (minimo / total) >= UMBRAL_REQUERIDO,
+                usado: minimo > 0
+            };
+        }
+
+        return salida;
+    } catch (_) {
+        return vacio;
+    }
+}
+
+async function catalogoPorTipo(idTipo) {
+    const id = Number(idTipo) || 0;
+    const salida = { ok: true, idTipo: id, perfil: { total: 0, claves: {} } };
+    for (const [clave] of CASCADA_TIPO) salida[clave] = [];
+    if (!id) return salida;
+
+    try {
+        const pool = await getPool();
+        salida.perfil = await perfilPorTipo(pool, id);
+        const resultados = await Promise.all(CASCADA_TIPO.map(async ([clave, tabla, pk, fk]) => {
+            try {
+                const r = await pool.request()
+                    .input('IdTipo', sql.Int, id)
+                    .query(`
+                        SELECT DISTINCT c.${pk} AS id, c.Nombre AS nombre
+                        FROM ActivoFijoEquipos af
+                        INNER JOIN dbo.${tabla} c ON c.${pk} = af.${fk}
+                        WHERE af.IdTipo = @IdTipo
+                        ORDER BY c.Nombre`);
+                return [clave, r.recordset || []];
+            } catch (_) {
+                /* Catálogo o columna ausente en un esquema viejo: esa
+                   categoría simplemente no filtra. */
+                return [clave, []];
+            }
+        }));
+        for (const [clave, filas] of resultados) salida[clave] = filas;
+        return salida;
+    } catch (err) {
+        for (const [clave] of CASCADA_TIPO) salida[clave] = [];
+        return { ok: false, mensaje: 'No se pudo filtrar por tipo: ' + err.message, ...salida };
     }
 }
 
@@ -1272,7 +1935,14 @@ async function listarCatalogosExtendidos() {
 
 module.exports = {
     listar, obtener, crear, actualizar, eliminar, restaurar, eliminarDefinitivo,
-    historico, exportarExcel,
+    historico, exportarInventario,
+    /* Contexto automático por hostname (cartera / sitio COPERVA) */
+    inferirContexto, autoasignar,
+    /* Cascada Tipo → marca / modelo / especificaciones */
+    catalogoPorTipo,
+    /* Perfil real del tipo (usos/total del inventario) y contexto para el
+       importador masivo: ambos derivan del propio dato. */
+    perfilPorTipo, contextoParaImportacion,
     listarTipos, listarMarcas, listarEstados, listarEstatus, listarCarteras,
     listarSitios, listarSubtipos, listarVoltajes,
     listarClasificaciones, listarTamanios, listarCapacidades,

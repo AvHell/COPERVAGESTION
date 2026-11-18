@@ -10,6 +10,7 @@ let layoutSeleccionado = null;
 let layoutInfo         = null;
 let archivoSeleccionado= null;
 let filasPreview       = [];
+let opcionesDestino    = { carteras: [], sitios: [], idSitioPorDefecto: null, sitioPorDefecto: 'COPERVA' };
 
 /* =========================================================
    REFERENCIAS DOM
@@ -34,6 +35,9 @@ const resumenEl           = document.getElementById('resumen');
 const resultadoContenido  = document.getElementById('resultado-contenido');
 const btnNuevaImportacion = document.getElementById('btn-nueva-importacion');
 const btnIrActivos        = document.getElementById('btn-ir-activos');
+const selCartera          = document.getElementById('import-cartera');
+const selSitio            = document.getElementById('import-sitio');
+const chkSoloCartera      = document.getElementById('import-solo-cartera');
 
 /* =========================================================
    UTILIDADES
@@ -68,6 +72,69 @@ function toastError(titulo, texto = '') {
         }
     });
 }
+
+/* =========================================================
+   DESTINO — CARTERA / SITIO POR DEFECTO
+   ---------------------------------------------------------
+   Lo que el archivo no traiga se completa aquí. La cartera además se
+   deduce del hostname de cada fila, por eso puede quedarse en "Automática".
+   ========================================================= */
+async function cargarOpcionesDestino() {
+    try {
+        const opciones = await window.api.activoFijo.importacion.opciones();
+        if (!opciones || !opciones.ok) {
+            toastError('No se pudieron cargar carteras y sitios', opciones?.mensaje || '');
+            return;
+        }
+
+        opcionesDestino = opciones;
+
+        selCartera.innerHTML =
+            '<option value="">Automática (por hostname / sin cartera)</option>' +
+            (opciones.carteras || []).map(c =>
+                `<option value="${c.IdCartera}">${escaparHTML(c.Nombre)}</option>`
+            ).join('');
+
+        selSitio.innerHTML =
+            '<option value="">Por defecto</option>' +
+            (opciones.sitios || []).map(s =>
+                `<option value="${s.IdSitio}">${escaparHTML(s.Nombre)}</option>`
+            ).join('');
+
+        /* COPERVA queda preseleccionado: es el sitio real de casi todo el
+           inventario y evita capturas a mano en cada importación. */
+        if (opciones.idSitioPorDefecto) selSitio.value = String(opciones.idSitioPorDefecto);
+
+        aplicarEstadoSoloCartera();
+    } catch (err) {
+        console.error('Error al cargar opciones de importación:', err);
+        toastError('No se pudieron cargar carteras y sitios', err.message);
+    }
+}
+
+/* "Sólo esta cartera" no tiene sentido sin una cartera fija elegida. */
+function aplicarEstadoSoloCartera() {
+    const hayCartera = !!selCartera.value;
+    chkSoloCartera.disabled = !hayCartera;
+    if (!hayCartera) chkSoloCartera.checked = false;
+}
+
+function leerOpcionesDestino() {
+    return {
+        idCartera: selCartera.value ? parseInt(selCartera.value, 10) : null,
+        idSitio:   selSitio.value   ? parseInt(selSitio.value, 10)   : null,
+        soloCartera: !!chkSoloCartera.checked && !!selCartera.value
+    };
+}
+
+selCartera.addEventListener('change', () => {
+    aplicarEstadoSoloCartera();
+    if (filasPreview.length) renderPreview();
+});
+
+selSitio.addEventListener('change', () => {
+    if (filasPreview.length) renderPreview();
+});
 
 /* =========================================================
    PASO 1 — CARGAR TIPOS DINÁMICOS
@@ -317,7 +384,30 @@ async function renderPreview() {
     }).join('');
 
     const total = filasPreview.length;
-    resumenEl.innerHTML = `Se procesarán <strong>${total}</strong> fila(s) para el tipo <strong>${escaparHTML(layout.titulo)}</strong>.`;
+    resumenEl.innerHTML = `Se procesarán <strong>${total}</strong> fila(s) para el tipo <strong>${escaparHTML(layout.titulo)}</strong>.` +
+        ` ${descripcionDestino()}`;
+}
+
+/* Texto que explica, sin adivinar, a dónde va lo que se va a importar. */
+function descripcionDestino() {
+    const carteraNombre = selCartera.value
+        ? (opcionesDestino.carteras || []).find(c => String(c.IdCartera) === selCartera.value)?.Nombre
+        : null;
+    const sitioNombre = selSitio.value
+        ? (opcionesDestino.sitios || []).find(s => String(s.IdSitio) === selSitio.value)?.Nombre
+        : opcionesDestino.sitioPorDefecto;
+
+    const partes = [];
+    if (carteraNombre) {
+        partes.push(`Cartera destino: <strong>${escaparHTML(carteraNombre)}</strong>`);
+    } else {
+        partes.push('Cartera: <strong>automática</strong> (hostname / sin cartera)');
+    }
+    if (sitioNombre) partes.push(`Sitio: <strong>${escaparHTML(sitioNombre)}</strong>`);
+    if (chkSoloCartera.checked && selCartera.value) {
+        partes.push('Las filas de otra cartera se <strong>omitirán</strong>');
+    }
+    return `<br>${partes.join(' · ')}.`;
 }
 
 btnCancelarPreview.addEventListener('click', limpiarArchivo);
@@ -334,7 +424,8 @@ btnImportar.addEventListener('click', async () => {
     const conf = await Swal.fire({
         icon: 'question',
         title: '¿Confirmar importación?',
-        html: `Se van a importar <strong>${filasPreview.length}</strong> fila(s) como <strong>${escaparHTML(layoutInfo.titulo)}</strong>.`,
+        html: `Se van a importar <strong>${filasPreview.length}</strong> fila(s) como <strong>${escaparHTML(layoutInfo.titulo)}</strong>.` +
+              descripcionDestino(),
         showCloseButton: true,
         confirmButtonText: 'Sí, importar',
         buttonsStyling: false,
@@ -352,7 +443,8 @@ btnImportar.addEventListener('click', async () => {
     try {
         const res = await window.api.activoFijo.importacion.importar({
             layout: layoutSeleccionado,
-            filas: filasPreview
+            filas: filasPreview,
+            opciones: leerOpcionesDestino()
         });
 
         mostrarResultado(res);
@@ -385,14 +477,29 @@ function mostrarResultado(res) {
 
     const exitosos = res.insertados || [];
     const errores  = res.errores || [];
+    const omitidos = res.omitidos || 0;
 
     let html = '';
 
     if (exitosos.length > 0) {
+        const destino = [
+            res.cartera ? `cartera <strong>${escaparHTML(res.cartera)}</strong>` : null,
+            res.sitio   ? `sitio <strong>${escaparHTML(res.sitio)}</strong>`     : null
+        ].filter(Boolean).join(' · ');
+
         html += `
             <div class="resultado-ok">
                 <div class="resultado-titulo">✓ ${exitosos.length} activo(s) importado(s)</div>
-                <p>Se crearon correctamente en el inventario.</p>
+                <p>Se crearon correctamente en el inventario${destino ? ` (${destino})` : ''}.</p>
+            </div>
+        `;
+    }
+
+    if (omitidos > 0) {
+        html += `
+            <div class="resultado-aviso">
+                <div class="resultado-titulo">↷ ${omitidos} fila(s) omitida(s)</div>
+                <p>Pertenecían a otra cartera y el filtro <strong>sólo esta cartera</strong> estaba activo.</p>
             </div>
         `;
     }
@@ -408,7 +515,7 @@ function mostrarResultado(res) {
         `;
     }
 
-    if (exitosos.length === 0 && errores.length === 0) {
+    if (exitosos.length === 0 && errores.length === 0 && omitidos === 0) {
         html = `<div class="resultado-error"><p>No se procesó ninguna fila.</p></div>`;
     }
 
@@ -447,5 +554,5 @@ document.getElementById('btn-volver').addEventListener('click', () => {
    INICIO
    ========================================================= */
 (async () => {
-    await cargarLayouts();
+    await Promise.all([cargarLayouts(), cargarOpcionesDestino()]);
 })();

@@ -34,7 +34,8 @@
             </div>
 
             <div class="header-actions" id="acciones-inventario">
-                <button id="btn-exportar" class="btn-excel" data-permiso="af-act:listado:ver">
+                <button id="btn-exportar" class="btn-excel" data-permiso="af-act:listado:ver"
+                        data-tooltip="Inventario general en Excel: una hoja por cartera y una fila por pieza conectada">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
@@ -43,6 +44,15 @@
                         <polyline points="10 9 9 9 8 9"></polyline>
                     </svg>
                     <span>Excel</span>
+                </button>
+
+                <button id="btn-autoasignar" class="btn-excel" data-permiso="af-act:editar"
+                        data-tooltip="Deduce cartera y sitio (COPERVA) del hostname de cada equipo y rellena los que están vacíos">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>
+                        <circle cx="12" cy="12" r="3.5"/>
+                    </svg>
+                    <span>Autoasignar</span>
                 </button>
 
                 <button id="btn-nuevo" class="btn-primary" data-permiso="af-act:crear">
@@ -104,6 +114,14 @@
          ============================================================ -->
     <section id="vista-inventario">
 
+        <!-- PESTAÑAS POR CARTERA (se generan en activos-renderer.js) -->
+        <nav class="tabs-cartera" id="tabs-cartera" role="tablist"
+             aria-label="Filtrar el inventario por cartera">
+            <button type="button" class="tab-cartera activo" data-cartera="__todas__" role="tab">
+                Todas
+            </button>
+        </nav>
+
         <!-- ESTADO VACÍO -->
         <div id="sin-resultados" class="empty-state oculto">
             <div class="empty-icon">
@@ -126,6 +144,8 @@
                             <th>Serie / IMEI / Teléfono</th>
                             <th>Marca / Modelo</th>
                             <th>Tipo</th>
+                            <th title="Hostname que reporta el collector para el adaptador principal del equipo.">Hostname</th>
+                            <th title="Dominio o grupo de trabajo que reporta el collector.">Dominio</th>
                             <th>Estado</th>
                             <th>Estatus</th>
                             <th class="col-piezas" title="Monitores, discos, teclados y ratones conectados al equipo. No son activos aparte: el equipo vale 1.">Piezas</th>
@@ -539,7 +559,29 @@
                         </div>
                         <div class="campo-item campo-full campo-usuario-asignado oculto">
                             <label for="usuario-asignado">Usuario asignado <span class="req" id="req-usuario-asignado">*</span></label>
-                            <select id="usuario-asignado"><option value="">— Seleccionar usuario —</option></select>
+
+                            <label class="chk-usuario" for="chk-usuario-asignado">
+                                <input type="checkbox" id="chk-usuario-asignado">
+                                <span>Asignar este equipo a un usuario</span>
+                            </label>
+
+                            <div class="usuario-picker oculto" id="usuario-picker">
+                                <div class="buscador-usuario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"/>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                    </svg>
+                                    <input type="text" id="buscador-usuario" placeholder="Filtrar usuario por nombre...">
+                                    <button type="button" id="btn-limpiar-usuario" class="btn-limpiar oculto" title="Limpiar filtro">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="18" y1="6" x2="6" y2="18"/>
+                                            <line x1="6" y1="6" x2="18" y2="18"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <select id="usuario-asignado"><option value="">— Seleccionar usuario —</option></select>
+                            </div>
+
                             <small class="field-hint oculto" id="nota-usuario-asignado">Lo controla la responsiva abierta: para cambiarlo, edita la responsiva o registra primero la devolución.</small>
                         </div>
 
@@ -585,6 +627,10 @@
                         <div class="campo-item campo-full campo-accesorios oculto">
                             <label for="accesorios">Accesorios</label>
                             <select id="accesorios"><option value="">— Seleccionar accesorios —</option></select>
+                        </div>
+
+                        <div class="campo-item campo-full">
+                            <small class="field-hint contexto-auto oculto" id="nota-contexto-auto"></small>
                         </div>
 
                         <div class="campo-item campo-full">

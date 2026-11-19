@@ -2020,6 +2020,17 @@ const CATALOGOS_INLINE = {
     }
 };
 
+/* La hoja de esta página oculta `.swal2-validation-message` con
+   `display:none !important`, así que `Swal.showValidationMessage` no se ve.
+   El aviso se pinta en nuestro propio nodo `.swal-cat-error`. */
+function marcarErrorSwal(texto) {
+    const contenedor = Swal.getHtmlContainer?.() || document;
+    const aviso = contenedor.querySelector('.swal-cat-error');
+    if (!aviso) return;
+    aviso.textContent = texto;
+    aviso.hidden = false;
+}
+
 /* Abre un mini formulario (Swal) con los campos del catálogo, lo crea con
    `catalogos.crear` y coloca la opción nueva en su <select> sin cerrar el
    modal del activo. Devuelve cuando todo termina para poder encadenar. */
@@ -2076,12 +2087,15 @@ async function agregarCatalogoInline(clave) {
         }
     }
 
+    /* Sin la clase `swal2-input`: la hoja de esta página oculta los
+       controles nativos de SweetAlert (`display:none !important`), así que
+       el campo se estiliza únicamente con `swal-cat-input`. */
     const camposHtml = cfg.campos.map((campo, i) => `
         <label class="swal-cat-label" for="swal-cat-${i}">
             ${escaparHTML(campo.label)}${campo.requerido ? ' <span class="req">*</span>' : ''}
         </label>
-        <input id="swal-cat-${i}" type="text" class="swal2-input swal-cat-input"
-            maxlength="${campo.max || 100}"
+        <input id="swal-cat-${i}" type="text" class="swal-cat-input"
+            maxlength="${campo.max || 100}" autocomplete="off"
             placeholder="${escaparHTML(campo.placeholder || '')}">`).join('');
 
     const grupoHtml = grupoSubtipo
@@ -2090,21 +2104,32 @@ async function agregarCatalogoInline(clave) {
 
     const resultado = await Swal.fire({
         title: `Nuevo ${cfg.titulo.toLowerCase()}`,
-        html: `<div class="swal-cat-form">${grupoHtml}${camposHtml}</div>`,
+        html: `<div class="swal-cat-form">${grupoHtml}${camposHtml}<p class="swal-cat-error" role="alert" hidden></p></div>`,
         focusConfirm: false,
-        showCancelButton: true,
+        /* Sólo la X de la esquina: el pie queda con una única acción. */
+        showCancelButton: false,
+        showCloseButton: true,
         confirmButtonText: 'Agregar y seleccionar',
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#6E7B5B',
         customClass: { popup: 'cl-alert cl-alta-catalogo' },
-        didOpen: popup => popup.querySelector('.swal-cat-input')?.focus(),
+        didOpen: popup => {
+            const input = popup.querySelector('.swal-cat-input');
+            if (!input) return;
+            input.focus();
+            input.select();
+            input.addEventListener('keydown', event => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                Swal.clickConfirm();
+            });
+        },
         preConfirm: () => {
             const datos = {};
             for (let i = 0; i < cfg.campos.length; i += 1) {
                 const campo = cfg.campos[i];
                 const valor = (document.getElementById(`swal-cat-${i}`)?.value || '').trim();
                 if (campo.requerido && !valor) {
-                    Swal.showValidationMessage(`Escribe ${campo.label.toLowerCase()}.`);
+                    marcarErrorSwal(`Escribe ${campo.label.toLowerCase()}.`);
+                    document.getElementById(`swal-cat-${i}`)?.focus();
                     return false;
                 }
                 if (valor) datos[campo.nombre] = valor;

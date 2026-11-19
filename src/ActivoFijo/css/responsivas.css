@@ -1005,18 +1005,43 @@ body {
     margin: 0 0 5px;
 }
 .swal-cat-label .req { color: var(--rojo-base); font-weight: 700; }
-.swal-cat-form .swal2-input.swal-cat-input {
+/* Ojo: NO se usa la clase `swal2-input` porque esta hoja la oculta con
+   `display:none !important` (regla de "residuos nativos" más abajo). */
+.swal-cat-form .swal-cat-input {
+    display: block;
+    box-sizing: border-box;
     margin: 0;
     width: 100%;
     height: 44px;
+    padding: 0 14px;
     border: 1.5px solid var(--gray-200);
     border-radius: 11px;
+    background: #fff;
     font-size: 0.9rem;
     font-family: inherit;
     color: var(--gray-800);
 }
-.swal-cat-form .swal2-input.swal-cat-input:hover:not(:focus) { border-color: var(--gray-300); }
-.swal-cat-form .swal2-input.swal-cat-input:focus { border-color: var(--tierra-oliva); outline: none; }
+.swal-cat-form .swal-cat-input::placeholder { color: var(--gray-400); }
+.swal-cat-form .swal-cat-input:hover:not(:focus) { border-color: var(--gray-300); }
+.swal-cat-form .swal-cat-input:focus {
+    border-color: var(--tierra-oliva);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(110, 123, 91, 0.14);
+}
+
+/* Aviso de validación propio: el nativo de SweetAlert está oculto. */
+.swal-cat-error {
+    margin: 12px 0 0;
+    padding: 9px 12px;
+    border-left: 3px solid var(--rojo-base);
+    border-radius: 0 8px 8px 0;
+    background: var(--rojo-soft, #f3ded6);
+    color: var(--rojo-text, #7a2a1b);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    text-align: left;
+}
+.swal-cat-error[hidden] { display: none !important; }
 .grid-form .campo-ayuda {
     color: var(--gray-500);
     font-size: 0.72rem;

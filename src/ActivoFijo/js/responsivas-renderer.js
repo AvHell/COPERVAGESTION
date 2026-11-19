@@ -426,8 +426,8 @@ async function administrarCatalogosResponsiva() {
                 <div class="crud-catalogo-fila" data-fila="${clave}-${registro[cfg.pk]}">
                     <span class="crud-catalogo-nombre">${escaparHTML(registro.Nombre)}</span>
                     <div class="crud-catalogo-acciones">
-                        <button type="button" class="btn-ghost" data-editar="${clave}" data-id="${registro[cfg.pk]}">Editar</button>
-                        <button type="button" class="btn-ghost" data-eliminar="${clave}" data-id="${registro[cfg.pk]}">Eliminar</button>
+                        <button type="button" class="btn-ghost" data-cat-editar="${clave}" data-permiso="activofijo_responsivas" data-id="${registro[cfg.pk]}">Editar</button>
+                        <button type="button" class="btn-ghost" data-cat-eliminar="${clave}" data-permiso="activofijo_responsivas" data-id="${registro[cfg.pk]}">Eliminar</button>
                     </div>
                 </div>`).join('')
             : `<p class="crud-catalogo-vacio">${registros.length
@@ -439,7 +439,7 @@ async function administrarCatalogosResponsiva() {
             <section class="crud-catalogo" data-catalogo="${clave}" role="tabpanel"${activo ? '' : ' hidden'}>
                 <div class="crud-catalogo-alta">
                     <input type="text" maxlength="${cfg.max}" placeholder="Nuevo registro" aria-label="Nuevo registro para ${escaparHTML(cfg.titulo)}">
-                    <button type="button" class="btn-primary" data-agregar="${clave}">Agregar</button>
+                    <button type="button" class="btn-primary" data-cat-agregar="${clave}" data-permiso="activofijo_responsivas">Agregar</button>
                 </div>
                 <div class="crud-catalogo-lista">${filas}</div>
             </section>`;
@@ -479,7 +479,8 @@ async function administrarCatalogosResponsiva() {
                     const errorCarga = listas.find(lista => !Array.isArray(lista));
                     if (errorCarga) throw new Error(errorCarga?.mensaje || 'No se pudieron actualizar los catálogos.');
                     registrosPorCatalogo = Object.fromEntries(claves.map((clave, i) => [clave, listas[i]]));
-                    popup.querySelector('.crud-catalogos-responsiva').innerHTML = htmlCatalogos();
+                    const contenedor = popup.querySelector('.crud-catalogos-responsiva');
+                    if (contenedor) contenedor.innerHTML = htmlCatalogos();
                     mensajeEstado.textContent = '';
                     mensajeEstado.classList.remove('error');
                 } catch (err) {
@@ -511,73 +512,47 @@ async function administrarCatalogosResponsiva() {
             });
 
             popup.addEventListener('click', async event => {
-                const boton = event.target.closest('button[data-agregar], button[data-editar], button[data-guardar], button[data-cancelar], button[data-eliminar]');
+                const boton = event.target.closest('button[data-cat-agregar], button[data-cat-editar], button[data-cat-eliminar]');
                 if (!boton) return;
+                if (boton.disabled || boton.classList.contains('permiso-ui-oculto')) return;
 
-                const clave = boton.dataset.agregar || boton.dataset.editar || boton.dataset.guardar || boton.dataset.cancelar || boton.dataset.eliminar;
+                const clave = boton.dataset.catAgregar || boton.dataset.catEditar || boton.dataset.catEliminar;
                 const cfg = CONFIG_CATALOGOS_RESPONSIVA[clave];
-                if (!cfg) return;
+                if (!cfg || !clave) return;
                 mensajeEstado.textContent = '';
                 mensajeEstado.classList.remove('error');
 
-                const fila = boton.closest('.crud-catalogo-fila');
-                if (boton.dataset.cancelar) {
-                    await refrescar();
-                    return;
-                }
+                const buscarRegistro = () => (registrosPorCatalogo[clave] || [])
+                    .find(item => Number(item[cfg.pk]) === Number(boton.dataset.id));
 
-                if (boton.dataset.editar) {
-                    const registro = registrosPorCatalogo[clave].find(item => Number(item[cfg.pk]) === Number(boton.dataset.id));
-                    if (!registro || !fila) return;
-                    fila.innerHTML = `
-                        <input type="text" maxlength="${cfg.max}" value="${escaparHTML(registro.Nombre)}" aria-label="Editar ${escaparHTML(cfg.titulo)}">
-                        <div class="crud-catalogo-acciones">
-                            <button type="button" class="btn-primary" data-guardar="${clave}" data-id="${registro[cfg.pk]}">Guardar</button>
-                            <button type="button" class="btn-ghost" data-cancelar="${clave}">Cancelar</button>
-                        </div>`;
-                    fila.querySelector('input').focus();
+                /* Editar y eliminar abren su propio diálogo. Se cierra antes el
+                   gestor (y se reabre después con los datos frescos) porque
+                   SweetAlert no admite dos diálogos abiertos a la vez: al
+                   abrir uno encima el primero, el segundo no se mostraba. */
+                if (boton.dataset.catEditar || boton.dataset.catEliminar) {
+                    const registro = buscarRegistro();
+                    if (!registro) return;
+
+                    /* Se espera al cierre real del gestor antes de abrir el
+                       siguiente diálogo: SweetAlert no acepta dos a la vez. */
+                    await Swal.close();
+                    if (boton.dataset.catEditar) await editarCatalogoResponsiva(clave, cfg, registro);
+                    else await eliminarCatalogoResponsiva(clave, cfg, registro);
+                    await administrarCatalogosResponsiva();
                     return;
                 }
 
                 try {
-                    let res;
-                    if (boton.dataset.agregar) {
-                        const input = boton.closest('.crud-catalogo-alta').querySelector('input');
-                        const nombre = input.value.trim();
-                        if (!nombre) {
-                            mostrarError('Escribe un nombre antes de agregar.');
-                            input.focus();
-                            return;
-                        }
-                        res = await window.api.activoFijo.responsivas.crearCatalogo(clave, { Nombre: nombre });
-                        if (res?.ok) await refrescar();
-                    } else if (boton.dataset.guardar) {
-                        const input = fila?.querySelector('input');
-                        const nombre = input?.value.trim();
-                        if (!nombre) {
-                            mostrarError('El nombre no puede quedar vacío.');
-                            input?.focus();
-                            return;
-                        }
-                        res = await window.api.activoFijo.responsivas.actualizarCatalogo(clave, Number(boton.dataset.id), { Nombre: nombre });
-                        if (res?.ok) await refrescar();
-                    } else if (boton.dataset.eliminar) {
-                        if (boton.dataset.confirmar !== 'true') {
-                            boton.dataset.confirmar = 'true';
-                            boton.textContent = 'Eliminar';
-                            const cancelar = document.createElement('button');
-                            cancelar.type = 'button';
-                            cancelar.className = 'btn-ghost';
-                            cancelar.dataset.cancelar = clave;
-                            cancelar.textContent = 'Cancelar';
-                            boton.after(cancelar);
-                            return;
-                        }
-                        res = await window.api.activoFijo.responsivas.eliminarCatalogo(clave, Number(boton.dataset.id));
-                        if (res?.ok) await refrescar();
+                    const input = boton.closest('.crud-catalogo-alta').querySelector('input');
+                    const nombre = input.value.trim();
+                    if (!nombre) {
+                        mostrarError('Escribe un nombre antes de agregar.');
+                        input.focus();
+                        return;
                     }
-
-                    if (res && !res.ok) mostrarError(res.mensaje || 'No se pudo completar la operación.');
+                    const res = await window.api.activoFijo.responsivas.crearCatalogo(clave, { Nombre: nombre });
+                    if (res?.ok) await refrescar();
+                    else mostrarError(res?.mensaje || 'No se pudo agregar el registro.');
                 } catch (err) {
                     mostrarError(err.message);
                 }
@@ -588,6 +563,109 @@ async function administrarCatalogosResponsiva() {
 }
 
 btnCatalogosResp?.addEventListener('click', administrarCatalogosResponsiva);
+
+/* =========================================================
+   EDITAR / ELIMINAR UN REGISTRO DE CATÁLOGO (SweetAlert)
+   ---------------------------------------------------------
+   Cada acción abre su propio diálogo, igual que el resto de la
+   página: se cierra con la X de la esquina cuando no hay nada que
+   confirmar. Devuelven true sólo si el backend aceptó el cambio,
+   para que el gestor de catálogos repinte las listas y los contadores.
+   ========================================================= */
+async function editarCatalogoResponsiva(clave, cfg, registro) {
+    const resultado = await Swal.fire({
+        title: `Editar ${cfg.titulo.toLowerCase()}`,
+        html: `<div class="swal-cat-form">
+            ${campoTextoSwal({
+                id: 'swal-cat-editar',
+                label: 'Nombre',
+                valor: registro.Nombre || '',
+                max: cfg.max
+            })}
+            <p class="swal-cat-error" role="alert" hidden></p>
+        </div>`,
+        focusConfirm: false,
+        showCancelButton: false,
+        showCloseButton: true,
+        confirmButtonText: 'Guardar cambios',
+        customClass: { popup: 'cl-alert cl-alta-catalogo' },
+        didOpen: popup => {
+            const input = popup.querySelector('.swal-cat-input');
+            if (!input) return;
+            input.focus();
+            input.select();
+            input.addEventListener('keydown', event => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                Swal.clickConfirm();
+            });
+        },
+        preConfirm: () => {
+            const input = document.getElementById('swal-cat-editar');
+            const valor = (input?.value || '').trim();
+            if (!valor) {
+                marcarErrorSwal('El nombre no puede quedar vacío.');
+                input?.focus();
+                return false;
+            }
+            return valor;
+        }
+    });
+
+    if (!resultado.isConfirmed || !resultado.value) return false;
+    if (resultado.value === (registro.Nombre || '').trim()) return false;
+
+    try {
+        const res = await window.api.activoFijo.responsivas.actualizarCatalogo(
+            clave, Number(registro[cfg.pk]), { Nombre: resultado.value }
+        );
+        if (!res?.ok) {
+            await alertaError('No se pudo editar', res?.mensaje || 'Inténtalo de nuevo.');
+            return false;
+        }
+        await toastExito(`${cfg.titulo} actualizado`);
+        return true;
+    } catch (err) {
+        await alertaError('No se pudo editar', err.message);
+        return false;
+    }
+}
+
+async function eliminarCatalogoResponsiva(clave, cfg, registro) {
+    const resultado = await Swal.fire({
+        icon: 'warning',
+        title: '¿Eliminar registro?',
+        html: `<div>Se quitará <strong>${escaparHTML(registro.Nombre || '')}</strong>
+               del catálogo <b>${escaparHTML(cfg.titulo)}</b>.<br><br>
+               Si algún registro lo está usando, la operación se rechazará
+               y no se perderá nada.</div>`,
+        showCancelButton: false,
+        showCloseButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm cl-confirm-peligro',
+            confirmButton: 'swal2-confirm swal2-styled cl-peligro'
+        }
+    });
+
+    if (!resultado.isConfirmed) return false;
+
+    try {
+        const res = await window.api.activoFijo.responsivas.eliminarCatalogo(
+            clave, Number(registro[cfg.pk])
+        );
+        if (!res?.ok) {
+            await alertaError('No se pudo eliminar', res?.mensaje || 'Inténtalo de nuevo.');
+            return false;
+        }
+        await toastExito(`${cfg.titulo} eliminado`);
+        return true;
+    } catch (err) {
+        await alertaError('No se pudo eliminar', err.message);
+        return false;
+    }
+}
 
 /* =========================================================
    ALTA DIRECTA DE CATÁLOGOS DESDE LA RESPONSIVA
@@ -660,6 +738,28 @@ function toastExito(texto) {
     });
 }
 
+/* La hoja de esta página oculta `.swal2-validation-message` con
+   `display:none !important`, así que `Swal.showValidationMessage` no se ve.
+   El aviso se pinta en nuestro propio nodo `.swal-cat-error`. */
+function marcarErrorSwal(texto) {
+    const contenedor = Swal.getHtmlContainer?.() || document;
+    const aviso = contenedor.querySelector('.swal-cat-error');
+    if (!aviso) return;
+    aviso.textContent = texto;
+    aviso.hidden = false;
+}
+
+/* Campo de texto propio para los mini formularios de SweetAlert: la hoja
+   oculta los controles nativos (`.swal2-input`) con `display:none
+   !important`, de ahí que se use sólo la clase `swal-cat-input`. */
+function campoTextoSwal({ id, label, valor = '', max = 100, placeholder = '' }) {
+    return `
+        <label class="swal-cat-label" for="${id}">${escaparHTML(label)} <span class="req">*</span></label>
+        <input id="${id}" type="text" class="swal-cat-input" maxlength="${max}"
+            autocomplete="off" placeholder="${escaparHTML(placeholder)}"
+            value="${escaparHTML(valor)}">`;
+}
+
 async function agregarCatalogoResponsivaInline(clave) {
     const cfg = CATALOGOS_INLINE_RESPONSIVA[clave];
     if (!cfg) {
@@ -672,29 +772,37 @@ async function agregarCatalogoResponsivaInline(clave) {
     const resultado = await Swal.fire({
         title: `Nuevo ${cfg.titulo.toLowerCase()}`,
         html: `<div class="swal-cat-form">
-            <label class="swal-cat-label" for="swal-cat-resp">${escaparHTML(cfg.etiqueta || 'Nombre')} <span class="req">*</span></label>
-            <input id="swal-cat-resp" type="text" class="swal2-input swal-cat-input"
-                maxlength="${cfg.max || 100}" placeholder="${escaparHTML(cfg.placeholder || '')}">
+            ${campoTextoSwal({
+                id: 'swal-cat-resp',
+                label: cfg.etiqueta || 'Nombre',
+                max: cfg.max || 100,
+                placeholder: cfg.placeholder || ''
+            })}
+            <p class="swal-cat-error" role="alert" hidden></p>
         </div>`,
         focusConfirm: false,
-        showCancelButton: true,
+        /* Sólo la X de la esquina: el pie queda con una única acción. */
+        showCancelButton: false,
+        showCloseButton: true,
         confirmButtonText: 'Agregar y seleccionar',
-        cancelButtonText: 'Cancelar',
         customClass: { popup: 'cl-alert cl-alta-catalogo' },
         didOpen: popup => {
             const input = popup.querySelector('.swal-cat-input');
-            input?.focus();
-            input?.addEventListener('keydown', event => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    Swal.clickConfirm();
-                }
+            if (!input) return;
+            input.focus();
+            input.select();
+            input.addEventListener('keydown', event => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                Swal.clickConfirm();
             });
         },
         preConfirm: () => {
-            const valor = (document.getElementById('swal-cat-resp')?.value || '').trim();
+            const input = document.getElementById('swal-cat-resp');
+            const valor = (input?.value || '').trim();
             if (!valor) {
-                Swal.showValidationMessage(`Escribe ${(cfg.etiqueta || 'el nombre').toLowerCase()}.`);
+                marcarErrorSwal(`Escribe ${(cfg.etiqueta || 'el nombre').toLowerCase()}.`);
+                input?.focus();
                 return false;
             }
             return { Nombre: valor };
@@ -749,21 +857,32 @@ function claveCatalogoInline(boton) {
     return boton.dataset.cat || boton.dataset.catInline || '';
 }
 
-document.addEventListener('click', event => {
-    const objetivo = event.target;
-    const boton = objetivo && objetivo.closest ? objetivo.closest('.btn-cat-inline') : null;
-    if (!boton) return;
-    if (boton.disabled || boton.classList.contains('permiso-ui-oculto')) return;
-
-    event.preventDefault();
-    event.stopPropagation();
+function atenderClicCatalogoInline(evento, boton) {
+    if (!boton || boton.disabled || boton.classList.contains('permiso-ui-oculto')) return;
+    evento.preventDefault();
+    evento.stopPropagation();
 
     const clave = claveCatalogoInline(boton);
     agregarCatalogoResponsivaInline(clave).catch(err => {
         console.error('[alta-catalogo-responsiva]', clave, err);
         alertaError('No se pudo crear', err?.message || String(err));
     });
+}
+
+document.addEventListener('click', event => {
+    const objetivo = event.target;
+    const boton = objetivo && objetivo.closest ? objetivo.closest('.btn-cat-inline') : null;
+    if (!boton) return;
+    atenderClicCatalogoInline(event, boton);
 }, true);
+
+/* Respaldo: si el clic llegara al botón sin pasar por la delegación (otro
+   script que corte la fase de captura, por ejemplo), estos listeners
+   siguen abriendo el mini formulario. Nunca se ejecutan los dos: la
+   delegación corta la propagación cuando atiende el clic. */
+document.querySelectorAll('.btn-cat-inline').forEach(boton => {
+    boton.addEventListener('click', event => atenderClicCatalogoInline(event, boton));
+});
 
 /* =========================================================
    CARGAR ACTIVOS DISPONIBLES

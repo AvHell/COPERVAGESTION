@@ -395,10 +395,34 @@ async function administrarCatalogosResponsiva() {
         return;
     }
 
-    const renderizarCatalogos = () => Object.entries(CONFIG_CATALOGOS_RESPONSIVA).map(([clave, cfg]) => {
+    /* Pestañas + filtro rápido: con ocho catálogos y listas de usuarios
+       largas, apilarlo todo en una sola columna obligaba a bajar mucho y a
+       buscar a ojo. Ahora hay una pestaña por catálogo y un buscador que
+       filtra en vivo los registros del catálogo abierto. */
+    const clavesCatalogo = Object.keys(CONFIG_CATALOGOS_RESPONSIVA);
+    let catalogoActivo = clavesCatalogo[0];
+    let filtroTexto = '';
+
+    const coincideFiltro = registro =>
+        !filtroTexto || String(registro?.Nombre || '').toLowerCase().includes(filtroTexto);
+
+    const tabsHtml = () => clavesCatalogo.map(clave => {
+        const cfg = CONFIG_CATALOGOS_RESPONSIVA[clave];
+        const total = (registrosPorCatalogo[clave] || []).length;
+        const activo = clave === catalogoActivo;
+        return `<button type="button" class="crud-tab${activo ? ' activo' : ''}"
+                    role="tab" aria-selected="${activo}" data-tab-catalogo="${clave}">
+                    <span class="crud-tab-titulo">${escaparHTML(cfg.titulo)}</span>
+                    <span class="crud-tab-cuenta">${total}</span>
+                </button>`;
+    }).join('');
+
+    const panelesHtml = () => clavesCatalogo.map(clave => {
+        const cfg = CONFIG_CATALOGOS_RESPONSIVA[clave];
         const registros = registrosPorCatalogo[clave] || [];
-        const filas = registros.length
-            ? registros.map(registro => `
+        const visibles = registros.filter(coincideFiltro);
+        const filas = visibles.length
+            ? visibles.map(registro => `
                 <div class="crud-catalogo-fila" data-fila="${clave}-${registro[cfg.pk]}">
                     <span class="crud-catalogo-nombre">${escaparHTML(registro.Nombre)}</span>
                     <div class="crud-catalogo-acciones">
@@ -406,11 +430,13 @@ async function administrarCatalogosResponsiva() {
                         <button type="button" class="btn-ghost" data-eliminar="${clave}" data-id="${registro[cfg.pk]}">Eliminar</button>
                     </div>
                 </div>`).join('')
-            : '<p class="crud-catalogo-vacio">Sin registros.</p>';
+            : `<p class="crud-catalogo-vacio">${registros.length
+                ? 'Ningún registro coincide con el filtro.'
+                : 'Sin registros.'}</p>`;
 
+        const activo = clave === catalogoActivo;
         return `
-            <section class="crud-catalogo" data-catalogo="${clave}">
-                <h4>${escaparHTML(cfg.titulo)}</h4>
+            <section class="crud-catalogo" data-catalogo="${clave}" role="tabpanel"${activo ? '' : ' hidden'}>
                 <div class="crud-catalogo-alta">
                     <input type="text" maxlength="${cfg.max}" placeholder="Nuevo registro" aria-label="Nuevo registro para ${escaparHTML(cfg.titulo)}">
                     <button type="button" class="btn-primary" data-agregar="${clave}">Agregar</button>
@@ -419,9 +445,20 @@ async function administrarCatalogosResponsiva() {
             </section>`;
     }).join('');
 
+    /* Cabecera + paneles juntos: se usa al abrir y al recargar tras un alta,
+       para que las cuentas de las pestañas queden al día. */
+    const htmlCatalogos = () => `
+        <div class="crud-catalogos-tabs" role="tablist">${tabsHtml()}</div>
+        <div class="crud-catalogos-barra">
+            <input type="search" class="crud-catalogos-filtro" placeholder="Filtrar registros de esta lista…"
+                   aria-label="Filtrar registros del catálogo abierto" autocomplete="off"
+                   value="${escaparHTML(filtroTexto)}">
+        </div>
+        <div class="crud-catalogos-paneles">${panelesHtml()}</div>`;
+
     await Swal.fire({
         title: 'Administrar catálogos',
-        html: `<div class="crud-catalogos-responsiva">${renderizarCatalogos()}</div><p class="crud-catalogos-mensaje" role="status"></p>`,
+        html: `<div class="crud-catalogos-responsiva">${htmlCatalogos()}</div><p class="crud-catalogos-mensaje" role="status"></p>`,
         width: '900px',
         showConfirmButton: false,
         showCloseButton: true,
@@ -442,13 +479,36 @@ async function administrarCatalogosResponsiva() {
                     const errorCarga = listas.find(lista => !Array.isArray(lista));
                     if (errorCarga) throw new Error(errorCarga?.mensaje || 'No se pudieron actualizar los catálogos.');
                     registrosPorCatalogo = Object.fromEntries(claves.map((clave, i) => [clave, listas[i]]));
-                    popup.querySelector('.crud-catalogos-responsiva').innerHTML = renderizarCatalogos();
+                    popup.querySelector('.crud-catalogos-responsiva').innerHTML = htmlCatalogos();
                     mensajeEstado.textContent = '';
                     mensajeEstado.classList.remove('error');
                 } catch (err) {
                     mostrarError(err.message);
                 }
             };
+
+            /* Pestañas: cambia el catálogo visible y limpia el filtro (el
+               filtro es por lista, para no dejar resultados "fantasma"). */
+            popup.addEventListener('click', event => {
+                const tab = event.target.closest('[data-tab-catalogo]');
+                if (!tab) return;
+                catalogoActivo = tab.dataset.tabCatalogo;
+                filtroTexto = '';
+                popup.querySelector('.crud-catalogos-responsiva').innerHTML = htmlCatalogos();
+                popup.querySelector('.crud-catalogos-filtro')?.focus();
+                mensajeEstado.textContent = '';
+                mensajeEstado.classList.remove('error');
+            });
+
+            /* Filtro rápido: sólo se repintan los paneles, así el cursor no
+               salta fuera del buscador en cada tecla. */
+            popup.addEventListener('input', event => {
+                const input = event.target.closest('.crud-catalogos-filtro');
+                if (!input) return;
+                filtroTexto = String(input.value || '').trim().toLowerCase();
+                const paneles = popup.querySelector('.crud-catalogos-paneles');
+                if (paneles) paneles.innerHTML = panelesHtml();
+            });
 
             popup.addEventListener('click', async event => {
                 const boton = event.target.closest('button[data-agregar], button[data-editar], button[data-guardar], button[data-cancelar], button[data-eliminar]');
@@ -602,7 +662,12 @@ function toastExito(texto) {
 
 async function agregarCatalogoResponsivaInline(clave) {
     const cfg = CATALOGOS_INLINE_RESPONSIVA[clave];
-    if (!cfg) return;
+    if (!cfg) {
+        console.error('[alta-catalogo-responsiva] Clave de catálogo desconocida:', clave);
+        await alertaError('Catálogo no reconocido',
+            `El botón "+ Nuevo" apunta a "${clave || 'sin clave'}". Revisa el atributo data-cat del botón.`);
+        return;
+    }
 
     const resultado = await Swal.fire({
         title: `Nuevo ${cfg.titulo.toLowerCase()}`,
@@ -673,14 +738,32 @@ function colocarCatalogoResponsivaNuevo(cfg, id, datos) {
     select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-/* Delegación de clic: cualquier botón "+ Nuevo" del modal abre su alta. */
-modal?.addEventListener('click', event => {
-    const boton = event.target.closest('.btn-cat-inline[data-cat-inline]');
+/* Delegación de clic para los botones "+ Nuevo" de los catálogos.
+   Se registra en `document` y en FASE DE CAPTURA a propósito:
+   - el modal se vuelve a pintar (abrirEdicion/abrirModal), así que un
+     listener colgado del modal podría quedarse atrás;
+   - en captura nadie puede cancelar el clic antes de que lo atendamos
+     (un preventDefault/stopPropagation ajeno dejaría el botón "muerto").
+   La clave se lee de `data-cat` y, como respaldo, de `data-cat-inline`. */
+function claveCatalogoInline(boton) {
+    return boton.dataset.cat || boton.dataset.catInline || '';
+}
+
+document.addEventListener('click', event => {
+    const objetivo = event.target;
+    const boton = objetivo && objetivo.closest ? objetivo.closest('.btn-cat-inline') : null;
     if (!boton) return;
+    if (boton.disabled || boton.classList.contains('permiso-ui-oculto')) return;
+
     event.preventDefault();
-    agregarCatalogoResponsivaInline(boton.dataset.catInline)
-        .catch(err => alertaError('No se pudo crear', err.message));
-});
+    event.stopPropagation();
+
+    const clave = claveCatalogoInline(boton);
+    agregarCatalogoResponsivaInline(clave).catch(err => {
+        console.error('[alta-catalogo-responsiva]', clave, err);
+        alertaError('No se pudo crear', err?.message || String(err));
+    });
+}, true);
 
 /* =========================================================
    CARGAR ACTIVOS DISPONIBLES

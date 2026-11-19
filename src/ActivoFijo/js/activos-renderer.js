@@ -2025,7 +2025,28 @@ const CATALOGOS_INLINE = {
    modal del activo. Devuelve cuando todo termina para poder encadenar. */
 async function agregarCatalogoInline(clave) {
     const cfg = CATALOGOS_INLINE[clave];
-    if (!cfg || !puedeAcceder('af-cat:crear')) return;
+    if (!cfg) {
+        console.error('[alta-catalogo] Clave de catálogo desconocida:', clave);
+        await Swal.fire({
+            icon: 'error',
+            title: 'Catálogo no reconocido',
+            text: `El botón "+ Nuevo" apunta a "${clave || 'sin clave'}". Revisa el atributo data-cat del botón.`,
+            customClass: { popup: 'cl-alert cl-alert-error' }
+        });
+        return;
+    }
+
+    /* Sin permiso no debe fallar en silencio: el usuario acaba de pulsar un
+       botón y merece saber por qué no pasa nada. */
+    if (!puedeAcceder('af-cat:crear')) {
+        await Swal.fire({
+            icon: 'warning',
+            title: 'Sin permiso para crear catálogos',
+            text: 'Tu usuario no tiene el permiso "Crear registro catálogo" (af-cat:crear). Pídeselo a un administrador.',
+            customClass: { popup: 'cl-alert' }
+        });
+        return;
+    }
 
     /* El subtipo se agrupa con el mismo criterio que la cascada del
        formulario (poblarSubtipos(tipo.GrupoSubtipo)): si se usara otro
@@ -2136,13 +2157,31 @@ function colocarCatalogoNuevo(cfg, id, datos) {
     select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-/* Delegación de clic: cualquier botón "+ Nuevo" del modal abre su alta. */
-modal.addEventListener('click', event => {
-    const boton = event.target.closest('.btn-cat-inline');
+/* Delegación de clic para los botones "+ Nuevo" de los catálogos.
+   Se registra en `document` y en FASE DE CAPTURA: así el clic se atiende
+   antes que cualquier otro manejador (submit del formulario, cierre del
+   modal, etc.) y sigue funcionando aunque el modal se vuelva a pintar o el
+   botón se agregue después. La clave se lee de `data-cat`, con
+   `data-cat-inline` como respaldo para no depender del atributo exacto. */
+function claveCatalogoInline(boton) {
+    return boton.dataset.cat || boton.dataset.catInline || '';
+}
+
+document.addEventListener('click', event => {
+    const objetivo = event.target;
+    const boton = objetivo && objetivo.closest ? objetivo.closest('.btn-cat-inline') : null;
     if (!boton) return;
+    if (boton.disabled || boton.classList.contains('permiso-ui-oculto')) return;
+
     event.preventDefault();
-    agregarCatalogoInline(boton.dataset.cat).catch(err => toastError('No se pudo crear', err.message));
-});
+    event.stopPropagation();
+
+    const clave = claveCatalogoInline(boton);
+    agregarCatalogoInline(clave).catch(err => {
+        console.error('[alta-catalogo]', clave, err);
+        toastError('No se pudo crear', err?.message || String(err));
+    });
+}, true);
 
 /* Perfil real de cada tipo (cuántos de sus equipos tienen cada campo
    capturado). Lo llena la cascada desde el inventario; mientras no llegue

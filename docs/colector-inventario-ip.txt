@@ -1,0 +1,261 @@
+===========================================================================
+ PROMPT PARA EL COLECTOR — INVENTARIO IP / RED DEL ACTIVO FIJO
+ ---------------------------------------------------------------------------
+ Archivo de TEXTO PLANO. Se copia y pega como instrucción del programa que
+ colecta el hardware ("el colector").
+ Revisado contra la base real copervaservicios_ (29 filas en
+ dbo.ActivoFijoEquiposRed, 28 vigentes).
+===========================================================================
+
+RESPUESTA CORTA: ¿HAY QUE CAMBIAR ALGO EN EL COLECTOR?
+------------------------------------------------------
+El mapeo actual está BIEN. Verificado campo por campo contra la base: de
+las 29 filas, 0 sin IP, 0 sin MAC, 0 sin máscara, 0 sin prefijo, 0 sin DNS,
+0 sin hostname, 0 sin dominio; sólo 2 sin puerta de enlace. Lo que hoy
+manda el colector ya es correcto y NO se debe tocar.
+
+Lo único que hay que corregir es de COMPORTAMIENTO, no de mapeo:
+
+  1. El colector NO debe escribir en ninguna tabla que no sea suya.
+     Hoy hay que dejarle clarísimo que sus 4 tablas son:
+        dbo.ActivoFijoEquiposRed
+        dbo.ActivoFijoEquiposCuentas
+        dbo.ActivoFijoEquiposProgramas
+        dbo.ActivoFijoEquiposComponentes
+     y que NUNCA debe escribir en:
+        dbo.InventarioGeneralIP        (inventario manual)
+        dbo.InventarioIPGestion        (piso/cliente/switch/puerto)
+        dbo.InventarioIPMaestro        (espejo, lo llenan los triggers)
+        dbo.Equipos / dbo.EquiposControlGeneralIP
+        dbo.ActivoFijoEquipos          (el activo lo da de alta una persona)
+     Si el colector sigue metiendo filas en InventarioGeneralIP, vuelve a
+     aparecer la IP duplicada y "plancha" lo capturado a mano. Este es el
+     único punto realmente crítico.
+
+  2. TipoMedio de los adaptadores inalámbricos. Hoy manda "802.3" (24
+     filas) y "Native 802.11" (5 filas). El sistema detecta WiFi buscando
+     "Wi-Fi", "Wireless", "WLAN" u "802.11" en TipoMedio, NombreAdaptador
+     o DescripcionAdaptador. Ya se agregó "802.11" a esa detección para no
+     depender del nombre comercial; aun así, se pide:
+        · inalámbrico -> TipoMedio = "802.11" (o "Native 802.11")
+        · cableado    -> TipoMedio = "802.3"
+     y que NombreAdaptador/DescripcionAdaptador conserven la palabra
+     "Wi-Fi" o "Wireless" cuando aplique. Con eso la IP se marca volátil
+     (EsConfiable = 0) y no se cuenta como inventario duro.
+
+  3. Cobertura: hoy hay 35 activos fijos sin NINGUNA fila de red y 2
+     adaptadores sin PuertaEnlace. No es un error de formato: son equipos a
+     los que el colector todavía no llegó. No hay que cambiar código, hay
+     que revisar por qué no reportan.
+
+  Opcional (no urgente, mejora la pantalla): reportar si el adaptador está
+  conectado o desconectado. No hay columna propia en ActivoFijoEquiposRed;
+  si se quiere, se agrega una columna nueva (p. ej. EstadoAdaptador
+  VARCHAR(20): 'Conectado' | 'Desconectado') SIN tocar las existentes.
+
+
+===========================================================================
+ PROMPT (copiar y pegar tal cual)
+===========================================================================
+
+> Tu trabajo es reportar el hardware y la red de cada equipo al sistema de
+> inventario (Activo Fijo). A partir de ahora aplica estas reglas. No
+> cambies lo que ya funciona: el mapeo de columnas que usas hoy es
+> correcto y se conserva tal cual.
+>
+> ------------------------------------------------------------------
+> 1. TABLAS QUE PUEDES ESCRIBIR (y ninguna otra)
+> ------------------------------------------------------------------
+> Sólo estas cuatro, y sólo lo que es tuyo:
+>     dbo.ActivoFijoEquiposRed        red / adaptadores
+>     dbo.ActivoFijoEquiposCuentas    cuentas de Windows
+>     dbo.ActivoFijoEquiposProgramas  software instalado
+>     dbo.ActivoFijoEquiposComponentes piezas (monitor, disco, teclado,
+>                                     ratón, diadema)
+>
+> PROHIBIDO escribir en:
+>     dbo.InventarioGeneralIP   -> es el inventario que captura una persona
+>     dbo.InventarioIPGestion   -> es el piso/cliente/puerto que captura
+>                                  una persona en "Control general de IP"
+>     dbo.InventarioIPMaestro   -> lo llenan triggers de la base
+>     dbo.Equipos               -> lo administra el módulo Equipos
+>     dbo.EquiposControlGeneralIP
+>     dbo.ActivoFijoEquipos     -> lo da de alta una persona
+>     dbo.Clientes, dbo.Pisos, dbo.CatalogosInventarioIP
+>
+> Si escribes en esas tablas, el mismo equipo aparece dos veces en el
+> control general de IP y se borra lo que la persona capturó a mano. No lo
+> hagas nunca, ni "para ayudar".
+>
+> Tampoco cambies el esquema: nada de ALTER TABLE, CREATE ni DROP.
+>
+> ------------------------------------------------------------------
+> 2. UPSERT: NUNCA DUPLICAR
+> ------------------------------------------------------------------
+> · Identifica el equipo padre por NoSerie (serie del CPU). Si no existe,
+>   primero crea/actualiza el equipo y después sus filas hijas.
+> · En dbo.ActivoFijoEquiposRed la identidad de cada adaptador es
+>   (IdActivoFijoEQ, Clave). Usa Clave estable:
+>       'MAC:' + MAC en mayúsculas  (preferido)
+>       'IP:'  + IP                 (sólo si el adaptador no expone MAC)
+>   Si ya existe -> UPDATE de los campos y de UltimaDeteccion.
+>   Si no existe -> INSERT con PrimeraDeteccion = SYSDATETIME().
+> · NUNCA borres filas. Lo que ya no detectes se marca Vigente = 0.
+> · Manda un LoteEnvio (uniqueidentifier, uno solo por corrida, igual para
+>   todas las filas de esa pasada) para poder rastrear qué mandó cada lote.
+> · Una fila por adaptador. Nunca dos filas para la misma MAC del mismo
+>   equipo, ni dos para la misma IP del mismo equipo.
+>
+> ------------------------------------------------------------------
+> 3. MAPEO DE dbo.ActivoFijoEquiposRed  (ya es el correcto: consérvalo)
+> ------------------------------------------------------------------
+>   Columna                Tipo / límite          Qué debe llevar
+>   --------------------------------------------------------------------
+>   IdActivoFijoEQ         int, obligatorio       equipo padre (por NoSerie)
+>   NoSerie                nvarchar(150)          serie del CPU (copia de
+>                                                  correlación, exacta)
+>   Hostname               nvarchar(100)          nombre NETBIOS/DNS real
+>   Clave                  nvarchar(200), oblig. 'MAC:AA:BB:..' o 'IP:x.x.x.x'
+>   NombreAdaptador        nvarchar(200)          "Ethernet 2", "Wi-Fi"
+>   DescripcionAdaptador   nvarchar(300)          "Intel(R) Ethernet
+>                                                  Connection (2) I219-LM #2"
+>   TipoMedio              nvarchar(50)           "802.3" cableado,
+>                                                  "802.11"/"Native 802.11"
+>                                                  inalámbrico
+>   MAC                    varchar(17)            MAYÚSCULAS con dos puntos:
+>                                                  AA:BB:CC:DD:EE:FF
+>   IP                     varchar(45)            IPv4 o IPv6; NULL si el
+>                                                  adaptador no tiene
+>   Mascara                varchar(45)            255.255.255.0 o /24
+>   PrefijoRed             int                    24, 16, ...
+>   PuertaEnlace           varchar(45)            gateway
+>   DHCP                   bit, obligatorio       1 si la IP es DHCP
+>   DNS1 / DNS2            varchar(45)            servidores DNS
+>   DNSSufijo              nvarchar(200)          sufijo de búsqueda DNS
+>   Dominio                nvarchar(150)          dominio AD si pertenece
+>   DominioDNS             nvarchar(150)          dominio DNS
+>   EsPrincipal            bit, obligatorio       exactamente UNO por
+>                                                  equipo = 1 (el de la ruta
+>                                                  por defecto); el resto 0
+>   Vigente                bit, obligatorio       1 mientras se detecte,
+>                                                  0 cuando desaparezca
+>   LoteEnvio              uniqueidentifier       id de la corrida
+>   PrimeraDeteccion       datetime2, obligatorio SYSDATETIME() al insertar
+>   UltimaDeteccion        datetime2, obligatorio SYSDATETIME() en cada
+>                                                  pasada
+>
+> Reglas de formato que el sistema da por hechas:
+> · MAC SIEMPRE en mayúsculas y con ":" -> 17 caracteres exactos. El
+>   sistema usa la MAC como clave de la gestión manual (MAC:...), así que
+>   una MAC con "-" o en minúsculas abre una fila nueva.
+> · IP tal cual, sin máscara y sin espacios.
+> · Si el adaptador no tiene IP en este momento (DHCP/WiFi), manda la fila
+>   igual con IP = NULL. NO inventes una IP ni te saltes la fila: la
+>   dirección aparece después de reconectar.
+> · No recortes la DescripcionAdaptador: es lo que se muestra como
+>   referencia cuando una persona clasifica el aparato a mano.
+>
+> ------------------------------------------------------------------
+> 4. PROCEDENCIA DE LA IP (la calcula la base, tú sólo aporta los datos)
+> ------------------------------------------------------------------
+> · DHCP = 1 ................. la base la marca DHCP y volátil
+> · TipoMedio inalámbrico .... la base la marca Wifi y volátil
+> · DHCP = 0 y cableado ...... la base la marca Manual y confiable
+> No mandes tú "OrigenIP" ni "EsConfiable": esas columnas no están en tu
+> tabla. Se derivan de DHCP + TipoMedio.
+> Por eso es importante que TipoMedio diga la verdad.
+>
+> ------------------------------------------------------------------
+> 5. LO QUE NO DEBES HACER
+> ------------------------------------------------------------------
+> · No borrar filas (Vigente = 0).
+> · No duplicar equipos ni adaptadores.
+> · No escribir en InventarioGeneralIP, InventarioIPGestion ni
+>   InventarioIPMaestro.
+> · No copiar piso, cliente, puerto Fortinet ni descripción "de negocio":
+>   eso no se puede deducir del equipo y lo captura una persona.
+> · No alterar el esquema.
+> · No mandar MAC con otro formato.
+> · No mandar dos EsPrincipal = 1 para el mismo equipo.
+>
+> ------------------------------------------------------------------
+> 6. CÓMO SE VE TU TRABAJO EN EL SISTEMA
+> ------------------------------------------------------------------
+>   dbo.ActivoFijoEquiposRed  ->  Detalle del activo (ficha de red)
+>                             ->  Control general de IP (Origen "Activo")
+>                             ->  dbo.InventarioIPMaestro (espejo, por
+>                                 trigger; una fila por IP, sin duplicar)
+> En el control general de IP esas filas muestran tu MAC, tu hostname y el
+> nombre del adaptador, y la persona sólo agrega lo que tú no puedes
+> saber: dispositivo, tipo, piso, cliente, switch, puerto Fortinet y una
+> descripción legible. Eso se guarda aparte y tu siguiente lote NO lo
+> borra.
+
+
+===========================================================================
+ CÓMO VERIFICAR QUE EL COLECTOR QUEDÓ BIEN (sólo lectura)
+===========================================================================
+
+-- 1. Una fila por adaptador, sin duplicados por MAC dentro del equipo
+SELECT IdActivoFijoEQ, MAC, COUNT(*) AS Veces
+FROM dbo.ActivoFijoEquiposRed
+WHERE Vigente = 1 AND MAC IS NOT NULL
+GROUP BY IdActivoFijoEQ, MAC
+HAVING COUNT(*) > 1;
+-- Esperado: 0 filas.
+
+-- 2. Un solo EsPrincipal por equipo
+SELECT IdActivoFijoEQ, COUNT(*) AS Principales
+FROM dbo.ActivoFijoEquiposRed
+WHERE Vigente = 1 AND EsPrincipal = 1
+GROUP BY IdActivoFijoEQ
+HAVING COUNT(*) > 1;
+-- Esperado: 0 filas (hoy: 0).
+
+-- 3. Ningún dato técnico vacío
+SELECT SUM(CASE WHEN IP IS NULL THEN 1 ELSE 0 END)          AS SinIP,
+       SUM(CASE WHEN MAC IS NULL THEN 1 ELSE 0 END)         AS SinMAC,
+       SUM(CASE WHEN Hostname IS NULL THEN 1 ELSE 0 END)    AS SinHostname,
+       SUM(CASE WHEN TipoMedio IS NULL THEN 1 ELSE 0 END)   AS SinTipoMedio,
+       SUM(CASE WHEN Mascara IS NULL THEN 1 ELSE 0 END)     AS SinMascara,
+       SUM(CASE WHEN PuertaEnlace IS NULL THEN 1 ELSE 0 END) AS SinGateway
+FROM dbo.ActivoFijoEquiposRed
+WHERE Vigente = 1;
+-- Hoy: 0 / 0 / 0 / 0 / 0 / 2 (los 2 sin gateway son WiFi sin ruta).
+
+-- 4. Cobertura: activos que el colector todavía no ve
+SELECT COUNT(*) AS ActivosSinRed
+FROM dbo.ActivoFijoEquipos a
+WHERE NOT EXISTS (SELECT 1 FROM dbo.ActivoFijoEquiposRed r
+                   WHERE r.IdActivoFijoEQ = a.IdActivoFijoEQ
+                     AND r.Vigente = 1);
+-- Hoy: 35. No es un bug de formato: esos equipos no reportaron.
+
+-- 5. Que la maestra quedó una sola fila por IP (esto lo hace la base)
+SELECT COUNT(*) AS Filas, COUNT(DISTINCT IP) AS IPs
+FROM dbo.InventarioIPMaestro;
+-- Esperado: Filas = IPs. Hoy: 1623 y 1623.
+
+-- 6. Que el colector NO duplicó IP en el inventario manual
+SELECT COUNT(*) AS Duplicadas
+FROM (SELECT IP FROM dbo.InventarioGeneralIP
+      GROUP BY IP HAVING COUNT(*) > 1) d;
+-- Esperado: 0.
+
+-- 7. Fuerza una resincronización de la maestra si hiciera falta
+--    (idempotente, no borra nada):
+--    EXEC dbo.sp_IPMaestroResincronizar;
+
+
+===========================================================================
+ QUÉ CAMBIÓ EN EL SISTEMA PARA QUE ESTO FUNCIONE (contexto)
+===========================================================================
+· scripts/inventario-ip-maestro.sql crea dbo.InventarioIPMaestro: una fila
+  por IP, espejo de los 3 orígenes, mantenido por 5 triggers. No mueve ni
+  borra nada de las tablas originales.
+· La gestión manual (piso, cliente, switch, puerto Fortinet, dispositivo,
+  tipo, descripción) vive en dbo.InventarioIPGestion y marca
+  GestionManual = 1, así que ningún origen automático la vuelve a escribir.
+· La detección de WiFi acepta ahora "Wi-Fi", "Wireless", "WLAN" y "802.11"
+  en TipoMedio / NombreAdaptador / DescripcionAdaptador.
+· El mapeo del colector NO cambió: sigue mandando lo mismo que hoy.

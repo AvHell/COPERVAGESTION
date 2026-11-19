@@ -5,7 +5,6 @@ const os = require('os');
 const crypto = require('crypto');
 const { PDFDocument } = require('pdf-lib');
 const { autoUpdater } = require('electron-updater');
-const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
 
 /* =========================================================
@@ -35,8 +34,10 @@ const credencialesDB = require('./db/credenciales');
 const activoFijoCatalogosDB   = require('../ActivoFijo/consultas/catalogos');
 const activoFijoActivosDB     = require('../ActivoFijo/consultas/activos');
 const activoFijoResponsivasDB = require('../ActivoFijo/consultas/responsivas');
-const activoFijoReportesDB    = require('../ActivoFijo/consultas/reportes');
 const activoFijoImportacionDB = require('../ActivoFijo/consultas/importacion');
+/* Capa de datos de red / cuentas / programas del colector.
+   El módulo "Detalle del activo" ya no existe como página: este archivo
+   sólo alimenta la ficha "Ver" del inventario (af-activos-componentes). */
 const activoFijoDetalleDB     = require('../ActivoFijo/consultas/detalle');
 
 /* =========================================================
@@ -390,9 +391,7 @@ const RUTAS_MODULOS = {
        (#catalogos) junto al inventario. */
     activofijo_activos: { basePath: HTML_AF, archivo: 'activos.html', permiso: 'activofijo_activos', titulo: 'Inventario - Activo Fijo' },
     activofijo_responsivas: { basePath: HTML_AF, archivo: 'responsivas.html', permiso: 'activofijo_responsivas', titulo: 'Responsivas - Activo Fijo' },
-    activofijo_reportes: { basePath: HTML_AF, archivo: 'reportes.html', permiso: 'activofijo_reportes', titulo: 'Reportes - Activo Fijo' },
-    activofijo_importar: { basePath: HTML_AF, archivo: 'importar.html', permiso: 'activofijo_importar', titulo: 'Importar Masivo - Activo Fijo' },
-    activofijo_detalle: { basePath: HTML_AF, archivo: 'detalle.html', permiso: 'activofijo_detalle', titulo: 'Detalle del Activo - Activo Fijo' }
+    activofijo_importar: { basePath: HTML_AF, archivo: 'importar.html', permiso: 'activofijo_importar', titulo: 'Importar Masivo - Activo Fijo' }
 };
 
 async function navegarModuloEnVentana(win, modulo) {
@@ -886,9 +885,7 @@ ipcMain.handle('ventana:cerrar-actual', (e) => {
 
 ipcMain.handle('abrir-activofijo-activos', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_activos'));
 ipcMain.handle('abrir-activofijo-responsivas', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_responsivas'));
-ipcMain.handle('abrir-activofijo-reportes', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_reportes'));
 ipcMain.handle('abrir-activofijo-importar', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_importar'));
-ipcMain.handle('abrir-activofijo-detalle', (e) => navegarModuloEnVentana(BrowserWindow.fromWebContents(e.sender), 'activofijo_detalle'));
 
 /* =========================================================
    IPC: CATÁLOGOS AF
@@ -996,18 +993,11 @@ ipcMain.handle('af-activos-cascada-tipo', async (_e, idTipo) => {
 });
 
 /* =========================================================
-   IPC: DETALLE AF (red, cuentas, programas, piezas)
-   ---------------------------------------------------------
-   Todo es de sólo lectura sobre lo que dejó la app A.
+   El módulo "Detalle del activo" se retiró como página.
+   Su capa de datos sigue viva sólo para la ficha "Ver" del
+   inventario (ver af-activos-componentes más arriba).
    ========================================================= */
-ipcMain.handle('af-det-estado', async () => { const err = requerirSesion('activofijo_detalle'); if (err) return err; return await activoFijoDetalleDB.estadoFuentes(); });
-ipcMain.handle('af-det-maestro-listar', async (_e, filtros) => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.listarMaestro(filtros || {}); });
-ipcMain.handle('af-det-dominios', async () => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.listarDominios(); });
-ipcMain.handle('af-det-ficha', async (_e, id, opciones) => { const err = requerirSesion('af-det:listado:ver'); if (err) return err; return await activoFijoDetalleDB.obtenerFicha(id, opciones || {}); });
-ipcMain.handle('af-det-buscar-programa', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarPrograma(filtros || {}); });
-ipcMain.handle('af-det-buscar-cuenta', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarCuenta(filtros || {}); });
-ipcMain.handle('af-det-buscar-host', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarHost(filtros || {}); });
-ipcMain.handle('af-det-buscar-componente', async (_e, filtros) => { const err = requerirSesion('af-det:buscar:ver'); if (err) return err; return await activoFijoDetalleDB.buscarComponente(filtros || {}); });
+
 
 
 /* =========================================================
@@ -1028,104 +1018,6 @@ ipcMain.handle('af-resp-catalogo-crear',      async (_e, clave, datos) => { cons
 ipcMain.handle('af-resp-catalogo-actualizar', async (_e, clave, id, datos) => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.actualizarCatalogoResponsiva(clave, id, datos); });
 ipcMain.handle('af-resp-catalogo-eliminar',   async (_e, clave, id) => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.eliminarCatalogoResponsiva(clave, id); });
 ipcMain.handle('af-resp-lista-usuarios-entrega', async ()            => { const err = requerirSesion('activofijo_responsivas'); if (err) return err; return await activoFijoResponsivasDB.listarUsuariosEntrega(); });
-
-/* =========================================================
-   IPC: REPORTES AF
-   ========================================================= */
-ipcMain.handle('af-rep-resumen-general',       async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.resumenGeneral(); });
-ipcMain.handle('af-rep-resumen-tipo',          async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.resumenPorTipo(); });
-ipcMain.handle('af-rep-resumen-cartera',       async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.resumenPorCartera(); });
-ipcMain.handle('af-rep-inventario',            async (_e, filtros) => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.inventario(filtros || {}); });
-ipcMain.handle('af-rep-responsivas-activas',   async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.responsivasActivas(); });
-ipcMain.handle('af-rep-asignaciones-persona',  async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.asignacionesPorPersona(); });
-ipcMain.handle('af-rep-por-ticket',            async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.porTicket(); });
-ipcMain.handle('af-rep-historial-asignaciones',async (_e, filtros) => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.historialAsignaciones(filtros || {}); });
-ipcMain.handle('af-rep-historial-activo',      async (_e, id)      => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.historialActivo(id); });
-ipcMain.handle('af-rep-celulares',             async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.celulares(); });
-ipcMain.handle('af-rep-laptops',               async ()            => { const err = requerirSesion('af-rep:ver'); if (err) return err; return await activoFijoReportesDB.laptops(); });
-
-/* --- NUEVOS: endpoint consolidado + exportar a Excel --- */
-ipcMain.handle('af-rep-obtener-reporte', async (_e, vista, filtros) => {
-    const err = requerirSesion('af-rep:ver');
-    if (err) return err;
-    try {
-        return await activoFijoReportesDB.obtenerReporte(vista, filtros || {});
-    } catch (e) {
-        console.error('[Reportes] Error obtenerReporte:', e);
-        return { ok: false, mensaje: e.message, datos: [] };
-    }
-});
-
-ipcMain.handle('af-rep-exportar-excel', async (_e, payload) => {
-    const err = requerirSesion('af-rep:ver');
-    if (err) return err;
-    try {
-        return await exportarReporteExcel(payload);
-    } catch (e) {
-        console.error('[Reportes] Error exportarExcel:', e);
-        return { ok: false, mensaje: e.message };
-    }
-});
-
-/* =========================================================
-   HELPER: EXPORTAR REPORTE A EXCEL
-   payload = { vista, titulo, columnas: [{ key, etiqueta, tipo }], filas: [{ etiqueta: valor }] }
-   ========================================================= */
-async function exportarReporteExcel(payload) {
-    const { titulo, columnas, filas } = payload || {};
-
-    if (!filas || filas.length === 0) {
-        return { ok: false, mensaje: 'Sin datos para exportar.' };
-    }
-    if (!Array.isArray(columnas) || columnas.length === 0) {
-        return { ok: false, mensaje: 'No se especificaron columnas.' };
-    }
-
-    const safeTitulo = (titulo || 'Reporte').replace(/[\\/:*?"<>|]/g, '_');
-    const fecha = new Date().toISOString().slice(0, 10);
-    const downloadsDir = path.join(os.homedir(), 'Downloads');
-    const defaultPath = path.join(
-        fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
-        `${safeTitulo}_${fecha}.xlsx`
-    );
-
-    const { canceled, filePath } = await dialog.showSaveDialog({
-        title: 'Guardar reporte en Excel',
-        defaultPath,
-        filters: [{ name: 'Excel', extensions: ['xlsx'] }]
-    });
-
-    if (canceled || !filePath) return { ok: false, mensaje: 'Cancelado' };
-
-    const encabezados = columnas.map(c => c.etiqueta);
-    const datos = filas.map(f => columnas.map(c => {
-        const v = f[c.etiqueta];
-        return v === null || v === undefined ? '' : v;
-    }));
-
-    const ws = XLSX.utils.aoa_to_sheet([encabezados, ...datos]);
-
-    // Anchos automáticos
-    ws['!cols'] = encabezados.map((_, i) => {
-        const valores = [encabezados[i], ...datos.map(fila => fila[i])];
-        const max = Math.max(...valores.map(v => String(v ?? '').length));
-        return { wch: Math.min(Math.max(max + 2, 10), 45) };
-    });
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, safeTitulo.substring(0, 30) || 'Reporte');
-    XLSX.writeFile(wb, filePath);
-
-    return { ok: true, ruta: filePath };
-}
-
-/* =========================================================
-   IPC: CATÁLOGOS PARA FILTROS DE REPORTES
-   ========================================================= */
-ipcMain.handle('af-rep-tipos',                 async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.tiposParaFiltro(); });
-ipcMain.handle('af-rep-estados',               async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.estadosParaFiltro(); });
-ipcMain.handle('af-rep-estatus',               async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.estatusParaFiltro(); });
-ipcMain.handle('af-rep-carteras',              async () => { const err = requerirSesion('activofijo_reportes'); if (err) return err; return await activoFijoReportesDB.carterasParaFiltro(); });
 
 /* =========================================================
    IPC: IMPORTACIÓN AF
@@ -1547,6 +1439,16 @@ ipcMain.handle('inventario-ip:actualizar', async (_e, id, datos) => {
 ipcMain.handle('inventario-ip:cliente:actualizar', async (_e, idEquipo, datos) => {
     const err = requerirSesion('equipos:editar'); if (err) return err;
     return await inventarioIPDB.actualizarDatosEquipoCliente(idEquipo, datos);
+});
+/* Filas del colector: piso, cliente, puerto del Fortinet y descripción.
+   Se guardan en dbo.InventarioIPGestion (no crean otro renglón). */
+ipcMain.handle('inventario-ip:gestion:actualizar', async (_e, clave, datos) => {
+    const err = requerirSesion('equipos:editar'); if (err) return err;
+    return await inventarioIPDB.guardarGestionActivo(clave, datos);
+});
+ipcMain.handle('inventario-ip:gestion:quitar', async (_e, clave) => {
+    const err = requerirSesion('equipos:editar'); if (err) return err;
+    return await inventarioIPDB.quitarGestionActivo(clave);
 });
 ipcMain.handle('inventario-ip:eliminar', async (_e, id) => {
     const err = requerirSesion('equipos:eliminar'); if (err) return err;

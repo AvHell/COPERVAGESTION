@@ -127,7 +127,8 @@ async function estadoProcedencia(pool) {
         SELECT
             CASE WHEN COL_LENGTH(N'dbo.InventarioGeneralIP', N'OrigenIP') IS NULL THEN 0 ELSE 1 END AS OrigenIP,
             CASE WHEN OBJECT_ID(N'dbo.vw_InventarioIPUnificado', N'V') IS NULL THEN 0 ELSE 1 END AS Vista,
-            CASE WHEN OBJECT_ID(N'dbo.ActivoFijoEquiposRed', N'U') IS NULL THEN 0 ELSE 1 END AS Red
+            CASE WHEN OBJECT_ID(N'dbo.ActivoFijoEquiposRed', N'U') IS NULL THEN 0 ELSE 1 END AS Red,
+            CASE WHEN OBJECT_ID(N'dbo.vw_InventarioIPMaestro', N'V') IS NULL THEN 0 ELSE 1 END AS Maestra
     `);
     const fila = (result.recordset && result.recordset[0]) || {};
     estadoProcedenciaCache = {
@@ -135,7 +136,11 @@ async function estadoProcedencia(pool) {
         vista: !!fila.Vista,
         /* Red que reporta el colector para cada activo fijo. Sin la tabla,
            el control general sólo puede mostrar General + Cliente. */
-        red: !!fila.Red
+        red: !!fila.Red,
+        /* Tabla maestra única (scripts/inventario-ip-maestro.sql): una fila por
+           IP, ya fusionada de los tres orígenes. Cuando existe es la fuente
+           preferida; si no, se cae a la vista/consulta de siempre. */
+        maestra: !!fila.Maestra
     };
     return estadoProcedenciaCache;
 }
@@ -349,9 +354,723 @@ async function guardarPreferencia(clave, valor) {
     }
 }
 
+/* =========================================================
+   GESTIÓN DE LAS FILAS DEL COLECTOR (Origen 'Activo')
+   ---------------------------------------------------------
+   Esas filas las reporta el colector en dbo.ActivoFijoEquiposRed:
+   traen IP, MAC y el nombre técnico del adaptador, pero nunca piso,
+   cliente ni puerto del Fortinet. dbo.InventarioIPGestion
+   (scripts/control-general-ip.sql) guarda SÓLO ese complemento, con
+   una clave estable por adaptador.
+
+   Regla: no se copia la IP ni se crea otra fila. La gestión se aplica
+   ENCIMA de la fila que ya devuelve la vista (o el respaldo UNION), así
+   la pantalla sigue mostrando un solo renglón por tarjeta de red.
+   ========================================================= */
+
+const TABLA_GESTION = 'dbo.InventarioIPGestion';
+
+/**
+ * Clave estable de una fila del colector: 'MAC:00:11:22:33:44:55' o
+ * 'IP:192.168.1.10' cuando el adaptador no expone MAC.
+ * @returns {?string} null si la fila no se puede identificar.
+ */
+function claveGestion(fila) {
+    const mac = normalizarMAC(fila?.MAC);
+    if (mac) return `MAC:${mac}`;
+    const ip = String(fila?.IP || '').trim();
+    return ip ? `IP:${normalizarIPv4(ip)}` : null;
+}
+
+/** Valida y normaliza una clave recibida de la interfaz. */
+function normalizarClaveGestion(clave) {
+    const texto = String(clave || '').trim();
+    const separador = texto.indexOf(':');
+    if (separador < 0) return null;
+    const tipo = texto.slice(0, separador).toUpperCase();
+    const valor = texto.slice(separador + 1).trim();
+    if (!valor) return null;
+    if (tipo === 'MAC') {
+        const mac = normalizarMAC(valor);
+        return mac ? `MAC:${mac}` : null;
+    }
+    if (tipo === 'IP') return validarIPv4(valor) ? `IP:${normalizarIPv4(valor)}` : null;
+    return null;
+}
+
+/* ¿La base ya tiene la tabla de gestión y sus columnas de catálogo?
+   - sin tabla: el módulo se comporta como antes (filas del colector de sólo
+     lectura) en lugar de fallar;
+   - sin IdDispositivo/IdTipoEquipo (script anterior): se siguen gestionando
+     piso, cliente, puerto y descripción;
+   - sin IdSite (script anterior): se siguen gestionando los demás campos;
+   - sin IdPisoPlano o sin dbo.Pisos: sólo se ofrece el piso del catálogo de
+     control general. */
+let estadoGestionCache = null;
+async function estadoGestion(pool) {
+    if (estadoGestionCache) return estadoGestionCache;
+    const result = await pool.request().query(`
+        SELECT
+            CASE WHEN OBJECT_ID(N'${TABLA_GESTION}', N'U') IS NULL THEN 0 ELSE 1 END AS Tabla,
+            CASE WHEN COL_LENGTH(N'${TABLA_GESTION}', N'IdDispositivo') IS NULL THEN 0 ELSE 1 END AS Catalogos,
+            CASE WHEN COL_LENGTH(N'${TABLA_GESTION}', N'IdSite') IS NULL THEN 0 ELSE 1 END AS Site,
+            CASE WHEN COL_LENGTH(N'${TABLA_GESTION}', N'IdPisoPlano') IS NULL THEN 0 ELSE 1 END AS PisoPlano,
+            CASE WHEN OBJECT_ID(N'dbo.Pisos', N'U') IS NULL THEN 0 ELSE 1 END AS Pisos
+    `);
+    const fila = (result.recordset && result.recordset[0]) || {};
+    estadoGestionCache = {
+        tabla: !!fila.Tabla,
+        catalogos: !!fila.Catalogos,
+        site: !!fila.Site,
+        /* El piso del plano (dbo.Pisos) sólo se puede guardar y mostrar si
+           existen la columna y la tabla: son otro vocabulario distinto del
+           catálogo de control general. */
+        pisoPlano: !!fila.PisoPlano && !!fila.Pisos
+    };
+    return estadoGestionCache;
+}
+
+async function hayTablaGestion(pool) {
+    return (await estadoGestion(pool)).tabla;
+}
+
+/**
+ * Mapa clave → datos gestionados, con piso, cliente, dispositivo y tipo ya
+ * resueltos a nombre.
+ * @returns {Promise<?Map<string, object>>} null si la tabla no existe.
+ */
+async function mapaGestion(pool) {
+    const estado = await estadoGestion(pool);
+    if (!estado.tabla) return null;
+    /* Clasificación por catálogo: sólo existe si el script se volvió a
+       ejecutar; si no, se devuelve NULL y el renglón muestra lo del colector. */
+    const columnasCatalogo = estado.catalogos
+        ? `G.IdDispositivo, Dispositivo.Nombre AS Dispositivo,
+           G.IdTipoEquipo, TipoEquipo.Nombre AS TipoEquipo,`
+        : `CAST(NULL AS INT) AS IdDispositivo, CAST(NULL AS NVARCHAR(150)) AS Dispositivo,
+           CAST(NULL AS INT) AS IdTipoEquipo, CAST(NULL AS NVARCHAR(150)) AS TipoEquipo,`;
+    const joinsCatalogo = estado.catalogos
+        ? `LEFT JOIN dbo.CatalogosInventarioIP Dispositivo
+               ON Dispositivo.IdCatalogoIP = G.IdDispositivo
+           LEFT JOIN dbo.CatalogosInventarioIP TipoEquipo
+               ON TipoEquipo.IdCatalogoIP = G.IdTipoEquipo`
+        : '';
+    /* Switch (Site): columna añadida después; sin ella la pantalla sigue
+       funcionando y sólo se oculta ese campo del diálogo. */
+    const columnasSite = estado.site
+        ? 'G.IdSite, Switch.Nombre AS Site,'
+        : 'CAST(NULL AS INT) AS IdSite, CAST(NULL AS NVARCHAR(150)) AS Site,';
+    const joinSite = estado.site
+        ? `LEFT JOIN dbo.CatalogosInventarioIP Switch
+               ON Switch.IdCatalogoIP = G.IdSite`
+        : '';
+    /* Piso del plano (dbo.Pisos): el otro vocabulario. Sin la columna o sin la
+       tabla se devuelve NULL y la pantalla sólo ofrece el de control general. */
+    const columnasPisoPlano = estado.pisoPlano
+        ? 'G.IdPisoPlano, PisoPlano.Nombre AS PisoPlano,'
+        : 'CAST(NULL AS INT) AS IdPisoPlano, CAST(NULL AS NVARCHAR(150)) AS PisoPlano,';
+    const joinPisoPlano = estado.pisoPlano
+        ? `LEFT JOIN dbo.Pisos PisoPlano ON PisoPlano.IdPiso = G.IdPisoPlano`
+        : '';
+    const result = await pool.request().query(`
+        SELECT G.IdGestion, G.Clave, ${columnasCatalogo}
+               G.IdPiso, Piso.Nombre AS Piso,
+               ${columnasPisoPlano}
+               ${columnasSite}
+               G.IdCliente, C.Codigo AS ClienteCodigo, C.Nombre AS ClienteNombre,
+               G.PuertoFortinet, G.Descripcion
+        FROM dbo.InventarioIPGestion G
+        ${joinsCatalogo}
+        LEFT JOIN dbo.CatalogosInventarioIP Piso ON Piso.IdCatalogoIP = G.IdPiso
+        ${joinPisoPlano}
+        ${joinSite}
+        LEFT JOIN dbo.Clientes C ON C.IdCliente = G.IdCliente
+    `);
+    return new Map(
+        (result.recordset || []).map(fila => [String(fila.Clave || '').trim(), fila])
+    );
+}
+
+/** Texto vacío o en blanco = "no manda": se conserva lo del colector. */
+function textoGestionado(valor) {
+    const texto = String(valor === null || valor === undefined ? '' : valor).trim();
+    return texto || null;
+}
+
+/**
+ * Aplica la gestión encima de las filas del colector, en sitio.
+ * Nunca agrega ni quita renglones: la IP sigue apareciendo una sola vez.
+ * @param {Array<object>} registros filas de listar() (vista o respaldo).
+ * @param {?Map<string, object>} gestion resultado de mapaGestion().
+ */
+function aplicarGestion(registros, gestion) {
+    if (!gestion) return registros;
+    for (const registro of registros) {
+        /* Cualquier renglón identificable puede llevar datos capturados a mano
+           (antes sólo los del colector): con la tabla maestra toda fila tiene
+           clave de MAC o de IP y ésta es la única vía de edición. */
+        const clave = claveGestion(registro);
+        /* Sin clave el renglón no se puede identificar (adaptador sin MAC
+           ni IP): la pantalla lo deja de sólo lectura. */
+        if (!clave) continue;
+        registro.ClaveGestion = clave;
+        const datos = gestion.get(clave);
+        if (!datos) continue;
+        registro.IdGestion = datos.IdGestion;
+        const descripcion = textoGestionado(datos.Descripcion);
+        if (descripcion) registro.Descripcion = descripcion;
+        const puerto = textoGestionado(datos.PuertoFortinet);
+        if (puerto) registro.PuertoFortinet = puerto;
+        /* Dispositivo y Tipo los elige una persona de un catálogo; el
+           colector sólo aporta el nombre técnico del adaptador («Ethernet
+           2»). Lo gestionado manda y el texto del colector se conserva en
+           las columnas *Colector para poder mostrarlo como referencia. */
+        const dispositivo = textoGestionado(datos.Dispositivo);
+        if (dispositivo) {
+            if (sinDato(registro.DispositivoColector)) {
+                registro.DispositivoColector = registro.Dispositivo || null;
+            }
+            registro.Dispositivo = dispositivo;
+            registro.IdDispositivo = datos.IdDispositivo ?? null;
+        }
+        const tipoEquipo = textoGestionado(datos.TipoEquipo);
+        if (tipoEquipo) {
+            if (sinDato(registro.TipoEquipoColector)) {
+                registro.TipoEquipoColector = registro.TipoEquipo || null;
+            }
+            registro.TipoEquipo = tipoEquipo;
+            registro.IdTipoEquipo = datos.IdTipoEquipo ?? null;
+        }
+        /* Piso: dos catálogos excluyentes. IdPiso es el de control general
+           (CatalogosInventarioIP) e IdPisoPlano el del plano (dbo.Pisos). Se
+           aplica el que la persona haya elegido. */
+        if (datos.IdPiso) {
+            registro.IdPiso = datos.IdPiso;
+            registro.IdPisoPlano = null;
+            registro.Piso = datos.Piso;
+        } else if (datos.IdPisoPlano) {
+            registro.IdPisoPlano = datos.IdPisoPlano;
+            registro.IdPiso = null;
+            registro.Piso = datos.PisoPlano;
+        }
+        /* Switch capturado aquí: manda sobre el que se hubiera heredado de un
+           renglón manual de la misma IP. */
+        if (datos.IdSite && datos.Site) {
+            registro.IdSite = datos.IdSite;
+            registro.Site = datos.Site;
+        }
+        if (datos.IdCliente) {
+            registro.IdCliente = datos.IdCliente;
+            registro.ClienteCodigo = datos.ClienteCodigo;
+            registro.ClienteNombre = datos.ClienteNombre;
+        }
+        /* IdPiso e IdCliente pueden venir heredados de otra fuente (el
+           piso de un equipo de cliente pertenece a dbo.Pisos, no a
+           CatalogosInventarioIP). Sólo estos ids son los de ESTA
+           gestión y los únicos que la pantalla puede preseleccionar. */
+        registro.IdPisoGestion = datos.IdPiso ?? null;
+        registro.IdPisoPlanoGestion = datos.IdPisoPlano ?? null;
+        registro.IdSiteGestion = datos.IdSite ?? null;
+        registro.IdClienteGestion = datos.IdCliente ?? null;
+        registro.IdDispositivoGestion = datos.IdDispositivo ?? null;
+        registro.IdTipoEquipoGestion = datos.IdTipoEquipo ?? null;
+    }
+    return registros;
+}
+
+/**
+ * Guarda los datos que el colector no puede saber de un adaptador
+ * (dispositivo, tipo, piso, cliente, puerto del Fortinet y descripción
+ * legible). Si llega todo vacío, la gestión se retira y el renglón vuelve
+ * a mostrar exactamente lo que reporta el colector.
+ * @param {string} clave 'MAC:...' o 'IP:...' de la fila.
+ */
+async function guardarGestionActivo(clave, datos = {}) {
+    const claveNormalizada = normalizarClaveGestion(clave);
+    if (!claveNormalizada) {
+        return { ok: false, mensaje: 'No se pudo identificar el adaptador de red de esta fila.' };
+    }
+    const idPiso = datos.idPiso ? validarIdCatalogo(datos.idPiso) : null;
+    /* Piso del plano: es el id de dbo.Pisos, NO del catálogo de control
+       general, así que se valida aparte (abajo, contra su propia tabla). */
+    const idPisoPlano = datos.idPisoPlano ? validarIdCatalogo(datos.idPisoPlano) : null;
+    const idSite = datos.idSite ? validarIdCatalogo(datos.idSite) : null;
+    const idCliente = datos.idCliente ? validarIdCatalogo(datos.idCliente) : null;
+    const idDispositivo = datos.idDispositivo ? validarIdCatalogo(datos.idDispositivo) : null;
+    const idTipoEquipo = datos.idTipoEquipo ? validarIdCatalogo(datos.idTipoEquipo) : null;
+    const puertoFortinet = String(datos.puertoFortinet || '').trim() || null;
+    const descripcion = String(datos.descripcion || '').trim() || null;
+    if ((datos.idPiso && !idPiso) || (datos.idPisoPlano && !idPisoPlano) ||
+        (datos.idSite && !idSite) ||
+        (datos.idCliente && !idCliente) ||
+        (datos.idDispositivo && !idDispositivo) || (datos.idTipoEquipo && !idTipoEquipo) ||
+        (puertoFortinet && puertoFortinet.length > 100) ||
+        (descripcion && descripcion.length > 500)) {
+        return { ok: false, mensaje: 'Revisa los catálogos y la longitud de los campos.' };
+    }
+    if (!idPiso && !idPisoPlano && !idSite && !idCliente && !idDispositivo && !idTipoEquipo &&
+        !puertoFortinet && !descripcion) {
+        return await quitarGestionActivo(claveNormalizada);
+    }
+
+    const pool = await getPool();
+    const estado = await estadoGestion(pool);
+    if (!estado.tabla) {
+        return {
+            ok: false,
+            tablaFaltante: true,
+            mensaje: 'Falta ejecutar scripts/control-general-ip.sql para guardar los datos complementarios de las filas del colector.'
+        };
+    }
+    /* Sin las columnas de catálogo (script aplicado antes de esta versión):
+       se avisa en lugar de perder la clasificación en silencio. */
+    if ((idDispositivo || idTipoEquipo) && !estado.catalogos) {
+        return {
+            ok: false,
+            tablaFaltante: true,
+            mensaje: 'Vuelve a ejecutar scripts/control-general-ip.sql para poder clasificar dispositivo y tipo en las filas del colector.'
+        };
+    }
+    if (idSite && !estado.site) {
+        return {
+            ok: false,
+            tablaFaltante: true,
+            mensaje: 'Vuelve a ejecutar scripts/control-general-ip.sql para poder asignar el switch (Site) en las filas del colector.'
+        };
+    }
+    if (idPisoPlano && !estado.pisoPlano) {
+        return {
+            ok: false,
+            tablaFaltante: true,
+            mensaje: 'Vuelve a ejecutar scripts/control-general-ip.sql para poder asignar el piso del plano en esta fila.'
+        };
+    }
+    /* Los dos pisos son excluyentes: si llegaran los dos, manda el del
+       catálogo de control general, que es el que se ofrece primero. */
+    const pisoPlanoFinal = idPiso ? null : idPisoPlano;
+    /* Catálogos: cada id debe existir, estar activo y ser de su categoría,
+       igual que en el alta manual (guardar()). */
+    const esperados = [['piso', idPiso, 'Piso'], ['dispositivo', idDispositivo, 'Dispositivo'],
+        ['tipoEquipo', idTipoEquipo, 'TipoEquipo'], ['site', idSite, 'Site']]
+        .filter(([, valor]) => valor);
+    if (esperados.length) {
+        const catalogosRequest = pool.request();
+        esperados.forEach(([campo, valor]) => catalogosRequest.input(campo, sql.Int, valor));
+        const catalogos = await catalogosRequest.query(`
+            SELECT IdCatalogoIP, TipoCatalogo
+            FROM dbo.CatalogosInventarioIP
+            WHERE Activo = 1
+              AND IdCatalogoIP IN (${esperados.map(([campo]) => `@${campo}`).join(', ')})
+        `);
+        const tipoPorId = new Map(catalogos.recordset.map(item => [item.IdCatalogoIP, item.TipoCatalogo]));
+        if (esperados.some(([, valor, tipo]) => tipoPorId.get(valor) !== tipo)) {
+            return { ok: false, mensaje: 'Uno o más catálogos seleccionados no existen o están inactivos.' };
+        }
+    }
+    /* El piso del plano se valida contra SU tabla (dbo.Pisos), no contra
+       CatalogosInventarioIP: son dos catálogos con ids distintos. */
+    if (pisoPlanoFinal) {
+        const pisoPlano = await pool.request()
+            .input('IdPiso', sql.Int, pisoPlanoFinal)
+            .query('SELECT 1 AS Existe FROM dbo.Pisos WHERE IdPiso = @IdPiso AND Activo = 1');
+        if (!pisoPlano.recordset.length) {
+            return { ok: false, mensaje: 'El piso del plano seleccionado ya no existe o está inactivo.' };
+        }
+    }
+    if (idCliente) {
+        const cliente = await pool.request()
+            .input('IdCliente', sql.Int, idCliente)
+            .query('SELECT 1 AS Existe FROM dbo.Clientes WHERE IdCliente = @IdCliente');
+        if (!cliente.recordset.length) return { ok: false, mensaje: 'El cliente seleccionado ya no existe.' };
+    }
+
+    const request = pool.request()
+        .input('Clave', sql.VarChar(60), claveNormalizada)
+        .input('IdPiso', sql.Int, idPiso)
+        .input('IdCliente', sql.Int, idCliente)
+        .input('PuertoFortinet', sql.NVarChar(100), puertoFortinet)
+        .input('Descripcion', sql.NVarChar(500), descripcion);
+    /* Sólo se tocan las columnas de catálogo cuando la base ya las tiene. */
+    const columnas = estado.catalogos
+        ? { insertar: ', IdDispositivo, IdTipoEquipo', valores: ', @IdDispositivo, @IdTipoEquipo' }
+        : { insertar: '', valores: '' };
+    if (estado.catalogos) {
+        request.input('IdDispositivo', sql.Int, idDispositivo)
+            .input('IdTipoEquipo', sql.Int, idTipoEquipo);
+    }
+    if (estado.site) request.input('IdSite', sql.Int, idSite);
+    if (estado.pisoPlano) request.input('IdPisoPlano', sql.Int, pisoPlanoFinal);
+    /* Piso del plano: se escribe junto al de control general, pero sólo uno de
+       los dos lleva valor (arriba se anula el que no se eligió). */
+    const columnaPisoPlano = estado.pisoPlano ? ', IdPisoPlano' : '';
+    const valorPisoPlano = estado.pisoPlano ? ', @IdPisoPlano' : '';
+
+    try {
+        await request.query(`
+            MERGE dbo.InventarioIPGestion AS Destino
+            USING (SELECT @Clave AS Clave) AS Origen
+                ON Destino.Clave = Origen.Clave
+            WHEN MATCHED THEN
+                UPDATE SET IdPiso = @IdPiso, IdCliente = @IdCliente,
+                    PuertoFortinet = @PuertoFortinet, Descripcion = @Descripcion
+                    ${estado.site ? ', IdSite = @IdSite' : ''}
+                    ${estado.pisoPlano ? ', IdPisoPlano = @IdPisoPlano' : ''}
+                    ${estado.catalogos ? ', IdDispositivo = @IdDispositivo, IdTipoEquipo = @IdTipoEquipo' : ''},
+                    FechaActualizacion = SYSDATETIME()
+            WHEN NOT MATCHED THEN
+                INSERT (Clave, IdPiso, IdCliente, PuertoFortinet, Descripcion${columnas.insertar}${estado.site ? ', IdSite' : ''}${columnaPisoPlano})
+                VALUES (@Clave, @IdPiso, @IdCliente, @PuertoFortinet, @Descripcion${columnas.valores}${estado.site ? ', @IdSite' : ''}${valorPisoPlano});
+        `);
+        return { ok: true, mensaje: 'Datos del adaptador guardados (el colector no los sobrescribe).' };
+    } catch (error) {
+        if (error.number === 208) {
+            return {
+                ok: false,
+                tablaFaltante: true,
+                mensaje: 'Falta ejecutar scripts/control-general-ip.sql para guardar los datos del adaptador.'
+            };
+        }
+        if (error.number === 547) return { ok: false, mensaje: 'El piso, el cliente o el catálogo ya no existen.' };
+        throw error;
+    }
+}
+
+/** Retira la gestión de un adaptador: vuelve a mostrar lo del colector. */
+async function quitarGestionActivo(clave) {
+    const claveNormalizada = normalizarClaveGestion(clave);
+    if (!claveNormalizada) {
+        return { ok: false, mensaje: 'No se pudo identificar el adaptador de red de esta fila.' };
+    }
+    const pool = await getPool();
+    if (!(await hayTablaGestion(pool))) {
+        return { ok: true, mensaje: 'No hay datos gestionados que restablecer.' };
+    }
+    await pool.request()
+        .input('Clave', sql.VarChar(60), claveNormalizada)
+        .query('DELETE FROM dbo.InventarioIPGestion WHERE Clave = @Clave');
+    return { ok: true, mensaje: 'Se restablecieron los datos que reporta el colector.' };
+}
+
+/* =========================================================
+   UNA IP = UN RENGLÓN
+   ---------------------------------------------------------
+   La misma dirección puede llegar por dos fuentes a la vez: el
+   colector la reporta en dbo.ActivoFijoEquiposRed (Origen 'Activo',
+   con MAC, hostname y adaptador) y además alguien la capturó como
+   equipo de un cliente (dbo.Equipos, Origen 'Cliente') o a mano en el
+   control general (dbo.InventarioGeneralIP, Origen 'General').
+   Mostrar los dos renglones duplicaba la IP y obligaba a editar en dos
+   lugares para un solo aparato.
+
+   Regla: la fila del colector manda —es la observación real del
+   equipo— y absorbe lo que el renglón manual sí sabe: piso, cliente,
+   puerto del Fortinet, descripción legible y catálogos. El renglón
+   manual desaparece de la LISTA, no de la base: sigue existiendo en
+   Equipos / InventarioGeneralIP, donde se administra como siempre.
+
+   Luego aplicarGestion() escribe ENCIMA lo capturado en esta pantalla
+   (dbo.InventarioIPGestion), así que lo gestionado siempre gana.
+   ========================================================= */
+
+/* Campos que el colector no puede saber y que el renglón manual de la
+   misma IP sí puede aportar. */
+const CAMPOS_HEREDADOS = Object.freeze([
+    'Piso', 'IdPiso', 'Site', 'IdSite', 'ClienteCodigo', 'ClienteNombre',
+    'PuertoFortinet'
+]);
+
+/* Textos que el renglón manual SÍ puede reemplazar aunque el colector ya
+   traiga uno: su valor es un dato técnico (nombre del adaptador / del
+   medio), no una clasificación. El original se guarda en `<Campo>Colector`
+   para mostrarlo como referencia y para poder volver a él. */
+const CAMPOS_REEMPLAZABLES = Object.freeze([
+    { campo: 'Dispositivo', id: 'IdDispositivo' },
+    { campo: 'TipoEquipo', id: 'IdTipoEquipo' }
+]);
+
+function sinDato(valor) {
+    return valor === null || valor === undefined || String(valor).trim() === '';
+}
+
+/* El renglón del cliente manda sobre el del control general: trae piso
+   y cliente, que son justo los dos datos que cuestan más trabajo. */
+function prioridadComplemento(registro) {
+    return String(registro?.Origen || '') === 'Cliente' ? 0 : 1;
+}
+
+/* Mismo criterio que la vista: volátil = DHCP / WiFi del controlador. */
+function esConfiable(registro) {
+    return !(registro?.EsConfiable === 0 || registro?.EsConfiable === false);
+}
+
+/* Pasa a `base` sólo lo que le falta; nunca pisa un dato del colector. */
+function heredarDeComplemento(base, complemento) {
+    for (const campo of CAMPOS_HEREDADOS) {
+        if (sinDato(base[campo]) && !sinDato(complemento[campo])) {
+            base[campo] = complemento[campo];
+        }
+    }
+    /* La descripción del colector es el nombre técnico del adaptador
+       ("Intel(R) Ethernet Connection (2) I219-LM"): si el renglón manual
+       tiene una legible, se muestra ésa y se conserva la técnica para
+       que el diálogo de edición pueda proponerla. */
+    const descripcion = textoGestionado(complemento.Descripcion);
+    if (descripcion) {
+        if (sinDato(base.DescripcionColector)) {
+            base.DescripcionColector = base.Descripcion || null;
+        }
+        base.Descripcion = descripcion;
+    }
+    /* Dispositivo y Tipo: el renglón manual trae la clasificación que alguien
+       eligió del catálogo; el colector sólo el nombre técnico del adaptador
+       ("Ethernet 2"). Misma regla que la descripción: manda lo manual y el
+       texto del colector queda en <Campo>Colector como referencia. */
+    for (const { campo, id } of CAMPOS_REEMPLAZABLES) {
+        const valor = textoGestionado(complemento[campo]);
+        if (!valor) continue;
+        if (sinDato(base[`${campo}Colector`])) {
+            base[`${campo}Colector`] = base[campo] || null;
+        }
+        base[campo] = valor;
+        if (!sinDato(complemento[id])) base[id] = complemento[id];
+    }
+    base.Fusionado = true;
+    base.OrigenFusionado = base.OrigenFusionado || String(complemento.Origen || '') || null;
+    base.IdEquipoFusionado = base.IdEquipoFusionado ?? complemento.IdEquipo ?? null;
+    base.IdInventarioFusionado = base.IdInventarioFusionado ?? complemento.IdInventarioIP ?? null;
+    /* Procedencia: si el renglón manual declara la dirección como fija y el
+       colector la marca volátil, manda la más confiable. Sin esto un equipo
+       podría DESAPARECER de la tabla al fusionarse (el filtro de volátiles
+       lo oculta), justo lo contrario de lo que se busca. */
+    if (esConfiable(complemento) && !esConfiable(base)) {
+        base.OrigenIP = complemento.OrigenIP;
+        base.EsConfiable = complemento.EsConfiable;
+        base.TipoIP = complemento.TipoIP || base.TipoIP;
+    }
+}
+
+/**
+ * Colapsa los renglones que comparten IP: la fila del colector se queda
+ * (con los datos heredados) y los renglones manuales se retiran.
+ * Si una misma IP la reportan DOS adaptadores distintos del colector no
+ * se fusiona nada: ahí hay un conflicto real que debe verse.
+ * @param {Array<object>} registros filas de listar().
+ * @returns {Array<object>} la misma lista, sin los renglones absorbidos.
+ */
+function fusionarPorIP(registros = []) {
+    const grupos = new Map();
+    for (const registro of registros) {
+        const ip = String(registro?.IP || '').trim();
+        if (!ip) continue;
+        const clave = validarIPv4(ip) ? normalizarIPv4(ip) : ip;
+        if (!grupos.has(clave)) grupos.set(clave, []);
+        grupos.get(clave).push(registro);
+    }
+
+    const absorbidos = new Set();
+    for (const filasIP of grupos.values()) {
+        if (filasIP.length < 2) continue;
+        const colector = filasIP.filter(fila => String(fila?.Origen || '') === 'Activo');
+        if (colector.length !== 1) continue;
+        const base = colector[0];
+        const complementos = filasIP
+            .filter(fila => fila !== base)
+            .sort((a, b) => prioridadComplemento(a) - prioridadComplemento(b));
+        for (const complemento of complementos) {
+            heredarDeComplemento(base, complemento);
+            absorbidos.add(complemento);
+        }
+    }
+
+    return absorbidos.size ? registros.filter(registro => !absorbidos.has(registro)) : registros;
+}
+
+/**
+ * Lectura desde la TABLA MAESTRA ÚNICA (scripts/inventario-ip-maestro.sql).
+ * Una fila por dirección: los tres orígenes (control general, equipos de
+ * cliente y colector) ya vienen fusionados en la base por los triggers, así
+ * que aquí no hay nada que fusionar ni que duplicar. Se devuelve la misma
+ * forma de fila que espera la pantalla y se marcan los ids de gestión para
+ * que el diálogo "Editar datos" pueda preseleccionarlos.
+ * @returns {Promise<?Array<object>>} null si la vista maestra no se puede leer.
+ */
+async function listarDesdeMaestro(pool) {
+    try {
+        const result = await pool.request().query(`
+            SELECT Origen, Origenes, IdIPMaestro, IdInventarioIP, IdEquipo, IdActivoFijoEQ,
+                   IP, Hostname, MAC, ClaveGestion, Descripcion, DescripcionTecnica,
+                   PuertoFortinet, Estado, Dispositivo, TipoEquipo, Piso, Site, TipoIP,
+                   ClienteCodigo, ClienteNombre, OrigenIP, EsConfiable, FechaActualizacion,
+                   IdEstado, IdDispositivo, IdTipoEquipo, IdPiso, IdSite, IdTipoIP, IdCliente,
+                   IdPisoPlano, EnGeneral, EnCliente, EnColector, GestionManual, FuenteGestion,
+                   NombreAdaptador, TipoMedio, DHCP
+            FROM dbo.vw_InventarioIPMaestro
+            ORDER BY IP, Hostname
+        `);
+        return (result.recordset || []).map(fila => {
+            const registro = { ...fila };
+            /* Clave estable para "Editar datos": la calcula la base y coincide
+               exactamente con claveGestion() (MAC si hay, si no la IP). */
+            registro.ClaveGestion = fila.ClaveGestion || claveGestion(fila);
+            /* Ids de ESTA gestión (los del catálogo de control general), que
+               son los únicos que el diálogo puede preseleccionar. */
+            registro.IdDispositivoGestion = fila.IdDispositivo ?? null;
+            registro.IdTipoEquipoGestion = fila.IdTipoEquipo ?? null;
+            registro.IdPisoGestion = fila.IdPiso ?? null;
+            /* Piso del plano: puede venir heredado del equipo de cliente o
+               haberlo elegido una persona en "Editar datos". En ambos casos es
+               el id de dbo.Pisos, que es lo que el diálogo debe preseleccionar
+               en su segundo desplegable. */
+            registro.IdPisoPlanoGestion = fila.IdPisoPlano ?? null;
+            registro.IdSiteGestion = fila.IdSite ?? null;
+            registro.IdClienteGestion = fila.IdCliente ?? null;
+            /* Lo que reporta el colector, para mostrarlo como referencia
+               debajo de Dispositivo/Tipo cuando la persona ya los clasificó. */
+            registro.DispositivoColector = fila.NombreAdaptador || null;
+            registro.TipoEquipoColector = fila.TipoMedio || null;
+            return registro;
+        });
+    } catch (error) {
+        /* Vista maestra de otra versión: se sigue con la vista/consulta de
+           siempre en lugar de dejar la pantalla en blanco. */
+        console.warn('[InventarioIP] vw_InventarioIPMaestro no se pudo leer:', error.message);
+        return null;
+    }
+}
+
+/**
+ * ¿Quién es el dueño actual de una dirección? Se consulta la TABLA MAESTRA,
+ * que es la única fuente que conoce los TRES orígenes a la vez (control
+ * general, equipos de cliente y red del colector). Es la regla de propiedad
+ * de IP: una dirección que ya vive en otro origen no se vuelve a dar de alta.
+ *
+ * Devuelve `null` cuando no se puede opinar (IP inválida o base sin la vista
+ * maestra): en ese caso el que llama aplica su respaldo de siempre.
+ * Devuelve un objeto —con `ocupada:false`— cuando la dirección está libre.
+ *
+ * @param {string} ip
+ * @param {{idInventario?:number, idEquipo?:number}} excluir Registros que se
+ *   están editando: su propio renglón no cuenta como conflicto.
+ * @returns {Promise<?{ocupada:boolean, enGeneral:boolean, enCliente:boolean,
+ *   enColector:boolean, Hostname:?string, ClienteCodigo:?string,
+ *   PisoNombre:?string, mensaje:string}>}
+ */
+function evaluarDuenio(fila, direccion, excluir = {}) {
+    const idInventario = validarIdCatalogo(excluir.idInventario);
+    const idEquipo = validarIdCatalogo(excluir.idEquipo);
+    /* Un alta del control general "vacía" (sólo IP + Estado) no identifica
+       ningún aparato: no representa una dirección en uso y no debe impedir
+       capturarla, igual que hace el buscador de IP libres. */
+    const identifica = Boolean(
+        String(fila.Hostname || '').trim() ||
+        String(fila.MAC || '').trim() ||
+        String(fila.Descripcion || '').trim()
+    );
+    /* Un renglón del control general dado de baja (Estado "Inactivo") ya no
+       usa su dirección: la lupa la ofrece como libre y no debe bloquear el
+       alta. Es la misma regla que ya aplicaba el módulo Equipos. */
+    const generalEnUso = Boolean(fila.EnGeneral) && !/^inactivo$/i.test(String(fila.Estado || '').trim());
+    const enGeneral = generalEnUso && fila.IdInventarioIP !== idInventario && identifica;
+    const enCliente = Boolean(fila.EnCliente) && fila.IdEquipo !== idEquipo;
+    const enColector = Boolean(fila.EnColector);
+
+    const cliente = String(fila.ClienteCodigo || fila.ClienteNombre || '').trim() || null;
+    const hostname = String(fila.Hostname || '').trim() || null;
+    const piso = String(fila.Piso || '').trim() || null;
+
+    let mensaje = '';
+    if (enCliente) {
+        mensaje = cliente
+            ? `La IP ${direccion} ya está asignada al equipo ${hostname || 'sin hostname'} del cliente ${cliente}.`
+            : `La IP ${direccion} ya está asignada a un equipo de cliente.`;
+    } else if (enGeneral) {
+        mensaje = `La IP ${direccion} ya está registrada en el control general`
+            + `${hostname ? ` (${hostname})` : ''}. Edita ese registro en lugar de crear otro.`;
+    }
+
+    return {
+        ocupada: Boolean(mensaje),
+        enGeneral, enCliente, enColector,
+        Hostname: hostname,
+        ClienteCodigo: cliente,
+        PisoNombre: piso,
+        mensaje
+    };
+}
+
+async function duenioDeIP(ip, excluir = {}) {
+    if (!validarIPv4(ip)) return null;
+    const pool = await getPool();
+    const estado = await estadoProcedencia(pool);
+    if (!estado.maestra) return null;
+
+    const direccion = normalizarIPv4(ip);
+    const result = await pool.request()
+        .input('IP', sql.VarChar(45), direccion)
+        .query(`
+            SELECT TOP 1 m.IP, m.Origenes, m.EnGeneral, m.EnCliente, m.EnColector,
+                   m.Hostname, m.MAC, m.Descripcion, m.Piso, m.Estado,
+                   m.IdInventarioIP, m.IdEquipo, m.ClienteCodigo, m.ClienteNombre
+            FROM dbo.vw_InventarioIPMaestro m
+            WHERE m.IP = @IP
+        `);
+    const fila = result.recordset[0];
+    if (!fila) {
+        /* La maestra tiene una fila por IP de los tres orígenes: si no está,
+           la dirección está libre en todo el sistema. */
+        return {
+            ocupada: false, enGeneral: false, enCliente: false, enColector: false,
+            Hostname: null, ClienteCodigo: null, PisoNombre: null, mensaje: ''
+        };
+    }
+    return evaluarDuenio(fila, direccion, excluir);
+}
+
+/**
+ * Igual que duenioDeIP() pero para un lote completo (importación masiva):
+ * una sola consulta a la maestra en vez de una por fila. Devuelve un Map
+ * IP normalizada -> fila, o null cuando la base no tiene la vista maestra
+ * (en ese caso el importador se queda con su pre-validación).
+ */
+async function mapaDueniosDeIP() {
+    const pool = await getPool();
+    const estado = await estadoProcedencia(pool);
+    if (!estado.maestra) return null;
+    const result = await pool.request().query(`
+        SELECT m.IP, m.Origenes, m.EnGeneral, m.EnCliente, m.EnColector,
+               m.Hostname, m.MAC, m.Descripcion, m.Piso, m.Estado,
+               m.IdInventarioIP, m.IdEquipo, m.ClienteCodigo, m.ClienteNombre
+        FROM dbo.vw_InventarioIPMaestro m
+        WHERE NULLIF(LTRIM(RTRIM(m.IP)), '') IS NOT NULL
+    `);
+    const mapa = new Map();
+    for (const fila of result.recordset || []) {
+        const cruda = String(fila.IP || '').trim();
+        if (!cruda) continue;
+        /* Las fuentes no guardan la IP con el mismo formato (192.168.005.086),
+           así que la llave se normaliza igual que la del archivo. */
+        mapa.set(validarIPv4(cruda) ? normalizarIPv4(cruda) : cruda, fila);
+    }
+    return mapa;
+}
+
 async function listar() {
     const pool = await getPool();
     const estado = await estadoProcedencia(pool);
+
+    /* 1) Tabla maestra única: una fila por IP, ya fusionada en la base.
+       La gestión (piso, cliente, switch, puerto, dispositivo, tipo y
+       descripción) viaja dentro de la propia fila, así que no hace falta
+       aplicarla después. */
+    if (estado.maestra) {
+        const filas = await listarDesdeMaestro(pool);
+        if (filas) return filas;
+    }
+
+    /* Datos gestionados a mano de las filas del colector (null si la tabla
+       todavía no existe: esas filas quedan como antes, de sólo lectura). */
+    const gestion = await mapaGestion(pool);
+
 
     /* Con la vista aplicada (scripts/activo-vivo-vistas.sql) la unión de
        control general + equipos de clientes vive en la base: una sola
@@ -366,7 +1085,7 @@ async function listar() {
                 FROM dbo.vw_InventarioIPUnificado
                 ORDER BY IP, Hostname, Origen
             `);
-            return result.recordset;
+            return aplicarGestion(fusionarPorIP(result.recordset), gestion);
         } catch (error) {
             /* Vista desalineada (base de otra versión): se sigue con la
                consulta directa en lugar de dejar la pantalla en blanco. */
@@ -521,7 +1240,7 @@ async function listar() {
         ) Inventario
         ORDER BY Inventario.IP, Inventario.Hostname, Inventario.Origen
     `);
-    return result.recordset;
+    return aplicarGestion(fusionarPorIP(result.recordset), gestion);
 }
 
 async function actualizarDatosEquipoCliente(idEquipo, datos) {
@@ -670,25 +1389,43 @@ async function guardar(datos, id = null) {
     const estructura = await estadoProcedencia(pool);
     const procedenciaIP = resolverProcedencia(datos, tipoIP);
 
+    /* Propiedad de la IP: se pregunta a la TABLA MAESTRA, que es la única
+       fuente que ve los tres orígenes. Antes sólo se miraban los equipos de
+       cliente, así que una dirección que ya vivía en el control general (o en
+       la red del colector) se colaba hasta que la rechazaba el índice único. */
+    let duenio = null;
     if (ip) {
-        const equipoCliente = await pool.request()
-            .input('IP', sql.VarChar(45), ip)
-            .query(`
-                SELECT TOP 1 E.Hostname, C.Codigo AS ClienteCodigo
-                FROM dbo.Equipos E
-                INNER JOIN dbo.Clientes C ON C.IdCliente = E.IdCliente
-                WHERE E.TipoIP = 'Estatica'
-                  AND TRY_CONVERT(int, PARSENAME(E.IP, 4)) = TRY_CONVERT(int, PARSENAME(@IP, 4))
-                  AND TRY_CONVERT(int, PARSENAME(E.IP, 3)) = TRY_CONVERT(int, PARSENAME(@IP, 3))
-                  AND TRY_CONVERT(int, PARSENAME(E.IP, 2)) = TRY_CONVERT(int, PARSENAME(@IP, 2))
-                  AND TRY_CONVERT(int, PARSENAME(E.IP, 1)) = TRY_CONVERT(int, PARSENAME(@IP, 1))
-            `);
-        if (equipoCliente.recordset.length) {
+        duenio = await duenioDeIP(ip, { idInventario });
+        if (duenio?.ocupada) {
             return {
                 ok: false,
                 tipo: 'ip-duplicada',
-                mensaje: `La IP ya está asignada al equipo ${equipoCliente.recordset[0].Hostname} del cliente ${equipoCliente.recordset[0].ClienteCodigo}.`
+                mensaje: duenio.mensaje,
+                detalle: duenio
             };
+        }
+        /* Sin la vista maestra (base de otra versión): respaldo de siempre,
+           consultando el módulo de Equipos directamente. */
+        if (!duenio) {
+            const equipoCliente = await pool.request()
+                .input('IP', sql.VarChar(45), ip)
+                .query(`
+                    SELECT TOP 1 E.Hostname, C.Codigo AS ClienteCodigo
+                    FROM dbo.Equipos E
+                    INNER JOIN dbo.Clientes C ON C.IdCliente = E.IdCliente
+                    WHERE E.TipoIP = 'Estatica'
+                      AND TRY_CONVERT(int, PARSENAME(E.IP, 4)) = TRY_CONVERT(int, PARSENAME(@IP, 4))
+                      AND TRY_CONVERT(int, PARSENAME(E.IP, 3)) = TRY_CONVERT(int, PARSENAME(@IP, 3))
+                      AND TRY_CONVERT(int, PARSENAME(E.IP, 2)) = TRY_CONVERT(int, PARSENAME(@IP, 2))
+                      AND TRY_CONVERT(int, PARSENAME(E.IP, 1)) = TRY_CONVERT(int, PARSENAME(@IP, 1))
+                `);
+            if (equipoCliente.recordset.length) {
+                return {
+                    ok: false,
+                    tipo: 'ip-duplicada',
+                    mensaje: `La IP ya está asignada al equipo ${equipoCliente.recordset[0].Hostname} del cliente ${equipoCliente.recordset[0].ClienteCodigo}.`
+                };
+            }
         }
     }
 
@@ -708,6 +1445,13 @@ async function guardar(datos, id = null) {
             }
         }
     }
+
+    /* La IP que reporta el colector se puede capturar aquí sin miedo: la
+       tabla maestra las junta en un solo renglón. Se avisa para que nadie
+       crea que acaba de duplicar el inventario. */
+    const avisoColector = duenio?.enColector
+        ? ' La red de esa dirección también la reporta el colector: se verá como un solo renglón.'
+        : '';
 
     const request = pool.request()
         .input('IP', sql.VarChar(45), ip)
@@ -741,7 +1485,7 @@ async function guardar(datos, id = null) {
                 WHERE IdInventarioIP = @IdInventarioIP
             `);
             return result.rowsAffected[0]
-                ? { ok: true, mensaje: 'Registro de IP actualizado.' }
+                ? { ok: true, mensaje: `Registro de IP actualizado.${avisoColector}` }
                 : { ok: false, mensaje: 'El registro de IP ya no existe.' };
         }
 
@@ -753,7 +1497,7 @@ async function guardar(datos, id = null) {
                 (@IP, @Hostname, @MAC, @Descripcion, @PuertoFortinet, @IdEstado,
                  @IdDispositivo, @IdTipoEquipo, @IdPiso, @IdSite, @IdTipoIP${estructura.columnas ? ', @OrigenIP, @EsConfiable' : ''})
         `);
-        return { ok: true, mensaje: 'Registro general de IP creado.' };
+        return { ok: true, mensaje: `Registro general de IP creado.${avisoColector}` };
     } catch (error) {
         if (error.number === 2627 || error.number === 2601) {
             return { ok: false, tipo: 'ip-duplicada', mensaje: 'La IP ya está registrada en el control general.' };
@@ -852,6 +1596,12 @@ async function insertarImportados(filas = []) {
        TipoIP (DHCP / WiFi = volátil) salvo que el importador lo especifique. */
     const estructura = await estadoProcedencia(pool);
 
+    /* Propiedad de la IP: la MISMA regla del alta manual (duenioDeIP), pero en
+       una sola consulta porque aquí se inserta un lote. Mientras la base no
+       tenga la vista maestra el mapa es null y se respeta la pre-validación
+       del importador (control general + equipos estáticos). */
+    const duenios = await mapaDueniosDeIP();
+
     for (const fila of filas) {
         const referencia = String(fila?.hostname || fila?.ip || 'fila').trim();
         const ip = String(fila?.ip || '').trim() || null;
@@ -883,6 +1633,18 @@ async function insertarImportados(filas = []) {
             continue;
         }
 
+        /* Propiedad de la IP: no se da de alta una dirección que ya vive en
+           otro origen (control general, equipo de cliente o red del colector).
+           Es la misma regla del alta manual, aplicada fila por fila. */
+        if (ip && duenios) {
+            const direccion = normalizarIPv4(ip);
+            const filaMaestra = duenios.get(direccion);
+            const duenio = filaMaestra ? evaluarDuenio(filaMaestra, direccion) : null;
+            if (duenio && duenio.ocupada) {
+                errores.push(`${referencia}: ${duenio.mensaje}`);
+                continue;
+            }
+        }
         try {
             const procedenciaIP = resolverProcedencia(fila, nombreTipoIP.get(ids.tipoIP));
             const request = pool.request()
@@ -944,6 +1706,14 @@ module.exports = {
     guardarPreferencia,
     listar,
     actualizarDatosEquipoCliente,
+    /* Complemento editable de las filas que reporta el colector
+       (dbo.InventarioIPGestion): la IP no se duplica. */
+    guardarGestionActivo,
+    quitarGestionActivo,
+    claveGestion,
+    /* Propiedad de la IP: la consulta el alta del control general y la del
+       módulo Equipos, para que la regla sea una sola. */
+    duenioDeIP,
     guardar,
     eliminar,
     listarIPsOcupadas,

@@ -64,8 +64,6 @@ const btnLimpiarBusq   = document.getElementById('btn-limpiar-busqueda');
 const btnLimpiarVacio  = document.getElementById('btn-limpiar-busqueda-vacio');
 const modal            = document.getElementById('modal-activo');
 const modalTitulo      = document.getElementById('modal-titulo');
-<<<<<<< Updated upstream
-=======
 
 /* Segmentación del inventario por cartera y controles nuevos del formulario. */
 const tabsCartera        = document.getElementById('tabs-cartera');
@@ -78,7 +76,6 @@ const notaContextoAuto   = document.getElementById('nota-contexto-auto');
 
 /* Contenedores de las dos vistas que viven en esta misma página:
    el inventario y los catálogos (ya no son módulos separados). */
->>>>>>> Stashed changes
 const seccionInventario  = document.getElementById('vista-inventario');
 const seccionCatalogos   = document.getElementById('vista-catalogos');
 const buscadorInventario = document.getElementById('buscador-inventario');
@@ -520,7 +517,6 @@ function celdaPiezas(a) {
         + `${total} ${total === 1 ? 'pieza' : 'piezas'}</span>`;
 }
 
-<<<<<<< Updated upstream
 
 /* --- Piezas conectadas: lo que va al Excel -------------------------
    El activo con piezas sigue contando 1 en el inventario (un monitor, un
@@ -658,7 +654,8 @@ function filasConPiezas(datos) {
         }
     }
     return filas;
-=======
+}
+
 /* Hostname y dominio los deja el collector: van como insignia para que se
    lean de un golpe. Sólo el hostname es copiable (se dicta por teléfono y
    se pega en otros sistemas); el dominio es informativo. */
@@ -673,7 +670,6 @@ function celdaRed(valor, opciones) {
     }
     return `<button type="button" class="${clase}" data-copiar-texto="${escaparHTML(texto)}"`
         + ` data-tooltip="${escaparHTML(tooltip || 'Copiar')}">${escaparHTML(texto)}</button>`;
->>>>>>> Stashed changes
 }
 
 
@@ -882,136 +878,8 @@ btnExportar.addEventListener('click', async () => {
         return;
     }
 
-<<<<<<< Updated upstream
-    const opcionesTipo = tipos.map(t => `<option value="${t.IdTipo}">${t.Nombre}</option>`).join('');
-
-    const { value: idTipo, isConfirmed } = await Swal.fire({
-        title: 'Exportar a Excel',
-        html: `
-            <p style="font-size:0.9rem; color:#575347; margin-bottom:15px;">
-                Selecciona el tipo de activo. El Excel se generará con las columnas exactas que necesita ese tipo.
-            </p>
-            <select id="swal-tipo-export" class="export-tipo-select">
-                <option value="">Todos los tipos (Reporte General)</option>
-                ${opcionesTipo}
-            </select>
-        `,
-        showCloseButton: true,
-        confirmButtonText: 'Generar Excel',
-        buttonsStyling: false,
-        customClass: {
-            popup: 'cl-confirm',
-            confirmButton: 'swal2-confirm swal2-styled'
-        },
-        preConfirm: () => {
-            return document.getElementById('swal-tipo-export').value;
-        }
-    });
-
-    if (!isConfirmed) return;
-
-    /* Reporte aplanado: cada activo en su fila y, debajo, una fila por cada
-       pieza conectada (monitor, disco, teclado...). */
-    const filasInventario = filasConPiezas(activos);
-
-    let filasExport = [];
-    let columnas = [];
-    let tituloReporte = 'Inventario_General';
-
-    if (idTipo) {
-        // Filtrar por tipo
-        const tipoSel = tipos.find(t => t.IdTipo == idTipo);
-        tituloReporte = `Inventario_${tipoSel.Nombre.replace(/\s+/g, '_')}`;
-
-        /* El filtro es por el TIPO DE CADA FILA, no por el tipo del activo:
-           un monitor (como un disco, teclado o ratón) no es un activo, cuelga
-           de un equipo como pieza conectada. Filtrar sólo los activos dejaba
-           el reporte de monitores casi vacío aunque los equipos tuvieran
-           monitores registrados. */
-        filasExport = filasInventario.filter(f => tipoCoincide(f.Tipo, tipoSel.Nombre));
-
-        if (filasExport.length === 0) {
-            toastError('Sin datos', `No hay activos ni piezas conectadas de tipo "${tipoSel.Nombre}".`);
-            return;
-        }
-
-      
-        columnas = [
-            { header: 'No. Serie', key: 'NoSerie', width: 20 },
-            { header: 'Marca', key: 'Marca', width: 15 },
-            { header: 'Modelo', key: 'Modelo', width: 20 },
-            { header: 'Tipo', key: 'Tipo', width: 15 },
-            { header: 'Estado', key: 'Estado', width: 15 },
-            { header: 'Estatus', key: 'Estatus', width: 15 }
-        ];
-
-     
-        if (tipoSel.RequiereIMEI) {
-            columnas.push({ header: 'IMEI 1', key: 'IMEI1', width: 20 });
-            columnas.push({ header: 'IMEI 2', key: 'IMEI2', width: 20 });
-        }
-        if (tipoSel.RequiereTelefono) columnas.push({ header: 'Teléfono', key: 'NoTelefono', width: 15 });
-        if (tipoSel.RequiereSitio) columnas.push({ header: 'Sitio', key: 'Sitio', width: 15 });
-        if (tipoSel.RequiereSubtipo) columnas.push({ header: 'Subtipo', key: 'Subtipo', width: 15 });
-        if (tipoSel.RequiereClasificacion) columnas.push({ header: 'Clasificación', key: 'Clasificacion', width: 15 });
-        if (tipoSel.RequiereTamanio) columnas.push({ header: 'Tamaño', key: 'Tamanio', width: 15 });
-        if (tipoSel.RequiereCapacidad) columnas.push({ header: 'Capacidad', key: 'Capacidad', width: 15 });
-        if (tipoSel.RequiereVoltaje) columnas.push({ header: 'Voltaje', key: 'Voltaje', width: 15 });
-        if (tipoSel.RequiereUsuarioAsignado) columnas.push({ header: 'Usuario Asignado', key: 'UsuarioAsignado', width: 25 });
-        if (tipoSel.RequierePrecio) columnas.push({ header: 'Precio', key: 'PrecioActivo', width: 15 });
-        if (tipoSel.RequiereEspecificaciones) {
-            columnas.push({ header: 'Procesador', key: 'Procesador', width: 20 });
-            columnas.push({ header: 'RAM', key: 'MemoriaRAM', width: 15 });
-            columnas.push({ header: 'Almacenamiento', key: 'Almacenamiento', width: 20 });
-            columnas.push({ header: 'S.O.', key: 'SistemaOperativo', width: 20 });
-        }
-        if (tipoSel.RequiereAccesorios) columnas.push({ header: 'Accesorios', key: 'Accesorios', width: 25 });
-
-        columnas.push({ header: 'Cartera', key: 'Cartera', width: 15 });
-
-    } else {
-      
-        filasExport = filasInventario;
-        columnas = [
-            { header: 'No. Serie', key: 'NoSerie', width: 20 },
-            { header: 'Marca', key: 'Marca', width: 15 },
-            { header: 'Modelo', key: 'Modelo', width: 20 },
-            { header: 'Tipo', key: 'Tipo', width: 15 },
-            { header: 'Estado', key: 'Estado', width: 15 },
-            { header: 'Estatus', key: 'Estatus', width: 15 },
-            { header: 'IMEI 1', key: 'IMEI1', width: 20 },
-            { header: 'Teléfono', key: 'NoTelefono', width: 15 },
-            { header: 'Cartera', key: 'Cartera', width: 15 },
-            { header: 'Sitio', key: 'Sitio', width: 15 },
-            { header: 'Usuario Asignado', key: 'UsuarioAsignado', width: 25 }
-        ];
-    }
-
-   
-    /* Las dos únicas columnas de "piezas": de qué activo cuelga cada fila.
-       No se abren columnas por tipo de pieza; cada pieza va en su renglón
-       con su serie, marca y modelo en las columnas normales. */
-    columnas.push(COL_PADRE_SERIE, COL_PADRE_HOST);
-
-    /* Recuento del reporte: los renglones con el padre lleno son piezas
-       conectadas; el resto son activos. Así el aviso sirve tanto para el
-       reporte general como para uno filtrado por tipo (que puede traer
-       sólo piezas, p. ej. el de monitores). */
-    const totalPiezas = filasExport.filter(f => f[COL_PADRE_SERIE.key]).length;
-    const totalActivos = filasExport.length - totalPiezas;
-    const resumenFilas = totalPiezas
-        ? (totalActivos
-            ? `<strong>${totalActivos}</strong> activo(s) más <strong>${totalPiezas}</strong> pieza(s) conectada(s)`
-            : `<strong>${totalPiezas}</strong> pieza(s) conectada(s)`)
-        : `<strong>${totalActivos}</strong> activo(s)`;
-
-    const confirm = await Swal.fire({
-        icon: 'question',
-        title: '¿Generar Excel?',
-        html: `Se exportarán ${resumenFilas} con <strong>${columnas.length}</strong> columnas.<br>`
-            + `<small>Cada pieza va en su propia fila, con el No. Serie y el hostname del activo al que pertenece.</small>`,
-=======
-    const carteras = new Set(activos.map(a => String(a.Cartera || '').trim() || 'Sin cartera'));
+    /* Ojo: no se llama `carteras` para no tapar el catálogo del módulo. */
+    const carterasDelLibro = new Set(activos.map(a => String(a.Cartera || '').trim() || 'Sin cartera'));
     const conPiezas = activos.filter(a => Number(a.Piezas) > 0).length;
 
     const confirm = await Swal.fire({
@@ -1020,12 +888,11 @@ btnExportar.addEventListener('click', async () => {
         html: `
             <p style="font-size:0.9rem; color:#575347; margin-bottom:12px;">
                 Un solo archivo con <strong>una hoja por cartera</strong>
-                (<strong>${carteras.size}</strong>) más la hoja de resumen.
+                (<strong>${carterasDelLibro.size}</strong>) más la hoja de resumen.
                 Los <strong>${conPiezas}</strong> equipos con piezas conectadas
                 incluyen un renglón extra por pieza, referenciando su hostname.
             </p>
         `,
->>>>>>> Stashed changes
         showCloseButton: true,
         confirmButtonText: 'Generar Excel',
         buttonsStyling: false,
@@ -1045,17 +912,7 @@ btnExportar.addEventListener('click', async () => {
     });
 
     try {
-<<<<<<< Updated upstream
-        const payload = {
-            titulo: tituloReporte,
-            columnas: columnas,
-            datos: filasExport
-        };
-
-        const res = await window.api.activoFijo.activos.exportarExcel(payload);
-=======
         const res = await window.api.activoFijo.activos.exportarExcel();
->>>>>>> Stashed changes
         Swal.close();
 
         if (res && res.ok) {
@@ -1990,7 +1847,12 @@ function planCascada() {
         { clave: 'procesadores',       select: inpProcesador,     registros: catalogosEspecificaciones.procesadores, porId: false },
         { clave: 'memoriasRam',        select: inpRAM,            registros: catalogosEspecificaciones.memoriasRam, porId: false },
         { clave: 'almacenamientos',    select: inpAlmacenamiento, registros: catalogosEspecificaciones.almacenamientos, porId: false },
-        { clave: 'sistemasOperativos', select: inpSO,             registros: catalogosEspecificaciones.sistemasOperativos, porId: false },
+        /* El SO se identifica por Id, igual que poblarSistemasOperativos():
+           su etiqueta lleva el build (Nombre · BuildSO) y dos filas pueden
+           compartir nombre, así que no se puede filtrar ni repoblar por
+           texto sin perder a qué variante apunta el activo. */
+        { clave: 'sistemasOperativos', select: inpSO,             registros: catalogosEspecificaciones.sistemasOperativos, porId: true, pk: 'IdSistemaOperativo',
+          etiqueta: r => `${r.Nombre ?? ''}${r.BuildSO ? ' · ' + r.BuildSO : ''}` },
         { clave: 'voltajes',           select: selVoltaje,        registros: voltajes, porId: true,  pk: 'IdVoltaje' }
     ];
 }
@@ -2015,8 +1877,10 @@ function aplicarCascada(res) {
         if (!select || registros.length === 0) return;
 
         const filas = (res && Array.isArray(res[cfg.clave])) ? res[cfg.clave] : [];
+        /* Las filas de la cascada traen { id, Nombre } (+ BuildSO en el SO). */
+        const textoFila = f => f.Nombre ?? f.nombre;
         const permitidos = filas.length
-            ? new Set(filas.map(f => String(cfg.porId ? f.id : f.nombre).toUpperCase()))
+            ? new Set(filas.map(f => String(cfg.porId ? f.id : textoFila(f)).toUpperCase()))
             : null;
 
         const elegido = select.value;
@@ -2034,7 +1898,8 @@ function aplicarCascada(res) {
         select.innerHTML = `<option value="">${escaparHTML(vacio)}</option>` +
             visibles.map(r => {
                 const valor = cfg.porId ? r[cfg.pk] : r.Nombre;
-                return `<option value="${escaparHTML(valor)}">${escaparHTML(r.Nombre)}</option>`;
+                const texto = cfg.etiqueta ? cfg.etiqueta(r) : r.Nombre;
+                return `<option value="${escaparHTML(valor)}">${escaparHTML(texto)}</option>`;
             }).join('');
 
         restaurarSeleccion(select, elegido, elegidoTexto);
@@ -2113,9 +1978,12 @@ async function cargarCascadaTipo() {
     }
 }
 
-selTipo.addEventListener('change', actualizarCamposPorTipo);
+selTipo.addEventListener('change', () => { actualizarCamposPorTipo().catch(() => {}); });
 
-function actualizarCamposPorTipo() {
+/* Devuelve la promesa de la cascada: quien rellene el formulario después
+   (abrirEdicion) debe esperarla, o la respuesta reescribe los <select> y se
+   pierde la selección que se acaba de poner. */
+async function actualizarCamposPorTipo() {
     const idTipo = parseInt(selTipo.value, 10);
     const tipo = tipos.find(t => t.IdTipo === idTipo);
 
@@ -2140,8 +2008,7 @@ function actualizarCamposPorTipo() {
         toggle('.bloque-especificaciones', false);
         toggle('.campo-accesorios', false);
         poblarSubtipos(null);
-        cargarCascadaTipo();
-        return;
+        return cargarCascadaTipo();
     }
 
     aplicarRequisitos(tipo);
@@ -2154,7 +2021,7 @@ function actualizarCamposPorTipo() {
 
     /* Marca, modelo, procesador, RAM, almacenamiento, S.O. y voltaje se
        reducen a lo que este tipo realmente usa. */
-    cargarCascadaTipo();
+    return cargarCascadaTipo();
 }
 
 /* Muestra/oculta los campos del formulario con las reglas del tipo. El
@@ -2213,9 +2080,6 @@ function actualizarUsuarioAsignado(tipoActual = null) {
     }
 }
 
-<<<<<<< Updated upstream
-
-=======
 /* =========================================================
    USUARIO ASIGNADO · casilla + buscador rápido
    ---------------------------------------------------------
@@ -2282,21 +2146,16 @@ btnLimpiarUsuario?.addEventListener('click', () => {
 /* Un activo está "en uso" mientras tenga una responsiva abierta: su estatus
    y su usuario de inventario los mueve la responsiva (asignar / devolver),
    no el formulario. */
->>>>>>> Stashed changes
 function activoEnUso(estatus) {
     const nombre = String(estatus ?? '').trim().toUpperCase();
     return nombre === 'ASIGNADO' || nombre === 'PENDIENTE';
 }
 
-<<<<<<< Updated upstream
-
-=======
 /* Candado del campo "Usuario asignado":
    - En uso: la casilla queda marcada y bloqueada, porque lo escribe la
      responsiva.
    - Activo libre: se puede desmarcar, que es la forma de devolverlo al
      inventario sin tener que borrar el activo. */
->>>>>>> Stashed changes
 function aplicarEstadoUsuarioAsignado(enUso) {
     const asignado = !!String(inpUsuarioAsig?.value ?? '').trim();
     const marcado = !!enUso || asignado;
@@ -2431,7 +2290,7 @@ function limpiarFormulario() {
     inpAccesorios.value = '';
     inpPrecio.value = '';
     inpObservaciones.value = '';
-    actualizarCamposPorTipo();
+    actualizarCamposPorTipo().catch(() => {});
 }
 
 btnNuevo.addEventListener('click', () => {
@@ -2506,7 +2365,10 @@ async function abrirEdicion(id) {
     modalTitulo.textContent = 'Editar activo';
 
     selTipo.value = a.IdTipo != null ? String(a.IdTipo) : '';
-    actualizarCamposPorTipo();
+    /* Se espera la cascada: reescribe marca / modelo / especificaciones y el
+       SO, así que si se lanza sin await borra la selección que se pone justo
+       debajo (era el motivo de que el SO apareciera vacío al editar). */
+    await actualizarCamposPorTipo();
 
     selMarca.value         = a.IdMarca   != null ? String(a.IdMarca)   : '';
     selEstado.value        = a.IdEstado  != null ? String(a.IdEstado)  : '';
@@ -2662,12 +2524,36 @@ formulario.addEventListener('submit', async (e) => {
 
     const precioNum = inpPrecio.value.trim() ? parseFloat(inpPrecio.value) : null;
 
-    /* El select de SO usa el Id; se recupera la fila del catálogo para
-       mandar también el nombre (columna de respaldo) y la FK explícita. */
-    const soSeleccionado = inpSO.value
-        ? (catalogosEspecificaciones.sistemasOperativos || [])
-            .find(x => String(x.IdSistemaOperativo) === inpSO.value) || null
+    /* El select de SO usa el Id de la fila del catálogo como valor (dos
+       filas pueden compartir Nombre y diferir sólo en BuildSO), así que la
+       FK se toma directo de ese valor: buscarla por nombre re-apuntaba el
+       equipo a otra variante y, si el nombre no coincidía, la borraba. */
+    const soTexto = String(inpSO.value ?? '').trim();
+    const soNum = /^\d+$/.test(soTexto) ? parseInt(soTexto, 10) : null;
+    if (soTexto && soNum === null) {
+        mostrarMensaje('El sistema operativo seleccionado no es válido. Vuelve a elegirlo del catálogo.', 'error');
+        return;
+    }
+
+    const soCatalogo = catalogosEspecificaciones.sistemasOperativos || [];
+    const soFila = soNum !== null
+        ? soCatalogo.find(x => Number(x.IdSistemaOperativo) === soNum)
         : null;
+    const soEtiqueta = inpSO.selectedOptions && inpSO.selectedOptions[0]
+        ? inpSO.selectedOptions[0].textContent
+        : '';
+
+    /* Texto de respaldo: el nombre del catálogo o, si la fila se dio de
+       baja, la etiqueta visible sin el build ni el sufijo "(inactivo)". */
+    const soNombre = soFila
+        ? soFila.Nombre
+        : (soEtiqueta.replace(/\s*·[^·]*$/, '').replace(/\s*\(inactivo\)\s*$/i, '').trim() || null);
+
+    /* Si el catálogo no llegó (select vacío porque la carga falló) no se
+       mandan las claves del SO: actualizar() sólo toca lo enviado, así que
+       dejarlas fuera conserva lo guardado en vez de vaciarlo. */
+    const soEnviar = soNum !== null || soCatalogo.length > 0;
+
 
     const datos = {
         IdTipo:          idTipo,
@@ -2692,11 +2578,17 @@ formulario.addEventListener('submit', async (e) => {
         Procesador:      inpProcesador.value.trim() || null,
         MemoriaRAM:      inpRAM.value.trim() || null,
         Almacenamiento:  inpAlmacenamiento.value.trim() || null,
-        IdSistemaOperativo: soSeleccionado ? soSeleccionado.IdSistemaOperativo : null,
-        SistemaOperativo: soSeleccionado ? soSeleccionado.Nombre : null,
         Accesorios:      inpAccesorios.value.trim() || null,
         Observaciones:   inpObservaciones.value.trim() || null
     };
+
+    /* La FK del SO viaja como Id (nunca como texto) para no re-apuntar el
+       equipo a otra compilación del mismo sistema. */
+    if (soEnviar) {
+        datos.IdSistemaOperativo = soNum;
+        datos.SistemaOperativo = soNum !== null ? soNombre : null;
+    }
+
 
     if (tipo.RequierePrecio) {
         datos.PrecioActivo = Number.isFinite(precioNum) ? precioNum : null;

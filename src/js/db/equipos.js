@@ -1,5 +1,8 @@
 const { getPool, sql } = require('./conexion');
 const rangosDB = require('./rangos');
+/* Regla de propiedad de IP compartida: la tabla maestra
+   (scripts/inventario-ip-maestro.sql) conoce los tres orígenes a la vez. */
+const inventarioIPDB = require('./inventario-ip');
 
 /* =========================================================
    LISTAR
@@ -90,6 +93,30 @@ async function verificarIPDuplicada(ip, idEquipoExcluir = null) {
 
     const r = await req.query(query);
     return r.recordset[0] || null;
+}
+
+/* =========================================================
+   CONFLICTO EN LA TABLA MAESTRA (PROPIEDAD DE LA IP)
+   La comprobación anterior miraba sólo los equipos de cliente y los
+   registros del control general que estuvieran en Estado "Activo"; un
+   registro general "Ocupado" se le colaba. Aquí se pregunta a la fuente
+   única, así el alta de Equipos y la del control general aplican la MISMA
+   regla: una dirección no vive en dos orígenes a la vez.
+   ========================================================= */
+async function conflictoEnMaestra(ip, idEquipo = null) {
+    const duenio = await inventarioIPDB.duenioDeIP(ip, { idEquipo });
+    if (!duenio || !duenio.ocupada) return null;
+    return {
+        ok: false,
+        mensaje: duenio.mensaje,
+        tipo: 'ip-duplicada',
+        /* La pantalla pinta Hostname / ClienteCodigo / PisoNombre. */
+        choque: {
+            Hostname: duenio.Hostname || 'Dispositivo del control general',
+            ClienteCodigo: duenio.ClienteCodigo || 'Control general',
+            PisoNombre: duenio.PisoNombre || 'Sin piso'
+        }
+    };
 }
 
 /* =========================================================
@@ -266,6 +293,11 @@ async function crear(datos) {
                     choque
                 };
             }
+            /* Segunda pasada contra la tabla maestra: cubre los registros del
+               control general que la consulta anterior no ve (por ejemplo uno
+               en Estado "Ocupado"). */
+            const enMaestra = await conflictoEnMaestra(ip);
+            if (enMaestra) return enMaestra;
         }
 
         // Control por rango IP del cliente y perfil (heredado del catálogo de rangos)
@@ -372,6 +404,10 @@ async function actualizar(id, datos) {
                     choque
                 };
             }
+            /* Segunda pasada contra la tabla maestra. Se excluye este mismo
+               equipo: editar un registro que ya compartía IP no falla. */
+            const enMaestra = await conflictoEnMaestra(ip, id);
+            if (enMaestra) return enMaestra;
         }
 
         // Control por rango IP del cliente y perfil (heredado del catálogo de rangos)

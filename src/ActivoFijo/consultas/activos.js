@@ -40,6 +40,19 @@ async function columnasTextoEquipo() {
     return catalogosDB.columnasExistentes('ActivoFijoEquipos', [...TEXTOS_RESPALDO_EQUIPO]);
 }
 
+/* La compilación del SO (BuildSO) es atributo del catálogo (Nombre +
+   BuildSO): ("Windows 10", "21H2") y ("Windows 10", "22H2") son dos filas
+   distintas, así que el listado y la ficha deben devolverla o las dos se
+   ven iguales. Se lee por la FK del equipo con el alias que arma
+   prepararNombresCatalogo (catSistemaOperativo). Defensivo mientras el
+   script de migración no corra. */
+async function expresionBuildSO() {
+    const columnas = await catalogosDB.columnasExistentes('ActivoFijoSistemasOperativos', ['BuildSO']);
+    return columnas.has('BuildSO')
+        ? 'catSistemaOperativo.BuildSO'
+        : 'CAST(NULL AS NVARCHAR(20)) AS BuildSO';
+}
+
 /* JOINs y columnas para leer las especificaciones por catálogo (3FN). La
    regla "nombre del catálogo, con el texto como respaldo mientras la columna
    siga existiendo" vive en catalogos.js, que la comparte con responsivas. */
@@ -501,39 +514,13 @@ async function listar(filtros = {}) {
         await catalogosDB.prepararAccesoriosEquipo('af')
     );
 
-    /* La compilación del SO (BuildSO) es atributo del catálogo (Nombre +
-       BuildSO); se lee por la FK del equipo con el alias que arma
-       prepararNombresCatalogo (catSistemaOperativo), así el listado
-       distingue "Windows 10 21H2" de "Windows 10 22H2". Defensivo mientras
-       el script de migración no corra. */
-    const columnasSO = await catalogosDB.columnasExistentes('ActivoFijoSistemasOperativos', ['BuildSO']);
-    const buildSOExpr = columnasSO.has('BuildSO')
-        ? 'catSistemaOperativo.BuildSO'
-        : 'CAST(NULL AS NVARCHAR(20)) AS BuildSO';
+    const buildSOExpr = await expresionBuildSO();
 
-    /* Hostname con el que el colector identifica al equipo. No vive en el
-       activo sino en la tabla puente de red (ActivoFijoEquiposRed), así que
-       se lee por subconsulta del registro principal (EsPrincipal y, si no
-       hay, la última detección). El Excel lo usa para decir de qué equipo
-       cuelga cada pieza. Defensivo: si la base no tiene la tabla o las
-       columnas, el listado sigue igual y el hostname sale vacío. */
-    let hostnameExpr = 'CAST(NULL AS NVARCHAR(100)) AS Hostname';
-    if (await catalogosDB.tablaExiste('ActivoFijoEquiposRed')) {
-        const colsRed = await catalogosDB.columnasExistentes('ActivoFijoEquiposRed',
-            ['Hostname', 'Vigente', 'EsPrincipal', 'UltimaDeteccion']);
-        if (colsRed.has('Hostname')) {
-            const orden = [
-                colsRed.has('EsPrincipal')     ? 'r.EsPrincipal DESC'     : null,
-                colsRed.has('UltimaDeteccion') ? 'r.UltimaDeteccion DESC' : null
-            ].filter(Boolean).join(', ') || '(SELECT NULL)';
-            hostnameExpr = `(SELECT TOP (1) r.Hostname
-                FROM dbo.ActivoFijoEquiposRed r
-                WHERE r.IdActivoFijoEQ = af.IdActivoFijoEQ
-                  ${colsRed.has('Vigente') ? 'AND r.Vigente = 1' : ''}
-                  AND NULLIF(LTRIM(RTRIM(r.Hostname)), '') IS NOT NULL
-                ORDER BY ${orden}) AS Hostname`;
-        }
-    }
+    /* Hostname y Dominio con los que el colector identifica al equipo. No
+       viven en el activo sino en la tabla puente de red (ActivoFijoEquiposRed)
+       y los resuelve `red` (OUTER APPLY al adaptador principal, o NULL si la
+       base todavía no tiene esa tabla). El Excel del inventario los usa para
+       decir de qué equipo cuelga cada pieza. */
 
     const result = await request.query(`
         SELECT
@@ -560,7 +547,6 @@ async function listar(filtros = {}) {
             t.RequiereAccesorios,
             t.GrupoSubtipo,
             af.NoSerie,
-            ${hostnameExpr},
             af.IMEI1,
             af.IMEI2,
             af.NoTelefono,
@@ -586,11 +572,8 @@ async function listar(filtros = {}) {
             af.Observaciones,
             af.FechaCreacion,
             af.FechaModificacion,
-<<<<<<< Updated upstream
             ${buildSOExpr},
-=======
             ${red.columna},
->>>>>>> Stashed changes
             ${lectura.columnas.join(',\n            ')}
         FROM ActivoFijoEquipos af
         LEFT  JOIN ActivoFijoCarteras       c   ON c.IdCartera       = af.IdCartera
@@ -637,6 +620,8 @@ async function obtener(id) {
         await catalogosDB.prepararAccesoriosEquipo('af')
     );
     const red = aplicarHostname(await tablaRedDisponible(pool), await columnaEnRed(pool, 'Dominio'));
+    /* Misma forma que listar(): la ficha también necesita el build del SO. */
+    const buildSOExpr = await expresionBuildSO();
     const r = await pool.request()
         .input('Id', sql.Int, id)
         .query(`
@@ -654,6 +639,7 @@ async function obtener(id) {
                 tam.Nombre AS Tamanio,
                 cap.Nombre AS Capacidad,
                 vol.Nombre AS Voltaje,
+                ${buildSOExpr},
                 ${red.columna},
                 ${lectura.columnas.join(',\n                ')}
             FROM ActivoFijoEquipos af
@@ -1686,13 +1672,16 @@ async function exportarInventario() {
    Si un tipo todavía no tiene datos en alguna categoría, la UI muestra
    el catálogo completo para no bloquear la captura.
    ========================================================= */
+/* El quinto elemento es opcional: columnas extra que viajan con la fila.
+   El SO las necesita para que (Nombre, BuildSO) llegue completo: el nombre
+   solo no identifica la variante. */
 const CASCADA_TIPO = [
     ['marcas',             'ActivoFijoMarcas',             'IdMarca',            'IdMarca'],
     ['modelos',            'ActivoFijoModelos',            'IdModelo',           'IdModelo'],
     ['procesadores',       'ActivoFijoProcesadores',       'IdProcesador',       'IdProcesador'],
     ['memoriasRam',        'ActivoFijoMemoriasRAM',        'IdMemoriaRAM',       'IdMemoriaRAM'],
     ['almacenamientos',    'ActivoFijoAlmacenamientos',    'IdAlmacenamiento',   'IdAlmacenamiento'],
-    ['sistemasOperativos', 'ActivoFijoSistemasOperativos', 'IdSistemaOperativo', 'IdSistemaOperativo'],
+    ['sistemasOperativos', 'ActivoFijoSistemasOperativos', 'IdSistemaOperativo', 'IdSistemaOperativo', ['BuildSO']],
     ['voltajes',           'ActivoFijoVoltajes',           'IdVoltaje',          'IdVoltaje']
 ];
 
@@ -1805,20 +1794,38 @@ async function catalogoPorTipo(idTipo) {
     try {
         const pool = await getPool();
         salida.perfil = await perfilPorTipo(pool, id);
-        const resultados = await Promise.all(CASCADA_TIPO.map(async ([clave, tabla, pk, fk]) => {
+        const resultados = await Promise.all(CASCADA_TIPO.map(async ([clave, tabla, pk, fk, extra = []]) => {
             try {
+                /* Columnas extra sólo si existen: el catálogo de SO puede
+                   venir de antes de la migración que agregó BuildSO. */
+                const disponibles = extra.length
+                    ? await catalogosDB.columnasExistentes(tabla, extra)
+                    : new Set();
+                const colsExtra = extra
+                    .filter(c => disponibles.has(c))
+                    .map(c => `, c.[${c}]`)
+                    .join('');
+
+                /* La fila viaja con Nombre (no "nombre": el renderer arma la
+                   etiqueta del <select> con esa clave) y, cuando la tabla la
+                   tiene, con el BuildSO. En el SO ambos son la identidad:
+                   ("Windows 10", "21H2") y ("Windows 10", "22H2") son dos
+                   filas distintas y la etiqueta muestra "Nombre · Build". */
                 const r = await pool.request()
                     .input('IdTipo', sql.Int, id)
                     .query(`
-                        SELECT DISTINCT c.${pk} AS id, c.Nombre AS nombre
+                        SELECT DISTINCT c.${pk} AS id, c.Nombre AS Nombre${colsExtra}
                         FROM ActivoFijoEquipos af
                         INNER JOIN dbo.${tabla} c ON c.${pk} = af.${fk}
                         WHERE af.IdTipo = @IdTipo
-                        ORDER BY c.Nombre`);
+                        ORDER BY [Nombre], [id]`);
                 return [clave, r.recordset || []];
-            } catch (_) {
+            } catch (err) {
                 /* Catálogo o columna ausente en un esquema viejo: esa
-                   categoría simplemente no filtra. */
+                   categoría simplemente no filtra. Se deja rastro en consola
+                   para que un error de SQL no se confunda con "sin datos"
+                   (era el caso del SO: el <select> se quedaba sin opciones). */
+                console.warn(`[ActivoFijo] Cascada "${clave}" sin filtrar:`, err.message);
                 return [clave, []];
             }
         }));

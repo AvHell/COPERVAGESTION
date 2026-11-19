@@ -57,9 +57,7 @@ contextBridge.exposeInMainWorld('api', {
        ========================================================= */
     abrirActivoFijoActivos:     () => ipcRenderer.invoke('abrir-activofijo-activos'),
     abrirActivoFijoResponsivas: () => ipcRenderer.invoke('abrir-activofijo-responsivas'),
-    abrirActivoFijoReportes:    () => ipcRenderer.invoke('abrir-activofijo-reportes'),
     abrirActivoFijoImportar:    () => ipcRenderer.invoke('abrir-activofijo-importar'),
-    abrirActivoFijoDetalle:     () => ipcRenderer.invoke('abrir-activofijo-detalle'),
 
     /* =========================================================
        CLIENTES
@@ -141,6 +139,13 @@ contextBridge.exposeInMainWorld('api', {
         actualizar: (id, datos) => ipcRenderer.invoke('inventario-ip:actualizar', id, datos),
         actualizarDatosEquipoCliente: (idEquipo, datos) =>
             ipcRenderer.invoke('inventario-ip:cliente:actualizar', idEquipo, datos),
+        /* Datos que el colector no puede saber de un adaptador (piso,
+           cliente, puerto del Fortinet, descripción). Se guardan aparte y
+           no duplican la IP: ver dbo.InventarioIPGestion. */
+        actualizarGestion: (clave, datos) =>
+            ipcRenderer.invoke('inventario-ip:gestion:actualizar', clave, datos),
+        quitarGestion: clave =>
+            ipcRenderer.invoke('inventario-ip:gestion:quitar', clave),
         eliminar: id => ipcRenderer.invoke('inventario-ip:eliminar', id),
         exportarExcel: opciones => ipcRenderer.invoke('inventario-ip:exportarExcel', opciones),
         importarExcel: () => ipcRenderer.invoke('inventario-ip:importarExcel'),
@@ -335,46 +340,11 @@ contextBridge.exposeInMainWorld('api', {
             eliminarCatalogo: (clave, id) => ipcRenderer.invoke('af-resp-catalogo-eliminar', clave, id),
             listarUsuariosEntrega: () => ipcRenderer.invoke('af-resp-lista-usuarios-entrega')
         },
-        reportes: {
-            obtenerReporte: (vista, filtros) => ipcRenderer.invoke('af-rep-obtener-reporte', vista, filtros),
-            exportarExcel: payload => ipcRenderer.invoke('af-rep-exportar-excel', payload),
-            resumenGeneral: () => ipcRenderer.invoke('af-rep-resumen-general'),
-            resumenPorTipo: () => ipcRenderer.invoke('af-rep-resumen-tipo'),
-            resumenPorCartera: () => ipcRenderer.invoke('af-rep-resumen-cartera'),
-            inventario: filtros => ipcRenderer.invoke('af-rep-inventario', filtros),
-            responsivasActivas: () => ipcRenderer.invoke('af-rep-responsivas-activas'),
-            asignacionesPorPersona: () => ipcRenderer.invoke('af-rep-asignaciones-persona'),
-            porTicket: () => ipcRenderer.invoke('af-rep-por-ticket'),
-            historialAsignaciones: filtros => ipcRenderer.invoke('af-rep-historial-asignaciones', filtros),
-            historialActivo: id => ipcRenderer.invoke('af-rep-historial-activo', id),
-            celulares: () => ipcRenderer.invoke('af-rep-celulares'),
-            laptops: () => ipcRenderer.invoke('af-rep-laptops'),
-            tiposParaFiltro: () => ipcRenderer.invoke('af-rep-tipos'),
-            estadosParaFiltro: () => ipcRenderer.invoke('af-rep-estados'),
-            estatusParaFiltro: () => ipcRenderer.invoke('af-rep-estatus'),
-            carterasParaFiltro: () => ipcRenderer.invoke('af-rep-carteras')
-        },
         importacion: {
             opciones: () => ipcRenderer.invoke('af-import-opciones'),
             listarLayouts: () => ipcRenderer.invoke('af-import-layouts'),
             obtenerLayout: clave => ipcRenderer.invoke('af-import-layout', clave),
             importar: datos => ipcRenderer.invoke('af-import-procesar', datos)
-        },
-        /* Detalle del activo: maestro, ficha (red / cuentas / programas),
-           buscadores cruzados. */
-        detalle: {
-            estado: () => ipcRenderer.invoke('af-det-estado'),
-            maestro: {
-                listar: filtros => ipcRenderer.invoke('af-det-maestro-listar', filtros),
-                dominios: () => ipcRenderer.invoke('af-det-dominios')
-            },
-            ficha: (id, opciones) => ipcRenderer.invoke('af-det-ficha', id, opciones),
-            buscarPrograma: filtros => ipcRenderer.invoke('af-det-buscar-programa', filtros),
-            buscarCuenta: filtros => ipcRenderer.invoke('af-det-buscar-cuenta', filtros),
-            buscarHost: filtros => ipcRenderer.invoke('af-det-buscar-host', filtros),
-            /* ¿A qué equipo pertenece esta pieza? (monitor, disco, teclado,
-               ratón): devuelve siempre el activo padre por NoSerie. */
-            buscarComponente: filtros => ipcRenderer.invoke('af-det-buscar-componente', filtros)
         }
     }
 });

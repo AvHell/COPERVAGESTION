@@ -22,9 +22,7 @@ const CATALOGO = {
   'activofijo_catalogos':          { grupo: 'Activo Fijo',  etiqueta: 'Catálogos' },
   'activofijo_activos':            { grupo: 'Activo Fijo',  etiqueta: 'Inventario' },
   'activofijo_responsivas':        { grupo: 'Activo Fijo',  etiqueta: 'Responsivas' },
-  'activofijo_reportes':           { grupo: 'Activo Fijo',  etiqueta: 'Reportes' },
   'activofijo_importar':           { grupo: 'Activo Fijo',  etiqueta: 'Importación masiva' },
-  'activofijo_detalle':            { grupo: 'Activo Fijo',  etiqueta: 'Detalle del activo (red, cuentas, programas)' },
 
   /* ---------- CATÁLOGOS: acciones finas ---------- */
   'catalogos:clientes:crear':      { grupo: 'Catálogos',    etiqueta: 'Crear cliente' },
@@ -107,14 +105,7 @@ const CATALOGO = {
   'af-resp:eliminar':              { grupo: 'Activo Fijo',  etiqueta: 'Eliminar responsiva' },
   'af-resp:pdf':                   { grupo: 'Activo Fijo',  etiqueta: 'Generar PDF' },
 
-  /* ---------- ACTIVO FIJO: detalle del activo ----------
-     Lectura de lo que captura el colector (módulo sin escrituras). */
-  'af-det:listado:ver':            { grupo: 'Activo Fijo',  etiqueta: 'Ver maestro y ficha del activo' },
-  'af-det:buscar:ver':             { grupo: 'Activo Fijo',  etiqueta: 'Usar buscadores cruzados (programas, cuentas, red)' },
-
-  /* ---------- ACTIVO FIJO: reportes / importación ---------- */
-  'af-rep:ver':                    { grupo: 'Activo Fijo',  etiqueta: 'Ver reportes' },
-  'af-rep:exportar':               { grupo: 'Activo Fijo',  etiqueta: 'Exportar reportes' },
+  /* ---------- ACTIVO FIJO: importación ---------- */
   'af-imp:ejecutar':               { grupo: 'Activo Fijo',  etiqueta: 'Ejecutar importación' }
 };
 

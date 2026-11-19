@@ -16,9 +16,7 @@
         /* Los catálogos ya no tienen entrada propia: viven como pestaña
            dentro de activos.html (Inventario de activo fijo). */
         { key: 'activofijo_activos', label: 'Inventario de activo fijo', permiso: 'activofijo_activos', icon: '▣' },
-        { key: 'activofijo_detalle', label: 'Detalle del activo', permiso: 'activofijo_detalle', icon: '◫' },
         { key: 'activofijo_responsivas', label: 'Responsivas', permiso: 'activofijo_responsivas', icon: '▧' },
-        { key: 'activofijo_reportes', label: 'Reportes', permiso: 'activofijo_reportes', icon: '▥' },
         { key: 'activofijo_importar', label: 'Importación', permiso: 'activofijo_importar', icon: '⇧' }
       ]
     },
@@ -225,21 +223,9 @@
       '[data-guardar]': 'activofijo_responsivas',
       '[data-eliminar]': 'activofijo_responsivas'
     },
-    'reportes.html': {
-      '#btn-exportar': 'af-rep:exportar',
-      '#btn-recargar': 'af-rep:ver',
-      '#card-tabla': 'af-rep:ver'
-    },
     'importar.html': {
       '#btn-importar': 'af-imp:ejecutar',
       '#btn-descargar-plantilla': 'af-imp:ejecutar'
-    },
-    /* Detalle del activo: módulo de sólo lectura. */
-    'detalle.html': {
-      '#card-maestro': 'af-det:listado:ver',
-      '#panel-buscadores': 'af-det:buscar:ver',
-      '#btn-recargar': 'af-det:listado:ver',
-      '#det-modal': 'af-det:listado:ver'
     }
   };
 
@@ -387,23 +373,12 @@
       exportar: 'af-resp:pdf',
       gestionar: 'activofijo_responsivas'
     },
-    'reportes.html': {
-      ver: 'af-rep:ver',
-      exportar: 'af-rep:exportar',
-      gestionar: 'activofijo_reportes'
-    },
     'importar.html': {
       ver: 'activofijo_importar',
       crear: 'af-imp:ejecutar',
       guardar: 'af-imp:ejecutar',
       exportar: 'af-imp:ejecutar',
       gestionar: 'activofijo_importar'
-    },
-    'detalle.html': {
-      ver: 'af-det:listado:ver',
-      exportar: 'af-det:listado:ver',
-      importar: 'af-det:buscar:ver',
-      gestionar: 'activofijo_detalle'
     }
   };
 
@@ -418,7 +393,7 @@
     ['guardar', ['guardar', 'guarda', 'aceptar', 'aplicar', 'confirmar', 'save']],
     ['crear', ['nuevo', 'nueva', 'crear', 'crea', 'agregar', 'agrega', 'anadir', 'añadir', 'registrar', 'registra', 'alta']],
     ['asignar', ['asignar', 'asigna', 'permisos', 'permiso', 'rol', 'roles']],
-    ['ver', ['ver', 'consultar', 'consulta', 'auditar', 'auditoria', 'recargar', 'actualizar', 'catalogo', 'catalogos', 'listado', 'historial', 'detalle', 'seleccionar']]
+    ['ver', ['ver', 'consultar', 'consulta', 'auditar', 'auditoria', 'recargar', 'actualizar', 'catalogo', 'catalogos', 'listado', 'historial', 'seleccionar']]
   ];
 
   /* Acciones detectables por selector genérico (filas de tabla, etc.). */

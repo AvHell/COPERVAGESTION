@@ -252,8 +252,40 @@ th {
     font-weight: 700;
 }
 td { font-size: .84rem; }
-.actions { display: flex; gap: 7px; }
-.actions .button { min-height: 31px; padding: 5px 9px; font-size: .78rem; }
+/* Acciones de la fila: SÓLO icono. El texto va en el tooltip flotante
+   (.tooltip-accion-ip), que es position:fixed para que no lo recorte el
+   contenedor de la tabla ni se rompa con el scroll horizontal. */
+.actions { display: flex; gap: 7px; align-items: center; }
+.actions .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    border-radius: 8px;
+}
+.actions .button svg { width: 15px; height: 15px; }
+.actions .button.primary { border: 1px solid var(--ip-oliva); }
+.actions .reservado-nota { font-size: .74rem; }
+
+.tooltip-accion-ip {
+    position: fixed;
+    z-index: 9999;
+    display: none;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #2e3228;
+    color: #f6f2e6;
+    font-size: .72rem;
+    line-height: 1.35;
+    text-align: center;
+    overflow-wrap: anywhere;
+    box-shadow: 0 4px 12px -2px rgba(46, 50, 40, .25);
+    pointer-events: none;
+}
 .empty { padding: 16px; color: var(--ip-texto-suave); text-align: center; }
 
 .ip-badge {
@@ -279,6 +311,17 @@ td { font-size: .84rem; }
 /* Red reportada por el colector para un activo fijo: ni infraestructura
    capturada a mano ni equipo de cliente con IP estática. */
 .ip-badge.origen-activo { border-color: #b7c6d3; background: #e8eff5; color: #3c5568; }
+/* Una IP puede venir del colector y además estar capturada como equipo de
+   cliente o en el control general. Se muestra un solo renglón: la insignia
+   "Activo" con la de su origen heredado (+ Cliente / + General). */
+.origen-celda { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.ip-badge.fusionado {
+    border-color: #c6cfd6;
+    border-style: dashed;
+    background: #f4f7fa;
+    color: #4a6376;
+    cursor: help;
+}
 .ip-badge.estado-ocupado { border-color: #a7d6b1; background: #e5f5e8; color: #25643a; }
 .ip-badge.estado-libre { border-color: #d8d6cb; background: #f2f1ea; color: #6f7066; }
 .ip-badge.estado-reservado { border-color: #d8b49a; background: var(--ip-oro-suave); color: #6b4b25; }
@@ -467,6 +510,25 @@ td { font-size: .84rem; }
 }
 .edicion-cliente-grid > label { display: grid; gap: 5px; }
 .edicion-cliente-grid .wide { grid-column: 1 / -1; }
+
+/* Encabezado del diálogo de una fila del colector: recuerda que la IP y la
+   MAC las manda el colector y aquí sólo se captura lo que él no sabe. */
+.edicion-cliente-grid .gestion-colector {
+    margin: 0;
+    font-size: .78rem;
+    line-height: 1.45;
+    color: var(--ip-texto-secundario);
+}
+.edicion-cliente-grid .gestion-colector strong { color: var(--ip-texto); }
+
+/* Referencia de lo que reporta el colector bajo un campo de catálogo: deja
+   ver qué valor se mostrará si el campo se deja «Sin asignar». */
+.edicion-cliente-grid > label small {
+    font-size: .7rem;
+    line-height: 1.35;
+    color: var(--ip-texto-secundario);
+    font-style: italic;
+}
 
 /* El Switch de los datos complementarios es un desplegable más del
    formulario: comparte el estilo de los demás <select> de la rejilla. */

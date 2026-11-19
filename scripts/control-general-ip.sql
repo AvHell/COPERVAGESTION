@@ -263,3 +263,163 @@ IF NOT EXISTS (
     CREATE UNIQUE INDEX UX_CatalogosInventarioIP_Tipo_Nombre_Origen
         ON dbo.CatalogosInventarioIP (TipoCatalogo, Nombre, Origen);
 GO
+
+/* =========================================================
+   GESTIÓN DE LAS FILAS DEL COLECTOR
+   ---------------------------------------------------------
+   Las filas con Origen 'Activo' no viven en dbo.InventarioGeneralIP:
+   las reporta el colector en dbo.ActivoFijoEquiposRed (IP, MAC,
+   hostname, adaptador...). Lo que el colector NO puede saber —y que
+   sólo una persona decide— es el piso, el cliente al que pertenece el
+   equipo, el puerto del Fortinet y, a veces, una descripción legible:
+   el colector manda el nombre técnico del adaptador, p. ej.
+   "Intel(R) Ethernet Connection (2) I219-LM #2".
+
+   Esta tabla guarda SÓLO ese complemento y se une por Clave contra la
+   fila que ya devuelve dbo.vw_InventarioIPUnificado (o el respaldo
+   UNION de src/js/db/inventario-ip.js). No duplica la IP ni crea un
+   segundo renglón: la pantalla sigue mostrando UNA fila por adaptador,
+   con lo del colector y encima lo gestionado aquí (ver
+   aplicarGestion() en src/js/db/inventario-ip.js).
+
+   Es el mismo patrón que dbo.EquiposControlGeneralIP con dbo.Equipos:
+   la tabla base manda y ésta sólo la complementa. Como el colector
+   nunca escribe aquí, su siguiente lote no borra lo capturado a mano.
+
+   Clave: 'MAC:00:11:22:33:44:55' (la MAC normalizada del adaptador) o
+   'IP:192.168.1.10' cuando el adaptador no expone MAC.
+
+   Columnas:
+     IdDispositivo / IdTipoEquipo  clasificación de catálogo elegida a mano
+                                   (el colector sólo sabe el nombre técnico
+                                   del adaptador: «Ethernet 2»).
+     IdPiso                        piso del catálogo de control general.
+     IdSite                        switch (Site) donde está conectado; es
+                                   el equipo dueño del puerto del Fortinet.
+     IdCliente                     cliente dueño del aparato.
+     PuertoFortinet                puerto del switch Fortinet.
+     Descripcion                   texto legible que reemplaza al nombre
+                                   técnico del adaptador.
+   Todas son NULLables: vacío = «no manda» y se muestra lo del colector.
+   ========================================================= */
+
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.InventarioIPGestion (
+        IdGestion INT IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_InventarioIPGestion PRIMARY KEY,
+        Clave VARCHAR(60) NOT NULL,
+        IdDispositivo INT NULL,
+        IdTipoEquipo INT NULL,
+        IdPiso INT NULL,
+        IdSite INT NULL,
+        IdCliente INT NULL,
+        PuertoFortinet NVARCHAR(100) NULL,
+        Descripcion NVARCHAR(500) NULL,
+        FechaActualizacion DATETIME2(0) NOT NULL
+            CONSTRAINT DF_InventarioIPGestion_Fecha DEFAULT (SYSDATETIME()),
+        CONSTRAINT UQ_InventarioIPGestion_Clave UNIQUE (Clave)
+    );
+
+    PRINT 'Creada dbo.InventarioIPGestion';
+END
+ELSE
+    PRINT 'dbo.InventarioIPGestion ya existía (sin cambios)';
+GO
+
+/* Las claves foráneas van en su propio lote y con guardas: la tabla debe
+   poder crearse aunque dbo.Clientes aún no exista en esa base. */
+/* Dispositivo y Tipo son datos de catálogo que el colector nunca manda (él
+   sólo conoce el nombre técnico del adaptador, p.ej. «Ethernet 2»). Se
+   guardan aquí para que la clasificación hecha a mano sobreviva a cada lote
+   del colector. Columnas nuevas sobre tablas ya creadas: idempotente. */
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.InventarioIPGestion', N'IdDispositivo') IS NULL
+    ALTER TABLE dbo.InventarioIPGestion ADD IdDispositivo INT NULL;
+GO
+
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.InventarioIPGestion', N'IdTipoEquipo') IS NULL
+    ALTER TABLE dbo.InventarioIPGestion ADD IdTipoEquipo INT NULL;
+GO
+
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND OBJECT_ID(N'dbo.CatalogosInventarioIP', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_InventarioIPGestion_Dispositivo')
+    ALTER TABLE dbo.InventarioIPGestion
+        ADD CONSTRAINT FK_InventarioIPGestion_Dispositivo FOREIGN KEY (IdDispositivo)
+            REFERENCES dbo.CatalogosInventarioIP (IdCatalogoIP);
+GO
+
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND OBJECT_ID(N'dbo.CatalogosInventarioIP', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_InventarioIPGestion_TipoEquipo')
+    ALTER TABLE dbo.InventarioIPGestion
+        ADD CONSTRAINT FK_InventarioIPGestion_TipoEquipo FOREIGN KEY (IdTipoEquipo)
+            REFERENCES dbo.CatalogosInventarioIP (IdCatalogoIP);
+GO
+
+/* Switch (Site) al que está conectado el adaptador: el colector no lo sabe
+   (él sólo ve la tarjeta de red del equipo) y es el equipo dueño del puerto
+   del Fortinet, así que se captura aquí. Idempotente. */
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.InventarioIPGestion', N'IdSite') IS NULL
+    ALTER TABLE dbo.InventarioIPGestion ADD IdSite INT NULL;
+GO
+
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND OBJECT_ID(N'dbo.CatalogosInventarioIP', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_InventarioIPGestion_Site')
+    ALTER TABLE dbo.InventarioIPGestion
+        ADD CONSTRAINT FK_InventarioIPGestion_Site FOREIGN KEY (IdSite)
+            REFERENCES dbo.CatalogosInventarioIP (IdCatalogoIP);
+GO
+
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND OBJECT_ID(N'dbo.CatalogosInventarioIP', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_InventarioIPGestion_Piso')
+    ALTER TABLE dbo.InventarioIPGestion
+        ADD CONSTRAINT FK_InventarioIPGestion_Piso FOREIGN KEY (IdPiso)
+            REFERENCES dbo.CatalogosInventarioIP (IdCatalogoIP);
+GO
+
+/* =========================================================
+   PISO: DOS CATÁLOGOS, UNA SOLA ELECCIÓN
+   ---------------------------------------------------------
+   El piso de un equipo capturado en Equipos o en el plano vive en
+   dbo.Pisos («PISO 2», «PISO 3 LADO A»), mientras que el piso que se
+   elige en el alta manual del control general vive en
+   CatalogosInventarioIP ('Piso') («Piso 2», «Planta Baja»). Son
+   vocabularios distintos: si sólo se guardara uno, la fila mostraba el
+   piso heredado pero el desplegable salía vacío.
+   IdPisoPlano guarda la elección del catálogo del plano; IdPiso la del
+   catálogo de control general. Se usan de forma excluyente.
+   ========================================================= */
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.InventarioIPGestion', N'IdPisoPlano') IS NULL
+    ALTER TABLE dbo.InventarioIPGestion ADD IdPisoPlano INT NULL;
+GO
+
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND OBJECT_ID(N'dbo.Pisos', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_InventarioIPGestion_PisoPlano')
+    ALTER TABLE dbo.InventarioIPGestion
+        ADD CONSTRAINT FK_InventarioIPGestion_PisoPlano FOREIGN KEY (IdPisoPlano)
+            REFERENCES dbo.Pisos (IdPiso);
+GO
+
+IF OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+   AND OBJECT_ID(N'dbo.Clientes', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_InventarioIPGestion_Cliente')
+    ALTER TABLE dbo.InventarioIPGestion
+        ADD CONSTRAINT FK_InventarioIPGestion_Cliente FOREIGN KEY (IdCliente)
+            REFERENCES dbo.Clientes (IdCliente);
+GO
+
+/* Verificación: la tabla debe existir (Existe = 1). Si sale 0, el lote
+   anterior no se aplicó y la pantalla seguirá mostrando «Colector» sin
+   botón de edición en esas filas. */
+SELECT N'dbo.InventarioIPGestion' AS Objeto,
+       CAST(CASE WHEN OBJECT_ID(N'dbo.InventarioIPGestion', N'U') IS NOT NULL
+                 THEN 1 ELSE 0 END AS BIT) AS Existe;
+GO

@@ -77,6 +77,48 @@ function claseOrigen(origen) {
     return 'origen-general';
 }
 
+/* Renglones fusionados: la misma IP también estaba capturada como equipo de
+   cliente o en el control general. Se muestra UN solo renglón (los datos del
+   colector + lo heredado) y esta insignia dice de dónde salió lo heredado. */
+/* Nombre del origen tal como lo reconoce la persona que usa la pantalla. */
+function etiquetaOrigen(token) {
+    const valor = String(token || '').trim();
+    if (valor === 'Activo') return 'Colector';
+    return valor;
+}
+
+function badgeFusion(registro) {
+    /* Vía nueva (tabla maestra): la vista devuelve `Origenes` con TODOS los
+       orígenes de esa IP ('General+Cliente', 'Cliente+Colector', ...), pero la
+       etiqueta `Origen` sólo puede decir uno porque se elige por prioridad
+       (General > Cliente > Activo). Antes se pintaba únicamente esa etiqueta y
+       una IP dada de alta en Equipos que además vivía en el control general se
+       veía como 'General' a secas. Aquí se añaden los orígenes restantes. */
+    const todos = String(registro?.Origenes || '')
+        .split('+')
+        .map(token => token.trim())
+        .filter(Boolean);
+    if (todos.length > 1) {
+        const principal = String(registro?.Origen || '').trim();
+        return todos
+            .filter(token => token !== principal)
+            .map(token => {
+                const etiqueta = etiquetaOrigen(token);
+                return `<span class="ip-badge fusionado"`
+                    + ` title="La misma IP también está registrada en ${escaparHTML(etiqueta)}: se muestra una sola vez y lo que edites aquí no la duplica"`
+                    + `>+ ${escaparHTML(etiqueta)}</span>`;
+            })
+            .join('');
+    }
+    /* Vía anterior (sin tabla maestra): la fusión se hacía en el proceso. */
+    const origen = String(registro?.OrigenFusionado || '').trim();
+    if (!registro?.Fusionado || !origen) return '';
+    const extra = origen === 'Cliente' ? 'Cliente' : 'General';
+    return `<span class="ip-badge fusionado"`
+        + ` title="La misma IP también estaba registrada como ${extra}: se muestra una sola vez y lo que edites aquí no la duplica"`
+        + `>+ ${escaparHTML(extra)}</span>`;
+}
+
 /* Contraste legible sobre un color de fondo (mismo criterio que PermisosUI). */
 function contraste(hex) {
     if (!/^#[0-9A-F]{6}$/i.test(hex || '')) return '#ffffff';
@@ -229,7 +271,9 @@ function colorDeCliente(codigo) {
    libres conservan la etiqueta neutra. */
 function badgeHostname(registro) {
     const hostname = String(registro?.Hostname || '').trim();
-    const esCliente = registro?.Origen === 'Cliente' &&
+    /* Un renglón fusionado conserva el color de su cliente aunque el dato
+       de la red venga del colector. */
+    const esCliente = (registro?.Origen === 'Cliente' || registro?.OrigenFusionado === 'Cliente') &&
         Boolean(String(registro?.ClienteCodigo || '').trim());
     if (!esCliente || !hostname) return badge(hostname, 'hostname');
     const color = colorDeCliente(registro.ClienteCodigo);
@@ -690,6 +734,126 @@ function renderizarTabla() {
     pintarTabla();
 }
 
+/* =========================================================
+   ACCIONES DE LA TABLA: SÓLO ICONO + TOOLTIP
+   ---------------------------------------------------------
+   Mismo patrón que src/js/equipos-renderer.js: el tooltip es un
+   elemento position:fixed creado en <body>, así NO lo recorta el
+   contenedor de la tabla (.table-wrap tiene overflow:auto) ni se
+   rompe al hacer scroll horizontal.
+   ========================================================= */
+function iconoEditarSVG() {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>`;
+}
+function iconoEliminarSVG() {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6M14 11v6"></path>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+            </svg>`;
+}
+function iconoAsignarSVG() {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14"></path>
+            </svg>`;
+}
+
+let tooltipAccionIp = null;
+let tooltipAccionElementoIp = null;
+
+function mostrarTooltipAccion(elemento) {
+    const texto = elemento.dataset.tooltip;
+    if (!texto) return;
+
+    if (!tooltipAccionIp) {
+        tooltipAccionIp = document.createElement('div');
+        tooltipAccionIp.className = 'tooltip-accion-ip';
+        tooltipAccionIp.id = 'tooltip-accion-ip';
+        tooltipAccionIp.setAttribute('role', 'tooltip');
+        document.body.append(tooltipAccionIp);
+    }
+
+    tooltipAccionElementoIp = elemento;
+    tooltipAccionIp.textContent = texto;
+    tooltipAccionIp.style.display = 'block';
+    elemento.setAttribute('aria-describedby', tooltipAccionIp.id);
+
+    const boton = elemento.getBoundingClientRect();
+    const tooltip = tooltipAccionIp.getBoundingClientRect();
+    const izquierda = Math.max(8, Math.min(
+        boton.left + boton.width / 2 - tooltip.width / 2,
+        window.innerWidth - tooltip.width - 8
+    ));
+    const abajo = boton.bottom + 8;
+    const arriba = abajo + tooltip.height <= window.innerHeight - 8
+        ? abajo
+        : Math.max(8, boton.top - tooltip.height - 8);
+
+    tooltipAccionIp.style.left = `${izquierda}px`;
+    tooltipAccionIp.style.top = `${arriba}px`;
+}
+
+function ocultarTooltipAccion() {
+    if (tooltipAccionElementoIp) tooltipAccionElementoIp.removeAttribute('aria-describedby');
+    tooltipAccionElementoIp = null;
+    if (tooltipAccionIp) tooltipAccionIp.style.display = 'none';
+}
+
+document.addEventListener('pointerover', evento => {
+    const boton = evento.target instanceof Element
+        ? evento.target.closest('.actions [data-tooltip]')
+        : null;
+    if (boton && boton !== tooltipAccionElementoIp) mostrarTooltipAccion(boton);
+});
+
+document.addEventListener('pointerout', evento => {
+    const boton = evento.target instanceof Element
+        ? evento.target.closest('.actions [data-tooltip]')
+        : null;
+    const siguiente = evento.relatedTarget instanceof Element
+        ? evento.relatedTarget.closest('.actions [data-tooltip]')
+        : null;
+    if (boton === tooltipAccionElementoIp && siguiente !== boton) ocultarTooltipAccion();
+});
+
+document.addEventListener('focusin', evento => {
+    const boton = evento.target instanceof Element
+        ? evento.target.closest('.actions [data-tooltip]')
+        : null;
+    if (boton) mostrarTooltipAccion(boton);
+});
+
+document.addEventListener('focusout', evento => {
+    const boton = evento.target instanceof Element
+        ? evento.target.closest('.actions [data-tooltip]')
+        : null;
+    if (boton === tooltipAccionElementoIp) ocultarTooltipAccion();
+});
+
+window.addEventListener('scroll', ocultarTooltipAccion, true);
+window.addEventListener('resize', ocultarTooltipAccion);
+
+/**
+ * Botón de acción de la tabla: sólo el icono, con el texto en el tooltip
+ * (y en aria-label para lectores de pantalla). Conserva las clases
+ * secondary/danger porque permisos-ui.js las usa para filtrar por permiso.
+ */
+function botonAccion({ icono, tooltip, clase = 'secondary', permiso = null, alPulsar }) {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = `button ${clase}`;
+    if (permiso) boton.dataset.permiso = permiso;
+    boton.dataset.tooltip = tooltip;
+    boton.setAttribute('aria-label', tooltip);
+    boton.innerHTML = icono;
+    boton.addEventListener('click', alPulsar);
+    return boton;
+}
+
 function pintarTabla() {
     const cuerpo = $('tabla-ip');
     cuerpo.replaceChildren();
@@ -714,7 +878,7 @@ function pintarTabla() {
             ? 'estado-reservado'
             : (item.Estado === 'Ocupado' ? 'estado-ocupado' : 'estado-libre');
         fila.innerHTML = `
-            <td>${badge(item.Origen, claseOrigen(item.Origen))}</td>
+            <td><div class="origen-celda">${badge(etiquetaOrigen(item.Origen), claseOrigen(item.Origen))}${badgeFusion(item)}</div></td>
             <td>${badge(item.Estado, claseEstado)}</td>
             <td>${badge(item.IP || 'DHCP', 'ip')}</td>
             <td>${badgeOrigenIP(item)}</td>
@@ -729,6 +893,9 @@ function pintarTabla() {
 
         const acciones = document.createElement('td');
         acciones.className = 'actions';
+        /* UN solo juego de acciones por fila. Antes se pintaba el botón de
+           gestión y además el del origen (General/Cliente), así que aparecían
+           dos "Editar datos" que abrían lo mismo. */
         if (item.Reservado && !item.Origen) {
             /* IP libre del segmento que un cliente ya reservó: no se puede
                asignar desde el control general. */
@@ -738,46 +905,68 @@ function pintarTabla() {
             nota.title = etiquetaRangoCliente(item.RangoReservado);
             acciones.append(nota);
         } else if (item.Libre) {
-            const asignar = document.createElement('button');
-            asignar.type = 'button';
-            asignar.className = 'button primary';
-            asignar.dataset.permiso = 'equipos:crear';
-            asignar.textContent = 'Asignar';
-            asignar.title = `Registrar ${item.IP} en el control general`;
-            asignar.addEventListener('click', () => abrirRegistroLibre(item));
-            acciones.append(asignar);
+            acciones.append(botonAccion({
+                icono: iconoAsignarSVG(),
+                tooltip: `Registrar ${item.IP} en el control general`,
+                clase: 'primary',
+                permiso: 'equipos:crear',
+                alPulsar: () => abrirRegistroLibre(item)
+            }));
+        } else if (item.ClaveGestion) {
+            /* Toda fila identificable (MAC o IP) se completa aquí: la IP, la
+               MAC y el hostname son de sólo lectura —los vuelve a mandar su
+               origen—, y lo que ningún origen automático sabe (dispositivo,
+               tipo, piso, cliente, switch, puerto y descripción) se guarda en
+               dbo.InventarioIPGestion sin crear un segundo renglón. */
+            acciones.append(botonAccion({
+                icono: iconoEditarSVG(),
+                tooltip: 'Editar datos: dispositivo, tipo, piso, cliente, switch, puerto y descripción',
+                permiso: 'equipos:editar',
+                alPulsar: () => editarGestionActivo(item)
+            }));
+            /* Eliminar sólo tiene sentido en el renglón capturado a mano en el
+               control general: el del colector y el del equipo de cliente se
+               administran en su propio módulo. */
+            if (item.IdInventarioIP) {
+                acciones.append(botonAccion({
+                    icono: iconoEliminarSVG(),
+                    tooltip: 'Eliminar el registro del control general',
+                    clase: 'danger',
+                    permiso: 'equipos:eliminar',
+                    alPulsar: () => eliminarRegistro(item)
+                }));
+            }
         } else if (item.Origen === 'Activo') {
-            /* Red que reporta el colector: es de sólo lectura aquí. Se
-               corrige en el equipo de origen, no desde el control general;
-               por eso no se ofrecen Editar/Eliminar (apuntarían a otra
-               tabla y el siguiente lote del colector lo sobrescribiría). */
+            /* Filas del colector sin clave (adaptador sin MAC ni IP): no hay
+               con qué identificarlas para gestionarlas. */
             const nota = document.createElement('span');
             nota.className = 'reservado-nota';
             nota.textContent = 'Colector';
-            nota.title = 'La red de este activo la reporta el colector; se corrige en el equipo de origen';
+            nota.title = 'La red de este activo la reporta el colector; ejecuta scripts/control-general-ip.sql para poder gestionar dispositivo, tipo, piso, cliente y puerto';
             acciones.append(nota);
         } else if (item.Origen === 'General') {
-            const editar = document.createElement('button');
-            editar.type = 'button';
-            editar.className = 'button secondary';
-            editar.dataset.permiso = 'equipos:editar';
-            editar.textContent = 'Editar';
-            editar.addEventListener('click', () => editarRegistro(item));
-            const eliminar = document.createElement('button');
-            eliminar.type = 'button';
-            eliminar.className = 'button danger';
-            eliminar.dataset.permiso = 'equipos:eliminar';
-            eliminar.textContent = 'Eliminar';
-            eliminar.addEventListener('click', () => eliminarRegistro(item));
-            acciones.append(editar, eliminar);
-        } else {
-            const editar = document.createElement('button');
-            editar.type = 'button';
-            editar.className = 'button secondary';
-            editar.dataset.permiso = 'equipos:editar';
-            editar.textContent = 'Editar datos';
-            editar.addEventListener('click', () => editarDatosCliente(item));
-            acciones.append(editar);
+            /* Respaldo sin clave de gestión (base sin los scripts nuevos). */
+            acciones.append(botonAccion({
+                icono: iconoEditarSVG(),
+                tooltip: 'Editar el registro del control general',
+                permiso: 'equipos:editar',
+                alPulsar: () => editarRegistro(item)
+            }));
+            acciones.append(botonAccion({
+                icono: iconoEliminarSVG(),
+                tooltip: 'Eliminar el registro del control general',
+                clase: 'danger',
+                permiso: 'equipos:eliminar',
+                alPulsar: () => eliminarRegistro(item)
+            }));
+        } else if (item.IdEquipo) {
+            /* Respaldo de un equipo de cliente sin clave de gestión. */
+            acciones.append(botonAccion({
+                icono: iconoEditarSVG(),
+                tooltip: 'Editar los datos complementarios del equipo',
+                permiso: 'equipos:editar',
+                alPulsar: () => editarDatosCliente(item)
+            }));
         }
         fila.append(acciones);
         cuerpo.append(fila);
@@ -872,6 +1061,154 @@ async function editarDatosCliente(item) {
     if (!resultado.isConfirmed) return;
     try {
         const guardado = await window.api.inventarioIP.actualizarDatosEquipoCliente(item.IdEquipo, resultado.value);
+        if (!guardado?.ok) return mostrarError(guardado?.mensaje);
+        await cargar();
+        mostrarToast(guardado.mensaje);
+    } catch (error) {
+        mostrarError(error.message);
+    }
+}
+
+/* Datos complementarios de un renglón del colector (Origen 'Activo').
+   La IP, la MAC y el hostname NO se editan aquí: los vuelve a mandar el
+   colector en cada lote. Lo que sí se captura (dispositivo, tipo, piso,
+   cliente, puerto del Fortinet y descripción) se guarda en
+   dbo.InventarioIPGestion con una clave por adaptador, así la IP sigue
+   apareciendo UNA sola vez aunque también exista como equipo de cliente o
+   en el control general, y el siguiente lote del colector no lo borra. */
+/* Piso del plano (dbo.Pisos) frente al piso del catálogo de control general
+   (CatalogosInventarioIP 'Piso'): son DOS vocabularios con ids distintos. Por
+   eso el diálogo ofrece un desplegable por catálogo y cada uno se guarda en su
+   columna. La lista del plano se lee por la API que ya existe para
+   Mantenimientos (no se crea una nueva) y se cachea. */
+let pisosPlanoCache = null;
+async function pisosDelPlano() {
+    if (pisosPlanoCache) return pisosPlanoCache;
+    try {
+        pisosPlanoCache = (await window.api.mantenimientos.listarPisos()) || [];
+    } catch (error) {
+        console.warn('[InventarioIP] No se pudo leer el catálogo de pisos del plano:', error.message);
+        pisosPlanoCache = [];
+    }
+    return pisosPlanoCache;
+}
+
+/* Diálogo "Editar datos" del renglón unificado: completa lo que ningún origen
+   automático puede saber (dispositivo, tipo, piso, cliente, switch, puerto del
+   Fortinet y descripción). Existe para cualquier fila con clave estable de MAC
+   o IP; la IP, la MAC y el hostname no se tocan aquí. */
+async function editarGestionActivo(item) {
+    const opcionesPiso = opcionesCatalogo('Piso')
+        .map(catalogo => `<option value="${catalogo.IdCatalogoIP}">${escaparHTML(catalogo.Nombre)}</option>`)
+        .join('');
+    /* Piso del plano/Equipos: el mismo catálogo que usa el plano. */
+    const opcionesPisoPlano = (await pisosDelPlano())
+        .map(piso => `<option value="${piso.IdPiso}">${escaparHTML(piso.Nombre)}</option>`)
+        .join('');
+    const opcionesCliente = clientesCatalogo
+        .map(cliente => `<option value="${cliente.IdCliente}">${escaparHTML(cliente.Nombre || cliente.Codigo)}</option>`)
+        .join('');
+    const opcionesDispositivo = opcionesCatalogo('Dispositivo')
+        .map(catalogo => `<option value="${catalogo.IdCatalogoIP}">${escaparHTML(catalogo.Nombre)}</option>`)
+        .join('');
+    const opcionesTipo = opcionesCatalogo('TipoEquipo')
+        .map(catalogo => `<option value="${catalogo.IdCatalogoIP}">${escaparHTML(catalogo.Nombre)}</option>`)
+        .join('');
+    /* Switch (Site): es el equipo dueño del puerto del Fortinet y el colector
+       no puede saberlo, igual que el piso o el cliente. */
+    const opcionesSite = opcionesCatalogo('Site')
+        .map(catalogo => `<option value="${catalogo.IdCatalogoIP}">${escaparHTML(catalogo.Nombre)}</option>`)
+        .join('');
+    /* Código → IdCliente: un renglón heredado de un equipo de cliente trae el
+       código, no el id, y así se puede preseleccionar. */
+    const idPorCodigo = new Map(clientesCatalogo.map(cliente =>
+        [String(cliente.Codigo || '').trim().toUpperCase(), String(cliente.IdCliente)]
+    ));
+    /* Lo que reporta el colector: el nombre técnico del adaptador y del medio
+       no son una clasificación, así que se ofrecen como referencia de lo que
+       se verá si el campo se deja sin asignar. */
+    const referencia = valor => String(valor || '').trim();
+    const descripcionColector = referencia(item.DescripcionColector || item.Descripcion);
+    const dispositivoColector = referencia(item.DispositivoColector || item.Dispositivo);
+    const tipoColector = referencia(item.TipoEquipoColector || item.TipoEquipo);
+    const colector = (etiqueta, valor) => (valor
+        ? `<small>${etiqueta}: ${escaparHTML(valor)}</small>`
+        : '');
+    /* ¿Esta fila ya tiene datos capturados a mano? De eso depende que se
+       ofrezca "Restablecer" y que la descripción venga precargada. */
+    const gestionada = Boolean(item.IdGestion || item.GestionManual);
+
+    const resultado = await fireSwal({
+        title: `Datos complementarios: ${escaparHTML(item.Hostname || item.IP)}`,
+        html: `
+            <div class="edicion-cliente-grid">
+                <p class="gestion-colector wide">
+                    IP <strong>${escaparHTML(item.IP || '—')}</strong>
+                    · MAC <strong>${escaparHTML(item.MAC || '—')}</strong>
+                    <br><small>Lo que ningún origen automático sabe —clasificación del aparato, piso, cliente, switch, puerto y descripción— se captura aquí. Lo guardado no lo sobrescribe el siguiente lote del colector ni la siguiente alta de Equipos.</small>
+                </p>
+                <label>Dispositivo<select id="gestion-dispositivo"><option value="">Sin asignar</option>${opcionesDispositivo}</select>${colector('Colector', dispositivoColector)}</label>
+                <label>Tipo<select id="gestion-tipo"><option value="">Sin asignar</option>${opcionesTipo}</select>${colector('Colector', tipoColector)}</label>
+                <label>Piso (control general)<select id="gestion-piso"><option value="">Sin asignar</option>${opcionesPiso}</select></label>
+                <label>Piso (plano / Equipos)<select id="gestion-piso-plano"><option value="">Sin asignar</option>${opcionesPisoPlano}</select></label>
+                <label>Cliente<select id="gestion-cliente"><option value="">Sin asignar</option>${opcionesCliente}</select></label>
+                <label>Switch<select id="gestion-site"><option value="">Sin asignar</option>${opcionesSite}</select></label>
+                <label>Puerto Fortinet<input id="gestion-puerto" maxlength="100" value="${escaparHTML(item.PuertoFortinet)}" placeholder="Ej. P14"></label>
+                <label class="wide">Descripción<input id="gestion-descripcion" maxlength="500" value="${escaparHTML(gestionada ? item.Descripcion : '')}" placeholder="${escaparHTML(descripcionColector)}"></label>
+            </div>`,
+        showCancelButton: true,
+        showDenyButton: gestionada,
+        denyButtonText: 'Restablecer',
+        confirmButtonText: 'Guardar datos',
+        cancelButtonText: 'Cancelar',
+        didOpen: popup => {
+            /* Sólo se preseleccionan los ids propios de la gestión o los de
+               catálogo heredados del renglón fusionado; el piso heredado de
+               un equipo de cliente vive en otro catálogo (dbo.Pisos). */
+            const seleccionar = (id, valor) => {
+                const selector = popup.querySelector(id);
+                if (!selector) return;
+                const texto = String(valor || '');
+                selector.value = [...selector.options].some(opcion => opcion.value === texto) ? texto : '';
+            };
+            seleccionar('#gestion-dispositivo', item.IdDispositivoGestion || item.IdDispositivo);
+            seleccionar('#gestion-tipo', item.IdTipoEquipoGestion || item.IdTipoEquipo);
+            /* Piso: cada desplegable se preselecciona con SU catálogo. El del
+               plano trae el piso heredado del equipo/plano, que es justo el
+               que antes se veía en la fila pero no salía en el desplegable. */
+            seleccionar('#gestion-piso', item.IdPisoGestion);
+            seleccionar('#gestion-piso-plano', item.IdPisoPlanoGestion);
+            seleccionar('#gestion-site', item.IdSiteGestion || item.IdSite);
+            seleccionar('#gestion-cliente', item.IdClienteGestion ||
+                idPorCodigo.get(String(item.ClienteCodigo || '').trim().toUpperCase()));
+
+            /* Son excluyentes: elegir uno limpia el otro para que la fila no
+               muestre dos pisos distintos. */
+            const piso = popup.querySelector('#gestion-piso');
+            const pisoPlano = popup.querySelector('#gestion-piso-plano');
+            piso?.addEventListener('change', () => {
+                if (piso.value && pisoPlano) pisoPlano.value = '';
+            });
+            pisoPlano?.addEventListener('change', () => {
+                if (pisoPlano.value && piso) piso.value = '';
+            });
+        },
+        preConfirm: () => ({
+            idDispositivo: $('gestion-dispositivo').value || null,
+            idTipoEquipo: $('gestion-tipo').value || null,
+            idPiso: $('gestion-piso').value || null,
+            idPisoPlano: $('gestion-piso-plano').value || null,
+            idSite: $('gestion-site').value || null,
+            idCliente: $('gestion-cliente').value || null,
+            puertoFortinet: $('gestion-puerto').value.trim(),
+            descripcion: $('gestion-descripcion').value.trim()
+        })
+    });
+    if (resultado.isDismissed) return;
+    try {
+        const guardado = resultado.isDenied
+            ? await window.api.inventarioIP.quitarGestion(item.ClaveGestion)
+            : await window.api.inventarioIP.actualizarGestion(item.ClaveGestion, resultado.value);
         if (!guardado?.ok) return mostrarError(guardado?.mensaje);
         await cargar();
         mostrarToast(guardado.mensaje);

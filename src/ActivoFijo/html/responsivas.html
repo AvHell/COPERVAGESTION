@@ -162,6 +162,17 @@
             <div class="modal-body">
                 <div class="grid-form">
 
+                    <p class="nota-inline-catalogos campo-full">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9"/>
+                            <line x1="12" y1="11" x2="12" y2="16"/>
+                            <line x1="12" y1="8" x2="12" y2="8.01"/>
+                        </svg>
+                        <span>¿Falta una opción? Usa <b>+ Nuevo</b> junto a motivo, proyecto, descripción,
+                        cartera, puestos, área o usuario, y se crea al instante <b>sin salir de esta
+                        responsiva</b> ni ir a Activo Fijo › Catálogos.</span>
+                    </p>
+
                     <div class="seccion-titulo campo-full">Activo a asignar</div>
 
                     <div class="campo-full">
@@ -199,22 +210,46 @@
                         <small class="field-hint oculto" id="nota-estatus">El estatus de una responsiva ya guardada sólo cambia con <strong>Devolver</strong> o <strong>Cancelar</strong>: así el activo y la responsiva no se desincronizan.</small>
                     </div>
                     <div class="campo-item">
-                        <label for="motivo">Motivo de la salida</label>
+                        <div class="campo-etiqueta">
+                            <label for="motivo">Motivo de la salida</label>
+                            <button type="button" class="btn-cat-inline" data-cat-inline="motivosResponsiva" data-permiso="activofijo_responsivas" title="Agregar un motivo nuevo al catálogo sin salir de esta responsiva">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>Nuevo</span>
+                            </button>
+                        </div>
                         <select id="motivo"><option value="">— Seleccionar motivo —</option></select>
                     </div>
                     <div class="campo-item">
-                        <label for="proyecto">Nombre del proyecto / servicio</label>
+                        <div class="campo-etiqueta">
+                            <label for="proyecto">Nombre del proyecto / servicio</label>
+                            <button type="button" class="btn-cat-inline" data-cat-inline="proyectosResponsiva" data-permiso="activofijo_responsivas" title="Agregar un proyecto / servicio nuevo al catálogo sin salir de esta responsiva">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>Nuevo</span>
+                            </button>
+                        </div>
                         <select id="proyecto"><option value="">— Seleccionar proyecto —</option></select>
                     </div>
                     <div class="campo-item">
-                        <label for="descripcion">Descripción de la solicitud</label>
+                        <div class="campo-etiqueta">
+                            <label for="descripcion">Descripción de la solicitud</label>
+                            <button type="button" class="btn-cat-inline" data-cat-inline="descripcionesResponsiva" data-permiso="activofijo_responsivas" title="Agregar una descripción nueva al catálogo sin salir de esta responsiva">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>Nuevo</span>
+                            </button>
+                        </div>
                         <select id="descripcion"><option value="">— Seleccionar descripción —</option></select>
                     </div>
 
                     <div class="seccion-titulo campo-full">Información de quien recibe</div>
 
                     <div class="campo-full">
-                        <label for="nombre-recibe">Nombre completo <span class="req">*</span></label>
+                        <div class="campo-etiqueta">
+                            <label for="nombre-recibe">Nombre completo <span class="req">*</span></label>
+                            <button type="button" class="btn-cat-inline" data-cat-inline="usuariosAsignados" data-permiso="activofijo_responsivas" title="Agregar un usuario nuevo al catálogo sin salir de esta responsiva">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>Nuevo</span>
+                            </button>
+                        </div>
                         <input type="search" id="buscar-nombre-recibe" class="buscador-select"
                                placeholder="Filtrar por nombre…" autocomplete="off">
                         <select id="nombre-recibe" required>
@@ -223,7 +258,13 @@
                         <small class="campo-ayuda">Se alimenta del catálogo <b>Usuarios asignados</b> de Activo Fijo.</small>
                     </div>
                     <div class="campo-item">
-                        <label for="puesto-recibe">Puesto</label>
+                        <div class="campo-etiqueta">
+                            <label for="puesto-recibe">Puesto</label>
+                            <button type="button" class="btn-cat-inline" data-cat-inline="puestos" data-permiso="activofijo_responsivas" title="Agregar un puesto nuevo al catálogo sin salir de esta responsiva">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>Nuevo</span>
+                            </button>
+                        </div>
                         <select id="puesto-recibe"><option value="">— Seleccionar puesto —</option></select>
                     </div>
                     <div class="campo-item">
@@ -231,7 +272,13 @@
                         <input type="text" id="correo-recibe" maxlength="150" placeholder="usuario@coperva.com">
                     </div>
                     <div class="campo-item">
-                        <label for="cartera">Cartera</label>
+                        <div class="campo-etiqueta">
+                            <label for="cartera">Cartera</label>
+                            <button type="button" class="btn-cat-inline" data-cat-inline="carteras" data-permiso="activofijo_responsivas" title="Agregar una cartera nueva al catálogo sin salir de esta responsiva">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>Nuevo</span>
+                            </button>
+                        </div>
                         <select id="cartera" required><option value="">— Seleccionar cartera —</option></select>
                     </div>
                     <div class="campo-full">
@@ -248,11 +295,23 @@
                         <select id="nombre-entrega" required><option value="">— Seleccionar usuario —</option></select>
                     </div>
                     <div class="campo-item">
-                        <label for="puesto-entrega">Puesto</label>
+                        <div class="campo-etiqueta">
+                            <label for="puesto-entrega">Puesto</label>
+                            <button type="button" class="btn-cat-inline" data-cat-inline="puestosEntregaResponsiva" data-permiso="activofijo_responsivas" title="Agregar un puesto de quien entrega sin salir de esta responsiva">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>Nuevo</span>
+                            </button>
+                        </div>
                         <select id="puesto-entrega" required><option value="">— Seleccionar puesto —</option></select>
                     </div>
                     <div class="campo-full">
-                        <label for="area-entrega">Área</label>
+                        <div class="campo-etiqueta">
+                            <label for="area-entrega">Área</label>
+                            <button type="button" class="btn-cat-inline" data-cat-inline="areasEntregaResponsiva" data-permiso="activofijo_responsivas" title="Agregar un área de quien entrega sin salir de esta responsiva">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span>Nuevo</span>
+                            </button>
+                        </div>
                         <select id="area-entrega" required><option value="">— Seleccionar área —</option></select>
                     </div>
                 </div>

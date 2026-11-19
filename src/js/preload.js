@@ -132,9 +132,8 @@ contextBridge.exposeInMainWorld('api', {
         actualizarCatalogo: (id, tipo, nombre, origen) =>
             ipcRenderer.invoke('inventario-ip:catalogo:actualizar', id, tipo, nombre, origen),
         eliminarCatalogo: id => ipcRenderer.invoke('inventario-ip:catalogo:eliminar', id),
-        listarPreferencias: () => ipcRenderer.invoke('inventario-ip:preferencias'),
-        guardarPreferencia: (clave, valor) =>
-            ipcRenderer.invoke('inventario-ip:preferencia:guardar', clave, valor),
+        /* Plantilla Excel con los encabezados que reconoce el importador. */
+        plantilla: () => ipcRenderer.invoke('inventario-ip:plantilla'),
         crear: datos => ipcRenderer.invoke('inventario-ip:crear', datos),
         actualizar: (id, datos) => ipcRenderer.invoke('inventario-ip:actualizar', id, datos),
         actualizarDatosEquipoCliente: (idEquipo, datos) =>

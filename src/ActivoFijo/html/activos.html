@@ -497,20 +497,48 @@
 
             <form id="formulario" class="modal-form" autocomplete="off">
                 <div class="modal-body">
+                    <p class="nota-inline-catalogos">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9"/>
+                            <line x1="12" y1="11" x2="12" y2="16"/>
+                            <line x1="12" y1="8" x2="12" y2="8.01"/>
+                        </svg>
+                        <span>¿Falta una opción? Usa <b>+ Nuevo</b> junto a cualquier catálogo —tipo, marca,
+                        modelo, cartera, sitio, usuario asignado y todas las especificaciones técnicas— y se
+                        crea al instante <b>sin salir de este formulario</b> ni ir a la pestaña Catálogos.</span>
+                    </p>
                     <div class="grid-form">
 
                         <div class="seccion-titulo campo-full">Identificación</div>
 
                         <div class="campo-item">
-                            <label for="tipo">Tipo <span class="req">*</span></label>
+                            <div class="campo-etiqueta">
+                                <label for="tipo">Tipo <span class="req">*</span></label>
+                                <button type="button" class="btn-cat-inline" data-cat="tipos" data-permiso="af-cat:crear" title="Agregar un tipo nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="tipo" required></select>
                         </div>
                         <div class="campo-item">
-                            <label for="marca">Marca</label>
+                            <div class="campo-etiqueta">
+                                <label for="marca">Marca</label>
+                                <button type="button" class="btn-cat-inline" data-cat="marcas" data-permiso="af-cat:crear" title="Agregar una marca nueva al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="marca"><option value="">— Sin marca —</option></select>
                         </div>
                         <div class="campo-item">
-                            <label for="modelo">Modelo</label>
+                            <div class="campo-etiqueta">
+                                <label for="modelo">Modelo</label>
+                                <button type="button" class="btn-cat-inline" data-cat="modelos" data-permiso="af-cat:crear" title="Agregar un modelo nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="modelo"><option value="">— Seleccionar modelo —</option></select>
                         </div>
                         <div class="campo-item">
@@ -534,31 +562,73 @@
                         <div class="seccion-titulo campo-full">Ubicación y clasificación</div>
 
                         <div class="campo-item campo-sitio">
-                            <label for="sitio">Sitio</label>
+                            <div class="campo-etiqueta">
+                                <label for="sitio">Sitio</label>
+                                <button type="button" class="btn-cat-inline" data-cat="sitios" data-permiso="af-cat:crear" title="Agregar un sitio nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="sitio"><option value="">— Sin sitio —</option></select>
                         </div>
                         <div class="campo-item campo-subtipo">
-                            <label for="subtipo">Subtipo</label>
+                            <div class="campo-etiqueta">
+                                <label for="subtipo">Subtipo</label>
+                                <button type="button" class="btn-cat-inline" data-cat="subtipos" data-permiso="af-cat:crear" title="Agregar un subtipo para el tipo elegido sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="subtipo" disabled><option value="">— Selecciona un tipo primero —</option></select>
                         </div>
                         <div class="campo-item campo-clasificacion">
-                            <label for="clasificacion">Clasificación</label>
+                            <div class="campo-etiqueta">
+                                <label for="clasificacion">Clasificación</label>
+                                <button type="button" class="btn-cat-inline" data-cat="clasificaciones" data-permiso="af-cat:crear" title="Agregar una clasificación nueva al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="clasificacion"><option value="">— Sin clasificación —</option></select>
                         </div>
                         <div class="campo-item campo-tamanio">
-                            <label for="tamanio">Tamaño</label>
+                            <div class="campo-etiqueta">
+                                <label for="tamanio">Tamaño</label>
+                                <button type="button" class="btn-cat-inline" data-cat="tamanios" data-permiso="af-cat:crear" title="Agregar un tamaño nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="tamanio"><option value="">— Sin tamaño —</option></select>
                         </div>
                         <div class="campo-item campo-capacidad">
-                            <label for="capacidad">Capacidad</label>
+                            <div class="campo-etiqueta">
+                                <label for="capacidad">Capacidad</label>
+                                <button type="button" class="btn-cat-inline" data-cat="capacidades" data-permiso="af-cat:crear" title="Agregar una capacidad nueva al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="capacidad"><option value="">— Sin capacidad —</option></select>
                         </div>
                         <div class="campo-item campo-voltaje">
-                            <label for="voltaje">Voltaje</label>
+                            <div class="campo-etiqueta">
+                                <label for="voltaje">Voltaje</label>
+                                <button type="button" class="btn-cat-inline" data-cat="voltajes" data-permiso="af-cat:crear" title="Agregar un voltaje nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="voltaje"><option value="">— Sin voltaje —</option></select>
                         </div>
                         <div class="campo-item campo-full campo-usuario-asignado oculto">
-                            <label for="usuario-asignado">Usuario asignado <span class="req" id="req-usuario-asignado">*</span></label>
+                            <div class="campo-etiqueta">
+                                <label for="usuario-asignado">Usuario asignado <span class="req" id="req-usuario-asignado">*</span></label>
+                                <button type="button" class="btn-cat-inline" data-cat="usuariosAsignados" data-permiso="af-cat:crear" title="Agregar un usuario nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
 
                             <label class="chk-usuario" for="chk-usuario-asignado">
                                 <input type="checkbox" id="chk-usuario-asignado">
@@ -597,7 +667,13 @@
                             <small class="field-hint oculto" id="nota-estatus"></small>
                         </div>
                         <div class="campo-item">
-                            <label for="cartera">Cartera</label>
+                            <div class="campo-etiqueta">
+                                <label for="cartera">Cartera</label>
+                                <button type="button" class="btn-cat-inline" data-cat="carteras" data-permiso="af-cat:crear" title="Agregar una cartera nueva al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="cartera"><option value="">— Sin cartera —</option></select>
                         </div>
                         <div class="campo-item campo-precio oculto">
@@ -608,24 +684,54 @@
                         <div class="seccion-titulo campo-full bloque-especificaciones oculto">Especificaciones técnicas</div>
 
                         <div class="campo-item bloque-especificaciones oculto">
-                            <label for="procesador">Procesador</label>
+                            <div class="campo-etiqueta">
+                                <label for="procesador">Procesador</label>
+                                <button type="button" class="btn-cat-inline" data-cat="procesadores" data-permiso="af-cat:crear" title="Agregar un procesador nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="procesador"><option value="">— Seleccionar procesador —</option></select>
                         </div>
                         <div class="campo-item bloque-especificaciones oculto">
-                            <label for="ram">Memoria RAM</label>
+                            <div class="campo-etiqueta">
+                                <label for="ram">Memoria RAM</label>
+                                <button type="button" class="btn-cat-inline" data-cat="memoriasRam" data-permiso="af-cat:crear" title="Agregar una memoria RAM nueva al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="ram"><option value="">— Seleccionar memoria —</option></select>
                         </div>
                         <div class="campo-item bloque-especificaciones oculto">
-                            <label for="almacenamiento">Almacenamiento</label>
+                            <div class="campo-etiqueta">
+                                <label for="almacenamiento">Almacenamiento</label>
+                                <button type="button" class="btn-cat-inline" data-cat="almacenamientos" data-permiso="af-cat:crear" title="Agregar un almacenamiento nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="almacenamiento"><option value="">— Seleccionar almacenamiento —</option></select>
                         </div>
                         <div class="campo-item bloque-especificaciones oculto">
-                            <label for="so">Sistema Operativo</label>
+                            <div class="campo-etiqueta">
+                                <label for="so">Sistema Operativo</label>
+                                <button type="button" class="btn-cat-inline" data-cat="sistemasOperativos" data-permiso="af-cat:crear" title="Agregar un sistema operativo (con su compilación) sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="so"><option value="">— Seleccionar sistema operativo —</option></select>
                         </div>
 
                         <div class="campo-item campo-full campo-accesorios oculto">
-                            <label for="accesorios">Accesorios</label>
+                            <div class="campo-etiqueta">
+                                <label for="accesorios">Accesorios</label>
+                                <button type="button" class="btn-cat-inline" data-cat="accesorios" data-permiso="af-cat:crear" title="Agregar un accesorio nuevo al catálogo sin salir de este formulario">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <span>Nuevo</span>
+                                </button>
+                            </div>
                             <select id="accesorios"><option value="">— Seleccionar accesorios —</option></select>
                         </div>
 

@@ -137,14 +137,14 @@ function estiloSolido(color) {
    repite en la tabla) con el color configurado en Catálogos del Sistema.
    Si el cliente no tiene nombre registrado se usa el código como respaldo.
    Los registros que entran directo por el control general no pertenecen a
-   ningún cliente: llevan su propio color (ver colorGeneral()). */
+   ningún cliente: llevan una insignia neutra "General". */
 function badgeCliente(registro) {
     const codigo = String(registro?.ClienteCodigo || '').trim().toUpperCase();
     const nombre = String(registro?.ClienteNombre || '').trim();
     const etiqueta = nombre || codigo;
     if (!etiqueta) {
         if (String(registro?.Origen || '') === 'General') {
-            return `<span class="ip-badge cliente badge-cliente badge-general"${estiloSolido(colorGeneral())}`
+            return '<span class="ip-badge cliente badge-cliente badge-general"'
                 + ' title="Dispositivo del control general: no lo administra ningún cliente"'
                 + '>General</span>';
         }
@@ -160,9 +160,9 @@ function badgeCliente(registro) {
 
 /* =========================================================
    COLOR DEL CLIENTE
-   El color se define en Catálogos del Sistema. Aquí sólo se
-   administra el color propio de los registros que entran
-   directo por el control general.
+   El color se define en Catálogos del Sistema; esta pantalla sólo
+   lo aplica. Los registros que entran directo por el control
+   general no tienen dueño y llevan una insignia neutra.
    ========================================================= */
 
 const COLOR_CLIENTE_DEFECTO = '#6E7B5B';
@@ -175,66 +175,6 @@ function normalizarColorHex(valor, defecto = COLOR_CLIENTE_DEFECTO) {
         return `#${texto.slice(1).split('').map(canal => canal + canal).join('')}`.toUpperCase();
     }
     return defecto;
-}
-
-/* =========================================================
-   COLOR DE LOS DISPOSITIVOS SIN CLIENTE
-   Los registros que entran directo por el control general no los
-   administra ningún cliente, pero también necesitan distinguirse por
-   color. Ese color se guarda en la base de datos
-   (dbo.PreferenciasInventarioIP, clave 'color-general'), así es el mismo
-   en todos los equipos; localStorage queda sólo como caché para poder
-   pintar la tabla antes de que responda la base.
-   ========================================================= */
-
-const COLOR_GENERAL_CLAVE = 'inventario-ip:color-general';
-const COLOR_GENERAL_DEFECTO = '#5C6B73';
-
-/* Último color leído de la base (o de la caché) durante esta sesión. */
-let colorGeneralActual = null;
-
-function colorGeneral() {
-    if (colorGeneralActual) return colorGeneralActual;
-    try {
-        return normalizarColorHex(localStorage.getItem(COLOR_GENERAL_CLAVE), COLOR_GENERAL_DEFECTO);
-    } catch (error) {
-        return COLOR_GENERAL_DEFECTO;
-    }
-}
-
-function cachearColorGeneral(color) {
-    colorGeneralActual = normalizarColorHex(color, COLOR_GENERAL_DEFECTO);
-    try {
-        localStorage.setItem(COLOR_GENERAL_CLAVE, colorGeneralActual);
-    } catch (error) {
-        /* Sin almacenamiento el color sigue aplicado en memoria. */
-    }
-    return colorGeneralActual;
-}
-
-/* Lee el color guardado en la base y refresca la caché local. */
-async function cargarColorGeneral() {
-    try {
-        const preferencias = await window.api?.inventarioIP?.listarPreferencias?.();
-        const color = normalizarColorHex(preferencias?.['color-general'], '');
-        if (color) cachearColorGeneral(color);
-    } catch (error) {
-        console.warn('No se pudo leer el color del control general:', error?.message || error);
-    }
-}
-
-/* Guarda el color en la base. Si la base no responde, el color se aplica
-   igual en esta sesión y se avisa del problema. */
-async function guardarColorGeneral(color) {
-    const normalizado = cachearColorGeneral(color);
-    try {
-        const guardado = await window.api.inventarioIP.guardarPreferencia('color-general', normalizado);
-        return guardado?.ok
-            ? guardado
-            : { ok: false, mensaje: guardado?.mensaje || 'No se pudo guardar el color en la base de datos.' };
-    } catch (error) {
-        return { ok: false, mensaje: `No se pudo guardar el color en la base de datos: ${error.message}` };
-    }
 }
 
 function canalesColor(valor) {
@@ -1217,68 +1157,6 @@ async function editarGestionActivo(item) {
     }
 }
 
-/* Diálogo de color del tono de los dispositivos que no pertenecen a ningún
-   cliente (mismo patrón que Catálogos del Sistema). Devuelve "#RRGGBB", ""
-   si el valor no es válido o null si el usuario cancela. */
-async function pedirColor({ titulo, etiqueta, colorActual, ayuda }) {
-    const resultado = await fireSwal({
-        title: titulo,
-        html: `
-            <div class="color-cliente-form">
-                <p class="color-cliente-titulo">${etiqueta}</p>
-                <label class="color-cliente-campo">Color
-                    <span class="color-picker-field">
-                        <input id="color-cliente-input" type="color" value="${escaparHTML(colorActual)}"
-                            aria-label="Color hexadecimal">
-                        <span id="color-cliente-valor">${escaparHTML(colorActual)}</span>
-                    </span>
-                </label>
-                <p class="color-cliente-ayuda">${ayuda}</p>
-            </div>`,
-        showCancelButton: true,
-        confirmButtonText: 'Guardar color',
-        cancelButtonText: 'Cancelar',
-        didOpen: () => {
-            const input = document.getElementById('color-cliente-input');
-            const valor = document.getElementById('color-cliente-valor');
-            input?.addEventListener('input', () => {
-                if (valor) valor.textContent = normalizarColorHex(input.value);
-            });
-        },
-        preConfirm: () => ({
-            color: normalizarColorHex(document.getElementById('color-cliente-input')?.value, '')
-        })
-    });
-    if (!resultado.isConfirmed) return null;
-    return resultado.value?.color || '';
-}
-
-/* Color de los dispositivos que entran directo por el control general.
-   Es el único color que se administra desde esta pantalla: el color de los
-   equipos de cada cliente se define en Catálogos del Sistema. */
-async function editarColorGeneral() {
-    const colorActual = colorGeneral();
-    const color = await pedirColor({
-        titulo: 'Color de dispositivos sin cliente',
-        etiqueta: '<b>Control general</b> Dispositivos sin cliente asignado',
-        colorActual,
-        ayuda: 'Se aplica a la etiqueta Cliente de los registros que entran directo por '
-            + 'el control general. Se guarda en la base de datos, así que es el mismo '
-            + 'color en cualquier equipo.'
-    });
-    if (color === null) return;
-    if (!color) return mostrarError('El color seleccionado no es válido.');
-    if (color === colorActual) {
-        mostrarToast('El color no cambió.');
-        return;
-    }
-
-    const guardado = await guardarColorGeneral(color);
-    renderizarTabla();
-    if (!guardado?.ok) return mostrarError(guardado?.mensaje);
-    mostrarToast('Color de dispositivos sin cliente actualizado.');
-}
-
 function renderizarCatalogos() {
     const contenedor = $('lista-catalogos');
     contenedor.replaceChildren();
@@ -1533,6 +1411,32 @@ async function exportarExcel() {
 }
 
 /* =========================================================
+   PLANTILLA DE IMPORTACIÓN
+   El archivo lo genera el proceso principal (ExcelJS) con los
+   encabezados que reconoce importacion-inventario-ip.js, dos filas de
+   ejemplo y las opciones reales de los catálogos del ámbito General:
+   si las filas se llenan con esas opciones, la importación siempre
+   encuentra el catálogo y no hay que crear nada a mano.
+   ========================================================= */
+
+async function descargarPlantilla() {
+    try {
+        const generado = await window.api.inventarioIP.plantilla();
+        if (generado?.cancelado) return;
+        if (!generado?.ok) return mostrarError(generado?.mensaje);
+        fireSwal({
+            icon: 'success',
+            title: 'Plantilla lista',
+            html: 'Llena una fila por equipo (borra las dos filas de ejemplo) y sube el '
+                + 'archivo con <b>Importar Excel</b>.<br>'
+                + `<small>${escaparHTML(generado.ruta || '')}</small>`
+        });
+    } catch (error) {
+        mostrarError(error.message);
+    }
+}
+
+/* =========================================================
    IMPORTACIÓN INTELIGENTE DE EXCEL
    El análisis y el mapeo de columnas los hace el proceso principal
    (main) porque ahí vive SheetJS. Aquí sólo se muestra el resumen y
@@ -1659,8 +1563,7 @@ async function cargar() {
     const [listaCatalogos, listaRegistros] = await Promise.all([
         window.api.inventarioIP.listarCatalogos(),
         window.api.inventarioIP.listar(),
-        cargarClientesCatalogo(),
-        cargarColorGeneral()
+        cargarClientesCatalogo()
     ]);
     if (!Array.isArray(listaCatalogos)) throw new Error(listaCatalogos?.mensaje || 'No se pudieron cargar los catálogos.');
     if (!Array.isArray(listaRegistros)) throw new Error(listaRegistros?.mensaje || 'No se pudieron cargar las IP.');
@@ -1769,7 +1672,7 @@ $('btn-nueva-opcion').addEventListener('click', () => abrirModalCatalogo());
 $('btn-cerrar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('btn-cancelar-catalogo').addEventListener('click', limpiarFormularioCatalogo);
 $('btn-exportar').addEventListener('click', () => exportarExcel().catch(error => mostrarError(error.message)));
-$('btn-color-general').addEventListener('click', () => editarColorGeneral().catch(error => mostrarError(error.message)));
+$('btn-plantilla').addEventListener('click', () => descargarPlantilla().catch(error => mostrarError(error.message)));
 $('btn-importar').addEventListener('click', () => importarExcel().catch(error => mostrarError(error.message)));
 
 /* La MAC se captura siempre con dos puntos y 12 dígitos hexadecimales

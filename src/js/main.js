@@ -1414,15 +1414,125 @@ ipcMain.handle('inventario-ip:catalogo:actualizar', async (_e, id, tipo, nombre,
     const err = requerirSesion('equipos:editar'); if (err) return err;
     return await inventarioIPDB.guardarCatalogo(tipo, nombre, id, origen);
 });
-/* Preferencias de la pantalla guardadas en la base (color de los
-   dispositivos del control general, etc.). */
-ipcMain.handle('inventario-ip:preferencias', async () => {
-    const err = requerirSesion('equipos:listado:ver'); if (err) return err;
-    return await inventarioIPDB.listarPreferencias();
-});
-ipcMain.handle('inventario-ip:preferencia:guardar', async (_e, clave, valor) => {
-    const err = requerirSesion('equipos:editar'); if (err) return err;
-    return await inventarioIPDB.guardarPreferencia(clave, valor);
+/* Plantilla de importación del control general: usa exactamente los
+   encabezados que reconoce importacion-inventario-ip.js, trae dos filas
+   de ejemplo y una hoja de referencia con las opciones reales de los
+   catálogos, además de listas desplegables donde caben. Así, al llenarla,
+   ninguna fila depende de un catálogo inexistente. */
+ipcMain.handle('inventario-ip:plantilla', async () => {
+    const err = requerirSesion('equipos:crear'); if (err) return err;
+    try {
+        let catalogos = [];
+        try {
+            catalogos = await inventarioIPDB.listarCatalogos('General');
+        } catch (_) {
+            catalogos = [];
+        }
+        const opcionesDe = tipo => (Array.isArray(catalogos) ? catalogos : [])
+            .filter(opcion => String(opcion.TipoCatalogo || '') === tipo)
+            .map(opcion => String(opcion.Nombre || '').trim())
+            .filter(Boolean);
+
+        /* Orden y etiquetas alineados con ETIQUETAS/ALIAS del importador. */
+        const columnas = [
+            { etiqueta: 'IP', ancho: 18, catalogo: null, ejemplo: ['10.17.0.67', '10.17.0.68'] },
+            { etiqueta: 'Estado', ancho: 14, catalogo: 'Estado', ejemplo: [] },
+            { etiqueta: 'Hostname', ancho: 28, catalogo: null, ejemplo: ['EJEMPLO-PC-01', 'EJEMPLO-PC-02'] },
+            { etiqueta: 'MAC', ancho: 20, catalogo: null, ejemplo: ['00:11:22:33:44:55', '00:11:22:33:44:66'] },
+            { etiqueta: 'Descripción', ancho: 34, catalogo: null, ejemplo: ['Equipo de recepción', 'Equipo de almacén'] },
+            { etiqueta: 'Dispositivo', ancho: 18, catalogo: 'Dispositivo', ejemplo: [] },
+            { etiqueta: 'Tipo', ancho: 18, catalogo: 'TipoEquipo', ejemplo: [] },
+            { etiqueta: 'Cliente', ancho: 26, catalogo: null, ejemplo: ['', ''] },
+            { etiqueta: 'Piso', ancho: 18, catalogo: 'Piso', ejemplo: [] },
+            { etiqueta: 'Switch', ancho: 20, catalogo: 'Site', ejemplo: [] },
+            { etiqueta: 'Puerto', ancho: 16, catalogo: null, ejemplo: ['Gi0/12', 'Gi0/13'] },
+            { etiqueta: 'Tipo de IP', ancho: 20, catalogo: 'TipoIP', ejemplo: [] }
+        ];
+
+        /* Si el catálogo tiene opciones, el ejemplo usa la primera para que
+           la fila de muestra pase las validaciones de catálogo. */
+        const valorEjemplo = (columna, indice) => {
+            const propio = columna.ejemplo[indice];
+            if (propio) return propio;
+            const opciones = columna.catalogo ? opcionesDe(columna.catalogo) : [];
+            return opciones.length ? opciones[0] : '';
+        };
+
+        const ahora = new Date();
+        const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+        const downloadsDir = path.join(os.homedir(), 'Downloads');
+        const { canceled, filePath } = await dialog.showSaveDialog({
+            title: 'Descargar plantilla de importación',
+            defaultPath: path.join(
+                fs.existsSync(downloadsDir) ? downloadsDir : os.homedir(),
+                `Plantilla_ControlIP_${hoy}.xlsx`
+            ),
+            filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (canceled || !filePath) return { ok: false, cancelado: true };
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Coperva';
+        workbook.created = new Date();
+        const hoja = workbook.addWorksheet('Inventario IP', {
+            views: [{ state: 'frozen', ySplit: 1 }]
+        });
+        hoja.columns = columnas.map(columna => ({ header: columna.etiqueta, width: columna.ancho }));
+        hoja.addRow(columnas.map(columna => valorEjemplo(columna, 0)));
+        hoja.addRow(columnas.map(columna => valorEjemplo(columna, 1)));
+
+        hoja.getRow(1).eachCell(celda => {
+            celda.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF55744F' } };
+            celda.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            celda.alignment = { vertical: 'middle', wrapText: true };
+        });
+        hoja.getRow(1).height = 30;
+        hoja.eachRow((fila, numero) => {
+            fila.alignment = { vertical: 'middle', wrapText: true };
+            if (numero > 1) fila.font = { color: { argb: 'FF8A8A8A' }, italic: true };
+        });
+        hoja.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columnas.length } };
+
+        /* Listas desplegables: sólo se agregan si la lista cabe en el límite
+           de Excel (255 caracteres en una validación en línea). */
+        columnas.forEach((columna, indice) => {
+            if (!columna.catalogo) return;
+            const opciones = opcionesDe(columna.catalogo);
+            if (!opciones.length) return;
+            const lista = opciones.join(',').replace(/"/g, '');
+            if (lista.length > 250) return;
+            const letra = String.fromCharCode(65 + indice);
+            for (let fila = 2; fila <= 500; fila += 1) {
+                hoja.getCell(`${letra}${fila}`).dataValidation = {
+                    type: 'list',
+                    allowBlank: true,
+                    formulae: [`"${lista}"`]
+                };
+            }
+        });
+
+        /* Hoja de referencia: no tiene encabezados de IP/MAC/Hostname, así que
+           el importador la ignora y nunca se confunde con datos. */
+        const referencia = workbook.addWorksheet('Catálogos válidos');
+        referencia.columns = [{ width: 110 }];
+        referencia.addRow(['OPCIONES VÁLIDAS POR CATÁLOGO (sólo referencia; esta hoja no se importa)']);
+        referencia.getRow(1).font = { bold: true };
+        for (const tipo of ['Estado', 'Dispositivo', 'TipoEquipo', 'Piso', 'Site', 'TipoIP']) {
+            const etiqueta = tipo === 'Site' ? 'Switch' : tipo === 'TipoEquipo' ? 'Tipo' : tipo;
+            const opciones = opcionesDe(tipo);
+            referencia.addRow([
+                opciones.length
+                    ? `${etiqueta}: ${opciones.join(' · ')}`
+                    : `${etiqueta}: (sin opciones registradas; la importación puede crearlas)`
+            ]);
+        }
+
+        await workbook.xlsx.writeFile(filePath);
+        return { ok: true, ruta: filePath };
+    } catch (error) {
+        console.error('[InventarioIP] Error generando la plantilla:', error);
+        return { ok: false, mensaje: `No se pudo generar la plantilla: ${error.message}` };
+    }
 });
 ipcMain.handle('inventario-ip:catalogo:eliminar', async (_e, id) => {
     const err = requerirSesion('equipos:eliminar'); if (err) return err;

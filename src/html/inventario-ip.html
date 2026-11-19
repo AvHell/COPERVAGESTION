@@ -24,8 +24,21 @@
         </div>
         <div class="header-actions">
             <button id="btn-catalogos" type="button" class="button secondary" data-permiso="equipos:listado:ver">Catálogos</button>
-            <button id="btn-color-general" type="button" class="button secondary" data-permiso="equipos:editar">Asignar color</button>
             <button id="btn-exportar" type="button" class="button secondary" data-permiso="equipos:listado:exportar">Exportar a Excel</button>
+            <!-- Icono propio: hoja de cálculo con la flecha de descarga,
+                 para distinguirla del icono genérico de "bajar archivo". -->
+            <button id="btn-plantilla" type="button" class="button secondary" data-permiso="equipos:crear"
+                title="Descarga un Excel con las columnas que reconoce el importador y las opciones reales de los catálogos">
+                <svg class="button-icono" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                    <path d="M13.4 2.6H7A2.5 2.5 0 0 0 4.5 5.1v13.8A2.5 2.5 0 0 0 7 21.4h4.6"/>
+                    <path d="M13.3 2.8v5.2h5.2"/>
+                    <path d="M8 8.2h3.2M8 11.6h5.6M8 15h3.4"/>
+                    <path d="M17.6 12.6v6.9"/>
+                    <path d="M15 16.9l2.6 2.6 2.6-2.6"/>
+                </svg>
+                <span>Descargar plantilla</span>
+            </button>
             <button id="btn-importar" type="button" class="button secondary" data-permiso="equipos:crear">Importar Excel</button>
         </div>
     </header>
@@ -164,7 +177,7 @@
             <div class="modal-heading">
                 <div>
                     <h2 id="modal-catalogos-titulo">Catálogos editables</h2>
-                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP. El color de las etiquetas de los equipos de cada cliente se ajusta en Catálogos del Sistema; los registros del control general tienen su propio color, que se asigna con el botón <b>Asignar color</b> del encabezado.</p>
+                    <p>Opciones de dispositivo, tipo, piso, switch, estado y asignación IP. El color de las etiquetas de los equipos de cada cliente se ajusta en Catálogos del Sistema; los registros del control general llevan una insignia neutra.</p>
                 </div>
                 <button id="btn-cerrar-catalogos" type="button" class="button secondary" aria-label="Cerrar">Cerrar</button>
             </div>

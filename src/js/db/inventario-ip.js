@@ -14,11 +14,6 @@ const TIPOS_CATALOGO = Object.freeze([
    general y a los equipos de los clientes). Ver scripts/control-general-ip.sql. */
 const ORIGENES_CATALOGO = Object.freeze(['General', 'Cliente']);
 
-/* Preferencias de la pantalla que se guardan en la base de datos
-   (dbo.PreferenciasInventarioIP). */
-const CLAVE_COLOR_GENERAL = 'color-general';
-const COLOR_GENERAL_DEFECTO = '#5C6B73';
-
 function validarIdCatalogo(id) {
     const valor = Number(id);
     return Number.isInteger(valor) && valor > 0 ? valor : null;
@@ -277,78 +272,6 @@ async function eliminarCatalogo(id) {
     } catch (error) {
         if (error.number === 547) {
             return { ok: false, mensaje: 'No se puede eliminar: el catálogo está asignado a una IP.' };
-        }
-        throw error;
-    }
-}
-
-/* =========================================================
-   PREFERENCIAS DE LA PANTALLA (dbo.PreferenciasInventarioIP)
-   Antes vivían sólo en localStorage, así que cada equipo tenía su propio
-   color. Ahora se guardan en la base y son las mismas para todos.
-   ========================================================= */
-
-/* Validador/normalizador por preferencia conocida. */
-const VALIDADORES_PREFERENCIA = Object.freeze({
-    [CLAVE_COLOR_GENERAL]: valor =>
-        /^#[0-9A-F]{6}$/i.test(String(valor || '').trim())
-            ? String(valor).trim().toUpperCase()
-            : null
-});
-
-function validarPreferencia(clave, valor) {
-    const nombre = String(clave || '').trim().toLowerCase();
-    if (!Object.prototype.hasOwnProperty.call(VALIDADORES_PREFERENCIA, nombre)) return null;
-    const normalizado = VALIDADORES_PREFERENCIA[nombre](valor);
-    return normalizado ? { clave: nombre, valor: normalizado } : null;
-}
-
-/** Devuelve { 'color-general': '#RRGGBB', ... }; {} si la tabla no existe. */
-async function listarPreferencias() {
-    const pool = await getPool();
-    try {
-        const result = await pool.request().query(`
-            SELECT Clave, Valor FROM dbo.PreferenciasInventarioIP
-        `);
-        const preferencias = {};
-        for (const fila of result.recordset) {
-            preferencias[String(fila.Clave || '').trim().toLowerCase()] = fila.Valor;
-        }
-        return preferencias;
-    } catch (error) {
-        if (error.number === 208) return {};
-        throw error;
-    }
-}
-
-async function guardarPreferencia(clave, valor) {
-    const preferencia = validarPreferencia(clave, valor);
-    if (!preferencia) return { ok: false, mensaje: 'La preferencia enviada no es válida.' };
-
-    const pool = await getPool();
-    try {
-        const request = pool.request()
-            .input('Clave', sql.VarChar(60), preferencia.clave)
-            .input('Valor', sql.NVarChar(200), preferencia.valor);
-        const actualizado = await request.query(`
-            UPDATE dbo.PreferenciasInventarioIP
-            SET Valor = @Valor, FechaActualizacion = SYSDATETIME()
-            WHERE Clave = @Clave
-        `);
-        if (!actualizado.rowsAffected[0]) {
-            await request.query(`
-                INSERT INTO dbo.PreferenciasInventarioIP (Clave, Valor)
-                VALUES (@Clave, @Valor)
-            `);
-        }
-        return { ok: true, mensaje: 'Preferencia guardada.', valor: preferencia.valor };
-    } catch (error) {
-        if (error.number === 208) {
-            return {
-                ok: false,
-                tablaFaltante: true,
-                mensaje: 'Falta ejecutar scripts/control-general-ip.sql para guardar la preferencia en la base de datos.'
-            };
         }
         throw error;
     }
@@ -1702,8 +1625,6 @@ module.exports = {
     listarCatalogos,
     guardarCatalogo,
     eliminarCatalogo,
-    listarPreferencias,
-    guardarPreferencia,
     listar,
     actualizarDatosEquipoCliente,
     /* Complemento editable de las filas que reporta el colector

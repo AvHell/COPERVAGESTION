@@ -193,6 +193,19 @@ input:focus, select:focus { outline: 2px solid #a99a6380; border-color: var(--ip
 .button.danger { background: var(--ip-rojo); color: #fff; }
 .button.danger:hover { background: var(--ip-rojo-hover); }
 
+/* Botones con icono: el SVG se alinea con el texto sin alterar la altura
+   mínima del botón ni el salto de línea en pantallas estrechas. */
+.button-icono {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+.header .header-actions .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
 /* =========================================================
    MODALES
    ========================================================= */

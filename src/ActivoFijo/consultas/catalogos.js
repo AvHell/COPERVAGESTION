@@ -587,11 +587,20 @@ async function crear(clave, datos) {
         columnas.push('Activo');
         valores.push('1');
 
-        await request.query(
-            `INSERT INTO ${cfg.tabla} (${columnas.join(', ')}) VALUES (${valores.join(', ')})`
+        /* OUTPUT INSERTED devuelve el Id recién creado: los formularios que
+           dan de alta un catálogo al vuelo (activo y responsiva) lo usan
+           para dejar la opción nueva seleccionada sin volver a listar. */
+        const insertado = await request.query(
+            `INSERT INTO ${cfg.tabla} (${columnas.join(', ')})
+             OUTPUT INSERTED.${cfg.pk} AS Id
+             VALUES (${valores.join(', ')})`
         );
 
-        return { ok: true, mensaje: 'Registro creado correctamente.' };
+        return {
+            ok: true,
+            mensaje: 'Registro creado correctamente.',
+            id: insertado.recordset && insertado.recordset[0] ? insertado.recordset[0].Id : null
+        };
     } catch (err) {
         if (err.number === 2627 || err.number === 2601) {
             return { ok: false, mensaje: 'Ya existe un registro con ese valor único.' };

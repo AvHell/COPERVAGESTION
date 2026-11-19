@@ -1906,6 +1906,244 @@ function aplicarCascada(res) {
     });
 }
 
+/* =========================================================
+   ALTA DIRECTA DE CATÁLOGOS DESDE EL FORMULARIO
+   ---------------------------------------------------------
+   El modal sabe qué tipo de activo se está capturando, así que no
+   tiene sentido mandar al usuario a la pestaña Catálogos cuando le
+   falta una marca, un modelo o un procesador. Aquí se crea al vuelo
+   con el mismo backend de catálogos (af-cat:crear) y la opción queda
+   seleccionada sin cerrar el formulario. `porId` indica si el <select>
+   usa el Id como value (catálogos con tabla propia) o el Nombre (los
+   catálogos de texto). `after` cubre los que tienen lógica especial
+   (SO por compilación, subtipos por grupo y usuarios filtrados).
+   ========================================================= */
+const CATALOGOS_INLINE = {
+    tipos: {
+        titulo: 'Tipo', porId: true, pk: 'IdTipo',
+        select: () => selTipo, lista: () => tipos,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del tipo', requerido: true, max: 100, placeholder: 'Ej. LAPTOP' }]
+    },
+    marcas: {
+        titulo: 'Marca', porId: true, pk: 'IdMarca',
+        select: () => selMarca, lista: () => marcas,
+        campos: [{ nombre: 'Nombre', label: 'Nombre de la marca', requerido: true, max: 100, placeholder: 'Ej. HP' }]
+    },
+    modelos: {
+        titulo: 'Modelo', porId: false,
+        select: () => inpModelo, lista: () => catalogosEspecificaciones.modelos,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del modelo', requerido: true, max: 150, placeholder: 'Ej. ProBook 450 G8' }]
+    },
+    carteras: {
+        titulo: 'Cartera', porId: true, pk: 'IdCartera',
+        select: () => selCartera, lista: () => carteras,
+        campos: [{ nombre: 'Nombre', label: 'Nombre de la cartera', requerido: true, max: 100, placeholder: 'Ej. Coperva' }]
+    },
+    sitios: {
+        titulo: 'Sitio', porId: true, pk: 'IdSitio',
+        select: () => selSitio, lista: () => sitios,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del sitio', requerido: true, max: 100, placeholder: 'Ej. Corporativo' }]
+    },
+    subtipos: {
+        titulo: 'Subtipo', porId: true, pk: 'IdSubtipo', desdeTipo: true,
+        lista: () => subtipos,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del subtipo', requerido: true, max: 100, placeholder: 'Ej. ULTRADELGADO' }],
+        after: (id, datos) => { poblarSubtipos(datos.Grupo, id); }
+    },
+    clasificaciones: {
+        titulo: 'Clasificación', porId: true, pk: 'IdClasificacion',
+        select: () => selClasificacion, lista: () => clasificaciones,
+        campos: [{ nombre: 'Nombre', label: 'Nombre de la clasificación', requerido: true, max: 50, placeholder: 'Ej. INTERNO' }]
+    },
+    tamanios: {
+        titulo: 'Tamaño', porId: true, pk: 'IdTamanio',
+        select: () => selTamanio, lista: () => tamanios,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del tamaño', requerido: true, max: 50, placeholder: 'Ej. 24"' }]
+    },
+    capacidades: {
+        titulo: 'Capacidad', porId: true, pk: 'IdCapacidad',
+        select: () => selCapacidad, lista: () => capacidades,
+        campos: [{ nombre: 'Nombre', label: 'Nombre de la capacidad', requerido: true, max: 50, placeholder: 'Ej. 1 TB' }]
+    },
+    voltajes: {
+        titulo: 'Voltaje', porId: true, pk: 'IdVoltaje',
+        select: () => selVoltaje, lista: () => voltajes,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del voltaje', requerido: true, max: 50, placeholder: 'Ej. 110V' }]
+    },
+    procesadores: {
+        titulo: 'Procesador', porId: false,
+        select: () => inpProcesador, lista: () => catalogosEspecificaciones.procesadores,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del procesador', requerido: true, max: 150, placeholder: 'Ej. Intel Core i5-1135G7' }]
+    },
+    memoriasRam: {
+        titulo: 'Memoria RAM', porId: false,
+        select: () => inpRAM, lista: () => catalogosEspecificaciones.memoriasRam,
+        campos: [{ nombre: 'Nombre', label: 'Capacidad de memoria', requerido: true, max: 50, placeholder: 'Ej. 16 GB' }]
+    },
+    almacenamientos: {
+        titulo: 'Almacenamiento', porId: false,
+        select: () => inpAlmacenamiento, lista: () => catalogosEspecificaciones.almacenamientos,
+        campos: [{ nombre: 'Nombre', label: 'Tipo de almacenamiento', requerido: true, max: 50, placeholder: 'Ej. SSD 512 GB' }]
+    },
+    sistemasOperativos: {
+        titulo: 'Sistema operativo', porId: true, pk: 'IdSistemaOperativo',
+        lista: () => catalogosEspecificaciones.sistemasOperativos,
+        campos: [
+            { nombre: 'Nombre',  label: 'Nombre del sistema operativo', requerido: true, max: 100, placeholder: 'Ej. Windows 11' },
+            { nombre: 'BuildSO', label: 'Compilación / build (opcional)', requerido: false, max: 20, placeholder: 'Ej. 23H2' }
+        ],
+        after: (id, datos) => {
+            poblarSistemasOperativos(catalogosEspecificaciones.sistemasOperativos);
+            inpSO.value = String(id);
+            inpSO.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    },
+    accesorios: {
+        titulo: 'Accesorio', porId: false,
+        select: () => inpAccesorios, lista: () => catalogosEspecificaciones.accesorios,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del accesorio', requerido: true, max: 300, placeholder: 'Ej. Cargador 65W USB-C' }]
+    },
+    usuariosAsignados: {
+        titulo: 'Usuario asignado', porId: false,
+        lista: () => catalogosEspecificaciones.usuariosAsignados,
+        campos: [{ nombre: 'Nombre', label: 'Nombre del usuario', requerido: true, max: 200, placeholder: 'Ej. Juan Pérez López' }],
+        after: (id, datos) => {
+            if (chkUsuarioAsignado) chkUsuarioAsignado.checked = true;
+            aplicarVisibilidadUsuario();
+            /* El buscador se limpia a propósito: si quedara un filtro activo,
+               el usuario recién creado podría no estar en la lista y la
+               selección se perdería justo después de crearlo. */
+            if (buscadorUsuario) buscadorUsuario.value = '';
+            poblarUsuarios();
+            if (inpUsuarioAsig) inpUsuarioAsig.value = datos.Nombre;
+        }
+    }
+};
+
+/* Abre un mini formulario (Swal) con los campos del catálogo, lo crea con
+   `catalogos.crear` y coloca la opción nueva en su <select> sin cerrar el
+   modal del activo. Devuelve cuando todo termina para poder encadenar. */
+async function agregarCatalogoInline(clave) {
+    const cfg = CATALOGOS_INLINE[clave];
+    if (!cfg || !puedeAcceder('af-cat:crear')) return;
+
+    /* El subtipo se agrupa con el mismo criterio que la cascada del
+       formulario (poblarSubtipos(tipo.GrupoSubtipo)): si se usara otro
+       respaldo, el subtipo recién creado caería en un grupo que este
+       modal nunca muestra y la opción no aparecería. */
+    let grupoSubtipo = '';
+    if (cfg.desdeTipo) {
+        const tipo = tipos.find(t => Number(t.IdTipo) === Number(selTipo.value));
+        if (!tipo) {
+            await Swal.fire({
+                icon: 'info',
+                title: 'Elige un tipo primero',
+                text: 'El subtipo se agrupa según el tipo del activo. Selecciona el Tipo y vuelve a intentarlo.',
+                customClass: { popup: 'cl-alert' }
+            });
+            return;
+        }
+        grupoSubtipo = String(tipo.GrupoSubtipo || '').trim();
+        if (!grupoSubtipo) {
+            await Swal.fire({
+                icon: 'info',
+                title: 'Este tipo no tiene grupo de subtipos',
+                text: `"${tipo.Nombre}" todavía no tiene un grupo de subtipo asignado. Asígnalo en Catálogos › Tipos y vuelve a intentarlo.`,
+                customClass: { popup: 'cl-alert' }
+            });
+            return;
+        }
+    }
+
+    const camposHtml = cfg.campos.map((campo, i) => `
+        <label class="swal-cat-label" for="swal-cat-${i}">
+            ${escaparHTML(campo.label)}${campo.requerido ? ' <span class="req">*</span>' : ''}
+        </label>
+        <input id="swal-cat-${i}" type="text" class="swal2-input swal-cat-input"
+            maxlength="${campo.max || 100}"
+            placeholder="${escaparHTML(campo.placeholder || '')}">`).join('');
+
+    const grupoHtml = grupoSubtipo
+        ? `<p class="swal-cat-grupo">Se agregará al grupo <b>${escaparHTML(grupoSubtipo)}</b>.</p>`
+        : '';
+
+    const resultado = await Swal.fire({
+        title: `Nuevo ${cfg.titulo.toLowerCase()}`,
+        html: `<div class="swal-cat-form">${grupoHtml}${camposHtml}</div>`,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Agregar y seleccionar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#6E7B5B',
+        customClass: { popup: 'cl-alert cl-alta-catalogo' },
+        didOpen: popup => popup.querySelector('.swal-cat-input')?.focus(),
+        preConfirm: () => {
+            const datos = {};
+            for (let i = 0; i < cfg.campos.length; i += 1) {
+                const campo = cfg.campos[i];
+                const valor = (document.getElementById(`swal-cat-${i}`)?.value || '').trim();
+                if (campo.requerido && !valor) {
+                    Swal.showValidationMessage(`Escribe ${campo.label.toLowerCase()}.`);
+                    return false;
+                }
+                if (valor) datos[campo.nombre] = valor;
+            }
+            if (grupoSubtipo) datos.Grupo = grupoSubtipo;
+            return datos;
+        }
+    });
+
+    if (!resultado.isConfirmed || !resultado.value) return;
+
+    try {
+        const res = await window.api.activoFijo.catalogos.crear(clave, resultado.value);
+        if (!res || !res.ok) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'No se pudo crear',
+                text: res?.mensaje || 'Inténtalo de nuevo.',
+                customClass: { popup: 'cl-alert cl-alert-error' }
+            });
+            return;
+        }
+        colocarCatalogoNuevo(cfg, res.id, resultado.value);
+        toastExito(`${cfg.titulo} agregado`);
+    } catch (err) {
+        toastError('No se pudo crear', err.message);
+    }
+}
+
+/* Inserta la opción recién creada en el control y en el arreglo en memoria,
+   para que la cascada por tipo y los repoblados no la hagan desaparecer. */
+function colocarCatalogoNuevo(cfg, id, datos) {
+    const nombre = datos.Nombre || '';
+    const etiqueta = cfg.etiqueta ? cfg.etiqueta(datos) : nombre;
+
+    const lista = cfg.lista ? cfg.lista() : null;
+    if (Array.isArray(lista)) {
+        lista.push(cfg.porId ? Object.assign({}, datos, { [cfg.pk]: id }) : Object.assign({}, datos));
+    }
+
+    if (cfg.after) { cfg.after(id, datos, etiqueta); return; }
+
+    const select = cfg.select ? cfg.select() : null;
+    if (!select) return;
+    const valor = cfg.porId ? id : nombre;
+    if (!Array.prototype.some.call(select.options, o => String(o.value) === String(valor))) {
+        select.add(new Option(etiqueta, valor, true, true));
+    }
+    select.value = String(valor);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/* Delegación de clic: cualquier botón "+ Nuevo" del modal abre su alta. */
+modal.addEventListener('click', event => {
+    const boton = event.target.closest('.btn-cat-inline');
+    if (!boton) return;
+    event.preventDefault();
+    agregarCatalogoInline(boton.dataset.cat).catch(err => toastError('No se pudo crear', err.message));
+});
+
 /* Perfil real de cada tipo (cuántos de sus equipos tienen cada campo
    capturado). Lo llena la cascada desde el inventario; mientras no llegue
    o el tipo no tenga equipos, manda la bandera del catálogo. */
@@ -2883,24 +3121,26 @@ document.getElementById('btn-volver').addEventListener('click', () => {
 });
 
 /* =========================================================
+   GRUPOS DE SUBTIPO
+   Vive en el ámbito del módulo (no dentro de CatalogosUI) porque también
+   lo usa el alta rápida de subtipos desde el modal del activo.
+   ========================================================= */
+const GRUPOS_SUBTIPO = [
+    { valor: 'DIADEMA',         etiqueta: 'Diadema' },
+    { valor: 'MOUSE',           etiqueta: 'Mouse' },
+    { valor: 'TECLADO',         etiqueta: 'Teclado' },
+    { valor: 'CARGADOR',        etiqueta: 'Cargador' },
+    { valor: 'ADAPTADOR_VIDEO', etiqueta: 'Adaptador de Video' },
+    { valor: 'ALMACENAMIENTO',  etiqueta: 'Almacenamiento' }
+];
+
+/* =========================================================
    MÓDULO DE CATÁLOGOS (misma página, sin módulos aparte)
    ========================================================= */
 const CatalogosUI = (() => {
     'use strict';
 
     const $ = (id) => document.getElementById(id);
-
-    /* =========================================================
-       GRUPOS DE SUBTIPO
-       ========================================================= */
-    const GRUPOS_SUBTIPO = [
-        { valor: 'DIADEMA',         etiqueta: 'Diadema' },
-        { valor: 'MOUSE',           etiqueta: 'Mouse' },
-        { valor: 'TECLADO',         etiqueta: 'Teclado' },
-        { valor: 'CARGADOR',        etiqueta: 'Cargador' },
-        { valor: 'ADAPTADOR_VIDEO', etiqueta: 'Adaptador de Video' },
-        { valor: 'ALMACENAMIENTO',  etiqueta: 'Almacenamiento' }
-    ];
 
     /* Requisitos mostrados como chips en la tabla de tipos */
     const REQUISITOS_TIPO = [

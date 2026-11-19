@@ -984,6 +984,111 @@ body {
     font-weight: 700;
     margin-left: 2px;
 }
+
+/* =========================================================
+   ALTA RÁPIDA DE CATÁLOGOS DESDE EL MISMO FORMULARIO
+   ---------------------------------------------------------
+   El botón "+ Nuevo" vive pegado a la etiqueta del campo, así que la
+   etiqueta pasa a ser una fila flex. `[hidden]` se fuerza a none porque
+   PermisosUI oculta con el atributo y nuestro `display:inline-flex`
+   anularía el `display:none` del navegador.
+   ========================================================= */
+#modal-activo .modal-base { max-width: 1000px; }
+
+.nota-inline-catalogos {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin: 0 0 18px;
+    padding: 11px 14px;
+    border: 1px solid var(--tierra-arena);
+    border-radius: var(--radius-md);
+    background: var(--tierra-crema);
+    color: var(--gray-700);
+    font-size: 0.79rem;
+    line-height: 1.5;
+}
+.nota-inline-catalogos svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--tierra-oliva);
+}
+.nota-inline-catalogos b { color: var(--tierra-carbon); }
+
+.campo-etiqueta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 24px;
+}
+.campo-etiqueta > label { margin: 0; }
+
+.btn-cat-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 3px 9px 3px 6px;
+    border: 1px solid var(--tierra-arena);
+    border-radius: 999px;
+    background: var(--tierra-crema);
+    color: var(--tierra-oliva);
+    font-family: var(--font-display);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.btn-cat-inline svg { width: 11px; height: 11px; }
+.btn-cat-inline:hover {
+    background: var(--tierra-oliva);
+    border-color: var(--tierra-oliva);
+    color: var(--tierra-crema);
+}
+.btn-cat-inline:focus-visible { outline: 2px solid var(--tierra-oro); outline-offset: 2px; }
+.btn-cat-inline[hidden] { display: none !important; }
+.btn-cat-inline:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Mini formulario (Swal) que pide los datos del catálogo nuevo */
+/* Doble clase para ganarle a `.swal2-popup.cl-alert { width: 480px }`. */
+.swal2-popup.cl-alert.cl-alta-catalogo { width: min(460px, 94vw) !important; }
+.swal-cat-form {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+}
+.swal-cat-label {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin: 0 0 5px;
+}
+.swal-cat-label .req { color: var(--rojo-base); font-weight: 700; }
+.swal-cat-form .swal2-input.swal-cat-input {
+    margin: 0 0 14px;
+    width: 100%;
+    height: 44px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: 11px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    color: var(--gray-800);
+}
+.swal-cat-form .swal2-input.swal-cat-input:hover:not(:focus) { border-color: var(--gray-300); }
+.swal-cat-form .swal2-input.swal-cat-input:focus { border-color: var(--tierra-oliva); outline: none; }
+.swal-cat-form .swal2-input.swal-cat-input:last-child { margin-bottom: 0; }
+.swal-cat-grupo {
+    margin: 0 0 12px;
+    font-size: 0.79rem;
+    color: var(--gray-600);
+}
+.swal-cat-grupo b { color: var(--tierra-carbon); }
 .grid-form input[type="text"],
 .grid-form input[type="number"],
 .grid-form select,

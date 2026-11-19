@@ -530,6 +530,159 @@ async function administrarCatalogosResponsiva() {
 btnCatalogosResp?.addEventListener('click', administrarCatalogosResponsiva);
 
 /* =========================================================
+   ALTA DIRECTA DE CATÁLOGOS DESDE LA RESPONSIVA
+   ---------------------------------------------------------
+   Igual que en el inventario de activo fijo: cuando al capturar la
+   responsiva falta un motivo, un proyecto, un puesto o una cartera, se
+   crea al vuelo con `responsivas.crearCatalogo` (af-resp-catalogo-crear)
+   y la opción queda seleccionada sin cerrar el modal.
+   `porId` indica si el <select> usa el Id como value (catálogos con
+   tabla propia) o el Nombre (catálogos de texto).
+   ========================================================= */
+const CATALOGOS_INLINE_RESPONSIVA = {
+    motivosResponsiva: {
+        titulo: 'Motivo de salida', porId: false, max: 150,
+        select: () => selMotivo, lista: () => catalogosResponsiva.motivosResponsiva,
+        etiqueta: 'Nombre del motivo', placeholder: 'Ej. Reemplazo de equipo'
+    },
+    proyectosResponsiva: {
+        titulo: 'Proyecto / servicio', porId: false, max: 200,
+        select: () => selProyecto, lista: () => catalogosResponsiva.proyectosResponsiva,
+        etiqueta: 'Nombre del proyecto o servicio', placeholder: 'Ej. Implementación ADAMA'
+    },
+    descripcionesResponsiva: {
+        titulo: 'Descripción de solicitud', porId: false, max: 300,
+        select: () => selDescripcion, lista: () => catalogosResponsiva.descripcionesResponsiva,
+        etiqueta: 'Descripción de la solicitud', placeholder: 'Ej. Equipo de cómputo para nueva ingreso'
+    },
+    usuariosAsignados: {
+        titulo: 'Usuario asignado', porId: false, max: 200,
+        lista: () => usuariosAsignados,
+        etiqueta: 'Nombre completo del usuario', placeholder: 'Ej. Juan Pérez López',
+        after: (id, datos) => {
+            limpiarBuscadorSelect(inpBuscarNombreRecibe, inpNombreRecibe);
+            poblarUsuariosAsignados(datos.Nombre);
+        }
+    },
+    puestos: {
+        titulo: 'Puesto de quien recibe', porId: true, pk: 'IdPuesto', max: 100,
+        select: () => selPuestoRecibe, lista: () => puestos,
+        etiqueta: 'Nombre del puesto', placeholder: 'Ej. Auxiliar de sistemas'
+    },
+    carteras: {
+        titulo: 'Cartera', porId: true, pk: 'IdCartera', max: 100,
+        select: () => selCartera, lista: () => carteras,
+        etiqueta: 'Nombre de la cartera', placeholder: 'Ej. Coperva'
+    },
+    puestosEntregaResponsiva: {
+        titulo: 'Puesto de quien entrega', porId: true, pk: 'IdPuestoEntregaResponsiva', max: 100,
+        select: () => selPuestoEntrega, lista: () => puestosEntrega,
+        etiqueta: 'Nombre del puesto', placeholder: 'Ej. Coordinador de TI'
+    },
+    areasEntregaResponsiva: {
+        titulo: 'Área de quien entrega', porId: true, pk: 'IdAreaEntregaResponsiva', max: 100,
+        select: () => selAreaEntrega, lista: () => catalogosResponsiva.areasEntregaResponsiva,
+        etiqueta: 'Nombre del área', placeholder: 'Ej. Sistemas'
+    }
+};
+
+/* Aviso breve (esquina) para no interrumpir la captura. */
+function toastExito(texto) {
+    return Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: texto,
+        showConfirmButton: false,
+        timer: 1800,
+        timerProgressBar: true,
+        customClass: { popup: 'cl-toast' }
+    });
+}
+
+async function agregarCatalogoResponsivaInline(clave) {
+    const cfg = CATALOGOS_INLINE_RESPONSIVA[clave];
+    if (!cfg) return;
+
+    const resultado = await Swal.fire({
+        title: `Nuevo ${cfg.titulo.toLowerCase()}`,
+        html: `<div class="swal-cat-form">
+            <label class="swal-cat-label" for="swal-cat-resp">${escaparHTML(cfg.etiqueta || 'Nombre')} <span class="req">*</span></label>
+            <input id="swal-cat-resp" type="text" class="swal2-input swal-cat-input"
+                maxlength="${cfg.max || 100}" placeholder="${escaparHTML(cfg.placeholder || '')}">
+        </div>`,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Agregar y seleccionar',
+        cancelButtonText: 'Cancelar',
+        customClass: { popup: 'cl-alert cl-alta-catalogo' },
+        didOpen: popup => {
+            const input = popup.querySelector('.swal-cat-input');
+            input?.focus();
+            input?.addEventListener('keydown', event => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    Swal.clickConfirm();
+                }
+            });
+        },
+        preConfirm: () => {
+            const valor = (document.getElementById('swal-cat-resp')?.value || '').trim();
+            if (!valor) {
+                Swal.showValidationMessage(`Escribe ${(cfg.etiqueta || 'el nombre').toLowerCase()}.`);
+                return false;
+            }
+            return { Nombre: valor };
+        }
+    });
+
+    if (!resultado.isConfirmed || !resultado.value) return;
+
+    try {
+        const res = await window.api.activoFijo.responsivas.crearCatalogo(clave, resultado.value);
+        if (!res || !res.ok) {
+            await alertaError('No se pudo crear', res?.mensaje || 'Inténtalo de nuevo.');
+            return;
+        }
+        colocarCatalogoResponsivaNuevo(cfg, res.id, resultado.value);
+        toastExito(`${cfg.titulo} agregado`);
+    } catch (err) {
+        await alertaError('No se pudo crear', err.message);
+    }
+}
+
+/* Inserta la opción recién creada en el control y en el arreglo en memoria,
+   para que los repoblados de catálogos no la hagan desaparecer. */
+function colocarCatalogoResponsivaNuevo(cfg, id, datos) {
+    const nombre = datos.Nombre || '';
+
+    const lista = cfg.lista ? cfg.lista() : null;
+    if (Array.isArray(lista)) {
+        lista.push(cfg.porId ? Object.assign({}, datos, { [cfg.pk]: id }) : Object.assign({}, datos));
+    }
+
+    if (cfg.after) { cfg.after(id, datos); return; }
+
+    const select = cfg.select ? cfg.select() : null;
+    if (!select) return;
+    const valor = cfg.porId ? id : nombre;
+    if (!Array.prototype.some.call(select.options, o => String(o.value) === String(valor))) {
+        select.add(new Option(nombre, valor, true, true));
+    }
+    select.value = String(valor);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/* Delegación de clic: cualquier botón "+ Nuevo" del modal abre su alta. */
+modal?.addEventListener('click', event => {
+    const boton = event.target.closest('.btn-cat-inline[data-cat-inline]');
+    if (!boton) return;
+    event.preventDefault();
+    agregarCatalogoResponsivaInline(boton.dataset.catInline)
+        .catch(err => alertaError('No se pudo crear', err.message));
+});
+
+/* =========================================================
    CARGAR ACTIVOS DISPONIBLES
    ========================================================= */
 async function cargarActivosDisponibles() {

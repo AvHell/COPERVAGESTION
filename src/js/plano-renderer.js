@@ -78,7 +78,12 @@ let guardandoZonaLibre = false;
 let edDominiosCargados = [];
 let edPisosCliente = [];
 let edGuardando = false;
-let edEsModoCreacion = false; // por si en el futuro se reutiliza para crear
+/* true mientras el modal #modal-editar-equipo sirve para dar de alta un
+   equipo nuevo (mismo formulario que la página Equipos). */
+let edEsModoCreacion = false;
+/* Piso del panel desde el que se abrió el alta: se preselecciona en cuanto
+   el usuario elige un cliente que lo tenga entre sus pisos. */
+let edPisoSugerido = null;
 
 /* Normaliza un color almacenado a un valor CSS seguro (hex/rgb/hsl). */
 function normalizarColor(c, fallback = '#e2e8f0') {
@@ -686,6 +691,8 @@ const edPassword           = document.getElementById('ed-password');
 const editarMensaje        = document.getElementById('editar-mensaje');
 const editarCerrar         = document.getElementById('editar-cerrar');
 const editarConfirmar      = document.getElementById('editar-confirmar');
+const editarEliminar       = document.getElementById('editar-eliminar');
+const btnNuevoEquipoPlano  = document.getElementById('btn-nuevo-equipo-plano');
 
 /* =========================================================
    TOOLTIP
@@ -1494,7 +1501,110 @@ function edConfigurarInputIP(input) {
     });
 }
 
+/* Deja el formulario del modal como recién abierto, para dar de alta.
+   Mismo criterio que limpiarFormulario() de equipos.js. */
+function edLimpiarFormulario() {
+    if (edCliente) edCliente.value = '';
+    edLimpiarSelectConMensaje(edPiso, '-- Selecciona un cliente primero --');
+    if (edRol) edRol.value = '';
+    if (edTipoIP) edTipoIP.value = 'Estatica';
+
+    edLimpiarSelectConMensaje(edMascara, '-- Selecciona un cliente primero --');
+    edLimpiarSelectConMensaje(edPuerta, '-- Selecciona un cliente primero --');
+    edLimpiarSelectConMensaje(edDns1, '-- Selecciona un cliente primero --');
+    edLimpiarSelectConMensaje(edDns2, '-- Selecciona un cliente primero --');
+    edLimpiarSelectConMensaje(edUsuario, '-- Selecciona un cliente primero --');
+
+    if (edChkManual) edChkManual.checked = false;
+    if (edHostnamePreview) {
+        edHostnamePreview.value = '';
+        edHostnamePreview.readOnly = true;
+        edHostnamePreview.placeholder = 'Se armará automáticamente...';
+    }
+    if (edHostnameLibre) edHostnameLibre.value = '';
+    if (edIP) edIP.value = '';
+    if (edNumeroHost) edNumeroHost.value = '';
+    if (edPassword) edPassword.value = '';
+
+    limpiarHintRango(edIPHint);
+    edMostrarHintRol(null);
+
+    edActualizarCamposSegunTipo();
+}
+
+/* Si el alta se abrió desde un panel concreto, se elige ese piso en cuanto
+   el cliente seleccionado lo tenga entre los suyos. */
+function edPreseleccionarPisoSugerido() {
+    if (!edEsModoCreacion || !edPisoSugerido || !edPiso || edPiso.value) return;
+    const valor = String(edPisoSugerido);
+    if (Array.from(edPiso.options).some(o => o.value === valor)) edPiso.value = valor;
+}
+
+/* Alta de equipo desde el plano: reutiliza el MISMO modal y el MISMO payload
+   que la página Equipos (window.api.equipos.crear), así no hay dos caminos
+   distintos para dar de alta una IP. */
+async function abrirModalNuevoEquipo(panel) {
+    if (!panel?.idPiso) {
+        mostrarToast('Selecciona un piso primero.', 'warn', 3500);
+        return;
+    }
+
+    /* La propuesta futura no puede inventar equipos: el inventario es único y
+       la propuesta sólo reubica lo que ya existe. Se avisa y, si el usuario
+       acepta, el alta se hace en el inventario real y luego se coloca. */
+    if (panel.escenarioFuturoId) {
+        const aviso = await window.Swal.fire({
+            icon: 'info',
+            title: 'Alta desde una propuesta',
+            html: `<div style="text-align:left;font-size:0.9rem;">
+                Una propuesta futura no puede crear equipos que no existan: el
+                inventario es único y la propuesta sólo reubica equipos ya registrados.<br><br>
+                <div style="background:#FFF7E8;padding:10px;border-radius:6px;border-left:3px solid #A99A63;">
+                    El equipo se dará de alta en el <b>inventario real</b> y después
+                    aparecerá en <b>Equipos sin ubicar</b> de la propuesta para
+                    colocarlo donde quieras.
+                </div></div>`,
+            showCancelButton: true,
+            confirmButtonText: 'Continuar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            focusCancel: true,
+            buttonsStyling: false,
+            customClass: {
+                popup: 'cl-confirm',
+                confirmButton: 'swal2-confirm swal2-styled',
+                cancelButton: 'swal2-cancel swal2-styled'
+            }
+        });
+        if (!aviso.isConfirmed) return;
+    }
+
+    edInvalidarCacheRangos();
+    edEsModoCreacion = true;
+    edPisoSugerido = panel.idPiso;
+    equipoEditando = { equipo: null, panel, creando: true };
+
+    if (editarTitulo) editarTitulo.textContent = 'Nuevo equipo';
+    if (editarInfo) editarInfo.innerHTML = `
+        <div><b>Piso:</b> ${pisos.find(p => Number(p.IdPiso) === Number(panel.idPiso))?.Nombre || ''}</div>
+        <div><b>Alta:</b> el equipo se registra en el inventario; después puedes colocarlo en el plano.</div>
+        ${panel.escenarioFuturoId ? '<div><b>Propuesta:</b> no modifica el plano actual.</div>' : ''}
+    `;
+    if (editarMensaje) { editarMensaje.style.display = 'none'; editarMensaje.textContent = ''; }
+    if (editarEliminar) editarEliminar.hidden = true;
+    if (editarConfirmar) editarConfirmar.textContent = 'Crear equipo';
+
+    edLlenarSelectClientes();
+    edLlenarSelectRoles();
+    edLimpiarFormulario();
+
+    if (modalEditarEquipo) modalEditarEquipo.style.display = 'flex';
+    setTimeout(() => { if (edCliente) edCliente.focus(); }, 60);
+}
+
 async function abrirModalEditarEquipo(equipo, panel) {
+    edEsModoCreacion = false;
+    edPisoSugerido = null;
     equipoEditando = { equipo, panel };
 
     /* Rangos vigentes en cada apertura: de ellos dependen el rol inferido
@@ -1516,6 +1626,10 @@ async function abrirModalEditarEquipo(equipo, panel) {
         ${panel.escenarioFuturoId ? '<div><b>Propuesta temporal:</b> los cambios no modifican el equipo original.</div>' : ''}
     `;
     editarConfirmar.textContent = panel.escenarioFuturoId ? 'Guardar en copia futura' : 'Guardar cambios';
+    /* En una propuesta futura el borrado definitivo no aplica: el modal ofrece
+       sólo "quitar de la propuesta" (ver eliminarEquipoDesdePlano). */
+    if (editarEliminar) editarEliminar.hidden = false;
+
 
     if (editarMensaje) { editarMensaje.style.display = 'none'; editarMensaje.textContent = ''; }
 
@@ -1619,6 +1733,9 @@ if (edCliente) {
             // En cambio manual de cliente, no hay piso "actual" que preservar
             await edCargarPisosDelCliente(id, null);
             await edCargarConfiguracionesDelCliente(id);
+            /* En el alta, el piso del panel desde el que se abrió el modal se
+               elige solo cuando el cliente lo tiene entre los suyos. */
+            edPreseleccionarPisoSugerido();
             /* Con el cliente nuevo, red y administración se rellenan solas
                cuando el catálogo ofrece un único valor. */
             edAutollenarConfiguracion();
@@ -1665,10 +1782,28 @@ function cerrarModalEditarEquipo() {
     modalEditarEquipo.style.display = 'none';
     equipoEditando = null;
     edGuardando = false;
+    /* El modal sirve para editar y para dar de alta: al cerrarlo se vuelve
+       siempre al modo edición. */
+    edEsModoCreacion = false;
+    edPisoSugerido = null;
+    if (editarConfirmar) editarConfirmar.textContent = 'Guardar cambios';
+    if (editarEliminar) editarEliminar.hidden = true;
 }
 
 if (editarCerrar) {
     editarCerrar.addEventListener('click', cerrarModalEditarEquipo);
+}
+
+/* Eliminar desde el modal de edición: siempre pregunta si el equipo sólo sale
+   del plano o si se borra definitivamente (ver eliminarEquipoDesdePlano). */
+if (editarEliminar) {
+    editarEliminar.addEventListener('click', () => {
+        if (!equipoEditando || edGuardando) return;
+        /* En el alta todavía no existe nada que eliminar. */
+        if (edEsModoCreacion) return;
+        const { equipo, panel } = equipoEditando;
+        eliminarEquipoDesdePlano(equipo, panel);
+    });
 }
 
 /* Escape cierra el modal de Editar Equipo en cualquier estado,
@@ -2058,20 +2193,40 @@ if (editarConfirmar) {
         editarConfirmar.textContent = 'Guardando...';
 
         try {
-            const res = panel.escenarioFuturoId
-                ? await window.api.plano.editarEquipoFuturo(panel.escenarioFuturoId, equipo.IdEquipo, datos)
-                : await window.api.equipos.actualizar(equipo.IdEquipo, datos);
+            /* Alta y edición comparten formulario: el alta llama exactamente al
+               mismo backend que la página Equipos (equipos:crear), así las dos
+               pantallas validan rangos, IP duplicada y hostname igual. */
+            const creando = edEsModoCreacion;
+
+            const res = creando
+                ? await window.api.equipos.crear(datos)
+                : (panel.escenarioFuturoId
+                    ? await window.api.plano.editarEquipoFuturo(panel.escenarioFuturoId, equipo.IdEquipo, datos)
+                    : await window.api.equipos.actualizar(equipo.IdEquipo, datos));
 
             if (res && res.ok) {
                 modalEditarEquipo.style.display = 'none';
                 equipoEditando = null;
-                mostrarToast(
-                    panel.escenarioFuturoId
-                        ? `Equipo "${datos.hostname}" actualizado solo en la copia futura`
-                        : `Equipo "${datos.hostname}" actualizado correctamente`,
-                    'exito',
-                    3200
-                );
+                edEsModoCreacion = false;
+                edPisoSugerido = null;
+
+                if (creando) {
+                    mostrarToast(
+                        panel.escenarioFuturoId
+                            ? `Equipo "${datos.hostname}" creado en el inventario; ya está en "Equipos sin ubicar" de la propuesta`
+                            : `Equipo "${datos.hostname}" creado; ya está en "Equipos sin ubicar"`,
+                        'exito',
+                        4200
+                    );
+                } else {
+                    mostrarToast(
+                        panel.escenarioFuturoId
+                            ? `Equipo "${datos.hostname}" actualizado solo en la copia futura`
+                            : `Equipo "${datos.hostname}" actualizado correctamente`,
+                        'exito',
+                        3200
+                    );
+                }
                 await recargarPanel(panel);
                 return;
             }
@@ -2097,7 +2252,9 @@ if (editarConfirmar) {
         } finally {
             edGuardando = false;
             editarConfirmar.disabled = false;
-            editarConfirmar.textContent = panel.escenarioFuturoId ? 'Guardar en copia futura' : 'Guardar cambios';
+            editarConfirmar.textContent = edEsModoCreacion
+                ? 'Crear equipo'
+                : (panel.escenarioFuturoId ? 'Guardar en copia futura' : 'Guardar cambios');
         }
     });
 }
@@ -2290,6 +2447,25 @@ btnModoEdicion.addEventListener('click', () => {
     renderGridPanel(panelIzq);
     renderGridPanel(panelDer);
 });
+
+/* =========================================================
+   ALTA DE EQUIPO DESDE EL PLANO
+
+   Reutiliza el modal de Editar Equipo en modo alta y el MISMO backend
+   que la página Equipos (equipos:crear), de modo que las validaciones
+   de rango, IP duplicada y hostname son idénticas en las dos pantallas.
+   En una propuesta futura el equipo se registra en el inventario real y
+   queda en "Equipos sin ubicar" de la propuesta; el plano actual no cambia.
+   ========================================================= */
+if (btnNuevoEquipoPlano) {
+    btnNuevoEquipoPlano.addEventListener('click', async () => {
+        if (window.PermisosUI && !window.PermisosUI.puede('equipos:crear')) {
+            mostrarToast('No tienes permiso para crear equipos.', 'warn', 3500);
+            return;
+        }
+        await abrirModalNuevoEquipo(panelActivo);
+    });
+}
 
 /* =========================================================
    ACTUALIZAR BOTONES DE MODO
@@ -3860,14 +4036,29 @@ function renderListaSinUbicarFiltrada() {
             ev.stopPropagation();
             abrirModalEditarEquipo(e, panelActivo);
         });
+        /* Eliminar desde el listado: como el equipo no está en ninguna celda,
+           sólo cabe borrarlo definitivamente (la función lo pregunta igual). */
+        const btnEliminar = document.createElement('button');
+        btnEliminar.type = 'button';
+        btnEliminar.className = 'peligro btn-eliminar-equipo-plano';
+        btnEliminar.dataset.permiso = 'equipos:eliminar';
+        btnEliminar.textContent = 'Eliminar';
+        btnEliminar.setAttribute('aria-label', `Eliminar equipo ${e.Hostname}`);
+        btnEliminar.draggable = false;
+        btnEliminar.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            eliminarEquipoDesdePlano(e, panelActivo);
+        });
         if (panelActivo?.escenarioFuturoId) {
             /* Con una copia futura activa el listado solo contiene equipos que
                aún no están en la propuesta: se añaden arrastrándolos. Editarlos
-               antes de colocarlos escribiría en el equipo real, y eso está
-               prohibido desde una propuesta. */
+               o eliminarlos antes de colocarlos escribiría en el equipo real, y
+               eso está prohibido desde una propuesta. */
             li.title = 'Arrastra el equipo a una celda libre de la propuesta para colocarlo.';
         } else {
             li.appendChild(btnEditar);
+            li.appendChild(btnEliminar);
         }
         li.addEventListener('dragstart', (ev) => {
             if (window.PermisosUI && !window.PermisosUI.puede('plano:asignar')) {
@@ -4597,6 +4788,128 @@ function confirmarQuitarEnPropuesta(equipo, panel) {
         },
         'plano:quitar'
     );
+}
+
+/* Eliminar el equipo abierto en el modal de edición, preguntando SIEMPRE si
+   sólo sale del plano o si se borra definitivamente:
+     · "Sólo quitar del plano"      → borra su ubicación (PlanoUbicaciones).
+     · "Eliminar definitivamente"   → borra el equipo del inventario; con él se
+                                      van todas sus ubicaciones y propuestas.
+   En una copia futura sólo se ofrece la primera opción: el escenario futuro
+   nunca toca el equipo original ni el plano actual. */
+async function eliminarEquipoDesdePlano(equipo, panel) {
+    if (!equipo || equipo.IdEquipo == null || !panel) return;
+
+    const esPropuesta = Boolean(panel.escenarioFuturoId);
+    /* Un equipo abierto desde "Equipos sin ubicar" no está en ninguna celda:
+       ahí "quitar del plano" no tendría efecto. */
+    const ubicado = equipo._fila != null && equipo._col != null;
+    const puedeBorrar = !window.PermisosUI || window.PermisosUI.puede('equipos:eliminar');
+
+    if (!esPropuesta && !ubicado && !puedeBorrar) {
+        mostrarToast('No tienes permiso para eliminar equipos.', 'error', 4000);
+        return;
+    }
+
+    const host = escaparTextoTooltip(equipo.Hostname || 'el equipo');
+    const cliente = escaparTextoTooltip(equipo.ClienteCodigo || '');
+
+    const opciones = {
+        icon: 'warning',
+        title: 'Eliminar equipo',
+        showCancelButton: true,
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        focusCancel: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'cl-confirm',
+            confirmButton: 'swal2-confirm swal2-styled',
+            denyButton: 'swal2-deny swal2-styled cl-peligro',
+            cancelButton: 'swal2-cancel swal2-styled'
+        }
+    };
+
+    if (esPropuesta) {
+        opciones.title = '¿Quitar de la propuesta?';
+        opciones.html = `<b>${host}</b>${cliente ? ` (${cliente})` : ''} dejará de estar colocado en
+            esta copia futura y volverá a <b>Equipos sin ubicar</b> de la propuesta.<br><br>
+            El plano actual y el equipo original no se modifican.`;
+        opciones.confirmButtonText = 'Quitar de la propuesta';
+    } else if (ubicado) {
+        opciones.html = `¿Qué quieres hacer con <b>${host}</b>${cliente ? ` (${cliente})` : ''}?<br><br>
+            <b>Quitar del plano</b>: se libera su celda, el equipo sigue existiendo.<br>
+            <b>Eliminar definitivamente</b>: se borra del inventario y de todos los planos y propuestas.`;
+        opciones.confirmButtonText = 'Sólo quitar del plano';
+        if (puedeBorrar) {
+            opciones.showDenyButton = true;
+            opciones.denyButtonText = 'Eliminar definitivamente';
+        }
+    } else {
+        opciones.html = `Se borrará <b>${host}</b>${cliente ? ` (${cliente})` : ''} del inventario
+            junto con sus ubicaciones en planos y propuestas. Esta acción no se puede deshacer.`;
+        opciones.confirmButtonText = 'Eliminar definitivamente';
+        opciones.customClass.confirmButton = 'swal2-confirm swal2-styled cl-peligro';
+    }
+
+    let respuesta;
+    try {
+        respuesta = await window.Swal.fire(opciones);
+    } catch (err) {
+        mostrarToast('No se pudo abrir la confirmación: ' + err.message, 'error', 4500);
+        return;
+    }
+    if (!respuesta || respuesta.isDismissed) return;
+
+    cerrarModalEditarEquipo();
+
+    /* 1. Quitar sólo de la propuesta futura. */
+    if (esPropuesta && respuesta.isConfirmed) {
+        try {
+            const res = await window.api.plano.quitarEquipoFuturo(
+                panel.escenarioFuturoId,
+                equipo.IdEquipo
+            );
+            if (!res || res.ok === false) {
+                mostrarToast(res?.mensaje || 'No se pudo quitar el equipo de la propuesta.', 'error', 4500);
+                return;
+            }
+            mostrarToast(res.mensaje || `"${equipo.Hostname}" quitado de la propuesta`, 'exito');
+            await recargarPanel(panel);
+        } catch (err) {
+            mostrarToast('Error al quitar de la propuesta: ' + err.message, 'error', 4500);
+        }
+        return;
+    }
+
+    /* 2. Quitar sólo del plano actual (el equipo sigue en el inventario). */
+    if (ubicado && respuesta.isConfirmed) {
+        try {
+            await window.api.plano.quitar(equipo.IdEquipo, panel.idPiso, equipo.Hostname);
+            mostrarToast(`"${equipo.Hostname}" quitado del plano`, 'exito');
+            await recargarPanel(panel);
+        } catch (err) {
+            mostrarToast('Error al quitar del plano: ' + err.message, 'error', 4500);
+        }
+        return;
+    }
+
+    /* 3. Eliminar definitivamente: desaparece del inventario, de los planos y
+          de las propuestas, así que se recargan todos los paneles abiertos. */
+    try {
+        const res = await window.api.equipos.eliminar(equipo.IdEquipo);
+        if (!res || res.ok === false) {
+            mostrarToast(res?.mensaje || 'No se pudo eliminar el equipo.', 'error', 5000);
+            return;
+        }
+        mostrarToast(res.mensaje || `"${equipo.Hostname}" eliminado definitivamente`, 'exito', 3500);
+
+        const paneles = [panel, panelActivo, panelIzq, panelDer]
+            .filter((p, indice, lista) => p && p.idPiso && lista.indexOf(p) === indice);
+        for (const p of paneles) await recargarPanel(p);
+    } catch (err) {
+        mostrarToast('Error al eliminar el equipo: ' + err.message, 'error', 4500);
+    }
 }
 
 /* =========================================================

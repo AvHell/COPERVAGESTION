@@ -2053,7 +2053,11 @@ select:focus {
     border-color: var(--plano-oliva-oscuro);
 }
 
-.plano-body .btn-editar-equipo {
+/* Los botones de cada fila de "Equipos sin ubicar" (Editar / Eliminar) comparten
+   el mismo tamaño compacto: el padding por defecto de `button` (9px 18px) hacía
+   que "Eliminar" saliera mucho más gordo que "Editar" en el panel lateral. */
+.plano-body .btn-editar-equipo,
+.plano-body .btn-eliminar-equipo-plano {
     flex-shrink: 0;
     padding: 4px 8px;
     font-size: 0.72rem;

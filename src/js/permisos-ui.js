@@ -115,7 +115,10 @@
       '#mover-confirmar': 'plano:mover|plano:asignar',
       '#modal-aceptar': 'plano:mover|plano:asignar',
       '#btn-limpiar-seleccion': 'plano:mover|plano:asignar',
-      '#editar-confirmar': 'equipos:editar',
+      '#editar-confirmar': 'equipos:crear|equipos:editar',
+      '#btn-nuevo-equipo-plano': 'equipos:crear',
+      '#editar-eliminar': 'plano:quitar|equipos:eliminar',
+      '.btn-eliminar-equipo-plano': 'equipos:eliminar',
       '.btn-editar-equipo': 'equipos:editar',
       '.tabla-equipos button.secundario': 'equipos:editar'
     },

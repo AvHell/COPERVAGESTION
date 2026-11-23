@@ -889,17 +889,40 @@ function evaluarDuenio(fila, direccion, excluir = {}) {
         String(fila.MAC || '').trim() ||
         String(fila.Descripcion || '').trim()
     );
+
+    /* ¿La dirección la ocupa HOY un equipo de cliente? La maestra es un espejo
+       y puede quedarse atrás (el caso real: un equipo cambió de .103 a .105 y
+       la fila .103 conservó EnCliente = 1 con su IdEquipo), así que la
+       propiedad se resuelve contra dbo.Equipos, no contra la bandera. */
+    const clienteVivo = fila.ClienteVivo == null ? Boolean(fila.EnCliente) : Number(fila.ClienteVivo) === 1;
+    /* El dueño vivo puede ser el MISMO registro que se está editando: entonces
+       no hay duplicado, es su propia dirección. */
+    const idEquipoDuenio = validarIdCatalogo(
+        fila.IdEquipoVivo == null ? fila.IdEquipo : fila.IdEquipoVivo
+    );
+    const mismoEquipo = idEquipo !== null && idEquipoDuenio === idEquipo;
+    const enCliente = clienteVivo && !mismoEquipo;
+
+    /* Mismo criterio para el control general: cuenta el renglón que existe hoy
+       en dbo.InventarioGeneralIP, no la bandera guardada en el espejo. */
+    const generalVivo = fila.GeneralVivo == null ? Boolean(fila.EnGeneral) : Number(fila.GeneralVivo) === 1;
+    const idInventarioFila = fila.IdInventarioIPVivo == null
+        ? fila.IdInventarioIP
+        : fila.IdInventarioIPVivo;
     /* Un renglón del control general dado de baja (Estado "Inactivo") ya no
        usa su dirección: la lupa la ofrece como libre y no debe bloquear el
        alta. Es la misma regla que ya aplicaba el módulo Equipos. */
-    const generalEnUso = Boolean(fila.EnGeneral) && !/^inactivo$/i.test(String(fila.Estado || '').trim());
-    const enGeneral = generalEnUso && fila.IdInventarioIP !== idInventario && identifica;
-    const enCliente = Boolean(fila.EnCliente) && fila.IdEquipo !== idEquipo;
-    const enColector = Boolean(fila.EnColector);
+    const estadoFila = String(fila.EstadoVivo || fila.Estado || '').trim();
+    const generalEnUso = generalVivo && !/^inactivo$/i.test(estadoFila);
+    const enGeneral = generalEnUso && idInventarioFila !== idInventario && identifica;
 
-    const cliente = String(fila.ClienteCodigo || fila.ClienteNombre || '').trim() || null;
-    const hostname = String(fila.Hostname || '').trim() || null;
-    const piso = String(fila.Piso || '').trim() || null;
+    const colectorVivo = fila.ColectorVivo == null ? Boolean(fila.EnColector) : Number(fila.ColectorVivo) === 1;
+    const enColector = Boolean(colectorVivo);
+
+    /* Para el mensaje se prefieren los datos del dueño vivo. */
+    const cliente = String(fila.ClienteCodigoVivo || fila.ClienteCodigo || fila.ClienteNombre || '').trim() || null;
+    const hostname = String(fila.HostnameVivo || fila.Hostname || '').trim() || null;
+    const piso = String(fila.PisoVivo || fila.Piso || '').trim() || null;
 
     let mensaje = '';
     if (enCliente) {
@@ -928,13 +951,53 @@ async function duenioDeIP(ip, excluir = {}) {
     if (!estado.maestra) return null;
 
     const direccion = normalizarIPv4(ip);
+    /* Las banderas del espejo se acompañan con la comprobación en vivo de cada
+       origen. Sin esto, una fila que se quedó atrás (un equipo que cambió de
+       IP y no se refrescó) bloqueaba direcciones que en realidad ya estaban
+       libres, y el equipo se veía "duplicado" contra sí mismo. */
     const result = await pool.request()
         .input('IP', sql.VarChar(45), direccion)
         .query(`
             SELECT TOP 1 m.IP, m.Origenes, m.EnGeneral, m.EnCliente, m.EnColector,
                    m.Hostname, m.MAC, m.Descripcion, m.Piso, m.Estado,
-                   m.IdInventarioIP, m.IdEquipo, m.ClienteCodigo, m.ClienteNombre
+                   m.IdInventarioIP, m.IdEquipo, m.ClienteCodigo, m.ClienteNombre,
+                   Cliente.IdEquipo      AS IdEquipoVivo,
+                   Cliente.Hostname      AS HostnameVivo,
+                   Cliente.ClienteCodigo AS ClienteCodigoVivo,
+                   Cliente.PisoNombre    AS PisoVivo,
+                   General.IdInventarioIP AS IdInventarioIPVivo,
+                   General.EstadoNombre   AS EstadoVivo,
+                   Colector.IdEquipoRed   AS IdEquipoRedVivo,
+                   CASE WHEN Cliente.IdEquipo IS NOT NULL THEN 1 ELSE 0 END   AS ClienteVivo,
+                   CASE WHEN General.IdInventarioIP IS NOT NULL THEN 1 ELSE 0 END AS GeneralVivo,
+                   CASE WHEN Colector.IdEquipoRed IS NOT NULL THEN 1 ELSE 0 END  AS ColectorVivo
             FROM dbo.vw_InventarioIPMaestro m
+            OUTER APPLY (
+                SELECT TOP 1 e.IdEquipo, e.Hostname, c.Codigo AS ClienteCodigo,
+                       p.Nombre AS PisoNombre
+                FROM dbo.Equipos e
+                INNER JOIN dbo.Clientes c ON c.IdCliente = e.IdCliente
+                LEFT JOIN dbo.Pisos p ON p.IdPiso = e.IdPiso
+                WHERE e.Activo = 1
+                  AND LTRIM(RTRIM(e.IP)) = m.IP
+                ORDER BY e.IdEquipo DESC
+            ) Cliente
+            OUTER APPLY (
+                SELECT TOP 1 g.IdInventarioIP, Est.Nombre AS EstadoNombre
+                FROM dbo.InventarioGeneralIP g
+                LEFT JOIN dbo.CatalogosInventarioIP Est
+                       ON Est.IdCatalogoIP = g.IdEstado
+                      AND Est.TipoCatalogo = 'Estado'
+                WHERE LTRIM(RTRIM(g.IP)) = m.IP
+                ORDER BY g.IdInventarioIP DESC
+            ) General
+            OUTER APPLY (
+                SELECT TOP 1 r.IdEquipoRed
+                FROM dbo.ActivoFijoEquiposRed r
+                WHERE r.Vigente = 1
+                  AND LTRIM(RTRIM(r.IP)) = m.IP
+                ORDER BY r.EsPrincipal DESC, r.UltimaDeteccion DESC, r.IdEquipoRed DESC
+            ) Colector
             WHERE m.IP = @IP
         `);
     const fila = result.recordset[0];

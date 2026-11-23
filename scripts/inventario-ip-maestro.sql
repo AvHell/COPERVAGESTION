@@ -528,6 +528,37 @@ BEGIN
           JOIN dbo.Equipos e ON e.IdEquipo IN (SELECT IdEquipo FROM inserted)
           JOIN dbo.EquiposControlGeneralIP d ON d.IdEquipo = e.IdEquipo
          WHERE m.IdEquipo = e.IdEquipo;
+
+        /* 3.2.b La IP que el equipo DEJÓ de usar.
+           Antes esta parte sólo escribía la IP nueva: la fila de la dirección
+           anterior conservaba EnCliente = 1 y su IdEquipo para siempre, así
+           que seguía bloqueando como "duplicada" una dirección que ya estaba
+           libre (un equipo que pasó de .103 a .105 dejaba .103 marcada como
+           suya, y al editar otro equipo a .103 la pantalla lo acusaba de
+           chocar consigo mismo). Se recalcula desde cero la dirección vieja
+           cuando el equipo cambió de IP o quedó inactivo. */
+        DECLARE @ipsViejas TABLE (Orden INT IDENTITY(1, 1) PRIMARY KEY, IP VARCHAR(45));
+        INSERT INTO @ipsViejas (IP)
+        SELECT DISTINCT NULLIF(LTRIM(RTRIM(d.IP)), '')
+        FROM deleted d
+        WHERE NULLIF(LTRIM(RTRIM(d.IP)), '') IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM inserted i
+              WHERE i.IdEquipo = d.IdEquipo
+                AND i.Activo = 1
+                AND NULLIF(LTRIM(RTRIM(i.IP)), '') = NULLIF(LTRIM(RTRIM(d.IP)), '')
+          );
+
+        DECLARE @j INT = 1,
+                @totalViejas INT = (SELECT COUNT(*) FROM @ipsViejas),
+                @ipVieja VARCHAR(45);
+        WHILE @j <= @totalViejas
+        BEGIN
+            SELECT @ipVieja = IP FROM @ipsViejas WHERE Orden = @j;
+            EXEC dbo.sp_IPMaestroRefrescar @IP = @ipVieja;
+            SET @j += 1;
+        END
     END TRY
     BEGIN CATCH
         DECLARE @msg NVARCHAR(2048) = ERROR_MESSAGE();

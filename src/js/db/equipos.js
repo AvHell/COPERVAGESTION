@@ -45,6 +45,10 @@ async function verificarIPDuplicada(ip, idEquipoExcluir = null) {
         .input('IP2', sql.Int, octetos[1])
         .input('IP3', sql.Int, octetos[2])
         .input('IP4', sql.Int, octetos[3]);
+    /* El equipo que se está editando nunca compite consigo mismo: sus propios
+       renglones (el de Equipos y el que el colector pudo dejar en el control
+       general con el mismo hostname) se excluyen de la búsqueda. */
+    req.input('IdExcluir', sql.Int, idEquipoExcluir || null);
 
     let query = `
         SELECT TOP 1 Conflicto.IdEquipo, Conflicto.Hostname,
@@ -80,15 +84,29 @@ async function verificarIPDuplicada(ip, idEquipoExcluir = null) {
                  OR NULLIF(LTRIM(RTRIM(I.MAC)), '') IS NOT NULL
                  OR NULLIF(LTRIM(RTRIM(I.Descripcion)), N'') IS NOT NULL
               )
+              /* El registro actual tampoco choca consigo mismo: si el colector
+                 reportó la misma máquina en el control general (mismo
+                 hostname), ese renglón es el propio equipo que se está
+                 editando, no un tercero. */
+              AND NOT (
+                    @IdExcluir IS NOT NULL
+                AND NULLIF(LTRIM(RTRIM(ISNULL(I.Hostname, N''))), N'') IS NOT NULL
+                AND UPPER(LTRIM(RTRIM(I.Hostname))) = UPPER(LTRIM(RTRIM(
+                        ISNULL((SELECT TOP 1 E2.Hostname FROM dbo.Equipos E2
+                                WHERE E2.IdEquipo = @IdExcluir), N''))))
+              )
               AND TRY_CONVERT(int, PARSENAME(I.IP, 4)) = @IP1
               AND TRY_CONVERT(int, PARSENAME(I.IP, 3)) = @IP2
               AND TRY_CONVERT(int, PARSENAME(I.IP, 2)) = @IP3
               AND TRY_CONVERT(int, PARSENAME(I.IP, 1)) = @IP4
         ) Conflicto
     `;
+    /* Los renglones del control general salen con IdEquipo = NULL, así que la
+       exclusión por id sólo descartaba los de Equipos. Ahora el filtro va sobre
+       el alias cuando ambos orígenes traen id, y las filas del control general
+       ya vienen depuradas arriba por hostname. */
     if (idEquipoExcluir) {
         query += ' WHERE Conflicto.IdEquipo IS NULL OR Conflicto.IdEquipo <> @IdExcluir';
-        req.input('IdExcluir', sql.Int, idEquipoExcluir);
     }
 
     const r = await req.query(query);
@@ -531,6 +549,15 @@ async function eliminar(id) {
         await new sql.Request(tx)
             .input('IdEquipo', sql.Int, id)
             .query('DELETE FROM PlanoUbicaciones WHERE IdEquipo = @IdEquipo');
+
+        /* El histórico del plano es auditoría: NO se borra, sólo se desvincula
+           del equipo (IdEquipo es NULL-able). Sin esto la FK
+           FK_Historicos_Equipos bloquea el borrado con el error 547 y un equipo
+           que nunca se colocó en un plano ("sin ubicar") no se podía eliminar
+           definitivamente aunque no tuviera ubicaciones. */
+        await new sql.Request(tx)
+            .input('IdEquipo', sql.Int, id)
+            .query('UPDATE HistoricosPlano SET IdEquipo = NULL WHERE IdEquipo = @IdEquipo');
 
         const r = await new sql.Request(tx)
             .input('IdEquipo', sql.Int, id)

@@ -61,6 +61,17 @@
             Editar Equipo
         </button>
 
+        <!-- Alta de equipo con el MISMO formulario que la página Equipos. -->
+        <button id="btn-nuevo-equipo-plano" class="btn-modo" data-permiso="equipos:crear" type="button"
+                title="Da de alta un equipo nuevo sin salir del plano (mismo formulario que Equipos).">
+            <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Nuevo Equipo
+        </button>
+
+
         <button id="btn-limpiar-seleccion" class="secundario" style="display:none;">
             Limpiar selección
         </button>
@@ -509,6 +520,10 @@
         <div id="editar-mensaje" class="mensaje" style="display:none;"></div>
 
         <div class="modal-acciones">
+            <!-- Eliminar: pregunta si sólo se quita del plano o si el equipo se
+                 borra definitivamente. Se oculta al dar de alta. -->
+            <button id="editar-eliminar" class="peligro btn-eliminar-modal" type="button"
+                    data-permiso="plano:quitar|equipos:eliminar" hidden>Eliminar equipo</button>
             <button id="editar-confirmar">Guardar cambios</button>
         </div>
     </div>

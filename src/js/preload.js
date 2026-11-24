@@ -235,13 +235,6 @@ contextBridge.exposeInMainWorld('api', {
         swapEntrePisos: (datos) =>
             ipcRenderer.invoke('plano:swapEntrePisos', datos),
 
-        listarZonas:    (idPiso)                                                       => ipcRenderer.invoke('plano:listarZonas', idPiso),
-        guardarZona:    (idPiso, anterior, nombre, color, celdas)                       => ipcRenderer.invoke('plano:guardarZona', idPiso, anterior, nombre, color, celdas),
-        crearZona:      (idPiso, nombre, color, celdas)                                => ipcRenderer.invoke('plano:crearZona', idPiso, nombre, color, celdas),
-        actualizarZona: (idZona, nombre, color, fi, ff, ci, cf, idPiso)                => ipcRenderer.invoke('plano:actualizarZona', idZona, nombre, color, fi, ff, ci, cf, idPiso),
-        actualizarZonasPorNombre: (idPiso, nombreActual, colorActual, nombre, color, celdas) => ipcRenderer.invoke('plano:actualizarZonasPorNombre', idPiso, nombreActual, colorActual, nombre, color, celdas),
-        eliminarZona:   (idZona, idPiso, nombre)                                       => ipcRenderer.invoke('plano:eliminarZona', idZona, idPiso, nombre),
-        eliminarZonasPorNombre: (idPiso, nombre, color)                                => ipcRenderer.invoke('plano:eliminarZonasPorNombre', idPiso, nombre, color),
 
         listarZonasLibres:  (idPiso)                          => ipcRenderer.invoke('plano:listarZonasLibres', idPiso),
         guardarZonaLibre:   (idPiso, nombre, color, celdas)   => ipcRenderer.invoke('plano:guardarZonaLibre', idPiso, nombre, color, celdas),

@@ -450,6 +450,14 @@ async function listarZonasLibres(idPiso) {
     return r.recordset;
 }
 
+/* Dos celdas son del mismo grupo de zona libre cuando coinciden Nombre+Color
+   (el color se compara sin distinguir mayúsculas). Un grupo puede repetirse en
+   varias zonas separadas del piso sin dejar de ser la misma zona. */
+function esMismoGrupoZonaLibre(zona, nombre, color) {
+    return String(zona.Nombre || '').trim() === String(nombre || '').trim() &&
+        String(zona.Color || '').toLowerCase() === String(color || '').toLowerCase();
+}
+
 async function guardarZonaLibre(idUsuario, idPiso, nombre, color, celdas) {
     const nombreLimpio = String(nombre || '').trim();
     if (!nombreLimpio) return { ok: false, mensaje: 'El texto de la zona libre es obligatorio.' };
@@ -460,26 +468,54 @@ async function guardarZonaLibre(idUsuario, idPiso, nombre, color, celdas) {
 
     const pool = await getPool();
 
-    /* Crear no debe borrar lo existente: si ya hay un grupo con el mismo
-       Nombre+Color se avisa y se edita desde el punto correspondiente. */
-    const existente = await pool.request()
+    /* Un mismo Nombre+Color SÍ puede repetirse: cada marcado nuevo se suma al
+       grupo existente, de modo que una zona puede quedar formada por varios
+       tramos separados del piso. Lo único que se rechaza es intentar ocupar
+       celdas que ya pertenecen a otra zona libre distinta. */
+    const ocupadas = await pool.request()
         .input('IdPiso', sql.Int, idPiso)
-        .input('Nombre', sql.NVarChar(100), nombreLimpio)
-        .input('Color', sql.VarChar(20), color)
-        .query(`SELECT COUNT(*) AS Total FROM PlanoZonasLibres
-                WHERE IdPiso = @IdPiso AND Nombre = @Nombre AND Color = @Color`);
-    if ((existente.recordset[0]?.Total || 0) > 0) {
+        .query(`SELECT Nombre, Color, Fila, Columna
+                FROM PlanoZonasLibres
+                WHERE IdPiso = @IdPiso`);
+
+    const porCelda = new Map();
+    for (const zona of ocupadas.recordset) {
+        porCelda.set(`${zona.Fila},${zona.Columna}`, zona);
+    }
+
+    const aInsertar = [];
+    const ajenas = [];
+    for (const celda of nuevas) {
+        const clave = `${celda.fila},${celda.columna}`;
+        const existente = porCelda.get(clave);
+        if (!existente) {
+            aInsertar.push(celda);
+            porCelda.set(clave, { Nombre: nombreLimpio, Color: color });
+        } else if (!esMismoGrupoZonaLibre(existente, nombreLimpio, color)) {
+            ajenas.push(String(existente.Nombre || '').trim());
+        }
+        /* Si la celda ya es de este mismo grupo simplemente se ignora. */
+    }
+
+    if (ajenas.length) {
+        const nombres = [...new Set(ajenas)];
         return {
             ok: false,
-            mensaje: `Ya existe la zona libre "${nombreLimpio}" con ese color. Edítala desde la lista de zonas.`
+            mensaje: nombres.length > 1
+                ? `Algunas celdas ya pertenecen a otras zonas libres ("${nombres.join('", "')}"). Marca celdas libres.`
+                : `Algunas celdas ya pertenecen a la zona libre "${nombres[0]}". Marca celdas libres.`
         };
+    }
+
+    if (!aInsertar.length) {
+        return { ok: true, mensaje: `La zona libre "${nombreLimpio}" ya incluía esas celdas` };
     }
 
     const tx = new sql.Transaction(pool);
     await tx.begin();
 
     try {
-        for (const celda of nuevas) {
+        for (const celda of aInsertar) {
             await new sql.Request(tx)
                 .input('IdPiso', sql.Int, idPiso)
                 .input('Nombre', sql.NVarChar(100), nombreLimpio)
@@ -492,7 +528,7 @@ async function guardarZonaLibre(idUsuario, idPiso, nombre, color, celdas) {
 
         await tx.commit();
         await historicos.registrar(idUsuario, idPiso, null, 'ZonaLibre',
-            `Zona libre "${nombreLimpio}" guardada con ${nuevas.length} celda(s)`);
+            `Zona libre "${nombreLimpio}" guardada con ${aInsertar.length} celda(s)`);
         return { ok: true, mensaje: 'Zona libre guardada' };
     } catch (err) {
         await tx.rollback();
@@ -510,29 +546,11 @@ async function actualizarZonaLibre(idUsuario, idPiso, nombreActual, colorActual,
     if (!nombreLimpio) return { ok: false, mensaje: 'El texto de la zona libre es obligatorio.' };
     if (!idPiso) return { ok: false, mensaje: 'Selecciona un piso antes de guardar la zona libre.' };
 
-    const sinCambioDeGrupo =
-        actualLimpio === nombreLimpio &&
-        String(colorActual || '').toLowerCase() === String(color || '').toLowerCase();
-
     const nuevas = normalizarCeldas(celdas);
     const pool = await getPool();
 
-    /* Renombrar/recolorear hacia un grupo que ya existe lo fusionaría sin
-       avisar: se valida antes de tocar la BD (mismo criterio que guardarZona). */
-    if (!sinCambioDeGrupo) {
-        const colision = await pool.request()
-            .input('IdPiso', sql.Int, idPiso)
-            .input('Nombre', sql.NVarChar(100), nombreLimpio)
-            .input('Color', sql.VarChar(20), color)
-            .query(`SELECT COUNT(*) AS Total FROM PlanoZonasLibres
-                    WHERE IdPiso = @IdPiso AND Nombre = @Nombre AND Color = @Color`);
-        if ((colision.recordset[0]?.Total || 0) > 0) {
-            return {
-                ok: false,
-                mensaje: `Ya existe otra zona libre "${nombreLimpio}" con ese color. Usa otro nombre o color.`
-            };
-        }
-    }
+    /* Nombre+Color puede repetirse: si el grupo destino ya existe, el resultado
+       es la suma de sus celdas (una zona puede ocupar varios tramos del piso). */
 
     if (nuevas.length > 0) {
         const tx = new sql.Transaction(pool);
@@ -555,7 +573,11 @@ async function actualizarZonaLibre(idUsuario, idPiso, nombreActual, colorActual,
                     .input('Fila', sql.Int, celda.fila)
                     .input('Columna', sql.Int, celda.columna)
                     .query(`INSERT INTO PlanoZonasLibres (IdPiso, Nombre, Color, Fila, Columna)
-                            VALUES (@IdPiso, @Nombre, @Color, @Fila, @Columna)`);
+                            SELECT @IdPiso, @Nombre, @Color, @Fila, @Columna
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM PlanoZonasLibres
+                                WHERE IdPiso = @IdPiso AND Fila = @Fila AND Columna = @Columna
+                            )`);
             }
 
             await tx.commit();
@@ -602,245 +624,6 @@ async function eliminarZonaLibre(idUsuario, idPiso, nombre, color) {
         `Zona libre "${nombre}" eliminada`);
 
     return { ok: true, mensaje: 'Zona libre eliminada' };
-}
-
-/* =========================================================
-   ZONAS
-   ========================================================= */
-
-async function listarZonas(idPiso) {
-    const pool = await getPool();
-    const r = await pool.request()
-        .input('IdPiso', sql.Int, idPiso)
-        .query(`
-            SELECT IdZona, Nombre, Color, FilaInicio, FilaFin, ColumnaInicio, ColumnaFin
-            FROM PlanoZonas WHERE IdPiso = @IdPiso ORDER BY IdZona
-        `);
-    return r.recordset;
-}
-
-/* Guarda una zona completa a partir de las celdas marcadas en el canvas.
-   Se inserta UN registro 1×1 por celda (FilaInicio = FilaFin, etc.): así la
-   zona abarca exactamente lo que el usuario marcó aunque el grupo no sea un
-   rectángulo, y la llave del plano se calcula con las celdas reales.
-   Si se recibe {nombres, colores} de la zona anterior se reemplaza el grupo. */
-async function guardarZona(idUsuario, idPiso, anterior, nombre, color, celdas) {
-    const nombreLimpio = String(nombre || '').trim();
-    if (!nombreLimpio) return { ok: false, mensaje: 'El nombre de la zona es obligatorio.' };
-
-    const nuevas = normalizarCeldas(celdas);
-    if (!nuevas.length) return { ok: false, mensaje: 'Selecciona al menos una celda para la zona.' };
-    if (!idPiso) return { ok: false, mensaje: 'Selecciona un piso antes de guardar la zona.' };
-
-    const pool = await getPool();
-
-    /* Al crear no se pisa una zona existente: si ya hay un grupo con el mismo
-       Nombre+Color se avisa para que se edite en lugar de fusionarse sin querer. */
-    if (!anterior?.nombre) {
-        const existente = await pool.request()
-            .input('IdPiso', sql.Int, idPiso)
-            .input('Nombre', sql.NVarChar(100), nombreLimpio)
-            .input('Color', sql.VarChar(20), color)
-            .query(`SELECT COUNT(*) AS Total FROM PlanoZonas
-                    WHERE IdPiso = @IdPiso AND Nombre = @Nombre AND Color = @Color`);
-        if ((existente.recordset[0]?.Total || 0) > 0) {
-            return {
-                ok: false,
-                mensaje: `Ya existe la zona "${nombreLimpio}" con ese color. Edítala desde las llaves o la lista de zonas.`
-            };
-        }
-    } else if (
-        String(anterior.nombre || '').trim() !== nombreLimpio ||
-        String(anterior.color || '').toLowerCase() !== String(color || '').toLowerCase()
-    ) {
-        /* Renombrar/recolorear hacia un grupo que ya existe lo fusionaría: se avisa. */
-        const colision = await pool.request()
-            .input('IdPiso', sql.Int, idPiso)
-            .input('Nombre', sql.NVarChar(100), nombreLimpio)
-            .input('Color', sql.VarChar(20), color)
-            .query(`SELECT COUNT(*) AS Total FROM PlanoZonas
-                    WHERE IdPiso = @IdPiso AND Nombre = @Nombre AND Color = @Color`);
-        if ((colision.recordset[0]?.Total || 0) > 0) {
-            return {
-                ok: false,
-                mensaje: `Ya existe otra zona "${nombreLimpio}" con ese color. Usa otro nombre o color.`
-            };
-        }
-    }
-
-    /* Ninguna celda puede pertenecer a dos grupos a la vez: si el usuario marca
-       una celda que ya está en otra zona, se avisa en lugar de dejar la celda
-       duplicada (la primera zona pintada ganaría y la otra parecería rota). */
-    const zonasPiso = (await pool.request()
-        .input('IdPiso', sql.Int, idPiso)
-        .query(`SELECT Nombre, Color, FilaInicio, FilaFin, ColumnaInicio, ColumnaFin
-                FROM PlanoZonas WHERE IdPiso = @IdPiso`)).recordset;
-
-    const esDelMismoGrupo = (zona) => Boolean(anterior?.nombre) &&
-        String(zona.Nombre || '').trim() === String(anterior.nombre).trim() &&
-        String(zona.Color || '').toLowerCase() === String(anterior.color || '').toLowerCase();
-
-    const choques = [];
-    for (const celda of nuevas) {
-        for (const zona of zonasPiso) {
-            if (esDelMismoGrupo(zona)) continue;
-
-            const filaInicio = Number(zona.FilaInicio) || 0;
-            const filaFin = Number(zona.FilaFin) || filaInicio;
-            const columnaInicio = Number(zona.ColumnaInicio) || 0;
-            const columnaFin = Number(zona.ColumnaFin) || columnaInicio;
-
-            const dentro = celda.fila >= filaInicio && celda.fila <= filaFin &&
-                celda.columna >= columnaInicio && celda.columna <= columnaFin;
-
-            if (dentro && !choques.includes(zona.Nombre)) {
-                choques.push(zona.Nombre);
-                break;
-            }
-        }
-    }
-
-    if (choques.length) {
-        return {
-            ok: false,
-            mensaje: `Esas celdas ya pertenecen a la${choques.length > 1 ? 's zona' : ' zona'} ` +
-                `"${choques.join('", "')}". Quítalas de esa zona o marca otras celdas.`
-        };
-    }
-
-    const tx = new sql.Transaction(pool);
-    await tx.begin();
-
-    try {
-        if (anterior?.nombre) {
-            await new sql.Request(tx)
-                .input('IdPiso', sql.Int, idPiso)
-                .input('NombreAnterior', sql.NVarChar(100), anterior.nombre)
-                .input('ColorAnterior', sql.VarChar(20), anterior.color || null)
-                .query(`DELETE FROM PlanoZonas
-                        WHERE IdPiso = @IdPiso
-                          AND Nombre = @NombreAnterior
-                          AND (@ColorAnterior IS NULL OR Color = @ColorAnterior OR Color IS NULL)`);
-        }
-
-        for (const celda of nuevas) {
-            await new sql.Request(tx)
-                .input('IdPiso', sql.Int, idPiso)
-                .input('Nombre', sql.NVarChar(100), nombreLimpio)
-                .input('Color', sql.VarChar(20), color)
-                .input('Fila', sql.Int, celda.fila)
-                .input('Columna', sql.Int, celda.columna)
-                .query(`INSERT INTO PlanoZonas (IdPiso, Nombre, Color, FilaInicio, FilaFin, ColumnaInicio, ColumnaFin)
-                        VALUES (@IdPiso, @Nombre, @Color, @Fila, @Fila, @Columna, @Columna)`);
-        }
-
-        await tx.commit();
-    } catch (err) {
-        await tx.rollback();
-        throw err;
-    }
-
-    if (anterior?.nombre) {
-        await historicos.registrar(idUsuario, idPiso, null, 'EditarZona',
-            `Zona "${anterior.nombre}" actualizada a "${nombreLimpio}" (${nuevas.length} celda(s))`);
-        return { ok: true, mensaje: 'Zona actualizada' };
-    }
-
-    await historicos.registrar(idUsuario, idPiso, null, 'CrearZona',
-        `Zona "${nombreLimpio}" creada con ${nuevas.length} celda(s)`);
-    return { ok: true, mensaje: 'Zona creada' };
-}
-
-async function crearZona(idUsuario, idPiso, nombre, color, celdas) {
-    return guardarZona(idUsuario, idPiso, null, nombre, color, celdas);
-}
-
-async function actualizarZona(idUsuario, idPiso, idZona, nombre, color, fi, ff, ci, cf) {
-    const pool = await getPool();
-    await pool.request()
-        .input('IdZona', sql.Int, idZona)
-        .input('Nombre', sql.NVarChar(100), nombre)
-        .input('Color', sql.VarChar(20), color)
-        .input('FilaInicio', sql.Int, fi)
-        .input('FilaFin', sql.Int, ff)
-        .input('ColumnaInicio', sql.Int, ci)
-        .input('ColumnaFin', sql.Int, cf)
-        .query(`UPDATE PlanoZonas
-                SET Nombre = @Nombre, Color = @Color,
-                    FilaInicio = @FilaInicio, FilaFin = @FilaFin,
-                    ColumnaInicio = @ColumnaInicio, ColumnaFin = @ColumnaFin
-                WHERE IdZona = @IdZona`);
-
-    await historicos.registrar(idUsuario, idPiso, null, 'EditarZona',
-        `Zona "${nombre}" actualizada`);
-    return { ok: true, mensaje: 'Zona actualizada' };
-}
-
-async function actualizarZonasPorNombre(idUsuario, idPiso, nombreActual, colorActual, nombre, color, celdas) {
-    /* Con celdas se reemplaza el grupo completo (renombrar + recolorear +
-       recolocar en una sola operación). Sin celdas solo se renombra. */
-    if (Array.isArray(celdas) && celdas.length > 0) {
-        return guardarZona(
-            idUsuario, idPiso,
-            { nombre: nombreActual, color: colorActual },
-            nombre, color, celdas
-        );
-    }
-
-    const pool = await getPool();
-    const r = await pool.request()
-        .input('IdPiso', sql.Int, idPiso)
-        .input('NombreActual', sql.NVarChar(100), nombreActual)
-        .input('ColorActual', sql.VarChar(20), colorActual)
-        .input('Nombre', sql.NVarChar(100), nombre)
-        .input('Color', sql.VarChar(20), color)
-        .query(`UPDATE PlanoZonas
-                SET Nombre = @Nombre, Color = @Color
-                WHERE IdPiso = @IdPiso
-                  AND Nombre = @NombreActual
-                  AND ((@ColorActual IS NULL AND Color IS NULL) OR Color = @ColorActual)`);
-
-    if (r.rowsAffected[0] === 0) {
-        return { ok: false, mensaje: 'No se encontraron zonas para actualizar' };
-    }
-
-    await historicos.registrar(idUsuario, idPiso, null, 'EditarZona',
-        `Zona "${nombreActual}" actualizada a "${nombre}" — ${r.rowsAffected[0]} registro(s)`);
-    return { ok: true, mensaje: `Se actualizaron ${r.rowsAffected[0]} zonas` };
-}
-
-/* Eliminar zona por IdZona (una sola, se usa al editar una específica) */
-async function eliminarZona(idUsuario, idPiso, idZona, nombre) {
-    const pool = await getPool();
-    await pool.request()
-        .input('IdZona', sql.Int, idZona)
-        .query('DELETE FROM PlanoZonas WHERE IdZona = @IdZona');
-
-    await historicos.registrar(idUsuario, idPiso, null, 'EliminarZona',
-        `Zona "${nombre}" eliminada`);
-    return { ok: true, mensaje: 'Zona eliminada' };
-}
-
-/* Eliminar TODAS las zonas con el mismo Nombre+Color en un piso
-   (sirve cuando se generaron varias 1×1 con el mismo nombre) */
-async function eliminarZonasPorNombre(idUsuario, idPiso, nombre, color) {
-    const pool = await getPool();
-
-    const r = await pool.request()
-        .input('IdPiso', sql.Int, idPiso)
-        .input('Nombre', sql.NVarChar(100), nombre)
-        .input('Color', sql.VarChar(20), color || null)
-        .query(`
-            DELETE FROM PlanoZonas
-            WHERE IdPiso = @IdPiso
-              AND Nombre = @Nombre
-              AND (@Color IS NULL OR Color = @Color)
-        `);
-
-    await historicos.registrar(idUsuario, idPiso, null, 'EliminarZona',
-        `Zona(s) "${nombre}" eliminada(s) — ${r.rowsAffected[0]} registro(s)`);
-
-    return { ok: true, mensaje: `Se eliminaron ${r.rowsAffected[0]} zona(s)` };
 }
 
 async function listarEscenariosFuturos(idPiso) {
@@ -1388,9 +1171,7 @@ module.exports = {
     listarPorLugar, equiposSinUbicacion,
     asignar, mover, quitar, intercambiar,
     moverEntrePisos, swapEntrePisos,
-    listarZonas, crearZona, guardarZona, actualizarZona, eliminarZona, eliminarZonasPorNombre,
     listarZonasLibres, guardarZonaLibre, actualizarZonaLibre, eliminarZonaLibre,
-    actualizarZonasPorNombre,
     listarEscenariosFuturos, crearEscenarioFuturo, obtenerUbicacionesFuturas,
     moverEquipoEnEscenarioFuturo, actualizarEquipoEnEscenarioFuturo, eliminarEscenarioFuturo,
     quitarEquipoEnEscenarioFuturo, agregarEquipoEnEscenarioFuturo

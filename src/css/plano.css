@@ -238,13 +238,6 @@ body.plano-body {
     box-sizing: border-box;
 }
 
-/* Rieles laterales: espacio reservado FUERA del canvas donde viven los
-   indicadores de zona (llave + etiqueta), sin tapar ninguna celda. Solo se
-   reserva cuando el piso tiene zonas; si no, la grilla no pierde ancho. */
-.grid-plano-wrapper.con-riel {
-    padding: 14px 132px;
-}
-
 /* =========================================================
    GRID DEL PLANO
    ========================================================= */
@@ -427,24 +420,11 @@ body.plano-body {
     color: var(--celda-texto, var(--rol-texto));
 }
 
-/* Celda seleccionada en modo zona */
+/* Celda seleccionada en modo zona libre */
 .celda.seleccionada {
     outline: 3px solid var(--plano-oro);
     outline-offset: -3px;
     background: var(--plano-oro-suave) !important;
-}
-
-/* Arrastre de banda en modo zona: mientras se recorre la grilla no se
-   selecciona texto ni se arrastran imágenes sin querer. */
-body.seleccionando-grupo {
-    user-select: none;
-    cursor: crosshair;
-}
-
-body.seleccionando-grupo .celda,
-body.seleccionando-grupo .celda * {
-    cursor: crosshair;
-    user-select: none;
 }
 
 /* Celda filtrada (atenuada) */
@@ -477,22 +457,6 @@ body.seleccionando-grupo .celda * {
     overflow: hidden;
 }
 
-/* Celda que pertenece a una zona normal: sin marco ni anillo, para no tapar
-   el color del rol ni el hostname. La pertenencia se marca solo con el punto
-   de la esquina, que empareja la celda con su etiqueta externa del riel. */
-.celda.celda-zona::after {
-    content: '';
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 8px;
-    height: 8px;
-    border-radius: 2px;
-    background: var(--zona-color, var(--plano-oro));
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
-    pointer-events: none;
-}
-
 /* Grid activo en modo zona libre */
 .grid-plano.modo-zona-libre .celda.vacia {
     cursor: cell;
@@ -513,7 +477,7 @@ body.seleccionando-grupo .celda * {
     color: #334155;
     border: 1px solid #e2e8f0;
     font-weight: 500;
-    /* La etiqueta del modo zona lleva un contador en vivo ("— 3 celdas · Enter");
+    /* La etiqueta del modo zona libre lleva un contador en vivo ("— 3 celdas");
        sin nowrap se parte en dos líneas y descuadra la barra superior. */
     white-space: nowrap;
 }
@@ -539,60 +503,6 @@ body.seleccionando-grupo .celda * {
 #btn-modo-edicion.activo {
     background: var(--plano-oliva);
     color: #fff;
-}
-
-/* =========================================================
-   LLAVES DE ZONA (tipo Google Charts)
-   ========================================================= */
-
-.llaves-zona {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-}
-
-/* Etiqueta del grupo de zona: siempre en el riel, nunca encima de la grilla. */
-.etiqueta-llave {
-    position: absolute;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 104px;
-    padding: 4px 9px;
-    background: #fff;
-    border: 2px solid;
-    border-radius: 6px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    line-height: 1.15;
-    color: #1e293b;
-    word-break: break-word;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    letter-spacing: 0.02em;
-    pointer-events: auto;
-    /* La etiqueta se puede arrastrar libremente dentro de su lado del riel
-       (más hacia la derecha si está a la derecha, más hacia la izquierda si está
-       a la izquierda) para acomodarla al gusto del usuario. */
-    cursor: grab;
-    touch-action: none;
-    user-select: none;
-}
-
-.etiqueta-llave:hover {
-    box-shadow: 0 3px 10px rgba(0,0,0,0.14);
-}
-
-.etiqueta-llave.arrastrando {
-    cursor: grabbing;
-    z-index: 30;
-    box-shadow: 0 8px 18px rgba(0,0,0,0.22);
-}
-
-.etiqueta-llave .punto-color {
-    width: 8px;
-    height: 8px;
-    border-radius: 2px;
-    flex-shrink: 0;
 }
 
 /* =========================================================
@@ -701,6 +611,39 @@ body.seleccionando-grupo .celda * {
     background: var(--cliente-color, var(--plano-superficie-suave));
     font-weight: 700;
     font-size: 0.76rem;
+}
+
+/* ---- Tooltip de una ZONA LIBRE ----
+   La zona no lleva texto dibujado en el canvas: el nombre solo aparece aquí,
+   junto a una muestra del color de relleno, para identificarla de un vistazo. */
+.tooltip-plano.tooltip-zona {
+    min-width: 190px;
+}
+
+.tooltip-plano.tooltip-zona .tooltip-zona-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--plano-borde);
+}
+
+/* Cuadrito con el color real de la zona (lo inyecta el renderer). */
+.tooltip-plano.tooltip-zona .tooltip-zona-muestra {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    background: var(--zona-color, var(--plano-oro));
+}
+
+.tooltip-plano.tooltip-zona .tooltip-zona-nombre {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: var(--plano-texto);
+    overflow-wrap: anywhere;
 }
 
 /* =========================================================
@@ -1055,48 +998,10 @@ body.seleccionando-grupo .celda * {
     margin: 0 0 8px 0;
 }
 
-.lista-zonas {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.lista-zonas li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    background: #fff;
-    border-radius: 6px;
-    margin-bottom: 5px;
-    font-size: 0.82rem;
-    border: 1px solid #e2e8f0;
-}
-
-.lista-zonas .muestra-color {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    border: 1px solid rgba(0,0,0,0.1);
-    flex-shrink: 0;
-}
-
-.lista-zonas .nombre-zona {
-    flex: 1;
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.lista-zonas button {
-    padding: 3px 8px;
-    font-size: 0.72rem;
-}
-
 /* =========================================================
    MODALES
    ========================================================= */
+
 
 .modal-overlay {
     position: fixed;
@@ -1712,7 +1617,7 @@ body.plano-body {
 .grupo-encabezado input,
 .lateral-buscador input,
 .modal-caja,
-.lista-zonas li,
+.lista-zonas-libres li,
 .identificador-item {
     color: var(--plano-texto);
     border-color: var(--plano-borde);
@@ -1721,9 +1626,8 @@ body.plano-body {
 .panel-plano,
 .panel-lateral,
 .modal-caja,
-.lista-zonas li,
-.identificador-item,
-.etiqueta-llave {
+.lista-zonas-libres li,
+.identificador-item {
     background: var(--plano-superficie);
 }
 
@@ -1945,7 +1849,6 @@ select:focus {
 
 /* Botones: estados tierra/oliva también dentro de los modales. */
 .plano-body .modal-caja button:not(.secundario):not(.peligro),
-.plano-body .lista-zonas button:not(.secundario):not(.peligro),
 .plano-body .lista-zonas-libres button:not(.secundario):not(.peligro) {
     background: var(--plano-oliva);
     border-color: var(--plano-oliva);
@@ -1953,7 +1856,6 @@ select:focus {
 }
 
 .plano-body .modal-caja button:not(.secundario):not(.peligro):hover:not(:disabled),
-.plano-body .lista-zonas button:not(.secundario):not(.peligro):hover:not(:disabled),
 .plano-body .lista-zonas-libres button:not(.secundario):not(.peligro):hover:not(:disabled) {
     background: var(--plano-oliva-oscuro);
     border-color: var(--plano-oliva-oscuro);
@@ -2063,20 +1965,18 @@ select:focus {
     font-size: 0.72rem;
 }
 
-.plano-body .lista-zonas li {
+.plano-body .lista-zonas-libres li {
     min-width: 0;
 }
 
-.plano-body .lista-zonas .nombre-zona {
+.plano-body .lista-zonas-libres .nombre-zona-libre {
     min-width: 0;
 }
 
-.plano-body .lista-zonas button {
+.plano-body .lista-zonas-libres button {
     flex-shrink: 0;
 }
 
-.plano-body .lista-zonas .cant-zonas,
-.plano-body .lista-zonas .cant-celdas,
 .plano-body .lista-zonas-libres .cant-celdas {
     font-size: 0.7rem;
     background: var(--plano-superficie-suave);
@@ -2202,18 +2102,3 @@ select:focus {
     color: var(--plano-oliva-oscuro);
 }
 
-/* Cable de unión etiqueta → zona. Uno solo por etiqueta, fino y translúcido:
-   acompaña al arrastre sin llegar nunca al interior de la grilla. */
-.cable-llave {
-    position: absolute;
-    height: 2px;
-    border-radius: 2px;
-    opacity: 0.45;
-    transform-origin: 0 50%;
-    pointer-events: none;
-    z-index: 1;
-}
-
-.cable-llave.cable-oculto {
-    display: none;
-}

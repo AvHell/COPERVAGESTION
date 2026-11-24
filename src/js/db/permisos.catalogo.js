@@ -61,8 +61,8 @@ const CATALOGO = {
   'plano:mover':                   { grupo: 'Plano',        etiqueta: 'Mover equipo' },
   'plano:quitar':                  { grupo: 'Plano',        etiqueta: 'Quitar equipo' },
   'plano:intercambiar':            { grupo: 'Plano',        etiqueta: 'Intercambiar equipos' },
-  'plano:zonas:gestionar':         { grupo: 'Plano',        etiqueta: 'Crear/editar zonas' },
-  'plano:zonas:eliminar':          { grupo: 'Plano',        etiqueta: 'Eliminar zonas' },
+  'plano:zonas:gestionar':         { grupo: 'Plano',        etiqueta: 'Crear/editar zonas libres' },
+  'plano:zonas:eliminar':          { grupo: 'Plano',        etiqueta: 'Eliminar zonas libres' },
   'plano:exportar':                { grupo: 'Plano',        etiqueta: 'Exportar PDF' },
 
   /* ---------- DOCUMENTACIÓN ---------- */

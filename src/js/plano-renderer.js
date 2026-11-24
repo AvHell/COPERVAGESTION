@@ -26,9 +26,6 @@ function crearEstadoPanel(sufijo) {
         equiposSinUbicar: [],
         escenarioFuturoId: null,
         escenariosFuturos: [],
-        /* Posición vertical que el usuario le dio a cada etiqueta del riel,
-           por grupo Nombre+Color. Vacío = posición automática. */
-        posicionesLlave: {}
     };
 }
 
@@ -41,22 +38,10 @@ const COLOR_ZONA_LIBRE_DEFECTO = '#B5442E';
 let modoZonaLibre = false;
 let celdasLibresSeleccionadas = [];
 
-/* Zona Normal: se marcan celdas con clic o arrastrando una banda sobre la
-   grilla (permite celdas con o sin equipo) y después se les pone nombre. */
-let modoZona = false;
-let celdasZonaSeleccionadas = [];  // [{fila, columna}, ...]
-
-/* Arrastre (banda) de selección en modo zona.
-   { ancla:{fila,columna}, base:[celdas previas], sustraer:bool, movido:bool } */
-let arrastreZona = null;
-let arrastreZonaTerminado = false; // evita que el clic final deshaga la banda
-
 /* Edición */
 let modoEdicion = false;
 let equipoEditando = null;
 
-let zonaEditando = null;
-let zonaGrupoEditando = null;
 let zonaLibreEditando = null;
 
 let dragOrigen = null;
@@ -229,79 +214,6 @@ const CSS_PDF = `
         overflow: hidden;
     }
 
-    /* Riel de indicadores de zona: reserva el espacio lateral FUERA del canvas
-       para que la etiqueta nunca se encime con las celdas ni se salga de la
-       hoja. El riel se toma SIEMPRE del espacio sobrante: el canvas no cambia. */
-    .plano-con-riel {
-        position: relative;
-        width: fit-content;
-        flex-shrink: 0;
-        /* content-box explícito: el relleno del riel se SUMA al canvas, nunca
-           lo encoge. Así el PDF mide igual que la vista previa, aunque en el
-           PDF exista el reset universal a border-box. */
-        box-sizing: content-box;
-    }
-
-    .etiqueta-zona-pdf {
-        position: absolute;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        height: 23px;
-        padding: 0 9px;
-        background: #fff;
-        border: 2px solid;
-        border-radius: 6px;
-        font-size: 0.86rem;
-        font-weight: 700;
-        color: #1e293b;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        white-space: nowrap;
-        box-sizing: border-box;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-
-    .etiqueta-zona-pdf .punto-color {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        border-radius: 2px;
-        flex-shrink: 0;
-    }
-
-    /* Nombre de la zona: si no cabe en el riel se recorta con elipsis. */
-    .etiqueta-zona-pdf .texto-zona-pdf {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    /* Etiqueta girada 90°: se usa cuando la hoja no tiene franjas laterales
-       libres. Cabe en el relleno de la página, así que no tapa ninguna celda y
-       el canvas conserva su tamaño. */
-    .etiqueta-zona-pdf.vertical {
-        writing-mode: vertical-rl;
-        height: auto;
-        padding: 8px 0;
-        font-size: 0.78rem;
-        line-height: 1.1;
-        letter-spacing: 0.06em;
-    }
-
-    .etiqueta-zona-pdf.vertical .texto-zona-pdf {
-        text-overflow: clip;
-    }
-
-    /* Franja de página sin relleno lateral: esos píxeles pasan al riel de las
-       etiquetas, nunca al tamaño de las celdas. */
-    .plano-wrap.compacto,
-    .pagina-plano.compacto {
-        padding-left: 0;
-        padding-right: 0;
-    }
-
     .grid-plano {
         display: grid;
         background: #e2e8f0;
@@ -415,11 +327,8 @@ const CSS_PDF = `
         background: #94a3b8;
     }
 
-
-
     /* Los colores de cliente provienen del catálogo y llegan como style inline. */
     .badge-cli[data-color] { border: 1px solid transparent; }
-
 
     .badge-dhcp {
         display: inline-block;
@@ -577,13 +486,11 @@ const selectLugarIzq   = document.getElementById('select-lugar-izq');
 const inputFilasIzq    = document.getElementById('input-filas-izq');
 const inputColumnasIzq = document.getElementById('input-columnas-izq');
 const gridIzq          = document.getElementById('grid-izq');
-const llavesIzq        = document.getElementById('llaves-izq');
 
 const selectLugarDer   = document.getElementById('select-lugar-der');
 const inputFilasDer    = document.getElementById('input-filas-der');
 const inputColumnasDer = document.getElementById('input-columnas-der');
 const gridDer          = document.getElementById('grid-der');
-const llavesDer        = document.getElementById('llaves-der');
 const panelDerDiv      = document.getElementById('panel-der');
 
 const selectModo       = document.getElementById('select-modo');
@@ -599,15 +506,13 @@ const btnCerrarLateral = document.getElementById('btn-cerrar-lateral');
 const badgeToggle      = document.getElementById('badge-toggle');
 
 const listaSinUbicar   = document.getElementById('lista-sin-ubicar');
-const listaZonas       = document.getElementById('lista-zonas');
+const listaZonasLibres = document.getElementById('lista-zonas-libres');
 const lateralTabs      = document.getElementById('lateral-tabs');
 const lateralFiltrosRol = document.getElementById('lateral-filtros-rol');
 const buscadorLateral  = document.getElementById('buscador-lateral');
 
-const btnModoZona         = document.getElementById('btn-modo-zona');
 const btnModoZonaLibre    = document.getElementById('btn-modo-zona-libre');
 const btnModoEdicion      = document.getElementById('btn-modo-edicion');
-const btnLimpiarSeleccion = document.getElementById('btn-limpiar-seleccion');
 const btnVistaPrevia      = document.getElementById('btn-vista-previa');
 const btnExportarPDFDoc   = document.getElementById('btn-exportar-pdf-doc');
 
@@ -620,15 +525,6 @@ const modalTitulo    = document.getElementById('modal-titulo');
 const modalTexto     = document.getElementById('modal-texto');
 const modalAceptar   = document.getElementById('modal-aceptar');
 const modalCancelar  = document.getElementById('modal-cancelar');
-
-const modalZona         = document.getElementById('modal-zona');
-const modalZonaTitulo   = document.getElementById('modal-zona-titulo');
-const modalZonaNombre   = document.getElementById('zona-nombre');
-const modalZonaRango    = document.getElementById('zona-rango');
-const modalZonaAceptar  = document.getElementById('modal-zona-aceptar');
-const modalZonaCancelar = document.getElementById('modal-zona-cancelar');
-const modalZonaEliminar = document.getElementById('modal-zona-eliminar');
-const inputColorZona    = document.getElementById('zona-color');
 
 const modalMover        = document.getElementById('modal-mover-piso');
 const moverTitulo       = document.getElementById('mover-titulo');
@@ -783,6 +679,12 @@ function mostrarTooltip(ev, contenido) {
        (una vez armado el HTML) para que tome el de Catálogos. */
     window.PermisosUI?.aplicarColores?.(tooltipDiv);
 
+    tooltipDiv.classList.remove('tooltip-zona');
+    posicionarTooltip(ev);
+}
+
+/* Coloca el tooltip junto al puntero sin salirse de la ventana. */
+function posicionarTooltip(ev) {
     tooltipDiv.style.display = 'block';
 
     const x = ev.clientX + 18;
@@ -796,6 +698,52 @@ function mostrarTooltip(ev, contenido) {
 
     tooltipDiv.style.left = posX + 'px';
     tooltipDiv.style.top = posY + 'px';
+}
+
+/* Datos del grupo completo de una zona libre (todas las celdas que comparten
+   Nombre+Color), no solo de la celda bajo el puntero. */
+function grupoZonaLibre(panel, zl) {
+    const celdas = (panel.zonasLibres || []).filter(z =>
+        String(z.Nombre || '').trim() === String(zl.Nombre || '').trim() &&
+        String(z.Color || '').toLowerCase() === String(zl.Color || '').toLowerCase()
+    );
+    return {
+        nombre: zl.Nombre,
+        color: normalizarColor(zl.Color, COLOR_ZONA_LIBRE_DEFECTO),
+        celdas: celdas.length,
+        fila: Number(zl.Fila),
+        columna: Number(zl.Columna)
+    };
+}
+
+/* Tooltip de una zona libre: la zona ya se ve por su color de relleno, así que
+   al pasar el ratón solo se confirma el nombre y el tamaño del bloque. */
+function mostrarTooltipZonaLibre(ev, grupo) {
+    if (!tooltipDiv) crearTooltip();
+
+    const esc = escaparTextoTooltip;
+    tooltipDiv.classList.add('tooltip-zona');
+    tooltipDiv.innerHTML = `
+        <div class="tooltip-zona-header" style="--zona-color:${grupo.color};">
+            <span class="tooltip-zona-muestra"></span>
+            <span class="tooltip-zona-nombre">${esc(grupo.nombre || 'Zona libre')}</span>
+        </div>
+        <div class="tooltip-body">
+            <div class="tooltip-row">
+                <span class="label">Celdas</span>
+                <span class="valor">${grupo.celdas}</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="label">Posición</span>
+                <span class="valor mono">fila ${grupo.fila}, columna ${grupo.columna}</span>
+            </div>
+            <div class="tooltip-row">
+                <span class="label">Estado</span>
+                <span class="valor">Zona reservada</span>
+            </div>
+        </div>`;
+
+    posicionarTooltip(ev);
 }
 
 function ocultarTooltip() {
@@ -881,157 +829,6 @@ modalAceptar.addEventListener('click', async () => {
         accionPendiente = null;
         await fn();
     }
-});
-
-/* =========================================================
-   MODAL DE ZONA (acumulativo — múltiples celdas 1×1)
-   ========================================================= */
-function abrirModalZona(zona = null, grupo = null) {
-    zonaEditando = zona;
-    zonaGrupoEditando = grupo;
-
-    if (zona) {
-        /* Edición: se trabaja sobre el grupo completo (mismo Nombre+Color) para
-           que renombrar, recolorear y mover celdas sea una sola operación. */
-        const celdasGrupo = (grupo?.zonas?.length ? grupo.zonas : [zona])
-            .map(z => ({ fila: Number(z.FilaInicio), columna: Number(z.ColumnaInicio) }));
-
-        celdasZonaSeleccionadas = celdasGrupo;
-        modalZonaTitulo.textContent = 'Editar zona';
-        modalZonaNombre.value = zona.Nombre;
-        inputColorZona.value = colorParaInput(zona.Color || grupo?.color, COLOR_ZONA_DEFECTO);
-        modalZonaRango.textContent = celdasGrupo.length > 1
-            ? `${celdasGrupo.length} celdas en la zona`
-            : `Celda: fila ${celdasGrupo[0].fila}, columna ${celdasGrupo[0].columna}`;
-    } else {
-        if (celdasZonaSeleccionadas.length === 0) {
-            alert('Primero selecciona al menos una celda.');
-            return;
-        }
-        modalZonaTitulo.textContent = celdasZonaSeleccionadas.length > 1
-            ? `Nueva zona (${celdasZonaSeleccionadas.length} celdas)`
-            : 'Nueva zona';
-        modalZonaNombre.value = '';
-        inputColorZona.value = COLOR_ZONA_DEFECTO;
-        modalZonaRango.textContent = celdasZonaSeleccionadas.length === 1
-            ? `Celda seleccionada: fila ${celdasZonaSeleccionadas[0].fila}, columna ${celdasZonaSeleccionadas[0].columna}`
-            : `${celdasZonaSeleccionadas.length} celdas seleccionadas`;
-    }
-
-    if (modalZonaEliminar) {
-        /* Solo se ofrece eliminar al editar y si el rol tiene el permiso. */
-        const puedeEliminar = !window.PermisosUI || window.PermisosUI.puede('plano:zonas:eliminar');
-        modalZonaEliminar.hidden = !zona || !puedeEliminar;
-    }
-    modalZona.style.display = 'flex';
-
-    setTimeout(() => {
-        modalZonaNombre.focus();
-        modalZonaNombre.select();
-    }, 50);
-}
-
-modalZonaCancelar.addEventListener('click', () => {
-    modalZona.style.display = 'none';
-    zonaEditando = null;
-    zonaGrupoEditando = null;
-    celdasZonaSeleccionadas = [];
-    renderGridPanel(panelIzq);
-    renderGridPanel(panelDer);
-});
-
-/* Eliminar desde el propio modal: misma operación que la lista lateral,
-   así el CRUD queda coherente en los dos puntos de entrada. */
-function eliminarZonaDelModal() {
-    const grupo = zonaGrupoEditando;
-    if (!grupo) return;
-
-    modalZona.style.display = 'none';
-    mostrarConfirmacion(
-        'Eliminar zona',
-        `¿Eliminar la zona <b>"${grupo.nombre}"</b> (${grupo.zonas.length} celda(s))?<br>
-         <span style="color:#64748b;font-size:0.85rem;">Los equipos permanecerán en sus posiciones.</span>`,
-        async () => {
-            try {
-                const res = await window.api.plano.eliminarZonasPorNombre(
-                    panelActivo.idPiso, grupo.nombre, grupo.color
-                );
-                if (!res || res.ok === false) {
-                    mostrarToast(res?.mensaje || 'No se pudo eliminar la zona', 'error', 4000);
-                    return;
-                }
-                mostrarToast(res.mensaje || `Zona "${grupo.nombre}" eliminada`, 'exito');
-            } catch (err) {
-                mostrarToast('Error al eliminar: ' + err.message, 'error', 4000);
-                return;
-            }
-            zonaEditando = null;
-            zonaGrupoEditando = null;
-            celdasZonaSeleccionadas = [];
-            await recargarPanel(panelActivo);
-        },
-        'plano:zonas:eliminar'
-    );
-}
-
-if (modalZonaEliminar) {
-    modalZonaEliminar.addEventListener('click', eliminarZonaDelModal);
-}
-
-modalZonaAceptar.addEventListener('click', async () => {
-    const nombre = modalZonaNombre.value.trim();
-    const color = inputColorZona.value || COLOR_ZONA_DEFECTO;
-
-    if (!nombre) { alert('El nombre es obligatorio.'); modalZonaNombre.focus(); return; }
-    if (!panelActivo.idPiso) { alert('Selecciona un piso en el panel activo.'); return; }
-
-    const celdas = celdasZonaSeleccionadas.map(c => ({
-        fila: Number(c.fila),
-        columna: Number(c.columna)
-    }));
-    if (celdas.length === 0) { alert('No hay celdas seleccionadas.'); return; }
-
-    modalZonaAceptar.disabled = true;
-    try {
-        /* Siempre se envían las celdas: crear, renombrar, recolorear y recolocar
-           son la misma operación en la capa de datos. */
-        const res = zonaGrupoEditando
-            ? await window.api.plano.actualizarZonasPorNombre(
-                panelActivo.idPiso,
-                zonaGrupoEditando.nombre,
-                zonaGrupoEditando.color,
-                nombre,
-                color,
-                celdas
-            )
-            : await window.api.plano.crearZona(panelActivo.idPiso, nombre, color, celdas);
-
-        if (!res || res.ok === false) {
-            mostrarToast(res?.mensaje || 'No se pudo guardar la zona', 'error', 4000);
-            modalZonaAceptar.disabled = false;
-            return;
-        }
-
-        mostrarToast(
-            zonaGrupoEditando
-                ? (res.mensaje || `Zona "${nombre}" actualizada`)
-                : (celdas.length === 1
-                    ? `Zona "${nombre}" creada en (${celdas[0].fila}, ${celdas[0].columna})`
-                    : `Zona "${nombre}" creada (${celdas.length} celdas)`),
-            'exito'
-        );
-    } catch (err) {
-        mostrarToast('Error al guardar zona: ' + err.message, 'error', 4000);
-        modalZonaAceptar.disabled = false;
-        return;
-    }
-
-    modalZonaAceptar.disabled = false;
-    modalZona.style.display = 'none';
-    zonaEditando = null;
-    zonaGrupoEditando = null;
-    celdasZonaSeleccionadas = [];
-    await recargarPanel(panelActivo);
 });
 
 /* =========================================================
@@ -1629,7 +1426,6 @@ async function abrirModalEditarEquipo(equipo, panel) {
     /* En una propuesta futura el borrado definitivo no aplica: el modal ofrece
        sólo "quitar de la propuesta" (ver eliminarEquipoDesdePlano). */
     if (editarEliminar) editarEliminar.hidden = false;
-
 
     if (editarMensaje) { editarMensaje.style.display = 'none'; editarMensaje.textContent = ''; }
 
@@ -2287,136 +2083,14 @@ selectModo.addEventListener('change', () => {
 });
 
 /* =========================================================
-   SELECCIÓN EN BLOQUE (BANDA) PARA ZONAS
-   ========================================================= */
-function claveCelda(fila, columna) {
-    return `${fila},${columna}`;
-}
-
-/* Todas las celdas del rectángulo que va del ancla hasta la celda actual. */
-function celdasDelRectangulo(ancla, hasta) {
-    const filaA = Math.min(ancla.fila, hasta.fila);
-    const filaB = Math.max(ancla.fila, hasta.fila);
-    const colA = Math.min(ancla.columna, hasta.columna);
-    const colB = Math.max(ancla.columna, hasta.columna);
-
-    const salida = [];
-    for (let fila = filaA; fila <= filaB; fila++) {
-        for (let columna = colA; columna <= colB; columna++) {
-            salida.push({ fila, columna });
-        }
-    }
-    return salida;
-}
-
-/* Pinta las celdas marcadas sin reconstruir la grilla: la banda tiene que
-   seguir al ratón en vivo y reconstruir en cada movimiento parpadea. */
-function pintarSeleccionZona() {
-    if (!panelActivo) return;
-    const grid = panelActivo.sufijo === 'izq' ? gridIzq : gridDer;
-    if (!grid) return;
-
-    const marcadas = new Set(celdasZonaSeleccionadas.map(c => claveCelda(c.fila, c.columna)));
-    grid.querySelectorAll('.celda').forEach(celda => {
-        celda.classList.toggle(
-            'seleccionada',
-            marcadas.has(claveCelda(Number(celda.dataset.fila), Number(celda.dataset.columna)))
-        );
-    });
-}
-
-function iniciarArrastreZona(ev, fila, columna) {
-    arrastreZona = {
-        ancla: { fila, columna },
-        base: celdasZonaSeleccionadas.map(c => ({ fila: c.fila, columna: c.columna })),
-        sustraer: Boolean(ev.shiftKey || ev.altKey),
-        movido: false
-    };
-    arrastreZonaTerminado = false;
-    document.body.classList.add('seleccionando-grupo');
-}
-
-/* Suma (o resta, con Shift) el rectángulo ancla→celda a la selección actual. */
-function extenderArrastreZona(fila, columna) {
-    if (!arrastreZona) return;
-
-    const destino = celdasDelRectangulo(arrastreZona.ancla, { fila, columna });
-    const mapa = new Map(arrastreZona.base.map(c => [claveCelda(c.fila, c.columna), c]));
-
-    for (const celda of destino) {
-        const clave = claveCelda(celda.fila, celda.columna);
-        if (arrastreZona.sustraer) mapa.delete(clave);
-        else if (!mapa.has(clave)) mapa.set(clave, celda);
-    }
-
-    if (fila !== arrastreZona.ancla.fila || columna !== arrastreZona.ancla.columna) {
-        arrastreZona.movido = true;
-    }
-
-    celdasZonaSeleccionadas = [...mapa.values()];
-    pintarSeleccionZona();
-    actualizarBotonesModo();
-}
-
-function finalizarArrastreZona() {
-    if (!arrastreZona) return;
-    arrastreZonaTerminado = arrastreZona.movido;
-    arrastreZona = null;
-    document.body.classList.remove('seleccionando-grupo');
-    actualizarBotonesModo();
-}
-
-/* El mouseup puede ocurrir fuera de la grilla: se escucha en el documento. */
-document.addEventListener('mouseup', finalizarArrastreZona);
-
-/* =========================================================
-   MODO ZONA (varias celdas → una sola zona con nombre)
-   ========================================================= */
-btnModoZona.addEventListener('click', () => {
-    /* Con celdas ya marcadas, este clic significa "ponle nombre al grupo".
-       Antes apagaba el modo y borraba la selección, que es justo lo que hacía
-       parecer que solo se podían crear zonas de 1×1. */
-    if (modoZona && celdasZonaSeleccionadas.length > 0) {
-        abrirModalZona(null);
-        return;
-    }
-
-    modoZona = !modoZona;
-
-    if (modoZona) {
-        if (modoZonaLibre) modoZonaLibre = false;
-        if (modoEdicion) modoEdicion = false;
-        celdasLibresSeleccionadas = [];
-        celdasZonaSeleccionadas = [];
-        [gridIzq, gridDer].forEach(g => { if (g) g.classList.remove('modo-zona-libre'); });
-    } else {
-        celdasZonaSeleccionadas = [];
-    }
-
-    actualizarBotonesModo();
-    renderGridPanel(panelIzq);
-    renderGridPanel(panelDer);
-});
-
-btnLimpiarSeleccion.addEventListener('click', () => {
-    celdasZonaSeleccionadas = [];
-    celdasLibresSeleccionadas = [];
-    actualizarBotonesModo();   /* reinicia el contador del botón de zona */
-    renderGridPanel(panelIzq);
-    renderGridPanel(panelDer);
-});
-
-/* =========================================================
    MODO ZONA LIBRE
    ========================================================= */
 btnModoZonaLibre.addEventListener('click', () => {
     modoZonaLibre = !modoZonaLibre;
 
     if (modoZonaLibre) {
-        if (modoZona) modoZona = false;
         if (modoEdicion) modoEdicion = false;
         celdasLibresSeleccionadas = [];
-        celdasZonaSeleccionadas = [];
     } else {
         celdasLibresSeleccionadas = [];
     }
@@ -2436,10 +2110,8 @@ btnModoEdicion.addEventListener('click', () => {
     modoEdicion = !modoEdicion;
 
     if (modoEdicion) {
-        if (modoZona) modoZona = false;
         if (modoZonaLibre) modoZonaLibre = false;
         celdasLibresSeleccionadas = [];
-        celdasZonaSeleccionadas = [];
         [gridIzq, gridDer].forEach(g => { if (g) g.classList.remove('modo-zona-libre'); });
     }
 
@@ -2470,33 +2142,7 @@ if (btnNuevoEquipoPlano) {
 /* =========================================================
    ACTUALIZAR BOTONES DE MODO
    ========================================================= */
-const ICONO_MODO_ZONA = `
-    <svg class="icono-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <path d="M3 9h18M9 21V9"/>
-    </svg>`;
-
 function actualizarBotonesModo() {
-    if (modoZona) {
-        /* Contador en vivo: el usuario ve cuántas celdas lleva agrupadas antes
-           de pulsar Enter, que es cuando se le pide el nombre del grupo. */
-        const seleccionadas = celdasZonaSeleccionadas.length;
-        btnModoZona.classList.add('activo');
-        btnModoZona.innerHTML = `${ICONO_MODO_ZONA}${seleccionadas > 0
-            ? `Agrupar zona — ${seleccionadas} celda${seleccionadas === 1 ? '' : 's'} · Enter`
-            : 'Agrupar zona — elige celdas'}`;
-        btnModoZona.title = seleccionadas > 0
-            ? `Clic aquí o Enter para nombrar el grupo de ${seleccionadas} celda${seleccionadas === 1 ? '' : 's'}.`
-            : 'Arrastra sobre la grilla para marcar el grupo de golpe (o clic celda a celda; Shift resta). Después clic aquí o Enter para ponerle nombre.';
-        btnLimpiarSeleccion.style.display = 'inline-block';
-    } else {
-        btnModoZona.classList.remove('activo');
-        btnModoZona.innerHTML = `${ICONO_MODO_ZONA}Agrupar en zona`;
-        btnModoZona.title = 'Selecciona varias celdas y dales un nombre (MESA 1, etc.). El indicador se dibuja fuera del canvas, sin tapar equipos.';
-        btnLimpiarSeleccion.style.display = 'none';
-        celdasZonaSeleccionadas = [];
-    }
-
     if (modoZonaLibre) {
         btnModoZonaLibre.classList.add('activo');
         btnModoZonaLibre.innerHTML = `
@@ -2539,7 +2185,6 @@ function actualizarBotonesModo() {
    ========================================================= */
 function limpiarRenderPanel(panel, conservarCeldas = false) {
     const grid = panel.sufijo === 'izq' ? gridIzq : gridDer;
-    const llaves = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
     if (!grid) return;
 
     /* Al repintar el canvas las celdas NO se vacían: se sustituyen de golpe al
@@ -2547,13 +2192,7 @@ function limpiarRenderPanel(panel, conservarCeldas = false) {
        navegador recorte el scroll del .plano-wrapper a 0 y el plano "salta" al
        inicio aunque después se vuelva a dibujar. */
     if (!conservarCeldas) grid.innerHTML = '';
-    if (llaves) llaves.innerHTML = '';
 
-    const wrapper = grid.closest('.grid-plano-wrapper');
-    if (wrapper) {
-        wrapper.classList.remove('con-riel');
-        wrapper.querySelectorAll('.texto-zona-libre-overlay').forEach(el => el.remove());
-    }
 }
 
 /* =========================================================
@@ -2687,7 +2326,6 @@ function conectarEventosPanel(panel, selectLugar, inputFilas, inputColumnas, btn
 
         limpiarRenderPanel(panel);
 
-        celdasZonaSeleccionadas = [];
         celdasLibresSeleccionadas = [];
 
         panel.idPiso = nuevoIdPiso;
@@ -2804,21 +2442,19 @@ async function cargarPanelDatos(panel) {
         dimensiones,
         ubicaciones,
         equiposSinUbicar,
-        zonas,
         zonasLibres,
         escenariosFuturos
     ] = await Promise.all([
         window.api.plano.dimensiones(panel.idPiso),
         window.api.plano.listarPorLugar(panel.idPiso),
         window.api.plano.sinUbicacion(panel.idPiso, escenarioSolicitado),
-        window.api.plano.listarZonas(panel.idPiso),
         window.api.plano.listarZonasLibres(panel.idPiso),
         window.api.plano.listarFuturos(panel.idPiso)
     ]);
-    if ([dimensiones, ubicaciones, equiposSinUbicar, zonas, zonasLibres, escenariosFuturos].some(respuesta =>
+    if ([dimensiones, ubicaciones, equiposSinUbicar, zonasLibres, escenariosFuturos].some(respuesta =>
         respuesta?.ok === false
     )) {
-        const error = [dimensiones, ubicaciones, equiposSinUbicar, zonas, zonasLibres, escenariosFuturos]
+        const error = [dimensiones, ubicaciones, equiposSinUbicar, zonasLibres, escenariosFuturos]
             .find(respuesta => respuesta?.ok === false);
         throw new Error(error.mensaje || 'No se pudieron cargar los datos del plano.');
     }
@@ -2863,7 +2499,6 @@ async function cargarPanelDatos(panel) {
     });
 
     panel.equiposSinUbicar = equiposSinUbicar;
-    panel.zonas = zonas;
     panel.zonasLibres = zonasLibres;
     panel.escenariosFuturos = escenariosFuturos;
     if (panel.escenarioFuturoId &&
@@ -2968,9 +2603,7 @@ function actualizarControlesFuturos(panel) {
     const hayPropuesta = Boolean(panel?.escenarioFuturoId);
     btnEliminarFuturo.hidden = !hayPropuesta;
     const moverDeshabilitado = hayPropuesta;
-    for (const control of [btnModoZona, btnModoZonaLibre]) {
-        if (control) control.disabled = moverDeshabilitado;
-    }
+    if (btnModoZonaLibre) btnModoZonaLibre.disabled = moverDeshabilitado;
     const botonDimensiones = document.getElementById(`btn-aplicar-dim-${panel?.sufijo || 'izq'}`);
     if (botonDimensiones) botonDimensiones.disabled = moverDeshabilitado;
 }
@@ -2986,12 +2619,9 @@ selectEscenarioFuturo.addEventListener('change', async () => {
         panel.escenarioFuturoId = participa ? escenarioId : null;
     }
     if (escenarioId && paneles.some(panel => panel.escenarioFuturoId)) {
-        modoZona = false;
         modoZonaLibre = false;
         modoEdicion = false;
-        celdasZonaSeleccionadas = [];
         celdasLibresSeleccionadas = [];
-        btnModoZona.classList.remove('activo');
         btnModoZonaLibre.classList.remove('activo');
         btnModoEdicion.classList.remove('activo');
         [gridIzq, gridDer].forEach(grid => grid?.classList.remove('modo-zona-libre'));
@@ -3040,7 +2670,6 @@ btnCrearFuturo.addEventListener('click', async () => {
                 ? resultado.id
                 : null;
         }
-        modoZona = false;
         modoZonaLibre = false;
         modoEdicion = false;
         [gridIzq, gridDer].forEach(grid => grid?.classList.remove('modo-zona-libre'));
@@ -3108,16 +2737,6 @@ function limpiarPanel(panel) {
     if (panel === panelActivo) renderPanelLateral();
 }
 
-/* =========================================================
-   ZONAS
-   ========================================================= */
-function zonaEnCelda(panel, fila, columna) {
-    return panel.zonas.find(z =>
-        fila >= z.FilaInicio && fila <= z.FilaFin &&
-        columna >= z.ColumnaInicio && columna <= z.ColumnaFin
-    );
-}
-
 function zonaLibreEnCelda(panel, fila, columna) {
     return panel.zonasLibres?.find(zl => zl.Fila === fila && zl.Columna === columna);
 }
@@ -3168,6 +2787,15 @@ function pintarGridPanel(panel, grid) {
 
     const setFiltro = panel.sufijo === 'izq' ? clientesFiltroIzq : clientesFiltroDer;
 
+    /* El grupo de una zona libre se calcula una sola vez por Nombre+Color:
+       recorrer todas las zonas por cada celda del grid era O(n²). */
+    const cacheGruposZona = new Map();
+    const grupoDeZona = (zl) => {
+        const clave = `${zl.Nombre}|${zl.Color}`;
+        if (!cacheGruposZona.has(clave)) cacheGruposZona.set(clave, grupoZonaLibre(panel, zl));
+        return cacheGruposZona.get(clave);
+    };
+
     for (let f = 0; f < panel.dimensiones.Filas; f++) {
         for (let c = 0; c < panel.dimensiones.Columnas; c++) {
             const fila = f + 1;
@@ -3190,18 +2818,18 @@ function pintarGridPanel(panel, grid) {
             }
 
             if (zl && !contenido) {
+                /* La zona se reconoce por su color de relleno; el nombre y el
+                   tamaño se muestran en un tooltip al pasar el ratón, sin
+                   etiquetas encima del canvas. */
                 celda.classList.add('celda-libre');
                 celda.style.backgroundColor = normalizarColor(zl.Color, COLOR_ZONA_LIBRE_DEFECTO);
+                const grupo = grupoDeZona(zl);
+                celda.addEventListener('mouseenter', (ev) => mostrarTooltipZonaLibre(ev, grupo));
+                celda.addEventListener('mousemove', (ev) => {
+                    if (tooltipDiv && tooltipDiv.style.display === 'block') posicionarTooltip(ev);
+                });
+                celda.addEventListener('mouseleave', ocultarTooltip);
             }
-
-            /* Zona normal: marca visual de las celdas que pertenecen a una zona.
-               Se usa un anillo interior (CSS) para no tapar el color del rol. */
-            const zona = zonaEnCelda(panel, fila, columna);
-            if (zona) {
-                celda.classList.add('celda-zona');
-                celda.style.setProperty('--zona-color', normalizarColor(zona.Color, COLOR_ZONA_DEFECTO));
-            }
-
 
             if (contenido) {
                 const idCli = Number(contenido.IdCliente);
@@ -3209,13 +2837,6 @@ function pintarGridPanel(panel, grid) {
                 if (!setFiltro.has(idCli)) {
                     celda.classList.add('celda-filtrada');
                 }
-            }
-
-            if (modoZona && panel === panelActivo) {
-                const estaSel = celdasZonaSeleccionadas.some(
-                    cc => cc.fila === fila && cc.columna === columna
-                );
-                if (estaSel) celda.classList.add('seleccionada');
             }
 
             if (modoZonaLibre && panel === panelActivo) {
@@ -3237,18 +2858,18 @@ function pintarGridPanel(panel, grid) {
                     ${contenido._movimientoFuturo ? '<span class="marca-futuro">FUTURO</span>' : ''}`;
 
                 celda.addEventListener('mouseenter', (ev) => {
-                    if (modoZona || modoZonaLibre || modoEdicion) return;
+                    if (modoZonaLibre || modoEdicion) return;
                     mostrarTooltip(ev, datosTooltipCelda(contenido, fila, columna, panel));
                 });
                 celda.addEventListener('mousemove', (ev) => {
-                    if (modoZona || modoZonaLibre || modoEdicion) return;
+                    if (modoZonaLibre || modoEdicion) return;
                     if (tooltipDiv && tooltipDiv.style.display === 'block') {
                         mostrarTooltip(ev, datosTooltipCelda(contenido, fila, columna, panel));
                     }
                 });
                 celda.addEventListener('mouseleave', ocultarTooltip);
 
-                if (!modoZona && !modoZonaLibre && !modoEdicion) {
+                if (!modoZonaLibre && !modoEdicion) {
                     celda.draggable = true;
                     celda.addEventListener('dragstart', (ev) => {
                         if (window.PermisosUI && !window.PermisosUI.puede('plano:mover|plano:intercambiar')) {
@@ -3282,17 +2903,24 @@ function pintarGridPanel(panel, grid) {
                     btnCerrar.dataset.permiso = 'plano:quitar';
                     btnCerrar.addEventListener('click', (ev) => {
                         ev.stopPropagation();
-                        if (modoZona || modoZonaLibre || modoEdicion) return;
+                        if (modoZonaLibre || modoEdicion) return;
                         if (panel.escenarioFuturoId) confirmarQuitarEnPropuesta(contenido, panel);
                         else confirmarQuitar(contenido, panel);
                     });
                 }
             }
 
-            if (!modoZona && !modoZonaLibre && !modoEdicion) {
+            if (!modoZonaLibre && !modoEdicion) {
                 celda.addEventListener('dragover', (ev) => {
                     if (dragOrigen) {
                         ev.preventDefault();
+                        /* Una zona libre reserva la celda: se muestra como destino
+                           inválido en lugar de ofrecer el drop. */
+                        if (zonaLibreEnCelda(panel, fila, columna)) {
+                            ev.dataTransfer.dropEffect = 'none';
+                            celda.classList.remove('destino');
+                            return;
+                        }
                         celda.classList.add('destino');
                     }
                 });
@@ -3301,47 +2929,6 @@ function pintarGridPanel(panel, grid) {
                     ev.preventDefault();
                     celda.classList.remove('destino');
                     await manejarDrop(panel, fila, columna);
-                });
-            }
-
-            if (modoZona && panel === panelActivo) {
-                celda.style.cursor = 'crosshair';
-
-                /* Pulsar y arrastrar marca de golpe todo el rectángulo recorrido
-                   (los 8 equipos de la MESA 1 en un solo gesto). Shift resta. */
-                celda.addEventListener('mousedown', (ev) => {
-                    if (ev.button !== 0) return;
-                    if (ev.target.closest('.cerrar')) return;
-                    ev.preventDefault();
-                    iniciarArrastreZona(ev, fila, columna);
-                });
-
-                celda.addEventListener('mouseenter', () => {
-                    if (!arrastreZona) return;
-                    extenderArrastreZona(fila, columna);
-                });
-
-                celda.addEventListener('click', (ev) => {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-
-                    /* Clic que cierra una banda: la selección ya está aplicada. */
-                    if (arrastreZonaTerminado) {
-                        arrastreZonaTerminado = false;
-                        return;
-                    }
-
-                    const idx = celdasZonaSeleccionadas.findIndex(
-                        cc => cc.fila === fila && cc.columna === columna
-                    );
-
-                    if (idx >= 0) {
-                        celdasZonaSeleccionadas.splice(idx, 1);
-                    } else {
-                        celdasZonaSeleccionadas.push({ fila, columna });
-                    }
-                    pintarSeleccionZona();
-                    actualizarBotonesModo();
                 });
             }
 
@@ -3378,488 +2965,6 @@ function pintarGridPanel(panel, grid) {
     /* Sustitución atómica: un solo reflow, el canvas nunca queda vacío. */
     grid.replaceChildren(fragmento);
 
-
-    /* ORDEN IMPORTANTE: el riel de zonas reserva (o libera) el espacio lateral
-       del wrapper; los textos de zona libre se posicionan midiendo el wrapper,
-       así que deben medirse DESPUÉS de que el riel esté aplicado. Al revés, un
-       piso con zonas y zonas libres desplazaba los nombres libres ~118 px. */
-    renderizarLlavesZonas(panel);
-    renderizarTextosZonasLibres(panel);
-}
-
-/* =========================================================
-   RENDERIZAR TEXTOS DE ZONAS LIBRES
-   ========================================================= */
-function renderizarTextosZonasLibres(panel) {
-    const gridEl = panel.sufijo === 'izq' ? gridIzq : gridDer;
-    if (!gridEl) return;
-
-    const wrapper = gridEl.closest('.grid-plano-wrapper');
-    if (!wrapper) return;
-
-    /* Se limpian siempre para no dejar textos de una selección anterior. */
-    wrapper.querySelectorAll('.texto-zona-libre-overlay').forEach(el => el.remove());
-
-    if (!panel.zonasLibres || panel.zonasLibres.length === 0) return;
-
-    const grupos = {};
-    panel.zonasLibres.forEach(zl => {
-        const key = `${zl.Nombre}||${zl.Color}`;
-        if (!grupos[key]) {
-            grupos[key] = { nombre: zl.Nombre, color: zl.Color, celdas: [] };
-        }
-        grupos[key].celdas.push({ fila: zl.Fila, columna: zl.Columna });
-    });
-
-    Object.values(grupos).forEach(g => {
-        const filas = g.celdas.map(c => c.fila);
-        const cols = g.celdas.map(c => c.columna);
-        const filaMin = Math.min(...filas);
-        const filaMax = Math.max(...filas);
-        const colMin = Math.min(...cols);
-        const colMax = Math.max(...cols);
-
-        const celdaTL = gridEl.querySelector(`.celda[data-fila="${filaMin}"][data-columna="${colMin}"]`);
-        const celdaBR = gridEl.querySelector(`.celda[data-fila="${filaMax}"][data-columna="${colMax}"]`);
-        if (!celdaTL || !celdaBR) return;
-
-        const rectTL = celdaTL.getBoundingClientRect();
-        const rectBR = celdaBR.getBoundingClientRect();
-
-        const anchoTotal = (rectBR.right - rectTL.left);
-        const altoTotal = (rectBR.bottom - rectTL.top);
-
-        const totalFilas = filaMax - filaMin + 1;
-        const totalCols = colMax - colMin + 1;
-        const baseFontSize = Math.max(0.6, Math.min(1.5, 0.7 + Math.min(totalFilas, totalCols) * 0.08));
-
-        const overlay = document.createElement('div');
-        overlay.className = 'texto-zona-libre-overlay';
-        overlay.dataset.key = `${g.nombre}||${g.color}`;
-        overlay.style.position = 'absolute';
-        overlay.style.display = 'flex';
-        overlay.style.alignItems = 'center';
-        overlay.style.justifyContent = 'center';
-        overlay.style.textAlign = 'center';
-        overlay.style.fontWeight = '700';
-        overlay.style.color = '#1e293b';
-        overlay.style.textTransform = 'uppercase';
-        overlay.style.letterSpacing = '0.05em';
-        overlay.style.pointerEvents = 'none';
-        overlay.style.textShadow = '0 1px 2px rgba(255,255,255,0.7)';
-        overlay.style.padding = '4px';
-        overlay.style.lineHeight = '1.1';
-        overlay.style.wordBreak = 'break-word';
-        overlay.style.fontSize = baseFontSize + 'rem';
-        overlay.style.zIndex = '5';
-
-        const wrapperRect = wrapper.getBoundingClientRect();
-        const relX = (rectTL.left - wrapperRect.left) + wrapper.scrollLeft;
-        const relY = (rectTL.top - wrapperRect.top) + wrapper.scrollTop;
-
-        overlay.style.left = relX + 'px';
-        overlay.style.top = relY + 'px';
-        overlay.style.width = anchoTotal + 'px';
-        overlay.style.height = altoTotal + 'px';
-        overlay.textContent = g.nombre;
-
-        wrapper.appendChild(overlay);
-    });
-}
-
-/* =========================================================
-   RENDERIZAR LLAVES DE ZONA
-   ========================================================= */
-/* Agrupa las zonas por Nombre+Color. Cada grupo guarda las celdas REALES que
-   ocupa (no solo el rectángulo que las envuelve): así un grupo salteado, por
-   ejemplo 8 equipos repartidos en varias filas, se dibuja con tramos exactos
-   en lugar de una caja que aparenta abarcar celdas ajenas. */
-function agruparZonas(panel) {
-    const grupos = new Map();
-
-    for (const zona of panel.zonas || []) {
-        const clave = `${zona.Nombre}||${zona.Color || ''}`;
-        if (!grupos.has(clave)) {
-            grupos.set(clave, {
-                nombre: zona.Nombre,
-                color: normalizarColor(zona.Color, COLOR_ZONA_DEFECTO),
-                zonas: [],
-                celdas: [],
-                celdasClave: new Set()
-            });
-        }
-
-        const grupo = grupos.get(clave);
-        grupo.zonas.push(zona);
-
-        /* Una zona normalmente es 1×1; si alguna vez guarda un bloque, se
-           recorren todas sus celdas para no perder ninguna. */
-        const filaInicio = Number(zona.FilaInicio) || 1;
-        const filaFin = Math.max(filaInicio, Number(zona.FilaFin) || filaInicio);
-        const columnaInicio = Number(zona.ColumnaInicio) || 1;
-        const columnaFin = Math.max(columnaInicio, Number(zona.ColumnaFin) || columnaInicio);
-
-        for (let fila = filaInicio; fila <= filaFin; fila++) {
-            for (let columna = columnaInicio; columna <= columnaFin; columna++) {
-                const marca = `${fila}|${columna}`;
-                if (grupo.celdasClave.has(marca)) continue;
-                grupo.celdasClave.add(marca);
-                grupo.celdas.push({ fila, columna });
-            }
-        }
-    }
-
-    const lista = [...grupos.values()];
-    lista.forEach(grupo => {
-        delete grupo.celdasClave;
-        grupo.filaInicio = Math.min(...grupo.celdas.map(c => c.fila));
-        grupo.filaFin = Math.max(...grupo.celdas.map(c => c.fila));
-        grupo.columnaInicio = Math.min(...grupo.celdas.map(c => c.columna));
-        grupo.columnaFin = Math.max(...grupo.celdas.map(c => c.columna));
-    });
-    return lista;
-}
-
-/* Rectángulos reales de las celdas del grupo agrupados en tramos de filas
-   contiguas. Devuelve null si el grupo no está dibujado en este canvas. */
-function tramosDeZona(gridEl, grupo, contenedorRect) {
-    const porFila = new Map();
-
-    for (const celda of grupo.celdas) {
-        const elemento = gridEl.querySelector(
-            `.celda[data-fila="${celda.fila}"][data-columna="${celda.columna}"]`
-        );
-        if (!elemento) continue;
-
-        const rect = elemento.getBoundingClientRect();
-        if (!rect.height) continue;
-
-        const top = rect.top - contenedorRect.top;
-        const bottom = rect.bottom - contenedorRect.top;
-        const actual = porFila.get(celda.fila);
-
-        if (!actual) {
-            porFila.set(celda.fila, { top, bottom });
-        } else {
-            actual.top = Math.min(actual.top, top);
-            actual.bottom = Math.max(actual.bottom, bottom);
-        }
-    }
-
-    if (porFila.size === 0) return null;
-
-    const filas = [...porFila.entries()].sort((a, b) => a[0] - b[0]);
-    const tramos = [];
-
-    for (const [fila, rect] of filas) {
-        const ultimo = tramos[tramos.length - 1];
-        if (ultimo && fila === ultimo.filaFin + 1) {
-            ultimo.filaFin = fila;
-            ultimo.bottom = Math.max(ultimo.bottom, rect.bottom);
-        } else {
-            tramos.push({
-                filaInicio: fila,
-                filaFin: fila,
-                top: rect.top,
-                bottom: rect.bottom
-            });
-        }
-    }
-
-    return tramos;
-}
-
-function renderizarLlavesZonas(panel) {
-    const contenedor = panel.sufijo === 'izq' ? llavesIzq : llavesDer;
-    if (!contenedor) return;
-
-    /* Se limpia siempre: si ya no quedan zonas no deben quedar indicadores viejos. */
-    contenedor.innerHTML = '';
-    contenedor.classList.remove('riel-derecha', 'riel-izquierda');
-
-    const gridEl = panel.sufijo === 'izq' ? gridIzq : gridDer;
-    if (!gridEl) return;
-
-    const grupos = agruparZonas(panel)
-        .sort((a, b) => a.filaInicio - b.filaInicio || a.columnaInicio - b.columnaInicio);
-
-    /* El riel solo se reserva cuando hay algo que dibujar en él; así un piso sin
-       zonas no pierde ancho útil a los lados del canvas. */
-    const wrapper = gridEl.closest('.grid-plano-wrapper');
-    if (wrapper) wrapper.classList.toggle('con-riel', grupos.length > 0);
-    if (!grupos.length) return;
-
-    const contenedorRect = contenedor.getBoundingClientRect();
-    const gridRect = gridEl.getBoundingClientRect();
-    if (!gridRect.width) return;
-
-    /* RIEL: la franja libre FUERA del canvas (el wrapper reserva ese espacio a
-       los dos lados). Todos los indicadores de zona viven ahí, así nunca tapan
-       una celda ni el equipo que hay debajo. */
-    const bordeDerecho = gridRect.right - contenedorRect.left;
-    const bordeIzquierdo = gridRect.left - contenedorRect.left;
-    const espacioDerecha = contenedorRect.width - bordeDerecho;
-    const lado = espacioDerecha >= bordeIzquierdo ? 'derecha' : 'izquierda';
-
-    contenedor.classList.add(lado === 'derecha' ? 'riel-derecha' : 'riel-izquierda');
-
-    const xRiel = lado === 'derecha' ? bordeDerecho : bordeIzquierdo;
-
-    const ocupacion = [];
-    let indicadores = 0;
-
-    for (const grupo of grupos) {
-        const tramos = tramosDeZona(gridEl, grupo, contenedorRect);
-        if (!tramos) continue;
-
-        crearIndicadorZona({
-            contenedor,
-            grupo,
-            lado,
-            xRiel,
-            panel,
-            centro: (tramos[0].top + tramos[tramos.length - 1].bottom) / 2,
-            altoContenedor: contenedorRect.height,
-            ocupacion
-        });
-        indicadores++;
-    }
-
-    /* Ninguna zona de este piso está realmente dibujada en este canvas (por
-       ejemplo, coordenadas fuera de las dimensiones actuales): se devuelve el
-       ancho reservado para no dejar dos franjas vacías a los lados. */
-    if (!indicadores && wrapper) wrapper.classList.remove('con-riel');
-}
-
-/* Posiciones del riel que el usuario acomoda a mano. Se recuerdan por piso
-   (no solo mientras la página está abierta) para que no tenga que reacomodar
-   las etiquetas cada vez que entra al plano. */
-function claveAlmacenLlaves(panel) {
-    return `plano:llaves:${panel?.idPiso ?? 'sin-piso'}`;
-}
-
-function leerPosicionesLlave(panel) {
-    try {
-        const guardado = JSON.parse(localStorage.getItem(claveAlmacenLlaves(panel)) || '{}');
-        return guardado && typeof guardado === 'object' ? guardado : {};
-    } catch {
-        return {};
-    }
-}
-
-function guardarPosicionesLlave(panel, posiciones) {
-    try {
-        localStorage.setItem(claveAlmacenLlaves(panel), JSON.stringify(posiciones || {}));
-    } catch {
-        /* Sin almacenamiento disponible: se conserva solo la posición de la sesión. */
-    }
-}
-
-/* La posición se guarda como { x, y }; se acepta también el formato viejo
-   (solo la Y) para que las etiquetas ya acomodadas no salten de lugar. */
-function normalizarPosicionLlave(valor) {
-    if (valor == null) return { x: null, y: null };
-    if (typeof valor === 'number' || typeof valor === 'string') {
-        const y = Number(valor);
-        return { x: null, y: Number.isFinite(y) ? y : null };
-    }
-    const x = Number(valor.x);
-    const y = Number(valor.y);
-    return {
-        x: Number.isFinite(x) ? x : null,
-        y: Number.isFinite(y) ? y : null
-    };
-}
-
-/* Dibuja UN indicador por zona, siempre dentro del riel (fuera del canvas):
-   una sola etiqueta con el punto de color y el nombre. Ya no se dibuja ningún
-   palo ni corchete entre la zona y la etiqueta: el indicador ES la etiqueta y
-   el usuario la arrastra a su gusto (más hacia su lado si así lo quiere). */
-function crearIndicadorZona(opciones) {
-    const {
-        contenedor, grupo, lado, xRiel,
-        centro, altoContenedor, ocupacion, panel
-    } = opciones;
-
-    const margenRiel = 10;  // separación entre el canvas y la etiqueta
-
-
-    /* 1. Etiqueta: solo el punto de color y el nombre. Sin contador y sin
-       palo: el indicador es para ubicar la zona, no para contarla. */
-    const etiqueta = document.createElement('div');
-    etiqueta.className = 'etiqueta-llave';
-    etiqueta.style.borderColor = grupo.color;
-
-    const punto = document.createElement('span');
-    punto.className = 'punto-color';
-    punto.style.background = grupo.color;
-    etiqueta.append(punto, document.createTextNode(` ${grupo.nombre || ''}`));
-
-    etiqueta.title =
-        `${grupo.nombre || 'Zona'} · Arrastra para acomodarla · Clic para editar · ` +
-        'Doble clic para devolverla a su lugar.';
-
-    /* UN solo cable de unión por etiqueta: nace en el borde del canvas a la
-       altura de la zona y muere en el borde interior de la etiqueta. Se dibuja
-       antes de la etiqueta para quedar por debajo y nunca cruza la grilla. */
-    const cable = document.createElement('div');
-    cable.className = 'cable-llave';
-    cable.style.background = grupo.color;
-    contenedor.appendChild(cable);
-
-    contenedor.appendChild(etiqueta);
-
-    const altoEtiqueta = etiqueta.offsetHeight || 26;
-    const anchoEtiqueta = etiqueta.offsetWidth || 90;
-    const anchoContenedor = contenedor.clientWidth || anchoEtiqueta + 4;
-
-    /* 2. Límites permitidos de arrastre. La etiqueta nunca se mete al canvas y
-       solo puede alejarse hacia SU lado: si está a la derecha se mueve hacia la
-       derecha (hasta el borde del riel) y si está a la izquierda hacia la
-       izquierda. El resto del riel es su rango libre. */
-    const claveGrupo = `${grupo.nombre}||${grupo.color}`;
-
-    const xMin = lado === 'derecha' ? xRiel + 2 : 4;
-    const xMax = lado === 'derecha'
-        ? Math.max(xMin, anchoContenedor - anchoEtiqueta - 4)
-        : Math.max(xMin, xRiel - 4 - anchoEtiqueta);
-    const acotarX = valor => Math.max(xMin, Math.min(valor, xMax));
-
-    const limiteInferior = Math.max(altoContenedor - altoEtiqueta - 4, 4);
-    const acotarY = valor => Math.max(4, Math.min(valor, limiteInferior));
-
-    /* 3. Posición: si el usuario ya la había acomodado se respeta (x e y); si
-       no, se centra en su zona y se apila para no encimarse con otra etiqueta. */
-    ocupacion.sort((a, b) => a.top - b.top);
-    let yAuto = centro - altoEtiqueta / 2;
-    for (const bloque of ocupacion) {
-        if (yAuto < bloque.bottom + 6 && (yAuto + altoEtiqueta) > bloque.top - 6) {
-            yAuto = bloque.bottom + 6;
-        }
-    }
-    yAuto = acotarY(yAuto);
-
-    const xAuto = lado === 'derecha'
-        ? xRiel + margenRiel
-        : Math.max(4, xRiel - margenRiel - anchoEtiqueta);
-
-    const posicionGuardada = normalizarPosicionLlave(
-        panel?.posicionesLlave?.[claveGrupo] ?? leerPosicionesLlave(panel)[claveGrupo]
-    );
-    const x = posicionGuardada.x != null ? acotarX(posicionGuardada.x) : acotarX(xAuto);
-    const y = posicionGuardada.y != null ? acotarY(posicionGuardada.y) : yAuto;
-
-    etiqueta.style.top = y + 'px';
-    etiqueta.style.left = x + 'px';
-
-    ocupacion.push({ top: y, bottom: y + altoEtiqueta });
-
-    /* 4. El cable acompaña a la etiqueta: se recalcula en cada movimiento y se
-       oculta si la etiqueta se pasa al otro lado del ancla, de modo que NUNCA
-       se dibuja encima de la grilla (el ancla está en el borde del canvas). */
-    const actualizarCable = () => {
-        const leftActual = parseFloat(etiqueta.style.left);
-        const topActual = parseFloat(etiqueta.style.top);
-        const xEtiqueta = Number.isFinite(leftActual) ? leftActual : x;
-        const yEtiqueta = Number.isFinite(topActual) ? topActual : y;
-
-        /* Extremo en el borde interior de la etiqueta más cercano al canvas. */
-        const destinoX = lado === 'derecha' ? xEtiqueta : xEtiqueta + anchoEtiqueta;
-        const destinoY = yEtiqueta + altoEtiqueta / 2;
-
-        const dx = destinoX - xRiel;
-        const dy = destinoY - centro;
-        const largo = Math.hypot(dx, dy);
-        const visible = largo >= 4 && (lado === 'derecha' ? dx > 0 : dx < 0);
-
-        cable.classList.toggle('cable-oculto', !visible);
-        if (!visible) return;
-
-        cable.style.width = `${Math.round(largo)}px`;
-        cable.style.left = `${Math.round(xRiel)}px`;
-        cable.style.top = `${Math.round(centro) - 1}px`;
-        cable.style.transform = `rotate(${Math.atan2(dy, dx) * 180 / Math.PI}deg)`;
-    };
-
-    actualizarCable();
-
-    /* 5. Arrastre libre en las dos direcciones (dentro de los rangos de arriba).
-       La posición se recuerda por grupo y por piso; doble clic la restablece. */
-    let arrastreEtiqueta = null;
-    let etiquetaMovida = false;
-
-    etiqueta.addEventListener('pointerdown', (ev) => {
-        if (ev.button !== 0) return;
-        arrastreEtiqueta = {
-            xPuntero: ev.clientX,
-            yPuntero: ev.clientY,
-            leftInicial: parseFloat(etiqueta.style.left) || x,
-            topInicial: parseFloat(etiqueta.style.top) || y
-        };
-        etiquetaMovida = false;
-        etiqueta.classList.add('arrastrando');
-        etiqueta.setPointerCapture?.(ev.pointerId);
-        /* Sin preventDefault: así el clic sigue llegando al manejador que abre
-           el modal. El texto no se selecciona porque el CSS ya lo desactiva. */
-        ev.stopPropagation();
-    });
-
-    etiqueta.addEventListener('pointermove', (ev) => {
-        if (!arrastreEtiqueta) return;
-        const dx = ev.clientX - arrastreEtiqueta.xPuntero;
-        const dy = ev.clientY - arrastreEtiqueta.yPuntero;
-        if (Math.abs(dx) + Math.abs(dy) > 3) etiquetaMovida = true;
-        if (!etiquetaMovida) { ev.stopPropagation(); return; }
-
-        const nuevaX = acotarX(arrastreEtiqueta.leftInicial + dx);
-        const nuevaY = acotarY(arrastreEtiqueta.topInicial + dy);
-        etiqueta.style.left = nuevaX + 'px';
-        etiqueta.style.top = nuevaY + 'px';
-        actualizarCable();
-        ev.stopPropagation();
-    });
-
-    const terminarArrastreEtiqueta = () => {
-        if (!arrastreEtiqueta) return;
-        arrastreEtiqueta = null;
-        etiqueta.classList.remove('arrastrando');
-        if (etiquetaMovida && panel) {
-            panel.posicionesLlave = panel.posicionesLlave || {};
-            panel.posicionesLlave[claveGrupo] = {
-                x: parseFloat(etiqueta.style.left) || x,
-                y: parseFloat(etiqueta.style.top) || y
-            };
-            guardarPosicionesLlave(panel, panel.posicionesLlave);
-        }
-        /* El clic se dispara justo después del pointerup: se limpia la marca en
-           el siguiente turno para no abrir el modal al terminar de arrastrar. */
-        setTimeout(() => { etiquetaMovida = false; }, 0);
-    };
-
-    etiqueta.addEventListener('pointerup', terminarArrastreEtiqueta);
-    etiqueta.addEventListener('pointercancel', terminarArrastreEtiqueta);
-
-    /* Al hacer clic se edita el grupo completo (todas las celdas de esa zona),
-       no solo una, para que el CRUD quede coherente con lo que se ve. */
-    etiqueta.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (etiquetaMovida) return;
-        if (!grupo.zonas?.length) return;
-        abrirModalZona(grupo.zonas[0], { nombre: grupo.nombre, color: grupo.color });
-    });
-
-    etiqueta.addEventListener('dblclick', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (!panel) return;
-        delete panel.posicionesLlave?.[claveGrupo];
-        /* Doble clic = devolverla a su lugar automático, también en lo guardado. */
-        const posicionesGuardadas = leerPosicionesLlave(panel);
-        delete posicionesGuardadas[claveGrupo];
-        guardarPosicionesLlave(panel, posicionesGuardadas);
-        renderizarLlavesZonas(panel);
-    });
 }
 
 /* =========================================================
@@ -3893,12 +2998,12 @@ function renderPanelLateral() {
 
     enVivo(lateralTabs, renderTabs);
     enVivo(listaSinUbicar, renderListaSinUbicarFiltrada);
-    enVivo(listaZonas, renderListaZonas);
+    enVivo(listaZonasLibres, renderListaZonasLibres);
 
     renderFiltrosRol();
     actualizarBadge();
     window.PermisosUI?.aplicar(listaSinUbicar);
-    window.PermisosUI?.aplicar(listaZonas);
+    window.PermisosUI?.aplicar(listaZonasLibres);
 }
 
 function renderTabs() {
@@ -4096,106 +3201,17 @@ function actualizarBadge() {
     badgeToggle.textContent = total;
 }
 
-function renderListaZonas() {
-    listaZonas.innerHTML = '';
-    const zonasNormales = panelActivo.zonas || [];
-    const zonasLibres   = panelActivo.zonasLibres || [];
+function renderListaZonasLibres() {
+    listaZonasLibres.innerHTML = '';
+    const zonasLibres = panelActivo.zonasLibres || [];
 
-    if (zonasNormales.length === 0 && zonasLibres.length === 0) {
-        listaZonas.innerHTML = '<li style="cursor:default;color:#95a5a6;background:transparent;font-size:0.8rem;">Sin zonas definidas</li>';
+    if (zonasLibres.length === 0) {
+        listaZonasLibres.innerHTML = '<li style="cursor:default;color:#95a5a6;background:transparent;font-size:0.8rem;">Sin zonas libres definidas</li>';
         return;
     }
 
-    const gruposNormales = {};
-    zonasNormales.forEach(z => {
-        const key = `${z.Nombre}||${z.Color || ''}`;
-        if (!gruposNormales[key]) {
-            gruposNormales[key] = {
-                nombre: z.Nombre,
-                color: z.Color,
-                zonas: []
-            };
-        }
-        gruposNormales[key].zonas.push(z);
-    });
-
-    Object.values(gruposNormales).forEach(g => {
-        const li = document.createElement('li');
-        const colorDiv = document.createElement('div');
-        colorDiv.className = 'muestra-color';
-        colorDiv.style.background = g.color || '#ccc';
-        const nombreSpan = document.createElement('span');
-        nombreSpan.className = 'nombre-zona';
-        nombreSpan.textContent = g.nombre;
-
-        if (g.zonas.length > 1) {
-            const cantSpan = document.createElement('span');
-            cantSpan.className = 'cant-zonas';
-            cantSpan.textContent = `${g.zonas.length}`;
-            li.appendChild(colorDiv);
-            li.appendChild(nombreSpan);
-            li.appendChild(cantSpan);
-        } else {
-            li.appendChild(colorDiv);
-            li.appendChild(nombreSpan);
-        }
-
-        const btnEditar = document.createElement('button');
-        btnEditar.type = 'button';
-        btnEditar.textContent = 'Editar';
-        btnEditar.className = 'secundario';
-        btnEditar.dataset.permiso = 'plano:zonas:gestionar';
-        btnEditar.addEventListener('click', () => abrirModalZona(g.zonas[0], {
-            nombre: g.nombre,
-            color: g.color
-        }));
-
-        const btnEliminar = document.createElement('button');
-        btnEliminar.type = 'button';
-        btnEliminar.textContent = 'Eliminar';
-        btnEliminar.className = 'peligro';
-        btnEliminar.dataset.permiso = 'plano:zonas:eliminar';
-        btnEliminar.addEventListener('click', () => {
-            const total = g.zonas.length;
-            const mensaje = total > 1
-                ? `¿Eliminar TODAS las zonas llamadas <b>"${g.nombre}"</b> (${total} registros)?<br>
-                   <span style="color:#64748b;font-size:0.85rem;">Los equipos permanecerán en sus posiciones.</span>`
-                : `¿Eliminar la zona <b>"${g.nombre}"</b>?<br>
-                   <span style="color:#64748b;font-size:0.85rem;">Los equipos permanecerán en sus posiciones.</span>`;
-
-            mostrarConfirmacion(
-                'Eliminar zona',
-                mensaje,
-                async () => {
-                    try {
-                        const res = await window.api.plano.eliminarZonasPorNombre(
-                            panelActivo.idPiso, g.nombre, g.color
-                        );
-
-                        if (!res || res.ok === false) {
-                            mostrarToast(res?.mensaje || 'No se pudo eliminar la zona', 'error', 4000);
-                            return;
-                        }
-
-                        mostrarToast(
-                            res.mensaje || `Zona "${g.nombre}" eliminada`,
-                            'exito'
-                        );
-                        await recargarPanel(panelActivo);
-                    } catch (err) {
-                        mostrarToast('Error al eliminar: ' + err.message, 'error', 4000);
-                    }
-                },
-                'plano:zonas:eliminar'
-            );
-        });
-
-        li.appendChild(btnEditar);
-        li.appendChild(btnEliminar);
-        listaZonas.appendChild(li);
-    });
-
-    if (zonasLibres.length > 0) {
+    {
+        /* Cada grupo es un Nombre+Color; el mismo grupo puede ocupar varias celdas. */
         const grupos = {};
         zonasLibres.forEach(zl => {
             const key = `${zl.Nombre}||${zl.Color}`;
@@ -4209,8 +3225,8 @@ function renderListaZonas() {
             colorDiv.className = 'muestra-color';
             colorDiv.style.background = g.color;
             const nombreSpan = document.createElement('span');
-            nombreSpan.className = 'nombre-zona';
-            nombreSpan.textContent = g.nombre + ' (libre)';
+            nombreSpan.className = 'nombre-zona-libre';
+            nombreSpan.textContent = g.nombre;
             const cantSpan = document.createElement('span');
             cantSpan.className = 'cant-celdas';
             cantSpan.textContent = `${g.celdas.length} c.`;
@@ -4245,7 +3261,7 @@ function renderListaZonas() {
             li.appendChild(cantSpan);
             li.appendChild(btnEditar);
             li.appendChild(btnEliminar);
-            listaZonas.appendChild(li);
+            listaZonasLibres.appendChild(li);
         });
     }
 }
@@ -4255,6 +3271,19 @@ function renderListaZonas() {
    ========================================================= */
 async function manejarDrop(panelDestino, filaDestino, columnaDestino) {
     if (!dragOrigen) return;
+
+    /* Las zonas libres están reservadas: ningún equipo puede ocuparlas, ni
+       arrastrado desde otra celda ni traído desde el panel lateral. */
+    const zonaDestino = zonaLibreEnCelda(panelDestino, filaDestino, columnaDestino);
+    if (zonaDestino) {
+        dragOrigen = null;
+        mostrarToast(
+            `La celda (${filaDestino}, ${columnaDestino}) pertenece a la zona libre "${zonaDestino.Nombre}": está reservada y no admite equipos.`,
+            'warn',
+            5000
+        );
+        return;
+    }
 
     const panelOrigen = dragOrigen.panelSufijo === 'izq' ? panelIzq : panelDer;
     const mismoPanel = panelOrigen === panelDestino;
@@ -5009,16 +4038,6 @@ function calcularLayoutPlano(panel) {
     CELL_W = Math.max(28, CELL_W);
     CELL_H = Math.max(24, CELL_H);
 
-    /* RIEL de las etiquetas de zona: SIEMPRE se toma del espacio que ya sobraba
-       a los lados del canvas. Nunca se toca el tamaño de las celdas: el plano
-       mide exactamente lo mismo que antes de existir los indicadores. Si el
-       sobrante no alcanza para una etiqueta legible, no se reserva riel y las
-       etiquetas se dibujan encima de su propia zona (ver construirBloquesPlano),
-       así la hoja jamás se desborda. Aquí solo se informa cuánto espacio libre
-       queda a cada lado; el reparto entre riel izquierdo y derecho lo hace
-       construirBloquesPlano según el lado en el que esté cada zona. */
-    const sobranteLado = Math.max(0, Math.floor((anchoUtil - (cols * CELL_W + (cols - 1) * GAP)) / 2));
-
     const orientacionPagina = esHorizontal ? 'landscape' : 'portrait';
 
     const FONT_HOST = Math.max(0.18, Math.min(0.70, CELL_H / 54)).toFixed(2);
@@ -5031,7 +4050,6 @@ function calcularLayoutPlano(panel) {
         GAP,
         GRID_PADDING,
         BORDE_GRID,
-        sobranteLado,
         CELL_W,
         CELL_H,
         FONT_HOST,
@@ -5042,12 +4060,8 @@ function calcularLayoutPlano(panel) {
 function construirBloquesPlano(panel, layout) {
     const {
         cols, filas, GAP, GRID_PADDING, CELL_W, CELL_H,
-        FONT_HOST, FONT_IP, BORDE_GRID, sobranteLado
+        FONT_HOST, FONT_IP, BORDE_GRID
     } = layout;
-
-    const escaparTextoZona = valor => String(valor ?? '').replace(/[&<>"']/g, caracter => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[caracter]);
 
     const zonasLibresMap = new Map();
     (panel.zonasLibres || []).forEach(zl => {
@@ -5162,7 +4176,6 @@ function construirBloquesPlano(panel, layout) {
         return `#${canales.map(canal => Math.round(canal + (255 - canal) * .78).toString(16).padStart(2, '0')).join('')}`;
     };
 
-
     let celdasHTML = '';
     for (let f = 0; f < filas; f++) {
         for (let c = 0; c < cols; c++) {
@@ -5223,230 +4236,6 @@ function construirBloquesPlano(panel, layout) {
             <div data-color="${codigoCli}" data-color-kind="client" style="position:absolute;left:${x + GRID_PADDING - BORDE_OFFSET}px;top:${y + GRID_PADDING - BORDE_OFFSET - CHIP_ALTO + 2}px;height:${CHIP_ALTO}px;max-width:${CELL_W + BORDE_OFFSET * 2}px;padding:0 6px;background-color:${colorCli} !important;color:${colorTextoCliente} !important;border-color:${colorCli} !important;font-size:${CHIP_FONT}rem;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;border-radius:3px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:visible;pointer-events:none;box-sizing:border-box;z-index:5;">${codigoCli}</div>`;
         }
     });
-
-    let textosLibresHTML = '';
-    Object.values(gruposLibres).forEach(g => {
-        const filasArr = g.celdas.map(c => c.fila);
-        const colsArr  = g.celdas.map(c => c.columna);
-        const filaMin = Math.min(...filasArr);
-        const filaMax = Math.max(...filasArr);
-        const colMin  = Math.min(...colsArr);
-        const colMax  = Math.max(...colsArr);
-
-        const x0 = (colMin - 1) * (CELL_W + GAP) + GRID_PADDING;
-        const y0 = (filaMin - 1) * (CELL_H + GAP) + GRID_PADDING;
-        const w  = (colMax - colMin + 1) * (CELL_W + GAP) - GAP;
-        const h  = (filaMax - filaMin + 1) * (CELL_H + GAP) - GAP;
-
-        const colorZona  = normalizarColor(g.color, '#e2e8f0');
-        const colorTexto = colorTextoContraste(colorZona);
-
-        const totalFilas = filaMax - filaMin + 1;
-        const totalCols  = colMax - colMin + 1;
-        const fontSizeRem = Math.max(0.7, Math.min(1.4, 0.75 + Math.min(totalFilas, totalCols) * 0.08));
-
-        textosLibresHTML += `
-            <div style="position:absolute;left:${x0}px;top:${y0}px;width:${w}px;height:${h}px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:${fontSizeRem}rem;color:${colorTexto};text-transform:uppercase;letter-spacing:0.05em;text-shadow:0 1px 2px rgba(255,255,255,0.35);pointer-events:none;padding:2px;line-height:1.05;word-break:break-word;box-sizing:border-box;z-index:5;">${g.nombre}</div>`;
-    });
-
-    /* INDICADORES DE ZONA (vista previa y PDF)
-       ---------------------------------------------------------
-       UN indicador por grupo Nombre+Color y SIN palo ni corchete: solo la
-       etiqueta con el punto de color, centrada a la altura de su zona y en el
-       lado del canvas más cercano. Vive en el riel reservado FUERA del canvas
-       (`.plano-con-riel`), así nunca tapa una celda ni se sale de la hoja. */
-    const ANCHO_CONTENIDO = cols * CELL_W + (cols - 1) * GAP;
-    const ALTO_CONTENIDO  = filas * CELL_H + (filas - 1) * GAP;
-    const Y_CONTENIDO = BORDE_GRID + GRID_PADDING;
-    const ALTO_WRAPPER  = BORDE_GRID * 2 + GRID_PADDING * 2 + ALTO_CONTENIDO;
-
-    const gruposZona = new Map();
-    (panel.zonas || []).forEach(zona => {
-        const clave = `${zona.Nombre}||${zona.Color || ''}`;
-        if (!gruposZona.has(clave)) {
-            gruposZona.set(clave, {
-                nombre: zona.Nombre,
-                color: normalizarColor(zona.Color, COLOR_ZONA_DEFECTO),
-                celdas: [],
-                marcas: new Set()
-            });
-        }
-
-        const grupo = gruposZona.get(clave);
-        const filaInicio = Number(zona.FilaInicio) || 1;
-        const filaFin = Math.max(filaInicio, Number(zona.FilaFin) || filaInicio);
-        const colInicio = Number(zona.ColumnaInicio) || 1;
-        const colFin = Math.max(colInicio, Number(zona.ColumnaFin) || colInicio);
-
-        for (let f = filaInicio; f <= filaFin; f++) {
-            for (let c = colInicio; c <= colFin; c++) {
-                const marca = `${f}|${c}`;
-                if (grupo.marcas.has(marca)) continue;
-                grupo.marcas.add(marca);
-                grupo.celdas.push({ fila: f, columna: c });
-            }
-        }
-    });
-
-    const ALTURA_ETIQUETA = 23;
-    const ocupacionRiel = { derecha: [], izquierda: [] };
-    let etiquetasRiel = '';
-
-    const filaMinima = grupo => Math.min(...grupo.celdas.map(c => c.fila));
-
-    /* RIEL POR LADO
-       ---------------------------------------------------------
-       El canvas NO cambia de tamaño: las franjas laterales solo se toman del
-       espacio que ya sobraba en la hoja. Cada lado se topa a ESE sobrante (no
-       al doble), así el bloque con riel nunca excede el ancho de la hoja ni
-       desplaza el plano. */
-    const RIEL_MINIMO = 64;
-    /* Franja que ocupan las etiquetas giradas cuando la hoja no tiene espacio
-       lateral. Se toma del relleno de la página, jamás del canvas. */
-    const FRANJA_COMPACTA = 22;
-    /* Ancho estimado de la etiqueta horizontal: texto en 0.86rem (≈9 px por
-       carácter en mayúsculas) + punto (10) + hueco (6) + relleno (18) + bordes. */
-    const anchoNecesarioEtiqueta = nombre => Math.min(220, 42 + String(nombre || '').length * 9.1) + 12;
-
-    const gruposDibujables = [...gruposZona.values()]
-        .filter(grupo => grupo.celdas.length)
-        .map(grupo => {
-            const columnas = grupo.celdas.map(c => c.columna);
-            const centro = (Math.min(...columnas) + Math.max(...columnas)) / 2;
-            return {
-                grupo,
-                lado: centro > (cols + 1) / 2 ? 'derecha' : 'izquierda',
-                ancho: anchoNecesarioEtiqueta(grupo.nombre)
-            };
-        });
-
-    let RIEL_IZQ = 0;
-    let RIEL_DER = 0;
-    /* La decisión es POR LADO: una franja puede caber y la otra no. Cuando un
-       lado se queda sin riel, sus etiquetas se giran 90°. Antes el giro era
-       global, así que el lado sin riel colocaba la etiqueta fuera del
-       contenedor y acababa encima de la grilla. */
-    let verticalIzq = false;
-    let verticalDer = false;
-
-    if (gruposDibujables.length) {
-        if (sobranteLado >= RIEL_MINIMO) {
-            const necesario = { izquierda: 0, derecha: 0 };
-            gruposDibujables.forEach(g => {
-                necesario[g.lado] = Math.max(necesario[g.lado], g.ancho);
-            });
-            RIEL_IZQ = Math.min(necesario.izquierda, sobranteLado);
-            RIEL_DER = Math.min(necesario.derecha, sobranteLado);
-            /* Por debajo del mínimo la etiqueta no se lee: se descarta ese riel. */
-            if (RIEL_IZQ < RIEL_MINIMO) RIEL_IZQ = 0;
-            if (RIEL_DER < RIEL_MINIMO) RIEL_DER = 0;
-        }
-
-        const hayLado = lado => gruposDibujables.some(g => g.lado === lado);
-
-        /* El canvas ocupa todo el ancho útil (lo normal cuando hay muchas
-           columnas). Cada lado sin riel gira sus etiquetas 90° y las lleva a la
-           franja del relleno de página: no se tapa una sola celda y el plano
-           mide exactamente lo mismo. */
-        if (!RIEL_IZQ && hayLado('izquierda')) {
-            verticalIzq = true;
-            RIEL_IZQ = FRANJA_COMPACTA;
-        }
-        if (!RIEL_DER && hayLado('derecha')) {
-            verticalDer = true;
-            RIEL_DER = FRANJA_COMPACTA;
-        }
-    }
-
-    const etiquetasVerticales = verticalIzq || verticalDer;
-
-    /* Origen del canvas dentro del contenedor con riel. */
-    const X_CONTENIDO = RIEL_IZQ + BORDE_GRID + GRID_PADDING;
-
-    gruposDibujables
-        .sort((a, b) => filaMinima(a.grupo) - filaMinima(b.grupo))
-        .forEach(({ grupo, lado }) => {
-            /* Cada lado se dibuja según SU riel: horizontal si la franja
-               alcanza, girada 90° si ese lado no tiene espacio lateral. */
-            const vertical = lado === 'derecha' ? verticalDer : verticalIzq;
-            const filasGrupo = grupo.celdas.map(c => c.fila);
-            const filaMin = Math.min(...filasGrupo);
-            const filaMax = Math.max(...filasGrupo);
-            /* Centro vertical de la zona completa (no de cada tramo): una sola
-               etiqueta por zona, siempre a su altura. */
-            const centro = Y_CONTENIDO
-                + (filaMin - 1) * (CELL_H + GAP)
-                + ((filaMax - filaMin + 1) * (CELL_H + GAP) - GAP) / 2;
-
-            /* Alto que ocupará la etiqueta: fijo cuando va horizontal,
-               proporcional al nombre cuando va girada. Sirve para apilarlas sin
-               que se encimen. */
-            const altoEtiqueta = vertical
-                ? Math.min(ALTO_WRAPPER - 8, 26 + String(grupo.nombre || '').length * 8)
-                : ALTURA_ETIQUETA;
-
-            /* Apilado: dos etiquetas del mismo lado nunca se enciman. */
-            const ocupacion = ocupacionRiel[lado];
-            let y = centro - altoEtiqueta / 2;
-            for (const bloque of ocupacion) {
-                if (y < bloque.bottom + 6 && (y + altoEtiqueta) > bloque.top - 6) {
-                    y = bloque.bottom + 6;
-                }
-            }
-            y = Math.max(4, Math.min(y, Math.max(ALTO_WRAPPER - altoEtiqueta - 4, 4)));
-            ocupacion.push({ top: y, bottom: y + altoEtiqueta });
-
-            /* Borde visible del canvas en el lado de la etiqueta. */
-            const xBordeCanvas = lado === 'derecha'
-                ? X_CONTENIDO + ANCHO_CONTENIDO + BORDE_GRID + GRID_PADDING
-                : X_CONTENIDO - BORDE_GRID - GRID_PADDING;
-
-            let posicionLado;
-            let anchoMaxEtiqueta;
-            let claseEtiqueta = 'etiqueta-zona-pdf';
-
-            if (vertical) {
-                /* Etiqueta girada 90° pegada al borde del canvas: cabe en la
-                   franja del relleno de página, así que no toca ninguna celda. */
-                const franja = lado === 'derecha' ? RIEL_DER : RIEL_IZQ;
-                anchoMaxEtiqueta = Math.max(16, franja - 2);
-                claseEtiqueta += ' vertical';
-                posicionLado = lado === 'derecha'
-                    ? `left:${Math.round(xBordeCanvas + 1)}px;`
-                    : `left:${Math.round(xBordeCanvas - 1)}px;transform:translateX(-100%);`;
-            } else {
-                /* Con riel: la etiqueta vive FUERA del canvas, en su lado. */
-                const franja = lado === 'derecha' ? RIEL_DER : RIEL_IZQ;
-                const SEPARACION = 8;
-                const xEtiqueta = lado === 'derecha'
-                    ? xBordeCanvas + SEPARACION
-                    : xBordeCanvas - SEPARACION;
-
-                /* En el lado izquierdo la etiqueta crece hacia la izquierda. */
-                posicionLado = lado === 'derecha'
-                    ? `left:${Math.round(xEtiqueta)}px;`
-                    : `left:${Math.round(xEtiqueta)}px;transform:translateX(-100%);`;
-
-                /* max-width acotado al riel: un nombre largo se recorta con
-                   elipsis en lugar de salirse de la hoja. */
-                anchoMaxEtiqueta = Math.max(40, franja - 12);
-            }
-
-            /* En vertical el eje del texto es el alto: se acota con max-height
-               para que un nombre larguísimo se recorte con "…" en lugar de
-               salirse de la hoja. */
-            const limiteTexto = vertical
-                ? ` style="max-height:${Math.round(Math.max(40, Math.min(ALTO_CONTENIDO, ALTO_WRAPPER - 30) - 12))}px;"`
-                : '';
-
-            etiquetasRiel += `
-                <div class="${claseEtiqueta}" style="top:${Math.round(y)}px;${posicionLado}border-color:${grupo.color};max-width:${Math.round(anchoMaxEtiqueta)}px;">
-                    <span class="punto-color" style="background:${grupo.color};"></span>
-                    <span class="texto-zona-pdf"${limiteTexto}>${escaparTextoZona(grupo.nombre)}</span>
-                </div>`;
-        });
-
-    const zonasLlavesHTML = etiquetasRiel;
 
     const filasTabla = equiposList.map(e => {
         const esDhcpSinIp = ['DHC', 'DHCP'].includes(String(e.TipoIP || '').trim().toUpperCase())
@@ -5514,11 +4303,6 @@ function construirBloquesPlano(panel, layout) {
         celdasHTML,
         bordesEquipoHTML,
         etiquetasEquipoHTML,
-        textosLibresHTML,
-        zonasLlavesHTML,
-        rielIzq: RIEL_IZQ,
-        rielDer: RIEL_DER,
-        compacto: etiquetasVerticales,
         celdasAngostas,
         bandaCliente,
         altoBanda,
@@ -5652,7 +4436,6 @@ function generarHTMLVistaPrevia(panel) {
     } = layout;
     const {
         celdasHTML, bordesEquipoHTML, etiquetasEquipoHTML,
-        textosLibresHTML, zonasLlavesHTML, rielIzq, rielDer, compacto,
         celdasAngostas, bandaCliente, altoBanda, filasTabla, rolesHTML,
         clientesHTML, zonasLibresHTML, totalEquipos
     } = bloques;
@@ -5693,13 +4476,7 @@ function generarHTMLVistaPrevia(panel) {
                     font-size: .68rem; font-weight: 800; letter-spacing: .06em;
                 }
 
-                /* Riel de indicadores de zona: la franja reservada a los lados
-                   del canvas. Sin recorte, para que la etiqueta no se corte en
-                   la vista previa. */
-                /* Mismo relleno de página que el PDF: el cálculo del riel
-                   (PADDING_PAGINA = 12) supone exactamente estos 12 px. Con los
-                   20 px de planorenderer.css el canvas se desplazaba respecto a
-                   la franja y la etiqueta se metía en la grilla. */
+                /* Mismo relleno de página que el PDF. */
                 .pagina-plano {
                     padding: 8px 12px;
                 }
@@ -5707,63 +4484,6 @@ function generarHTMLVistaPrevia(panel) {
                     padding: 12px 8px;
                     overflow: visible;
                     align-items: flex-start;
-                }
-                .plano-con-riel {
-                    position: relative;
-                    width: fit-content;
-                    flex-shrink: 0;
-                    /* Igual que en el PDF: el riel se suma al canvas. */
-                    box-sizing: content-box;
-                }
-                .etiqueta-zona-pdf {
-                    position: absolute;
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    height: 23px;
-                    padding: 0 9px;
-                    background: #fff;
-                    border: 2px solid;
-                    border-radius: 6px;
-                    font-size: 0.86rem;
-                    font-weight: 700;
-                    color: #1e293b;
-                    text-transform: uppercase;
-                    letter-spacing: 0.03em;
-                    white-space: nowrap;
-                    box-sizing: border-box;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-                }
-                .etiqueta-zona-pdf .punto-color {
-                    display: inline-block;
-                    width: 10px;
-                    height: 10px;
-                    border-radius: 2px;
-                    flex-shrink: 0;
-                }
-                .etiqueta-zona-pdf .texto-zona-pdf {
-                    min-width: 0;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-                /* Igual que en el PDF: etiqueta girada cuando no hay franjas
-                   laterales libres, y relleno lateral cedido al riel. */
-                .etiqueta-zona-pdf.vertical {
-                    writing-mode: vertical-rl;
-                    height: auto;
-                    padding: 8px 0;
-                    font-size: 0.78rem;
-                    line-height: 1.1;
-                    letter-spacing: 0.06em;
-                }
-                .etiqueta-zona-pdf.vertical .texto-zona-pdf {
-                    text-overflow: clip;
-                }
-                .plano-wrap.compacto,
-                .pagina-plano.compacto {
-                    padding-left: 0;
-                    padding-right: 0;
                 }
             </style>
         </head>
@@ -5773,7 +4493,7 @@ function generarHTMLVistaPrevia(panel) {
                 <div class="zoom-center" id="zoom-center">
                     <div id="pdf-zoom-target">
 
-                        <div class="pagina-plano${compacto ? ' compacto' : ''}">
+                        <div class="pagina-plano">
                             <div class="encabezado">
                                 <div class="titulo">
                                     <h1>Plano de Equipos</h1>
@@ -5787,15 +4507,11 @@ function generarHTMLVistaPrevia(panel) {
                                 </div>
                             </div>
 
-                            <div class="plano-wrap${compacto ? ' compacto' : ''}">
-                                <div class="plano-con-riel" style="padding:0 ${rielDer}px 0 ${rielIzq}px;">
-                                    <div class="grid-plano">
-                                        ${celdasHTML}
-                                        ${bordesEquipoHTML}
-                                        ${etiquetasEquipoHTML}
-                                        ${textosLibresHTML}
-                                    </div>
-                                    ${zonasLlavesHTML}
+                            <div class="plano-wrap">
+                                <div class="grid-plano">
+                                    ${celdasHTML}
+                                    ${bordesEquipoHTML}
+                                    ${etiquetasEquipoHTML}
                                 </div>
                             </div>
                         </div>
@@ -5935,7 +4651,6 @@ function generarHTMLParaPDF(panel) {
     } = layout;
     const {
         celdasHTML, bordesEquipoHTML, etiquetasEquipoHTML,
-        textosLibresHTML, zonasLlavesHTML, rielIzq, rielDer, compacto,
         celdasAngostas, bandaCliente, altoBanda, filasTabla, rolesHTML,
         clientesHTML, zonasLibresHTML, totalEquipos
     } = bloques;
@@ -5967,7 +4682,7 @@ function generarHTMLParaPDF(panel) {
         </head>
         <body>
 
-            <div class="pagina-plano${compacto ? ' compacto' : ''}">
+            <div class="pagina-plano">
                 <div class="encabezado">
                     <div class="titulo">
                         <h1>Plano de Equipos</h1>
@@ -5981,15 +4696,11 @@ function generarHTMLParaPDF(panel) {
                     </div>
                 </div>
 
-                <div class="plano-wrap${compacto ? ' compacto' : ''}">
-                    <div class="plano-con-riel" style="padding:0 ${rielDer}px 0 ${rielIzq}px;">
-                        <div class="grid-plano">
-                            ${celdasHTML}
-                            ${bordesEquipoHTML}
-                            ${etiquetasEquipoHTML}
-                            ${textosLibresHTML}
-                        </div>
-                        ${zonasLlavesHTML}
+                <div class="plano-wrap">
+                    <div class="grid-plano">
+                        ${celdasHTML}
+                        ${bordesEquipoHTML}
+                        ${etiquetasEquipoHTML}
                     </div>
                 </div>
             </div>
@@ -6059,26 +4770,20 @@ function obtenerMarcaPropuesta(panel, tipo) {
 }
 
 /* =========================================================
-   ATAJOS: ENTER para nombrar/guardar el grupo (Zona y Zona Libre)
+   ATAJOS: ENTER guarda la zona libre; Escape cancela el modo activo
    ========================================================= */
 document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') {
-        const hayModoActivo = modoZona || modoZonaLibre || modoEdicion;
+        const hayModoActivo = modoZonaLibre || modoEdicion;
         if (!hayModoActivo) return;
         if (modalZonaLibreAceptar.disabled || edGuardando) return;
 
         ev.preventDefault();
-        if (modalZona.style.display === 'flex') modalZonaCancelar.click();
         if (modalZonaLibre.style.display === 'flex') modalZonaLibreCancelar.click();
         if (modalEditarEquipo.style.display === 'flex') cerrarModalEditarEquipo();
 
-        modoZona = false;
         modoZonaLibre = false;
         modoEdicion = false;
-        arrastreZona = null;
-        arrastreZonaTerminado = false;
-        document.body.classList.remove('seleccionando-grupo');
-        celdasZonaSeleccionadas = [];
         celdasLibresSeleccionadas = [];
         [gridIzq, gridDer].forEach(grid => {
             if (grid) grid.classList.remove('modo-zona-libre');
@@ -6093,12 +4798,6 @@ document.addEventListener('keydown', (ev) => {
 
     /* Los modales de nombre son <div>, no <form>: sin esto, escribir "MESA 1"
        y pulsar Enter no hacía nada y obligaba a buscar el botón Guardar. */
-    if (modalZona.style.display === 'flex' && !modalZonaAceptar.disabled) {
-        ev.preventDefault();
-        modalZonaAceptar.click();
-        return;
-    }
-
     if (modalZonaLibre.style.display === 'flex' && !modalZonaLibreAceptar.disabled) {
         ev.preventDefault();
         modalZonaLibreAceptar.click();
@@ -6118,12 +4817,6 @@ document.addEventListener('keydown', (ev) => {
     if (modoZonaLibre && celdasLibresSeleccionadas.length > 0 && !guardandoZonaLibre) {
         ev.preventDefault();
         abrirModalZonaLibre();
-        return;
-    }
-
-    if (modoZona && celdasZonaSeleccionadas.length > 0 && modalZona.style.display !== 'flex') {
-        ev.preventDefault();
-        abrirModalZona(null);
         return;
     }
 });
